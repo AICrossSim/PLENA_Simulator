@@ -154,6 +154,7 @@ async fn run_matrix_view_packet_roundtrip(tile_pitch_rows: u32) -> (Vec<f32>, u6
         tile_count: *VLEN / (2 * *BLEN),
         tile_pitch_rows,
         alpha: 1,
+        tile_skew: 0,
     };
     mram.write_layout_packet(
         0,
@@ -187,7 +188,7 @@ async fn run_matrix_view_packet_roundtrip(tile_pitch_rows: u32) -> (Vec<f32>, u6
         set_gp(3, *VLEN),
         set_gp(4, 0),
         set_gp(5, 0),
-        op::Opcode::L_MVIEW_FULL {
+        op::Opcode::L_TILE_CFG {
             shape: 1,
             mapping: 2,
             slot: 1,
@@ -312,12 +313,12 @@ async fn run_matrix_accumulator_view_writeback(tile_pitch_rows: u32) -> (Vec<f32
         set_gp(4, matrix_output_base),
         set_gp(5, vector_output_base),
         set_gp(8, vector_output_base + *VLEN),
-        op::Opcode::L_MVIEW_FULL {
+        op::Opcode::L_TILE_CFG {
             shape: 1,
             mapping: 2,
             slot: 0,
         },
-        op::Opcode::L_MVIEW_FULL {
+        op::Opcode::L_TILE_CFG {
             shape: 1,
             mapping: 2,
             slot: 1,

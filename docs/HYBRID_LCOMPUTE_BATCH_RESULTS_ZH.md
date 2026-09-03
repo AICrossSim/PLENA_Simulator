@@ -1,5 +1,10 @@
 # Hybrid L-Compute 批量 Decode 结果
 
+> **历史结果，已停止用于当前结论。** 本文对应早期 Vector/output-SRAM
+> `L_CFG` 实验，不是当前 Matrix-SRAM `L_TILE` 路径。统一 BF16、公平 D' 对照、
+> Compiler-to-Rust 数值证据和最新周期请只看
+> [MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md](MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)。
+
 ## 1. 这次实际跑了什么
 
 这次没有使用 GPU，也没有把 B1 周期简单乘以 batch。Simulator 对每个点重新构建并调度：

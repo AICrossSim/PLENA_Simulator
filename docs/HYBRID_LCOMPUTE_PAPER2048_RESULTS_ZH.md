@@ -1,5 +1,9 @@
 # Hybrid L-Compute：PLENA 2048-wide 验证结果
 
+> **历史结果，已停止用于当前结论。** 本文使用早期精度、端口和对照定义，
+> 不能与统一 BF16 的 Matrix-SRAM campaign 混用。当前唯一有效结果见
+> [MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md](MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)。
+
 ## 1. 测了什么
 
 本轮把 Compiler/Simulator 重新对齐到 PLENA 论文最终系统点：

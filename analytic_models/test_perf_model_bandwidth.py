@@ -59,7 +59,7 @@ def test_precision_section_parsed_from_toml():
     assert pb, "PRECISION section was not parsed"
     for name in ("HBM_M_WEIGHT_TYPE", "HBM_M_KV_TYPE", "HBM_V_ACT_TYPE", "HBM_V_KV_TYPE"):
         assert pb[name] == 1.125, f"{name} = {pb[name]}"
-    assert pb["HBM_STATE_TYPE"] == 4.0
+    assert pb["HBM_STATE_TYPE"] == 2.0
     assert pb["HBM_V_INT_TYPE"] == 4.0
     assert pb["MATRIX_SRAM_TYPE"] == 2.0
     assert parse_precision_bytes({}) == {}
@@ -177,7 +177,7 @@ def test_ssm_decode_state_traffic_is_context_independent():
     m.reset_traffic()
     m.ssd_recurrence_decode(num_heads=80, head_dim=64, state_size=128, n_groups=1, batch_size=1)
     first = m.traffic_bytes
-    expected = 2 * 80 * 64 * 128 * 4.0  # official FP32 state, read + write
+    expected = 2 * 80 * 64 * 128 * 2.0  # PLENA BF16 state, read + write
     assert first == expected
 
     # a thousand tokens later, the per-token cost is identical

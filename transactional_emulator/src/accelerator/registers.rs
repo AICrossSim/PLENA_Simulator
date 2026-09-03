@@ -148,27 +148,17 @@ impl AcceleratorRegFile {
         self.lstream.configure(value, target, slot, field)
     }
 
-    pub(super) fn configure_mview_full(
+    pub(super) fn configure_mview(
         &mut self,
         slot: u8,
         shape_register: u8,
         map_register: u8,
     ) -> Result<(), String> {
-        self.mviews.configure_full(
+        self.mviews.configure(
             slot,
             self.read_gp(shape_register),
             self.read_gp(map_register),
         )
-    }
-
-    pub(super) fn configure_mview_field(
-        &mut self,
-        slot: u8,
-        field: u8,
-        value_register: u8,
-    ) -> Result<(), String> {
-        self.mviews
-            .configure_field(slot, field, self.read_gp(value_register))
     }
 
     pub(super) fn matrix_view(&self, slot: u8) -> Result<MatrixViewDescriptor, String> {

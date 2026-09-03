@@ -18,8 +18,13 @@ from pathlib import Path
 
 import tomlkit
 
-from verification.check_mem import compare_vram_with_golden, print_comparison_results
 from transactional_emulator.testbench.config_utils import update_plena_config
+
+_TOOLS_ROOT = Path(__file__).resolve().parents[2] / "PLENA_Tools"
+if str(_TOOLS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_ROOT))
+
+from verification.check_mem import compare_vram_with_golden, print_comparison_results  # noqa: E402
 
 
 def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
@@ -103,11 +108,19 @@ _MATRIX_VIEW_PACKET_COUNTER_RE = re.compile(
     r"bank_stall_cycles=(?P<bank_stall_cycles>\d+)"
 )
 
+_ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+
+
+def _strip_ansi(value: str) -> str:
+    """Remove terminal colour/control sequences before parsing Rust logs."""
+
+    return _ANSI_ESCAPE_RE.sub("", value)
+
 
 def _parse_lstream_packet_counters(line: str) -> dict[str, int] | None:
     """Parse the Rust L-stream counter line without depending on log prefixes."""
 
-    match = _LSTREAM_PACKET_COUNTER_RE.search(line)
+    match = _LSTREAM_PACKET_COUNTER_RE.search(_strip_ansi(line))
     if match is None:
         return None
     return {name: int(value) for name, value in match.groupdict().items()}
@@ -116,7 +129,7 @@ def _parse_lstream_packet_counters(line: str) -> dict[str, int] | None:
 def _parse_matrix_view_packet_counters(line: str) -> dict[str, int] | None:
     """Parse Matrix-SRAM view counters without depending on log prefixes."""
 
-    match = _MATRIX_VIEW_PACKET_COUNTER_RE.search(line)
+    match = _MATRIX_VIEW_PACKET_COUNTER_RE.search(_strip_ansi(line))
     if match is None:
         return None
     return {name: int(value) for name, value in match.groupdict().items()}
@@ -131,6 +144,7 @@ def run_emulator(
     run_label: str | None = None,
     timing_model: str | None = None,
     dump_cwd: Path | None = None,
+    dump_hbm: bool = False,
 ) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
@@ -163,10 +177,14 @@ def run_emulator(
                   the historical emulator directory. Parallel replay can set this
                   to build_dir so vram_dump.bin/fpsram_dump.bin are not shared
                   between concurrent emulator processes.
+        dump_hbm: explicitly retain the post-run HBM image in ``build_dir``.
+                  This is intended for connected state/output numerical tests;
+                  ordinary tests leave it disabled because model HBM can be huge.
     """
+    build_dir = Path(build_dir).resolve()
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
-    dump_dir = Path(dump_cwd) if dump_cwd is not None else emulator_dir
+    dump_dir = Path(dump_cwd).resolve() if dump_cwd is not None else emulator_dir
     dump_dir.mkdir(parents=True, exist_ok=True)
 
     if stage_profile is None:
@@ -250,6 +268,8 @@ def run_emulator(
         ]
     if timing_model != "serial":
         cmd += ["--timing-model", timing_model]
+    if dump_hbm:
+        cmd += ["--hbm-dump", str((build_dir / "hbm_dump.bin").resolve())]
 
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.
@@ -294,6 +314,7 @@ def run_emulator(
         "log_path": str(log_path),
         "stage_profile_requested": bool(stage_profile),
         "timing_model": timing_model,
+        "hbm_dump_requested": dump_hbm,
     }
     if run_label:
         metrics["run_label"] = run_label
@@ -329,7 +350,9 @@ def run_emulator(
             print(line, end="")
             log_file.write(line)
 
-            sim_match = sim_latency_re.search(line)
+            parsed_line = _strip_ansi(line)
+
+            sim_match = sim_latency_re.search(parsed_line)
             if sim_match:
                 sim_latency_ns = float(sim_match.group(1))
                 metrics["sim_latency_ns"] = sim_latency_ns
@@ -337,23 +360,23 @@ def run_emulator(
                 if sim_match.group(2) is not None:
                     metrics["sim_latency_cycles"] = int(sim_match.group(2))
 
-            topo_match = topology_re.search(line)
+            topo_match = topology_re.search(parsed_line)
             if topo_match:
                 metrics["emu_mlen"] = int(topo_match.group(1))
                 metrics["emu_vlen"] = int(topo_match.group(2))
                 metrics["emu_blen"] = int(topo_match.group(3))
 
-            hbm_match = hbm_stats_re.search(line)
+            hbm_match = hbm_stats_re.search(parsed_line)
             if hbm_match:
                 metrics["hbm_bytes_read"] = int(hbm_match.group(1))
                 metrics["hbm_bytes_written"] = int(hbm_match.group(2))
                 metrics["hbm_utilization_bytes_per_sec"] = float(hbm_match.group(3))
 
-            packet_counters = _parse_lstream_packet_counters(line)
+            packet_counters = _parse_lstream_packet_counters(parsed_line)
             if packet_counters is not None:
                 metrics["lstream_packet_counters"] = packet_counters
 
-            matrix_view_counters = _parse_matrix_view_packet_counters(line)
+            matrix_view_counters = _parse_matrix_view_packet_counters(parsed_line)
             if matrix_view_counters is not None:
                 metrics["matrix_view_packet_counters"] = matrix_view_counters
 

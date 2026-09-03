@@ -331,7 +331,7 @@
     "state_multirow_layout": "executable for Mamba/KDA decay and rank-update packets; prediction/readout cross-row reductions deliberately retain the ordinary-row fallback",
     "weights": "symbolic performance execution; not full-checkpoint numerical execution"
   },
-  "compiler_report_sha256": "b9961fbf5e08f0867b544988074d96d8069f32c50dc893908df06c70090d70cf",
+  "compiler_report_sha256": "3bd44c92b7ef73c37473faa7ae35affcce06756ad6b6543e125720a81a8ec75f",
   "compiler_summary": {
     "assembly": {
       "generic_affine_saxpy": {
@@ -420,6 +420,123 @@
           "packetized_opcode_census": {},
           "scalar_loads": 0,
           "static_instructions": 47,
+          "unfoldable_self_advances": 0
+        }
+      },
+      "kimi_k3_decode_recurrence": {
+        "baseline": {
+          "arithmetic_share": 0.2467169766474538,
+          "contains_l_cfg": false,
+          "contains_model_specific_state_opcode": false,
+          "dynamic_issued_instructions": 201948,
+          "explicit_view_mask_census": {},
+          "foldable_self_advances": 98592,
+          "opcode_census": {
+            "C_LOOP_START": 960,
+            "S_ADDI_INT": 100348,
+            "S_LD_FP": 49344,
+            "S_LUI_INT": 1472,
+            "V_ADD_VV": 96,
+            "V_FMA_VF": 36864,
+            "V_MUL_VF": 12768,
+            "V_SUB_VV": 96
+          },
+          "packetized_opcode_census": {},
+          "scalar_loads": 49344,
+          "static_instructions": 7836,
+          "unfoldable_self_advances": 0
+        },
+        "dynamic_issue_reduction": 2.9605934439688033,
+        "packet_affine": {
+          "arithmetic_share": 0.5618863808005371,
+          "contains_l_cfg": true,
+          "contains_model_specific_state_opcode": false,
+          "dynamic_issued_instructions": 47668,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 288,
+            "V_MUL_VF@0x3": 96
+          },
+          "foldable_self_advances": 288,
+          "opcode_census": {
+            "C_LOOP_START": 960,
+            "L_CFG": 9692,
+            "S_ADDI_INT": 8568,
+            "S_LD_FP": 192,
+            "S_LUI_INT": 1472,
+            "V_ADD_VV": 96,
+            "V_FMA_VF": 25344,
+            "V_MUL_VF": 1248,
+            "V_SUB_VV": 96
+          },
+          "packetized_opcode_census": {
+            "V_FMA_VF": 768,
+            "V_MUL_VF": 768
+          },
+          "scalar_loads": 192,
+          "static_instructions": 22900,
+          "unfoldable_self_advances": 0
+        },
+        "packet_row_major": {
+          "arithmetic_share": 0.5664495389560951,
+          "contains_l_cfg": true,
+          "contains_model_specific_state_opcode": false,
+          "dynamic_issued_instructions": 47284,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 288,
+            "V_MUL_VF@0x3": 96
+          },
+          "foldable_self_advances": 288,
+          "opcode_census": {
+            "C_LOOP_START": 960,
+            "L_CFG": 9500,
+            "S_ADDI_INT": 8376,
+            "S_LD_FP": 192,
+            "S_LUI_INT": 1472,
+            "V_ADD_VV": 96,
+            "V_FMA_VF": 25344,
+            "V_MUL_VF": 1248,
+            "V_SUB_VV": 96
+          },
+          "packetized_opcode_census": {
+            "V_FMA_VF": 768,
+            "V_MUL_VF": 768
+          },
+          "scalar_loads": 192,
+          "static_instructions": 22516,
+          "unfoldable_self_advances": 0
+        },
+        "physical_layout": "identity; affine co-layout is reported separately",
+        "postincrement_only": {
+          "dynamic_issued_instructions": 103356,
+          "preserved_unfoldable_self_advances": 0,
+          "removed_foldable_self_advances": 98592,
+          "scope": "compiler_issue_stream_not_hardware_cycles"
+        },
+        "scope": "compiler_issue_stream_not_hardware_cycles",
+        "stream": {
+          "arithmetic_share": 0.730428663578256,
+          "contains_l_cfg": true,
+          "contains_model_specific_state_opcode": false,
+          "dynamic_issued_instructions": 68212,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 288,
+            "V_MUL_VF@0x3": 96
+          },
+          "foldable_self_advances": 288,
+          "opcode_census": {
+            "C_LOOP_START": 960,
+            "L_CFG": 8444,
+            "S_ADDI_INT": 7320,
+            "S_LD_FP": 192,
+            "S_LUI_INT": 1472,
+            "V_ADD_VV": 96,
+            "V_FMA_VF": 36864,
+            "V_MUL_VF": 12768,
+            "V_SUB_VV": 96
+          },
+          "packetized_opcode_census": {},
+          "scalar_loads": 192,
+          "static_instructions": 20404,
           "unfoldable_self_advances": 0
         }
       },
@@ -14234,7 +14351,7 @@
       }
     ]
   },
-  "report_sha256": "055a578f5655d8b77f7aafa0241a4be0989822207531e0628de9e242c1bea2e3",
+  "report_sha256": "5b8003f48fa51eb613d3bca8d853ae3944e53570ed35810047c53fa296ed2b79",
   "resource_proxies": {
     "additional_sram_payload_bytes": 0,
     "affine_address_adders": 32,

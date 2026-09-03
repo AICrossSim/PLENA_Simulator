@@ -314,10 +314,10 @@ class PerfModel:
         self.weight_bytes = self.precision_bytes.get("HBM_M_WEIGHT_TYPE", 2.0)
         self.kv_bytes = self.precision_bytes.get("HBM_M_KV_TYPE", 2.0)
         self.act_bytes = self.precision_bytes.get("HBM_V_ACT_TYPE", 2.0)
-        # Recurrent state is not an attention KV cache.  Official Nemotron
-        # Mamba and Kimi KDA both use FP32 state, while KV may be MX8/BF16.  Keep
-        # a compatibility fallback for older configs, but make the independent
-        # class authoritative whenever it is present.
+        # Recurrent state is not an attention KV cache.  Keep its precision
+        # independent from KV: the evaluated PLENA design point selects BF16,
+        # while the official GPU implementations' FP32 state remains external
+        # baseline/accuracy evidence.  Older configs still fall back to KV.
         self.state_bytes = self.precision_bytes.get(
             "HBM_STATE_TYPE",
             self.precision_bytes.get("HBM_V_KV_TYPE", self.kv_bytes),

@@ -620,6 +620,18 @@ pub(crate) fn op_access(
             ],
             vec![vector(gp(rd), *VLEN * *PREFETCH_V_AMOUNT)],
         ),
+        op::Opcode::H_PREFETCH_V_MV { rd, rs1, rs2, .. } => OpAccess::new(
+            Unit::Dma,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Hbm(rs2),
+                Resource::Cfg(Cfg::Scale),
+                Resource::Cfg(Cfg::Stride),
+                Resource::Cfg(Cfg::MatrixView),
+            ],
+            vec![matrix(gp(rd), matrix_tile)],
+        ),
         // A store reads the vram region it drains. Its HBM-side write is not
         // tracked as a resource; dispatch conservatively drains all pending
         // prefetches before an H_STORE_V instead (HBM WAR/RAW).
@@ -632,6 +644,19 @@ pub(crate) fn op_access(
                 Resource::Cfg(Cfg::Scale),
                 Resource::Cfg(Cfg::Stride),
                 vector(gp(rd), *VLEN * *STORE_V_AMOUNT),
+            ],
+            vec![],
+        ),
+        op::Opcode::H_STORE_V_MV { rd, rs1, rs2, .. } => OpAccess::new(
+            Unit::Dma,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Hbm(rs2),
+                Resource::Cfg(Cfg::Scale),
+                Resource::Cfg(Cfg::Stride),
+                Resource::Cfg(Cfg::MatrixView),
+                matrix(gp(rd), matrix_tile),
             ],
             vec![],
         ),
@@ -659,15 +684,23 @@ pub(crate) fn op_access(
             vec![Gp(value)],
             vec![Resource::Cfg(Cfg::LStream)],
         ),
-        op::Opcode::L_MVIEW_FULL { shape, mapping, .. } => OpAccess::new(
+        op::Opcode::L_TILE_CFG { shape, mapping, .. } => OpAccess::new(
             Unit::Scalar,
             vec![Gp(shape), Gp(mapping)],
             vec![Resource::Cfg(Cfg::MatrixView)],
         ),
-        op::Opcode::L_MVIEW_FIELD { value, .. } => OpAccess::new(
-            Unit::Scalar,
-            vec![Gp(value)],
-            vec![Resource::Cfg(Cfg::MatrixView)],
+        op::Opcode::L_TILE_EXEC { rd, rs1, rs2, .. } => OpAccess::new(
+            Unit::Vector,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Gp(rs2),
+                Resource::Cfg(Cfg::MatrixView),
+                matrix(gp(rd), matrix_tile),
+                matrix(gp(rs1), matrix_tile),
+                matrix(gp(rs2), matrix_tile),
+            ],
+            vec![matrix(gp(rd), matrix_tile)],
         ),
         op::Opcode::C_LOOP_START { rd, .. } => OpAccess::new(Unit::Scalar, vec![], vec![Gp(rd)]),
         op::Opcode::C_LOOP_END { rd } => OpAccess::new(Unit::Scalar, vec![Gp(rd)], vec![Gp(rd)]),

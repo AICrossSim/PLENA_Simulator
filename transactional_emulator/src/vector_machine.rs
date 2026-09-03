@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use half::bf16;
-use quantize::{QuantTensor, tensor_from_f32_slice};
+use quantize::{QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
 use sram::VectorSram;
 use tch::{IndexOp, Tensor};
 
@@ -602,6 +602,148 @@ impl VectorMachine {
             }
         }
         QuantTensor::quantize(result, a.data_type())
+    }
+
+    /// Generic row-wise affine recurrence primitive used by `L_TILE_EXEC`.
+    pub(crate) async fn tile_scale_accum(
+        &self,
+        destination: QuantTensor,
+        source: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_tile_offset: u32,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let src = tensor_to_f32_vec(source.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        let rows = dst.len() / row_width as usize;
+        assert_eq!(dst.len(), rows * row_width as usize);
+        assert!(src.len() == row_width as usize || src.len() == dst.len());
+        let expanded = coeff.len() == rows * scale_width as usize;
+        if expanded {
+            assert!(scale_width >= 2, "SCALE_ACCUM needs [a,b] per row");
+        } else {
+            assert_eq!(coeff.len(), scale_width as usize);
+            assert!(
+                2 * (scale_tile_offset as usize + rows) <= coeff.len(),
+                "compact SCALE_ACCUM packet needs one [a,b] pair per destination tile"
+            );
+        }
+
+        let mut result = vec![0_f32; dst.len()];
+        for row in 0..rows {
+            let coefficient = if expanded {
+                row * scale_width as usize
+            } else {
+                2 * (scale_tile_offset as usize + row)
+            };
+            let a = coeff[coefficient];
+            let b = coeff[coefficient + 1];
+            for col in 0..row_width as usize {
+                let index = row * row_width as usize + col;
+                let source_index = if src.len() == row_width as usize {
+                    col
+                } else {
+                    index
+                };
+                result[index] = a * dst[index] + b * src[source_index];
+            }
+        }
+        cycle!(2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES);
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
+    }
+
+    /// Accumulate one recurrence-row packet into per-tile dot products.
+    ///
+    /// `rows` is laid out as `[tile][row_width]`; each tile owns one scalar in
+    /// the corresponding scale row.  Repeating this primitive over the
+    /// recurrence-row loop computes `sum_k scale[tile,k] * state[tile,k,:]`
+    /// without materialising a transpose or reducing unrelated heads together.
+    pub(crate) async fn tile_dot_accumulate(
+        &self,
+        accumulator: &mut [f32],
+        rows: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_tile_offset: u32,
+    ) {
+        let values = tensor_to_f32_vec(rows.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        assert!(row_width > 0);
+        assert!(values.len().is_multiple_of(row_width as usize));
+        let row_count = values.len() / row_width as usize;
+        assert_eq!(accumulator.len(), values.len());
+        let expanded = coeff.len() == row_count * scale_width as usize;
+        if !expanded {
+            assert_eq!(coeff.len(), scale_width as usize);
+            assert!(
+                scale_tile_offset as usize + row_count <= coeff.len(),
+                "compact DOT_REDUCE packet needs one scalar per source tile"
+            );
+        }
+        assert!(scale_width > 0);
+
+        for row in 0..row_count {
+            let scale = coeff[if expanded {
+                row * scale_width as usize
+            } else {
+                scale_tile_offset as usize + row
+            }];
+            for lane in 0..row_width as usize {
+                let index = row * row_width as usize + lane;
+                accumulator[index] += values[index] * scale;
+            }
+        }
+        cycle!(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES);
+    }
+
+    /// Generic row-wise outer/rank-1 update used by linear recurrences.
+    pub(crate) async fn tile_outer_update(
+        &self,
+        destination: QuantTensor,
+        vector: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_tile_offset: u32,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let source = tensor_to_f32_vec(vector.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        let rows = dst.len() / row_width as usize;
+        assert!(
+            source.len() == row_width as usize || source.len() == dst.len(),
+            "OUTER_UPDATE source must be shared by every tile or provide one row per tile"
+        );
+        let expanded = coeff.len() == rows * scale_width as usize;
+        if !expanded {
+            assert_eq!(coeff.len(), scale_width as usize);
+            assert!(
+                scale_tile_offset as usize + rows <= coeff.len(),
+                "compact OUTER_UPDATE packet needs one scalar per destination tile"
+            );
+        }
+        let mut result = dst;
+        for row in 0..rows {
+            let scale = coeff[if expanded {
+                row * scale_width as usize
+            } else {
+                scale_tile_offset as usize + row
+            }];
+            for col in 0..row_width as usize {
+                let index = row * row_width as usize + col;
+                let source_index = if source.len() == row_width as usize {
+                    col
+                } else {
+                    index
+                };
+                result[index] += source[source_index] * scale;
+            }
+        }
+        cycle!(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES);
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
     }
 
     pub(crate) async fn exp(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {

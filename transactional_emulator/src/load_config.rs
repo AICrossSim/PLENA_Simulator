@@ -164,7 +164,7 @@ fn default_state_type() -> MxDataTypeConfig {
             data_type: DataTypeConfig::Fp(FpTypeConfig {
                 sign: true,
                 exponent: 8,
-                mantissa: 23,
+                mantissa: 7,
             }),
         },
     }
@@ -778,6 +778,12 @@ mod tests {
                 exponent: 8,
                 mantissa: 7,
             }))
+        );
+        // Recurrent state follows the active Matrix-LCompute data plane rather
+        // than silently falling back to the profiled GPU's FP32 state format.
+        assert_eq!(
+            MxDataType::from(cfg.precision.hbm_state_type.clone()),
+            MxDataType::Plain(DataType::Fp(FpType::BF16))
         );
         // HBM matrix weights default to MXFP8 (e4m3 elements, e8m0 scale, block 8).
         assert_eq!(

@@ -4,18 +4,20 @@
 //! match and dispatch-only helpers.
 
 use half::bf16;
-use quantize::MxDataType;
+use quantize::{MxDataType, QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
 
 use crate::runtime_config::PERIOD;
 use crate::runtime_config::{
     HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
-    SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
+    SCALAR_INT_BASIC_CYCLES, STATE_TYPE, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE,
+    VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
 use crate::vector_machine::{ScalarOperand, VectorBinaryOp, VectorOperandViews};
 use crate::{cycle, dma, op, timing};
 use runtime::{Executor, Instant};
+use sram::matrix::MatrixPacketService;
 
 use super::Accelerator;
 use super::access::{self, OpAccess};
@@ -48,6 +50,15 @@ struct MatrixViewBinaryArgs {
     pc: usize,
 }
 
+struct LTileExecArgs {
+    destination_register: u8,
+    source_register: u8,
+    scale_register: u8,
+    primitive: op::LTilePrimitive,
+    source_axis: op::LTileAxis,
+    scale_axis: op::LTileAxis,
+}
+
 impl Accelerator {
     /// Resolve the V_* opcode mask.
     ///
@@ -69,6 +80,29 @@ impl Accelerator {
                 panic!("{error} at pc {pc}")
             })
         })
+    }
+
+    async fn read_l_tile_lines(
+        &mut self,
+        base: u32,
+        view: MatrixViewDescriptor,
+        axis: op::LTileAxis,
+        lines: &[(u32, u32)],
+    ) -> (QuantTensor, MatrixPacketService) {
+        match axis {
+            op::LTileAxis::Row => {
+                self.m_machine
+                    .mram
+                    .read_layout_indexed_rows(base, view.layout(), lines)
+                    .await
+            }
+            op::LTileAxis::Column => {
+                self.m_machine
+                    .mram
+                    .read_layout_indexed_columns(base, view.layout(), lines)
+                    .await
+            }
+        }
     }
 
     /// Decode the explicit Matrix-view operand marker carried by the VV
@@ -162,6 +196,244 @@ impl Accelerator {
         }
     }
 
+    /// Execute one model-independent recurrence primitive over Matrix views.
+    ///
+    /// Views 0/1/2 are destination/source/scalars.  The decoder owns only a
+    /// deterministic row/column walk; all bases, shapes, layouts and precision
+    /// choices remain compiler-visible architectural state.
+    async fn execute_l_tile(&mut self, args: LTileExecArgs, pc: usize) {
+        let LTileExecArgs {
+            destination_register,
+            source_register,
+            scale_register,
+            primitive,
+            source_axis,
+            scale_axis,
+        } = args;
+        let destination = self.resolve_matrix_view(Some(0), pc).unwrap();
+        let source = self.resolve_matrix_view(Some(1), pc).unwrap();
+        let scales = self.resolve_matrix_view(Some(2), pc).unwrap();
+        let dst_base = self.reg_file.read_gp(destination_register);
+        let src_base = self.reg_file.read_gp(source_register);
+        let scale_base = self.reg_file.read_gp(scale_register);
+
+        for (name, view) in [
+            ("destination", destination),
+            ("source", source),
+            ("scale", scales),
+        ] {
+            if view.fp32() && self.m_machine.mram.element_bits() != 32 {
+                panic!(
+                    "{name} L_TILE view requests FP32 but Matrix SRAM stores {}-bit elements",
+                    self.m_machine.mram.element_bits()
+                );
+            }
+        }
+        if !scales.broadcast_minor() {
+            panic!("L_TILE scale view must set BROADCAST_MINOR");
+        }
+        if scales.shape.tile_count != 1 && scales.shape.tile_count != destination.shape.tile_count {
+            panic!("L_TILE scale tiles must be one or match destination tiles");
+        }
+        if source.shape.tile_count != 1 && source.shape.tile_count != destination.shape.tile_count {
+            panic!("L_TILE source tiles must be one or match destination tiles");
+        }
+
+        let dst_layout = destination.layout();
+        let source_line_count = match source_axis {
+            op::LTileAxis::Row => source.shape.rows,
+            op::LTileAxis::Column => source.shape.cols,
+        };
+        let source_line_width = match source_axis {
+            op::LTileAxis::Row => source.shape.cols,
+            op::LTileAxis::Column => source.shape.rows,
+        };
+        let scale_line_count = match scale_axis {
+            op::LTileAxis::Row => scales.shape.rows,
+            op::LTileAxis::Column => scales.shape.cols,
+        };
+        let scale_line_width = match scale_axis {
+            op::LTileAxis::Row => scales.shape.cols,
+            op::LTileAxis::Column => scales.shape.rows,
+        };
+
+        match primitive {
+            op::LTilePrimitive::ScaleAccum | op::LTilePrimitive::OuterUpdate => {
+                if source_line_width != destination.shape.cols {
+                    panic!("row-wise L_TILE source/destination widths differ");
+                }
+                if source_line_count != 1 && source_line_count != destination.shape.rows {
+                    panic!("row-wise L_TILE source rows must be one or match destination");
+                }
+                if scale_line_count < destination.shape.rows {
+                    panic!("L_TILE scale view has fewer logical lines than destination");
+                }
+                let tiles_per_packet = (self.v_machine.tile_size() / destination.shape.cols).max(1);
+                for row in 0..destination.shape.rows {
+                    for first_tile in
+                        (0..destination.shape.tile_count).step_by(tiles_per_packet as usize)
+                    {
+                        let tile_count =
+                            tiles_per_packet.min(destination.shape.tile_count - first_tile);
+                        let destination_lines = (first_tile..first_tile + tile_count)
+                            .map(|tile| (tile, row))
+                            .collect::<Vec<_>>();
+                        let source_lines = destination_lines
+                            .iter()
+                            .map(|&(tile, destination_row)| {
+                                (
+                                    if source.shape.tile_count == 1 {
+                                        0
+                                    } else {
+                                        tile
+                                    },
+                                    if source_line_count == 1 {
+                                        0
+                                    } else {
+                                        destination_row
+                                    },
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let scale_lines = if scales.shape.tile_count == 1 {
+                            // Compact per-segment scalars are fetched once,
+                            // one cycle ahead of the all-bank state packet.
+                            vec![(0, row)]
+                        } else {
+                            destination_lines
+                                .iter()
+                                .map(|&(tile, destination_row)| (tile, destination_row))
+                                .collect::<Vec<_>>()
+                        };
+
+                        let (dst_packet, dst_service) = self
+                            .m_machine
+                            .mram
+                            .read_layout_indexed_rows(dst_base, dst_layout, &destination_lines)
+                            .await;
+                        cycle!(dst_service.service_cycles.max(1));
+                        let (src_packet, src_service) = self
+                            .read_l_tile_lines(src_base, source, source_axis, &source_lines)
+                            .await;
+                        cycle!(src_service.service_cycles.max(1));
+                        let (scale_packet, scale_service) = self
+                            .read_l_tile_lines(scale_base, scales, scale_axis, &scale_lines)
+                            .await;
+                        // Scalar bank words are deliberately charged separately:
+                        // a full state packet already consumes every bank word.
+                        cycle!(scale_service.service_cycles.max(1));
+
+                        let result = match primitive {
+                            op::LTilePrimitive::ScaleAccum => {
+                                self.v_machine
+                                    .tile_scale_accum(
+                                        dst_packet,
+                                        src_packet,
+                                        scale_packet,
+                                        destination.shape.cols,
+                                        scale_line_width,
+                                        first_tile,
+                                    )
+                                    .await
+                            }
+                            op::LTilePrimitive::OuterUpdate => {
+                                self.v_machine
+                                    .tile_outer_update(
+                                        dst_packet,
+                                        src_packet,
+                                        scale_packet,
+                                        destination.shape.cols,
+                                        scale_line_width,
+                                        first_tile,
+                                    )
+                                    .await
+                            }
+                            op::LTilePrimitive::DotReduce => unreachable!(),
+                        };
+                        let service = self
+                            .m_machine
+                            .mram
+                            .write_layout_indexed_rows(
+                                dst_base,
+                                dst_layout,
+                                &destination_lines,
+                                result,
+                            )
+                            .await;
+                        cycle!(service.service_cycles.max(1));
+                    }
+                }
+            }
+            op::LTilePrimitive::DotReduce => {
+                if destination.shape.rows != 1
+                    || destination.shape.cols != source_line_width
+                    || destination.shape.tile_count != source.shape.tile_count
+                {
+                    panic!("DOT_REDUCE destination must be one row per source tile");
+                }
+                if scale_line_count < source_line_count {
+                    panic!("DOT_REDUCE scale view has fewer lines than reduction rows");
+                }
+                let tiles_per_packet = (self.v_machine.tile_size() / source_line_width).max(1);
+                for first_tile in (0..source.shape.tile_count).step_by(tiles_per_packet as usize) {
+                    let tile_count = tiles_per_packet.min(source.shape.tile_count - first_tile);
+                    let destination_lines = (first_tile..first_tile + tile_count)
+                        .map(|tile| (tile, 0))
+                        .collect::<Vec<_>>();
+                    let (destination_packet, destination_service) = self
+                        .m_machine
+                        .mram
+                        .read_layout_indexed_rows(dst_base, dst_layout, &destination_lines)
+                        .await;
+                    cycle!(destination_service.service_cycles.max(1));
+                    let mut accumulator = tensor_to_f32_vec(destination_packet.as_tensor());
+                    assert_eq!(accumulator.len(), (tile_count * source_line_width) as usize);
+                    for row in 0..source_line_count {
+                        let source_lines = (first_tile..first_tile + tile_count)
+                            .map(|tile| (tile, row))
+                            .collect::<Vec<_>>();
+                        let scale_lines = if scales.shape.tile_count == 1 {
+                            vec![(0, row)]
+                        } else {
+                            source_lines
+                                .iter()
+                                .map(|&(tile, source_row)| (tile, source_row))
+                                .collect::<Vec<_>>()
+                        };
+                        let (source_packet, source_service) = self
+                            .read_l_tile_lines(src_base, source, source_axis, &source_lines)
+                            .await;
+                        cycle!(source_service.service_cycles.max(1));
+                        let (scale_packet, scale_service) = self
+                            .read_l_tile_lines(scale_base, scales, scale_axis, &scale_lines)
+                            .await;
+                        cycle!(scale_service.service_cycles.max(1));
+                        self.v_machine
+                            .tile_dot_accumulate(
+                                &mut accumulator,
+                                source_packet,
+                                scale_packet,
+                                source_line_width,
+                                scale_line_width,
+                                first_tile,
+                            )
+                            .await;
+                    }
+                    let result = QuantTensor::quantize(
+                        tensor_from_f32_slice(&accumulator),
+                        self.m_machine.mram.ty(),
+                    );
+                    let service = self
+                        .m_machine
+                        .mram
+                        .write_layout_indexed_rows(dst_base, dst_layout, &destination_lines, result)
+                        .await;
+                    cycle!(service.service_cycles.max(1));
+                }
+            }
+        }
+    }
+
     fn mx_region(&self, dtype: MxDataType, addr: u64, offset: u32, rstride: u8) -> dma::MxRegion {
         let scale = match dtype {
             MxDataType::Plain(_) => 0,
@@ -220,11 +492,17 @@ impl Accelerator {
                 // - H_PREFETCH_*: all outstanding stores (HBM RAW) plus
                 //   prefetches overlapping its SRAM destination (WAW).
                 // - Everything else: SRAM overlaps only.
-                let pending = if access.barrier || matches!(op, op::Opcode::H_STORE_V { .. }) {
+                let pending = if access.barrier
+                    || matches!(
+                        op,
+                        op::Opcode::H_STORE_V { .. } | op::Opcode::H_STORE_V_MV { .. }
+                    ) {
                     scoreboard.take_all_dma()
                 } else if matches!(
                     op,
-                    op::Opcode::H_PREFETCH_M { .. } | op::Opcode::H_PREFETCH_V { .. }
+                    op::Opcode::H_PREFETCH_M { .. }
+                        | op::Opcode::H_PREFETCH_V { .. }
+                        | op::Opcode::H_PREFETCH_V_MV { .. }
                 ) {
                     scoreboard.take_dma_for_prefetch(&access)
                 } else {
@@ -954,6 +1232,7 @@ impl Accelerator {
                     let dtype = match precision {
                         op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
                     };
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
@@ -972,6 +1251,63 @@ impl Accelerator {
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
                         .await;
                 }
+                op::Opcode::H_PREFETCH_V_MV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride,
+                    precision,
+                    view,
+                } => {
+                    let descriptor = self.resolve_matrix_view(Some(*view), pc).unwrap();
+                    if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
+                        panic!(
+                            "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
+                            self.m_machine.mram.element_bits()
+                        );
+                    }
+                    let values = descriptor.values();
+                    let dtype = match precision {
+                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
+                    };
+                    let region = self.mx_region(
+                        dtype,
+                        self.reg_file.read_hbm(*rs2),
+                        self.reg_file.read_gp(*rs1),
+                        *rstride,
+                    );
+                    let xfer = dma::transfer_mx_from_hbm(
+                        &self.hbm,
+                        region,
+                        self.m_machine.mram.ty(),
+                        *VLEN,
+                        values.div_ceil(*VLEN),
+                        1,
+                    );
+                    let tensor = xfer.await.unwrap_or_else(|error| {
+                        panic!("Matrix-view DMA receiver dropped: {error}")
+                    });
+                    let tensor = if tensor.as_tensor().numel() == values as usize {
+                        tensor
+                    } else {
+                        QuantTensor::quantize(
+                            tensor.as_tensor().narrow(0, 0, i64::from(values)),
+                            self.m_machine.mram.ty(),
+                        )
+                    };
+                    let service = self
+                        .m_machine
+                        .mram
+                        .write_layout_packet(
+                            self.reg_file.read_gp(*rd),
+                            descriptor.layout(),
+                            tensor,
+                        )
+                        .await;
+                    cycle!(service.service_cycles.max(1));
+                }
                 op::Opcode::H_STORE_V {
                     rd,
                     rs1,
@@ -985,6 +1321,7 @@ impl Accelerator {
                     let dtype = match precision {
                         op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
                     };
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
@@ -998,6 +1335,41 @@ impl Accelerator {
                         *STORE_V_AMOUNT,
                     )
                     .await;
+                }
+                op::Opcode::H_STORE_V_MV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride,
+                    precision,
+                    view,
+                } => {
+                    let descriptor = self.resolve_matrix_view(Some(*view), pc).unwrap();
+                    if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
+                        panic!(
+                            "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
+                            self.m_machine.mram.element_bits()
+                        );
+                    }
+                    let (packet, service) = self
+                        .m_machine
+                        .mram
+                        .read_layout_packet(self.reg_file.read_gp(*rd), descriptor.layout())
+                        .await;
+                    cycle!(service.service_cycles.max(1));
+                    let rows = dma::split_packet_rows(&packet, *VLEN, self.m_machine.mram.ty());
+                    let dtype = match precision {
+                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
+                    };
+                    let region = self.mx_region(
+                        dtype,
+                        self.reg_file.read_hbm(*rs2),
+                        self.reg_file.read_gp(*rs1),
+                        *rstride,
+                    );
+                    dma::store_rows_to_hbm(&self.hbm, region, rows, *VLEN).await;
                 }
                 op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
                     let imm = ((self.reg_file.read_gp(*rs1) as u64) << 32)
@@ -1040,27 +1412,39 @@ impl Accelerator {
                         });
                     cycle!(1);
                 }
-                op::Opcode::L_MVIEW_FULL {
+                op::Opcode::L_TILE_CFG {
                     shape,
                     mapping,
                     slot,
                 } => {
                     self.reg_file
-                        .configure_mview_full(*slot, *shape, *mapping)
+                        .configure_mview(*slot, *shape, *mapping)
                         .unwrap_or_else(|error| {
-                            tracing::error!(pc, slot, %error, "invalid L_MVIEW_FULL");
+                            tracing::error!(pc, slot, %error, "invalid L_TILE_CFG");
                             panic!("{error} at pc {pc}")
                         });
                     cycle!(1);
                 }
-                op::Opcode::L_MVIEW_FIELD { value, field, slot } => {
-                    self.reg_file
-                        .configure_mview_field(*slot, *field, *value)
-                        .unwrap_or_else(|error| {
-                            tracing::error!(pc, slot, field, %error, "invalid L_MVIEW_FIELD");
-                            panic!("{error} at pc {pc}")
-                        });
-                    cycle!(1);
+                op::Opcode::L_TILE_EXEC {
+                    rd,
+                    rs1,
+                    rs2,
+                    primitive,
+                    source_axis,
+                    scale_axis,
+                } => {
+                    self.execute_l_tile(
+                        LTileExecArgs {
+                            destination_register: *rd,
+                            source_register: *rs1,
+                            scale_register: *rs2,
+                            primitive: *primitive,
+                            source_axis: *source_axis,
+                            scale_axis: *scale_axis,
+                        },
+                        pc,
+                    )
+                    .await;
                 }
                 op::Opcode::C_LOOP_START { rd, imm } => {
                     self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
@@ -1176,6 +1560,28 @@ impl Accelerator {
     }
 
     fn op_access_for_opcode(&self, op: &op::Opcode) -> OpAccess {
+        if let op::Opcode::H_PREFETCH_V_MV { view, .. } | op::Opcode::H_STORE_V_MV { view, .. } = op
+        {
+            let descriptor = self.reg_file.matrix_view(*view).unwrap_or_else(|error| {
+                panic!("{error} while building Matrix-view DMA scoreboard access")
+            });
+            let mut dma_access = access::op_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
+                self.reg_file.topk_policy()
+            });
+            for resource in dma_access
+                .reads
+                .iter_mut()
+                .chain(dma_access.writes.iter_mut())
+            {
+                if let access::Resource::Sram(range) = resource
+                    && range.space == access::SramSpace::Matrix
+                {
+                    range.len = descriptor.values();
+                }
+            }
+            return dma_access;
+        }
+
         let matrix_vector = match op {
             op::Opcode::V_ADD_VV {
                 rd,
@@ -1470,6 +1876,7 @@ impl Accelerator {
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                     op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
                 };
                 let region = self.mx_region(dtype, addr, offset, *rstride);
                 let xfer = dma::transfer_mx_from_hbm(
@@ -1494,6 +1901,66 @@ impl Accelerator {
                 });
                 (DmaKind::Prefetch, done_rx)
             }
+            op::Opcode::H_PREFETCH_V_MV {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+                view,
+            } => {
+                let descriptor = self
+                    .reg_file
+                    .matrix_view(*view)
+                    .unwrap_or_else(|error| panic!("{error} while issuing Matrix-view prefetch"));
+                if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
+                    panic!(
+                        "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
+                        self.m_machine.mram.element_bits()
+                    );
+                }
+                let values = descriptor.values();
+                let dtype = match precision {
+                    op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                    op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
+                };
+                let region = self.mx_region(
+                    dtype,
+                    self.reg_file.read_hbm(*rs2),
+                    self.reg_file.read_gp(*rs1),
+                    *rstride,
+                );
+                let xfer = dma::transfer_mx_from_hbm(
+                    &self.hbm,
+                    region,
+                    self.m_machine.mram.ty(),
+                    *VLEN,
+                    values.div_ceil(*VLEN),
+                    1,
+                );
+                let dest = self.reg_file.read_gp(*rd);
+                let (pending, service) = self
+                    .m_machine
+                    .mram
+                    .mark_pending_layout_packet(dest, descriptor.layout())
+                    .await;
+                let mram = self.m_machine.mram.clone();
+                let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                Executor::current().spawn(async move {
+                    let tensor = xfer.await.unwrap_or_else(|error| {
+                        panic!("Matrix-view DMA receiver dropped: {error}")
+                    });
+                    Executor::current()
+                        .resolve_at(*PERIOD * service.service_cycles.max(1))
+                        .await;
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+                    let _ = tx.send(tensor);
+                    mram.fill_pending(pending, rx).await;
+                    let _ = done_tx.send(Executor::current().now());
+                });
+                (DmaKind::Prefetch, done_rx)
+            }
             op::Opcode::H_STORE_V {
                 rd,
                 rs1,
@@ -1507,6 +1974,7 @@ impl Accelerator {
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                     op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
                 };
                 let region = self.mx_region(dtype, addr, offset, *rstride);
                 // Snapshot the source rows at issue: later instructions may
@@ -1517,6 +1985,52 @@ impl Accelerator {
                 let hbm = self.hbm.clone();
                 let (done_tx, done_rx) = tokio::sync::oneshot::channel();
                 Executor::current().spawn(async move {
+                    dma::store_rows_to_hbm(&hbm, region, rows, *VLEN).await;
+                    let _ = done_tx.send(Executor::current().now());
+                });
+                (DmaKind::Store, done_rx)
+            }
+            op::Opcode::H_STORE_V_MV {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+                view,
+            } => {
+                let descriptor = self
+                    .reg_file
+                    .matrix_view(*view)
+                    .unwrap_or_else(|error| panic!("{error} while issuing Matrix-view store"));
+                if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
+                    panic!(
+                        "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
+                        self.m_machine.mram.element_bits()
+                    );
+                }
+                let (packet, service) = self
+                    .m_machine
+                    .mram
+                    .read_layout_packet(self.reg_file.read_gp(*rd), descriptor.layout())
+                    .await;
+                let rows = dma::split_packet_rows(&packet, *VLEN, self.m_machine.mram.ty());
+                let dtype = match precision {
+                    op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                    op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
+                };
+                let region = self.mx_region(
+                    dtype,
+                    self.reg_file.read_hbm(*rs2),
+                    self.reg_file.read_gp(*rs1),
+                    *rstride,
+                );
+                let hbm = self.hbm.clone();
+                let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                Executor::current().spawn(async move {
+                    Executor::current()
+                        .resolve_at(*PERIOD * service.service_cycles.max(1))
+                        .await;
                     dma::store_rows_to_hbm(&hbm, region, rows, *VLEN).await;
                     let _ = done_tx.send(Executor::current().now());
                 });
@@ -1567,6 +2081,10 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::V_RED_MAX { .. }
         | op::Opcode::V_FMA_VF { .. }
         | op::Opcode::V_SOFTPLUS_V { .. }
+        // L_TILE_EXEC sequences existing Vector mul/add/reduce datapaths over
+        // Matrix-view packets.  Its configuration is scalar, but its execution
+        // must be charged to the arithmetic resource it occupies.
+        | op::Opcode::L_TILE_EXEC { .. }
         // S_MAP_FP_V drives the vector SRAM read port for a whole VLEN row, so it
         // contends with the vector unit even though its destination is FP_MEM. Its
         // mirror S_MAP_V_FP is classified Scalar for the same reason inverted.
@@ -1596,15 +2114,16 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_V_MASK_REG { .. }
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::L_CFG { .. }
-        | op::Opcode::L_MVIEW_FULL { .. }
-        | op::Opcode::L_MVIEW_FIELD { .. }
+        | op::Opcode::L_TILE_CFG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
 
         op::Opcode::H_PREFETCH_M { .. }
         | op::Opcode::H_PREFETCH_V { .. }
-        | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
+        | op::Opcode::H_PREFETCH_V_MV { .. }
+        | op::Opcode::H_STORE_V { .. }
+        | op::Opcode::H_STORE_V_MV { .. } => ResourceKind::Dma,
 
         op::Opcode::Invalid => ResourceKind::Other,
     }
@@ -1624,6 +2143,21 @@ mod tests {
                 rs2: 3,
                 rmask: 0,
                 lmask: 0,
+            }),
+            ResourceKind::Vector
+        );
+    }
+
+    #[test]
+    fn l_tile_execution_is_billed_to_the_vector_unit() {
+        assert_eq!(
+            resource_kind_for_opcode(&op::Opcode::L_TILE_EXEC {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                primitive: op::LTilePrimitive::ScaleAccum,
+                source_axis: op::LTileAxis::Row,
+                scale_axis: op::LTileAxis::Row,
             }),
             ResourceKind::Vector
         );

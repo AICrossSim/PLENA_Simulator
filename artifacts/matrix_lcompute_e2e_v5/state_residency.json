@@ -1,0 +1,675 @@
+{
+  "schema_version": 1,
+  "matrix_sram": {
+    "analytic": {
+      "mode": "analytic",
+      "mlen": 2048,
+      "depth_rows": 256,
+      "element_bits": 16,
+      "element_format": "bf16",
+      "elements": 524288,
+      "physical_bytes": 1048576,
+      "whole_square_tiles": 0,
+      "legacy_square_tile_api_valid": false,
+      "compact_matrix_view_api_valid": true,
+      "size_unit": "MLEN-wide logical rows"
+    },
+    "transactional": {
+      "mode": "transactional",
+      "mlen": 64,
+      "depth_rows": 4096,
+      "element_bits": 16,
+      "element_format": "bf16",
+      "elements": 262144,
+      "physical_bytes": 524288,
+      "whole_square_tiles": 64,
+      "legacy_square_tile_api_valid": true,
+      "compact_matrix_view_api_valid": true,
+      "size_unit": "MLEN-wide logical rows"
+    }
+  },
+  "residency": [
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "fp32",
+      "state_bytes_per_layer": 6291456,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 6,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 12582912,
+      "hbm_read_write_bytes_all_layers_token": 868220928,
+      "natively_representable": false
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "fp32",
+      "state_bytes_per_layer": 2097152,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 2,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 4194304,
+      "hbm_read_write_bytes_all_layers_token": 96468992,
+      "natively_representable": false
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "bf16",
+      "state_bytes_per_layer": 3145728,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 3,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 6291456,
+      "hbm_read_write_bytes_all_layers_token": 434110464,
+      "natively_representable": true
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "bf16",
+      "state_bytes_per_layer": 1048576,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 1,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 2097152,
+      "hbm_read_write_bytes_all_layers_token": 48234496,
+      "natively_representable": true
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "fp16",
+      "state_bytes_per_layer": 3145728,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 3,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 6291456,
+      "hbm_read_write_bytes_all_layers_token": 434110464,
+      "natively_representable": false
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "fp16",
+      "state_bytes_per_layer": 1048576,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 1,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 2097152,
+      "hbm_read_write_bytes_all_layers_token": 48234496,
+      "natively_representable": false
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "mx8_b128",
+      "state_bytes_per_layer": 1585152,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 2,
+      "final_window_occupancy": 0.51171875,
+      "hbm_read_write_bytes_per_layer_token": 3170304,
+      "hbm_read_write_bytes_all_layers_token": 218750976,
+      "natively_representable": false
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "mx8_b128",
+      "state_bytes_per_layer": 528384,
+      "matrix_capacity_bytes": 1048576,
+      "capacity_windows": 1,
+      "final_window_occupancy": 0.50390625,
+      "hbm_read_write_bytes_per_layer_token": 1056768,
+      "hbm_read_write_bytes_all_layers_token": 24305664,
+      "natively_representable": false
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "fp32",
+      "state_bytes_per_layer": 6291456,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 12,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 12582912,
+      "hbm_read_write_bytes_all_layers_token": 868220928,
+      "natively_representable": false
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "fp32",
+      "state_bytes_per_layer": 2097152,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 4,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 4194304,
+      "hbm_read_write_bytes_all_layers_token": 96468992,
+      "natively_representable": false
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "bf16",
+      "state_bytes_per_layer": 3145728,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 6,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 6291456,
+      "hbm_read_write_bytes_all_layers_token": 434110464,
+      "natively_representable": true
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "bf16",
+      "state_bytes_per_layer": 1048576,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 2,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 2097152,
+      "hbm_read_write_bytes_all_layers_token": 48234496,
+      "natively_representable": true
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "fp16",
+      "state_bytes_per_layer": 3145728,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 6,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 6291456,
+      "hbm_read_write_bytes_all_layers_token": 434110464,
+      "natively_representable": false
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "fp16",
+      "state_bytes_per_layer": 1048576,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 2,
+      "final_window_occupancy": 1.0,
+      "hbm_read_write_bytes_per_layer_token": 2097152,
+      "hbm_read_write_bytes_all_layers_token": 48234496,
+      "natively_representable": false
+    },
+    {
+      "model": "kimi_k3",
+      "layers": 69,
+      "state_elements_per_layer": 1572864,
+      "state_format": "mx8_b128",
+      "state_bytes_per_layer": 1585152,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 4,
+      "final_window_occupancy": 0.0234375,
+      "hbm_read_write_bytes_per_layer_token": 3170304,
+      "hbm_read_write_bytes_all_layers_token": 218750976,
+      "natively_representable": false
+    },
+    {
+      "model": "nemotron3_nano",
+      "layers": 23,
+      "state_elements_per_layer": 524288,
+      "state_format": "mx8_b128",
+      "state_bytes_per_layer": 528384,
+      "matrix_capacity_bytes": 524288,
+      "capacity_windows": 2,
+      "final_window_occupancy": 0.0078125,
+      "hbm_read_write_bytes_per_layer_token": 1056768,
+      "hbm_read_write_bytes_all_layers_token": 24305664,
+      "natively_representable": false
+    }
+  ],
+  "published_packet_footprints": {
+    "nemotron_mamba_32_heads_x_64": {
+      "reserved_rows_one_operand": 32,
+      "reserved_bytes_one_operand": 131072,
+      "reserved_bytes_two_operands": 262144,
+      "fits_one_operand": true,
+      "fits_two_operands": true
+    },
+    "kimi_kda_16_heads_x_128": {
+      "reserved_rows_one_operand": 16,
+      "reserved_bytes_one_operand": 65536,
+      "reserved_bytes_two_operands": 131072,
+      "fits_one_operand": true,
+      "fits_two_operands": true
+    }
+  },
+  "accuracy": {
+    "nemotron_mamba": {
+      "bf16": {
+        "schedule": "chunk128",
+        "output_relative_l2_mean": 0.00031241314694704236,
+        "state_relative_l2_mean": 0.001667918069863536,
+        "total_bytes": 1048576,
+        "source": "B200 Nemotron Mamba, S=32768, three seeds"
+      },
+      "fp16": {
+        "schedule": "chunk128",
+        "output_relative_l2_mean": 0.00014179012876617766,
+        "state_relative_l2_mean": 0.00020686635725325304,
+        "total_bytes": 1048576,
+        "source": "B200 Nemotron Mamba, S=32768, three seeds"
+      },
+      "fp32": {
+        "schedule": "reference",
+        "output_relative_l2_mean": 0.0,
+        "state_relative_l2_mean": 0.0,
+        "total_bytes": 2097152,
+        "source": "B200 Nemotron Mamba, S=32768, three seeds"
+      },
+      "mx8_b128": {
+        "schedule": "chunk128",
+        "output_relative_l2_mean": 0.0008060857982586665,
+        "state_relative_l2_mean": 0.026866347683043326,
+        "total_bytes": 528384,
+        "source": "B200 Nemotron Mamba, S=32768, three seeds"
+      }
+    },
+    "kimi_kda": {
+      "schema_version": 1,
+      "scope": {
+        "model": "Kimi K3 KDA recurrent core",
+        "real_dimensions": {
+          "key_dim": 128,
+          "value_dim": 128,
+          "full_model_heads": 96
+        },
+        "represented_heads": 3,
+        "seeds": [
+          17,
+          42,
+          2026
+        ],
+        "weights": "synthetic deterministic recurrent inputs; no checkpoint weights",
+        "arithmetic": "FP32 update and reduction; storage-only quantization",
+        "decay": "Kimi formula with a_log=0, dt_bias=0, long-memory gate near -8"
+      },
+      "config": {
+        "tokens": [
+          2048,
+          8192
+        ],
+        "seeds": [
+          17,
+          42,
+          2026
+        ],
+        "key_dim": 128,
+        "value_dim": 128,
+        "full_model_heads": 96,
+        "gate_lower_bound": -5.0,
+        "checkpoint_intervals": [
+          1,
+          128
+        ]
+      },
+      "records": [
+        {
+          "tokens": 2048,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "fp32",
+          "output": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 1.0000009536743164
+          },
+          "state": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 0.9999998807907104
+          },
+          "full_kimi_layer_bytes": 6291456,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "bf16",
+          "output": {
+            "relative_l2_mean": 0.017060738056898117,
+            "relative_l2_max": 0.01708611287176609,
+            "max_abs_max": 0.001000877469778061,
+            "cosine_min": 0.9998592734336853
+          },
+          "state": {
+            "relative_l2_mean": 0.017811674624681473,
+            "relative_l2_max": 0.017981555312871933,
+            "max_abs_max": 0.021274834871292114,
+            "cosine_min": 0.9998437166213989
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "fp16",
+          "output": {
+            "relative_l2_mean": 0.002092094160616398,
+            "relative_l2_max": 0.00209397217258811,
+            "max_abs_max": 0.00011722557246685028,
+            "cosine_min": 0.9999995231628418
+          },
+          "state": {
+            "relative_l2_mean": 0.0021715525072067976,
+            "relative_l2_max": 0.0021879596170037985,
+            "max_abs_max": 0.0021201372146606445,
+            "cosine_min": 0.9999970197677612
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "mx8_b128",
+          "output": {
+            "relative_l2_mean": 0.2627736032009125,
+            "relative_l2_max": 0.26389697194099426,
+            "max_abs_max": 0.014952536672353745,
+            "cosine_min": 0.9686194658279419
+          },
+          "state": {
+            "relative_l2_mean": 0.275733083486557,
+            "relative_l2_max": 0.2790513336658478,
+            "max_abs_max": 0.42005568742752075,
+            "cosine_min": 0.9648240208625793
+          },
+          "full_kimi_layer_bytes": 1585152,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "fp32",
+          "output": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 1.0000009536743164
+          },
+          "state": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 0.9999998807907104
+          },
+          "full_kimi_layer_bytes": 6291456,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "bf16",
+          "output": {
+            "relative_l2_mean": 0.0014665420167148113,
+            "relative_l2_max": 0.0014751477865502238,
+            "max_abs_max": 9.401515126228333e-05,
+            "cosine_min": 1.0000004768371582
+          },
+          "state": {
+            "relative_l2_mean": 0.0020062902476638556,
+            "relative_l2_max": 0.0020273549016565084,
+            "max_abs_max": 0.0015406012535095215,
+            "cosine_min": 0.9999998807907104
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "fp16",
+          "output": {
+            "relative_l2_mean": 0.00018315210763830692,
+            "relative_l2_max": 0.00018382465350441635,
+            "max_abs_max": 1.3551529264077544e-05,
+            "cosine_min": 1.000001072883606
+          },
+          "state": {
+            "relative_l2_mean": 0.0002506439050193876,
+            "relative_l2_max": 0.00025246478617191315,
+            "max_abs_max": 0.00019314885139465332,
+            "cosine_min": 0.9999994039535522
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 2048,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "mx8_b128",
+          "output": {
+            "relative_l2_mean": 0.023425912484526634,
+            "relative_l2_max": 0.02356373332440853,
+            "max_abs_max": 0.001539677381515503,
+            "cosine_min": 0.9997251629829407
+          },
+          "state": {
+            "relative_l2_mean": 0.03197726234793663,
+            "relative_l2_max": 0.032135553658008575,
+            "max_abs_max": 0.023573994636535645,
+            "cosine_min": 0.9994839429855347
+          },
+          "full_kimi_layer_bytes": 1585152,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "fp32",
+          "output": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 1.0000202655792236
+          },
+          "state": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 0.9999997615814209
+          },
+          "full_kimi_layer_bytes": 6291456,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "bf16",
+          "output": {
+            "relative_l2_mean": 0.01740780659019947,
+            "relative_l2_max": 0.017490558326244354,
+            "max_abs_max": 0.001055493950843811,
+            "cosine_min": 0.999868631362915
+          },
+          "state": {
+            "relative_l2_mean": 0.017679506912827492,
+            "relative_l2_max": 0.018032323569059372,
+            "max_abs_max": 0.018452510237693787,
+            "cosine_min": 0.9998422861099243
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "fp16",
+          "output": {
+            "relative_l2_mean": 0.00213101995177567,
+            "relative_l2_max": 0.0021349897142499685,
+            "max_abs_max": 0.00012457941193133593,
+            "cosine_min": 1.0000169277191162
+          },
+          "state": {
+            "relative_l2_mean": 0.0021688879933208227,
+            "relative_l2_max": 0.0022019799798727036,
+            "max_abs_max": 0.0022528618574142456,
+            "cosine_min": 0.9999969005584717
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "token",
+          "checkpoint_interval": 1,
+          "storage": "mx8_b128",
+          "output": {
+            "relative_l2_mean": 0.2687644958496094,
+            "relative_l2_max": 0.2705090045928955,
+            "max_abs_max": 0.01857207715511322,
+            "cosine_min": 0.9672597646713257
+          },
+          "state": {
+            "relative_l2_mean": 0.2717144191265106,
+            "relative_l2_max": 0.27387604117393494,
+            "max_abs_max": 0.4464881718158722,
+            "cosine_min": 0.9664066433906555
+          },
+          "full_kimi_layer_bytes": 1585152,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "fp32",
+          "output": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 1.0000202655792236
+          },
+          "state": {
+            "relative_l2_mean": 0.0,
+            "relative_l2_max": 0.0,
+            "max_abs_max": 0.0,
+            "cosine_min": 0.9999997615814209
+          },
+          "full_kimi_layer_bytes": 6291456,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "bf16",
+          "output": {
+            "relative_l2_mean": 0.0015051976079121232,
+            "relative_l2_max": 0.0015083899488672614,
+            "max_abs_max": 0.0001259204000234604,
+            "cosine_min": 1.000018835067749
+          },
+          "state": {
+            "relative_l2_mean": 0.0019971004221588373,
+            "relative_l2_max": 0.0020134607329964638,
+            "max_abs_max": 0.0019453167915344238,
+            "cosine_min": 0.9999998211860657
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "fp16",
+          "output": {
+            "relative_l2_mean": 0.00018787849694490433,
+            "relative_l2_max": 0.00018828181782737374,
+            "max_abs_max": 1.372210681438446e-05,
+            "cosine_min": 1.0000200271606445
+          },
+          "state": {
+            "relative_l2_mean": 0.00024927491904236376,
+            "relative_l2_max": 0.00025260334950871766,
+            "max_abs_max": 0.0002116858959197998,
+            "cosine_min": 0.9999992847442627
+          },
+          "full_kimi_layer_bytes": 3145728,
+          "nan_count": 0,
+          "inf_count": 0
+        },
+        {
+          "tokens": 8192,
+          "schedule": "chunk128",
+          "checkpoint_interval": 128,
+          "storage": "mx8_b128",
+          "output": {
+            "relative_l2_mean": 0.024024879559874535,
+            "relative_l2_max": 0.024062050506472588,
+            "max_abs_max": 0.0017540715634822845,
+            "cosine_min": 0.9997324347496033
+          },
+          "state": {
+            "relative_l2_mean": 0.03169042617082596,
+            "relative_l2_max": 0.03194493427872658,
+            "max_abs_max": 0.02474626898765564,
+            "cosine_min": 0.9994899034500122
+          },
+          "full_kimi_layer_bytes": 1585152,
+          "nan_count": 0,
+          "inf_count": 0
+        }
+      ]
+    }
+  },
+  "conclusions": [
+    "Official Kimi K3 FP32 recurrent state is 6 MiB per layer.",
+    "The analytic Matrix SRAM is 1 MiB (2048 x 256 BF16 elements).",
+    "The shipped transactional Matrix SRAM is 512 KiB of BF16 storage.",
+    "FP32 and MX8 state are not natively represented by that BF16 SRAM.",
+    "Matrix L-Compute therefore cannot assume full state residency; it must report explicit tiled traffic.",
+    "Compact Mamba/KDA BF16 operand views fit the 256-row analytic SRAM even though one 2048-square legacy tile does not.",
+    "BF16 q/k/v/B/C temporaries are the unconditional Matrix L-Compute scope."
+  ]
+}

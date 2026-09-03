@@ -8,12 +8,52 @@ pub enum MatrixPrecision {
 pub enum VectorPrecision {
     Activation,
     KeyValue,
+    State,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum VectorOrder {
     Normal,
     Reverse,
+}
+
+/// Model-independent algebraic forms executed over configured Matrix views.
+/// Loop bounds and broadcasting come from the views, never from a model ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LTilePrimitive {
+    ScaleAccum,
+    DotReduce,
+    OuterUpdate,
+}
+
+impl TryFrom<u8> for LTilePrimitive {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::ScaleAccum),
+            1 => Ok(Self::DotReduce),
+            2 => Ok(Self::OuterUpdate),
+            _ => Err(()),
+        }
+    }
+}
+
+/// Logical line direction selected independently for each `L_TILE_EXEC` input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LTileAxis {
+    Row,
+    Column,
+}
+
+impl From<u8> for LTileAxis {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Row,
+            1 => Self::Column,
+            _ => unreachable!("L_TILE axis is one bit"),
+        }
+    }
 }
 
 #[allow(non_camel_case_types)]
@@ -320,12 +360,33 @@ pub enum Opcode {
         rstride: u8,
         precision: VectorPrecision,
     },
+    /// Existing H_PREFETCH_V transfer targeted directly at a configured
+    /// Matrix-SRAM view. The view changes placement only; precision and HBM
+    /// addressing retain the legacy instruction's semantics.
+    H_PREFETCH_V_MV {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rstride: u8,
+        precision: VectorPrecision,
+        view: u8,
+    },
     H_STORE_V {
         rd: u8,
         rs1: u8,
         rs2: u8,
         rstride: u8,
         precision: VectorPrecision,
+    },
+    /// Existing H_STORE_V transfer sourced directly from a configured
+    /// Matrix-SRAM view, after logical lane order is restored.
+    H_STORE_V_MV {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rstride: u8,
+        precision: VectorPrecision,
+        view: u8,
     },
 
     C_SET_ADDR_REG {
@@ -357,16 +418,20 @@ pub enum Opcode {
         field: u8,
     },
     /// Atomically configure a packed Matrix-SRAM placement view.
-    L_MVIEW_FULL {
+    L_TILE_CFG {
         shape: u8,
         mapping: u8,
         slot: u8,
     },
-    /// Replace one packed Matrix-view word, or reset the slot.
-    L_MVIEW_FIELD {
-        value: u8,
-        field: u8,
-        slot: u8,
+    /// Execute one deterministic tiled recurrence primitive through views
+    /// 0/1/2. `rd`/`rs1`/`rs2` are explicit Matrix-SRAM base addresses.
+    L_TILE_EXEC {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        primitive: LTilePrimitive,
+        source_axis: LTileAxis,
+        scale_axis: LTileAxis,
     },
     C_LOOP_START {
         rd: u8,
@@ -428,11 +493,26 @@ impl Opcode {
     }
 
     #[inline]
-    fn vector_precision_from(funct1: u8) -> VectorPrecision {
+    fn legacy_vector_precision_from(funct1: u8) -> VectorPrecision {
+        // Preserve the pre-extension ISA exactly: zero selected activation and
+        // every non-zero funct value selected KV.  Old machine words must not
+        // silently acquire the new State meaning.
         if funct1 == 0 {
             VectorPrecision::Activation
         } else {
             VectorPrecision::KeyValue
+        }
+    }
+
+    #[inline]
+    fn matrix_view_vector_precision_from(funct1: u8) -> Option<VectorPrecision> {
+        // The bit-31 Matrix-view form is a new encoding and can therefore use
+        // a canonical three-way selector without changing legacy binaries.
+        match funct1 {
+            0 => Some(VectorPrecision::Activation),
+            1 => Some(VectorPrecision::KeyValue),
+            2 => Some(VectorPrecision::State),
+            _ => None,
         }
     }
 
@@ -443,6 +523,19 @@ impl Opcode {
         } else {
             VectorOrder::Reverse
         }
+    }
+
+    #[inline]
+    fn matrix_view_dma_slot(instr: u32) -> Result<Option<u8>, ()> {
+        let high = (instr >> 26) as u8;
+        if high == 0 {
+            return Ok(None);
+        }
+        // bit31 marks the form, bits30:29 are the slot, bits28:26 are zero.
+        if high & 0b100000 == 0 || high & 0b000111 != 0 {
+            return Err(());
+        }
+        Ok(Some((high >> 3) & 0b11))
     }
 
     pub fn decode(instr: u32) -> Self {
@@ -682,20 +775,60 @@ impl Opcode {
                 precision: Self::matrix_precision_from(funct1),
             },
             // 0x29 => Self::H_PREFETCH_M { rd, rs1, rs2, rstride: rs3, precision: MatrixPrecision::KeyValue },
-            0x29 => Self::H_PREFETCH_V {
-                rd,
-                rs1,
-                rs2,
-                rstride: rs3,
-                precision: Self::vector_precision_from(funct1),
+            0x29 => match Self::matrix_view_dma_slot(instr) {
+                Ok(None) => Self::H_PREFETCH_V {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride: rs3,
+                    precision: Self::legacy_vector_precision_from(funct1),
+                },
+                Ok(Some(view)) => match Self::matrix_view_vector_precision_from(funct1) {
+                    Some(precision) => Self::H_PREFETCH_V_MV {
+                        rd,
+                        rs1,
+                        rs2,
+                        rstride: rs3,
+                        precision,
+                        view,
+                    },
+                    None => {
+                        tracing::error!(instr, funct1, "reserved Matrix-view prefetch precision");
+                        Self::Invalid
+                    }
+                },
+                Err(()) => {
+                    tracing::error!(instr, funct1, "reserved H_PREFETCH_V encoding");
+                    Self::Invalid
+                }
             },
             // 0x2A => Self::H_PREFETCH_V { rd, rs1, rs2, rstride: rs3, precision: VectorPrecision::KeyValue },
-            0x2A => Self::H_STORE_V {
-                rd,
-                rs1,
-                rs2,
-                rstride: rs3,
-                precision: Self::vector_precision_from(funct1),
+            0x2A => match Self::matrix_view_dma_slot(instr) {
+                Ok(None) => Self::H_STORE_V {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride: rs3,
+                    precision: Self::legacy_vector_precision_from(funct1),
+                },
+                Ok(Some(view)) => match Self::matrix_view_vector_precision_from(funct1) {
+                    Some(precision) => Self::H_STORE_V_MV {
+                        rd,
+                        rs1,
+                        rs2,
+                        rstride: rs3,
+                        precision,
+                        view,
+                    },
+                    None => {
+                        tracing::error!(instr, funct1, "reserved Matrix-view store precision");
+                        Self::Invalid
+                    }
+                },
+                Err(()) => {
+                    tracing::error!(instr, funct1, "reserved H_STORE_V encoding");
+                    Self::Invalid
+                }
             },
             // 0x2B => Self::H_STORE_V { rd, rs1, rs2, rstride: rs3, precision: VectorPrecision::KeyValue },
             0x2B => Self::C_SET_ADDR_REG { rd, rs1, rs2 },
@@ -753,30 +886,36 @@ impl Opcode {
             }
             0x3F if funct1 == 1 => {
                 if instr >> 26 != 0 || rs2 >= 4 || rs3 != 0 {
-                    tracing::error!(instr, "non-canonical L_MVIEW_FULL encoding");
+                    tracing::error!(instr, "non-canonical L_TILE_CFG encoding");
                     Self::Invalid
                 } else {
-                    Self::L_MVIEW_FULL {
+                    Self::L_TILE_CFG {
                         shape: rd,
                         mapping: rs1,
                         slot: rs2,
                     }
                 }
             }
-            0x3F if funct1 == 2 => {
-                if instr >> 26 != 0 || rs2 >= 4 || rs3 != 0 || rs1 >= 3 {
-                    tracing::error!(instr, "non-canonical L_MVIEW_FIELD encoding");
+            0x3F if funct1 == 3 => {
+                if instr >> 28 != 0 {
+                    tracing::error!(instr, "non-canonical L_TILE_EXEC encoding");
                     Self::Invalid
-                } else {
-                    Self::L_MVIEW_FIELD {
-                        value: rd,
-                        field: rs1,
-                        slot: rs2,
+                } else if let Ok(primitive) = LTilePrimitive::try_from(rs3) {
+                    Self::L_TILE_EXEC {
+                        rd,
+                        rs1,
+                        rs2,
+                        primitive,
+                        source_axis: LTileAxis::from(((instr >> 26) & 1) as u8),
+                        scale_axis: LTileAxis::from(((instr >> 27) & 1) as u8),
                     }
+                } else {
+                    tracing::error!(instr, rs3, "reserved L_TILE primitive");
+                    Self::Invalid
                 }
             }
             0x3F => {
-                tracing::error!(instr, funct1, "reserved L_MVIEW form");
+                tracing::error!(instr, funct1, "reserved L_TILE form");
                 Self::Invalid
             }
             _ => {
@@ -1009,6 +1148,15 @@ mod tests {
                 ..
             }
         ));
+        for legacy_nonzero in 2..=15 {
+            assert!(matches!(
+                Opcode::decode(rform(0x29, 0, 0, 0, 0, legacy_nonzero)),
+                Opcode::H_PREFETCH_V {
+                    precision: VectorPrecision::KeyValue,
+                    ..
+                }
+            ));
+        }
     }
 
     #[test]
@@ -1023,6 +1171,48 @@ mod tests {
             } => assert_eq!((rd, rs1, rs2, rstride), (1, 2, 3, 4)),
             other => panic!("expected H_STORE_V KeyValue, got {other:?}"),
         }
+        for legacy_nonzero in 2..=15 {
+            assert!(matches!(
+                Opcode::decode(rform(0x2A, 1, 2, 3, 4, legacy_nonzero)),
+                Opcode::H_STORE_V {
+                    precision: VectorPrecision::KeyValue,
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn test_decode_vector_dma_matrix_view_form_and_reject_reserved_high_bits() {
+        let marker = 1_u32 << 31;
+        let slot = 3_u32 << 29;
+        match Opcode::decode(rform(0x29, 1, 2, 3, 4, 2) | marker | slot) {
+            Opcode::H_PREFETCH_V_MV {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision: VectorPrecision::State,
+                view,
+            } => assert_eq!((rd, rs1, rs2, rstride, view), (1, 2, 3, 4, 3)),
+            other => panic!("expected Matrix-view prefetch, got {other:?}"),
+        }
+        assert!(matches!(
+            Opcode::decode(rform(0x2A, 1, 2, 3, 4, 2) | marker | (2 << 29)),
+            Opcode::H_STORE_V_MV {
+                precision: VectorPrecision::State,
+                view: 2,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x29, 1, 2, 3, 4, 2) | marker | (1 << 28)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x29, 1, 2, 3, 4, 3) | marker),
+            Opcode::Invalid
+        ));
     }
 
     // ---------- control ops ----------
@@ -1228,21 +1418,19 @@ mod tests {
     }
 
     #[test]
-    fn l_mview_forms_and_explicit_matrix_consumer_match_compiler_words() {
+    fn l_tile_forms_and_explicit_matrix_consumer_match_compiler_words() {
         match Opcode::decode(rform(0x3F, 7, 9, 2, 0, 1)) {
-            Opcode::L_MVIEW_FULL {
+            Opcode::L_TILE_CFG {
                 shape,
                 mapping,
                 slot,
             } => assert_eq!((shape, mapping, slot), (7, 9, 2)),
-            other => panic!("expected L_MVIEW_FULL, got {other:?}"),
+            other => panic!("expected L_TILE_CFG, got {other:?}"),
         }
-        match Opcode::decode(rform(0x3F, 9, 2, 2, 0, 2)) {
-            Opcode::L_MVIEW_FIELD { value, field, slot } => {
-                assert_eq!((value, field, slot), (9, 2, 2));
-            }
-            other => panic!("expected L_MVIEW_FIELD, got {other:?}"),
-        }
+        assert!(matches!(
+            Opcode::decode(rform(0x3F, 9, 2, 2, 0, 2)),
+            Opcode::Invalid
+        ));
         match Opcode::decode(rform(0x09, 9, 5, 6, 0, 3)) {
             Opcode::M_BMV { rd, rs1, rs2, view } => {
                 assert_eq!((rd, rs1, rs2, view), (9, 5, 6, Some(2)));

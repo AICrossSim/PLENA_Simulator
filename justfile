@@ -175,7 +175,9 @@ test-lcompute-affine-projection:
 # Compiler projection -> M_MM_WO consumer-shaped Matrix view -> existing
 # V_ADD_VV.MV consumer, checked numerically by the Rust emulator.
 test-matrix-view-projection compiler_root="PLENA_Compiler":
-    PLENA_COMPILER_ROOT={{compiler_root}} python3 transactional_emulator/testbench/aten/matrix_view_projection_test.py
+    PLENA_SETTINGS_TOML="$PWD/plena_settings.toml" \
+      PLENA_COMPILER_ROOT={{compiler_root}} \
+      python3 transactional_emulator/testbench/aten/matrix_view_projection_test.py
 
 # Matrix-SRAM-only L-Compute Python gate. This deliberately excludes the older
 # Vector-SRAM L_CFG campaign so its speedups cannot be attributed to Matrix
@@ -184,17 +186,20 @@ test-matrix-lcompute-python compiler_root="PLENA_Compiler":
     PLENA_COMPILER_ROOT={{compiler_root}} python3 -m pytest -q \
         analytic_models/performance/test_matrix_sram_layout.py \
         analytic_models/performance/test_matrix_state_residency.py \
-        analytic_models/performance/test_matrix_lcompute_campaign.py
+        analytic_models/performance/test_matrix_lcompute_campaign.py \
+        transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py
 
 # Compiler encoding, dominance, packet extraction, physical writeback and
 # official-shape workload guards used by the Matrix L-Compute campaign.
 test-matrix-lcompute-compiler compiler_root="PLENA_Compiler":
     env -u LD_LIBRARY_PATH -u LIBRARY_PATH -u NIX_LDFLAGS -u PYTHONPATH \
+      PLENA_SETTINGS_TOML="$PWD/plena_settings.toml" \
       PYTHONPATH={{compiler_root}} \
       uv run --directory {{compiler_root}} python -m pytest -q \
         assembler/tests/test_l_mview.py \
         aten/tests/test_affine_layout.py \
         aten/tests/test_hybrid_compile_report.py \
+        aten/tests/test_hybrid_l_tile_schedule.py \
         aten/tests/test_hybrid_workloads.py \
         aten/tests/test_kda_precision_campaign.py \
         aten/tests/test_kda_official_layer.py \
@@ -221,8 +226,17 @@ _test-matrix-lcompute-rust-in-dev-shell:
     # can otherwise race and intermittently SIGSEGV despite each test passing.
     cd transactional_emulator && cargo test --workspace --release -- --test-threads=1
 
+# Official recurrence geometry, four consecutive tokens, Compiler assembly and
+# machine words executed by the Rust emulator. Temporary HBM dumps are removed;
+# the command fails on state/output mismatch or lane/head permutation.
+test-matrix-lcompute-recurrence compiler_root="PLENA_Compiler":
+    tmp_dir="$(mktemp -d)"; trap 'rm -rf "$tmp_dir"' EXIT; \
+      PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      "$PWD/transactional_emulator/testbench/aten/matrix_lcompute_recurrence_test.py" \
+      --output-dir "$tmp_dir"
+
 # Complete pre-RTL gate: Compiler contract + analytic campaign + physical Rust
-# simulator + a Compiler-generated binary executed by Rust. Invoke this recipe
+# simulator + Compiler-generated recurrence binaries executed by Rust. Invoke this recipe
 # through `nix develop` as shown in README.md; entering Nix once keeps Cargo's
 # build fingerprint stable across both Rust checks.
 test-matrix-lcompute compiler_root="PLENA_Compiler":
@@ -230,13 +244,13 @@ test-matrix-lcompute compiler_root="PLENA_Compiler":
     just test-matrix-lcompute-compiler {{compiler_root}}
     just _test-matrix-lcompute-rust-in-dev-shell
     just test-matrix-view-projection {{compiler_root}}
+    just test-matrix-lcompute-recurrence {{compiler_root}}
 
-# Write A/B/C/D'/D/E tables plus the state capacity/precision contract into one
-# reproducible directory.
+# Write A/B/C/D/E tables plus state capacity, precision and overlap contracts.
 matrix-lcompute-campaign compiler_root="PLENA_Compiler":
     python3 -m analytic_models.performance.matrix_lcompute_campaign \
         --compiler-root {{compiler_root}} \
-        --output-dir artifacts/matrix_lcompute_e2e_v1
+        --output-dir artifacts/matrix_lcompute_e2e_v5
 
 # ISA/layout unit tests plus reproducibility checks for both checked campaigns.
 test-hybrid-lcompute:

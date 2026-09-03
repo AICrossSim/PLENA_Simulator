@@ -16,74 +16,91 @@ The PLENA Simulator provides three main components:
 
 ## Matrix SRAM L-Compute branch
 
-**Round-3 result:** programmable per-view skew is unnecessary. PLENA's fixed
-diagonal Matrix-SRAM wiring plus a Compiler-selected physical-row pitch reaches
-the same bank floor for both Nemotron Mamba and Kimi KDA. The public ISA now
-reserves the former skew bits.
+This branch executes the prepared-coefficient Nemotron Mamba-2 and Kimi KDA
+decode recurrence through physical Matrix-SRAM banks. State, prepared fields
+and outputs use a uniform BF16 PLENA contract. Official GPU FP32 state remains
+profiling and accuracy metadata; it is not used to widen the Matrix port. There
+is no cache, private state SRAM, `X_STATE`, command queue, runtime scheduler or
+new MAC array.
 
-Matrix writeback and consumers use the same tensor view. Row, column and
-multi-row packet reads restore logical lane order from the same physical cells;
-there is no transpose copy or hidden gather.
-
-The public ISA is model independent:
+The Rust simulator stores real `banks x rows x bank_width` cells. It checks
+aliasing, one-port bank service, row/column addressing, lane restoration,
+segment broadcast, reductions, explicit output writeback and recurrent state
+carried across four tokens. The Compiler emits the same view contract and
+canonical 32-bit instructions.
 
 ```text
-L_MVIEW.FULL   slot, shape_reg, map_reg
-L_MVIEW.FIELD  slot, field, value_reg
-<consumer>     ..., view=slot
+L_TILE_CFG   slot, shape_reg, map_reg
+L_TILE_EXEC  dst, src, scale, primitive[, axis_mask]
 ```
 
-The descriptor contains shape, pitch and bounds flags. Mapping bits `[27:16]`
-must be zero. It contains no Mamba/KDA formula and adds no cache, private state
-SRAM, `X_STATE`, MAC array, extra SRAM port, command queue or runtime scheduler.
-`M_MM_WO` performs view-qualified Matrix writeback, while existing Matrix and
-Vector operations explicitly name the configured view.
+One opcode (`0x3f`) serves both forms while preserving legacy `L_CFG` at
+`funct1=0`. The primitives are generic scale-accumulate, dot-reduce and
+outer-update; model names do not appear in the encoding or decoder. Viewed
+`H_PREFETCH_V`/`H_STORE_V` words use bit 31 plus a two-bit view slot. Legacy DMA
+words and their KV precision interpretation are unchanged.
 
-At the evaluated `MLEN=2048`, `BLEN=32`, 64-bank point, the real Compiler
-lowerings move and verify every numbered value:
+At `MLEN=2048`, `BLEN=32`, 64 banks, a 1 MiB BF16 Matrix SRAM and 1560 HBM
+bytes/cycle, the fresh formula-based B1 decode timeline is:
 
-| Official-shape packet | Pitch-1 service | Implemented pitch | Implemented service | Programmable-skew upper bound |
-|---|---:|---:|---:|---:|
-| Nemotron Mamba, 32 x 64 | 2 cycles | 2 | 1 | 1 |
-| Kimi KDA, 16 x 128 | 4 cycles | 4 | 1 | 1 |
+| Model | Original A | Arlo B | Fixed single-base C | Affine D | D/A | D/B |
+|---|---:|---:|---:|---:|---:|---:|
+| Nemotron 3 | 4,055,091 | 3,110,067 | 2,210,882 | 2,014,554 | 2.0129x | 1.5438x |
+| Kimi K3 | 103,816,704 | 97,013,856 | 93,286,200 | 91,178,043 | 1.1386x | 1.0640x |
 
-The same dynamic operation stream and numbered values are used in every path.
-Both implemented paths have zero bank-conflict stalls. Across all recurrence
-rows, 262,144 values per model are placed and restored with no alias and no
-capacity overhead. An exhaustive programmable-skew search improves neither
-model, so skew is not an ISA field.
+`A` and `B` are one-cycle-per-issued-instruction proxies, not transactional
+Rust timings. `C` and `D` include explicit Matrix service, arithmetic and HBM
+terms. Consequently `D/A` and `D/B` are mainly multi-row utilization plus issue
+compression; they are not programmable-skew speedups.
 
-The full campaign keeps three credits separate:
+KDA decay/beta preparation is not hidden: B1 includes 5,107,104 ordinary
+elementwise operations and 1,702,368 exponentials across 69 layers, charged as
+the same 4,485 Vector cycles in every variant. This implements the official
+`decay = exp(lower_bound * sigmoid(rate * (gate + dt_bias)))` and
+`beta = sigmoid(beta_logit)` preparation before `L_TILE`.
 
-| B1 decode, official FP32 state | Pitch-1 cycles | Co-layout cycles | Pure L-Compute gain |
-|---|---:|---:|---:|
-| Nemotron 3, 52 layers | 3,160,138 | 3,142,474 | 1.00562x |
-| Kimi K3, 93 layers | 98,804,544 | 98,168,640 | 1.00648x |
+`C` is a constrained single-base executable descriptor, not the fair bank-only
+baseline. The fair `D'` control uses PLENA's fixed diagonal wiring and ordinary
+Compiler-selected per-tile base phases. It occupies the same physical cells as
+`D`, reaches zero bank stalls, and gives `D/D' = 1.00x` for both official BF16
+state packets. This branch therefore does **not** claim a programmable-skew
+bank speedup. `C -> D` is descriptor/chunk/issue and KDA-spill improvement.
+Ordinary Attention/MLA/MoE row and column service is unchanged at all base
+phases.
 
-Local bank service is numbered Python physical-cell replay of real Compiler
-dynamic addresses. Whole-model cycles are formula-based serial analytic
-timelines with official dimensions, measured GPU calibration and symbolic
-PLENA weights. Official recurrent state is FP32 (2 MiB per Nemotron Mamba layer
-and 6 MiB per Kimi KDA layer), so it remains explicit HBM traffic and receives
-no BF16 Matrix-residency or cache credit.
+Compiler-generated recurrence programs run through the assembler and Rust
+decoder for four consecutive tokens at official recurrence geometry. The test
+compares 524,288 Nemotron and 1,572,864 Kimi state values plus every head-group
+output. Fixed and affine cases all pass; the largest relative-L2 error is
+0.0071 under BF16. Every output group has a distinct HBM destination.
 
-KDA prefill keeps only two independently verified facts: the legacy Compiler's
-identity-GEMM instruction/MAC census and exact column-view equivalence over
-16,384 numbered values. The old `3.387x/1.713x` speedups are withdrawn because
-the two complete paths were not measured under the same timeline.
+The separate long-sequence storage study reports BF16 output relative-L2 error
+of 0.000312 for Nemotron at 32K tokens and 0.017061 for Kimi at 2K tokens versus
+FP32 state. These are synthetic recurrence errors, not checkpoint-level
+language-quality results.
 
-Evidence levels are explicit: Rust executes the physical banks, row/column
-reads, view-qualified writeback, lane restoration, and reduced-shape multi-token
-Mamba/KDA recurrence. Official 52/93-layer results are complete analytic
-timelines; real checkpoint weights have not been numerically executed from the
-first to the last layer in Rust. No RTL or synthesis means there is no PPA,
-frequency, power, or Token/J claim.
+All 23 Nemotron Mamba layers and all 69 Kimi KDA layers emit legal `L_TILE`
+instructions in the official 52/93-layer order. Whole-model cycles still come
+from an analytic timeline with official dimensions, GPU calibration and
+symbolic weights; ordinary layers are schedule markers. Real checkpoints have
+not run numerically from first to final layer in Rust. Coefficient generation
+is an upstream Vector stage. Prefill is modeled but not accelerated by
+`L_TILE`.
 
-See the human-readable [result and limitation report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)
-and the machine-readable [campaign artifact](artifacts/matrix_lcompute_e2e_v1/).
-Run `nix develop --no-write-lock-file --command just test-matrix-lcompute` for
-the complete Compiler/Python/Rust gate. Use `just matrix-lcompute-campaign` in
-the same Nix shell to regenerate all tables.
+The BF16 bank word is 512 bits, matching the reference port. Static overlap
+receives no credit: the one-MiB point is short by 45,312 bytes for a second
+Nemotron state group and 28,736 bytes for Kimi. No RTL or synthesis means no
+PPA, frequency, power, Token/J or silicon claim. The timing scoreboard still
+uses conservative logical extents for Matrix views; physical `Cell::Pending`
+state enforces correctness, but exact bank-word overlap timing is not claimed.
+
+See [the full result report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md) and
+`artifacts/matrix_lcompute_e2e_v5/`. Run:
+
+```bash
+nix develop --no-write-lock-file --command \
+  just test-matrix-lcompute /absolute/path/to/PLENA_Compiler
+```
 
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 

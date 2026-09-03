@@ -1,5 +1,9 @@
 # Hybrid L-Compute：Compiler/Simulator 结果
 
+> **历史结果，已停止用于当前结论。** 本文对应早期实现；其中的加速数字不
+> 代表当前 Matrix-SRAM `L_TILE`、公平 D' 对照或统一 BF16 配置。当前唯一有效
+> 报告见 [MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md](MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)。
+
 ## 1. 先说结论
 
 这轮完成了可执行的多行 L-Compute 数据通路，而不再只是独立布局测试：

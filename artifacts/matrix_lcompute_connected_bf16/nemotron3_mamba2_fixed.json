@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "model": "nemotron3_mamba2",
+  "layout": "fixed",
+  "precision": "bf16_uniform_matrix_recurrence",
+  "tokens": 4,
+  "official_shape": {
+    "heads": 64,
+    "state_rows": 128,
+    "row_elements": 64
+  },
+  "compiler_generated_machine_words": 33360,
+  "assembly_sha256": "f938d05595cc9fec6614362e9219731b6d4d9936ed8d535e9961e79caf57d40e",
+  "machine_code_sha256": "0b6481b74e5706ea404a9892c72c7f2447d5c13d2106f825e321f46f9b14768f",
+  "input_hbm_sha256": "2f3655507ecdb4b383565f4fa9ce1c52eea239133d9f908ed438835847a444c8",
+  "l_tile_exec_count": 1040,
+  "state_values_compared": 524288,
+  "output_values_compared": 16384,
+  "state_error": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "output_error": {
+    "max_abs": 0.000732421875,
+    "relative_l2": 0.005383844953030348
+  },
+  "rust_simulation_cycles": 2345850,
+  "matrix_view_packet_counters": {
+    "packets": 9328,
+    "values": 15108096,
+    "bank_words": 472128,
+    "service_cycles": 11376,
+    "ideal_cycles": 10352,
+    "bank_stall_cycles": 1024
+  },
+  "evidence": "Compiler assembly -> Compiler assembler -> Rust opcode decoder -> BF16 banked Matrix SRAM -> explicit HBM state/output readback",
+  "temporary_build_retained": false
+}

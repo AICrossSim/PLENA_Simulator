@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "model": "kimi_k3_kda",
+  "layout": "fixed",
+  "precision": "bf16_uniform_matrix_recurrence",
+  "tokens": 4,
+  "official_shape": {
+    "heads": 96,
+    "state_rows": 128,
+    "row_elements": 128
+  },
+  "compiler_generated_machine_words": 101064,
+  "assembly_sha256": "8ee02ec966448c711f2695ed7de8e7c2c38b3bf44cfeade47443d009f24fcdb1",
+  "machine_code_sha256": "5019d008a826e1b2f4cd1ee67cfa72ece16803ef0e5a584c6f4fff2bdd02809c",
+  "input_hbm_sha256": "3fb0bc863ec2d7d6896c1a29ee5134b0922fe7e34fdaf011ad7284349ce85989",
+  "l_tile_exec_count": 3096,
+  "state_values_compared": 1572864,
+  "output_values_compared": 49152,
+  "state_error": {
+    "max_abs": 0.0009765625,
+    "relative_l2": 0.0004625616129487753
+  },
+  "output_error": {
+    "max_abs": 0.0006103515625,
+    "relative_l2": 0.0070751686580479145
+  },
+  "rust_simulation_cycles": 13922560,
+  "matrix_view_packet_counters": {
+    "packets": 46296,
+    "values": 84346368,
+    "bank_words": 2873904,
+    "service_cycles": 55512,
+    "ideal_cycles": 55512,
+    "bank_stall_cycles": 0
+  },
+  "evidence": "Compiler assembly -> Compiler assembler -> Rust opcode decoder -> BF16 banked Matrix SRAM -> explicit HBM state/output readback",
+  "temporary_build_retained": false
+}

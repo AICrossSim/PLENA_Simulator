@@ -550,11 +550,6 @@ mod tests {
         assert_eq!(v.read_int(4).await, vec![20, 21, 22, 23]);
     }
 
-    // NB: reading 32-bit (f32) elements overflows the byte-unpacking shift
-    // (`data >>= 32`). That panics only under debug overflow-checks and wraps
-    // under release, so it isn't portably characterizable here; the overflow is
-    // tracked separately as a bug to fix.
-
     #[test]
     fn test_vector_tile_size_is_vlen_and_size_in_bytes() {
         let v = VectorSram::new(4, 8, f32_ty(), 4);

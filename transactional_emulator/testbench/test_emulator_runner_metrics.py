@@ -49,6 +49,23 @@ def test_parse_matrix_view_packet_counters_from_prefixed_rust_log() -> None:
     }
 
 
+def test_parse_matrix_view_packet_counters_ignores_ansi_colour_codes() -> None:
+    line = (
+        "\x1b[2m2026-09-01T00:00:00Z\x1b[0m \x1b[32mINFO\x1b[0m "
+        "Matrix-view packet counters packets=17 values=128 bank_words=32 "
+        "service_cycles=17 ideal_cycles=17 bank_stall_cycles=0"
+    )
+
+    assert _parse_matrix_view_packet_counters(line) == {
+        "packets": 17,
+        "values": 128,
+        "bank_words": 32,
+        "service_cycles": 17,
+        "ideal_cycles": 17,
+        "bank_stall_cycles": 0,
+    }
+
+
 def test_parse_matrix_view_packet_counters_rejects_incomplete_line() -> None:
     assert _parse_matrix_view_packet_counters("packets=1 values=64") is None
 

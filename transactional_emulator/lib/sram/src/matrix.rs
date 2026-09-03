@@ -1,4 +1,5 @@
 use quantize::{tensor_from_f32_slice, tensor_to_f32_vec, DataType, MxDataType, QuantTensor};
+use std::collections::{hash_map::Entry, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::oneshot::{Receiver, Sender};
 use tokio::sync::Mutex;
@@ -19,6 +20,8 @@ pub struct MatrixLayout {
     /// Bank skew used by the physical machine. Public Matrix views fix this to 1;
     /// tests may vary it only for a non-architectural upper-bound control.
     pub alpha: u32,
+    /// Additional compiler-selected phase between logical tiles.
+    pub tile_skew: u32,
 }
 
 /// Logical direction serviced from the same physical Matrix-SRAM cells.
@@ -68,9 +71,7 @@ struct MatrixPacketCounters {
 
 struct PendingWord {
     sender: Sender<QuantTensor>,
-    tile: usize,
-    row: usize,
-    word: usize,
+    source_offset: usize,
 }
 
 /// Opaque completion handle returned when a Matrix DMA parks physical words.
@@ -207,6 +208,10 @@ impl MatrixSram {
         self.bank_width
     }
 
+    pub fn element_bits(&self) -> u32 {
+        u32::from(self.element_type.size_in_bits())
+    }
+
     pub fn fixed_map(&self) -> (u32, u32) {
         (self.alpha, self.gamma)
     }
@@ -225,6 +230,7 @@ impl MatrixSram {
             tile_count: 1,
             tile_pitch_rows: self.rows_per_tile,
             alpha: self.alpha,
+            tile_skew: 0,
         }
     }
 
@@ -266,6 +272,17 @@ impl MatrixSram {
         col: u32,
     ) -> MatrixPhysicalCoord {
         self.validate_layout(addr, layout);
+        self.physical_coord_unchecked(addr, layout, tile, row, col)
+    }
+
+    fn physical_coord_unchecked(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+        tile: u32,
+        row: u32,
+        col: u32,
+    ) -> MatrixPhysicalCoord {
         assert!(
             tile < layout.tile_count,
             "Matrix-view tile index out of bounds"
@@ -275,10 +292,11 @@ impl MatrixSram {
 
         let full_row_elements = self.banks * self.bank_width;
         assert!(
-            addr.is_multiple_of(full_row_elements),
-            "Matrix-view base address {addr} is not aligned to a physical row"
+            addr.is_multiple_of(self.bank_width),
+            "Matrix-view base address {addr} is not aligned to a bank word"
         );
         let base_bank_row = addr / full_row_elements;
+        let base_bank = (addr % full_row_elements) / self.bank_width;
         let word = col / self.bank_width;
         let words_per_row = layout.cols / self.bank_width;
         let row_groups = words_per_row.div_ceil(self.banks);
@@ -288,8 +306,12 @@ impl MatrixSram {
         // and wide-row word group. Using the tile-local `row` here discards
         // that information. Public Matrix views keep alpha=1; alternate values
         // are used only by the counterfactual audit constructor.
-        let bank =
-            (layout.alpha * bank_row + self.gamma * (bank_row / self.banks) + word) % self.banks;
+        let bank = (base_bank
+            + layout.alpha * bank_row
+            + layout.tile_skew * tile
+            + self.gamma * (bank_row / self.banks)
+            + word)
+            % self.banks;
         assert!(
             (bank_row as usize) < self.bank_rows[bank as usize].len(),
             "Matrix-view physical row {bank_row} exceeds bank capacity"
@@ -328,7 +350,7 @@ impl MatrixSram {
         for row in 0..layout.rows {
             for word in 0..words_per_row {
                 let col = word * self.bank_width;
-                let coord = self.physical_coord(addr, layout, tile, row, col);
+                let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
                 let bytes = {
                     let mut guard = self.bank_rows[coord.bank as usize][coord.bank_row as usize]
                         .lock()
@@ -383,7 +405,7 @@ impl MatrixSram {
         let mut per_bank = vec![0_u64; self.banks as usize];
         for (row, col, whole_word) in positions {
             let word_col = col - col % self.bank_width;
-            let coord = self.physical_coord(addr, layout, tile, row, word_col);
+            let coord = self.physical_coord_unchecked(addr, layout, tile, row, word_col);
             let bytes = {
                 let mut guard = self.bank_rows[coord.bank as usize][coord.bank_row as usize]
                     .lock()
@@ -407,6 +429,306 @@ impl MatrixSram {
             QuantTensor::quantize(tensor_from_f32_slice(&logical), self.ty),
             service,
         )
+    }
+
+    /// Read several logical rows or columns in one bank-service packet.
+    ///
+    /// For column groups, lanes that share a physical bank word are fetched
+    /// once and then restored to their logical columns.  The service record is
+    /// derived from those exact physical words, so diagonal-read correctness
+    /// and bank-conflict timing cannot diverge.
+    pub async fn read_layout_lines(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+        tile: u32,
+        first: u32,
+        count: u32,
+        axis: MatrixAccessAxis,
+    ) -> (QuantTensor, MatrixPacketService) {
+        self.validate_layout(addr, layout);
+        assert!(count > 0, "Matrix line packet must be non-empty");
+        let limit = match axis {
+            MatrixAccessAxis::Row => layout.rows,
+            MatrixAccessAxis::Column => layout.cols,
+        };
+        assert!(
+            first + count <= limit,
+            "Matrix line packet exceeds its view"
+        );
+
+        let line_len = match axis {
+            MatrixAccessAxis::Row => layout.cols,
+            MatrixAccessAxis::Column => layout.rows,
+        };
+        let mut logical = vec![0_f32; (count * line_len) as usize];
+        let mut per_bank = vec![0_u64; self.banks as usize];
+        let mut words: HashMap<(u32, u32), Vec<f32>> = HashMap::new();
+
+        for line_offset in 0..count {
+            let line = first + line_offset;
+            match axis {
+                MatrixAccessAxis::Row => {
+                    for col in (0..layout.cols).step_by(self.bank_width as usize) {
+                        let coord = self.physical_coord_unchecked(addr, layout, tile, line, col);
+                        let key = (coord.bank, coord.bank_row);
+                        if let Entry::Vacant(entry) = words.entry(key) {
+                            let bytes = {
+                                let mut guard = self.bank_rows[coord.bank as usize]
+                                    [coord.bank_row as usize]
+                                    .lock()
+                                    .await;
+                                guard
+                                    .resolve_with(|tensor| self.tensor_to_word_bytes(&tensor))
+                                    .await
+                                    .clone()
+                            };
+                            entry.insert(self.word_bytes_to_values(&bytes));
+                            per_bank[coord.bank as usize] += 1;
+                        }
+                        let values = &words[&key];
+                        let start = (line_offset * line_len + col) as usize;
+                        logical[start..start + self.bank_width as usize].copy_from_slice(values);
+                    }
+                }
+                MatrixAccessAxis::Column => {
+                    for row in 0..layout.rows {
+                        let word_col = line - line % self.bank_width;
+                        let coord =
+                            self.physical_coord_unchecked(addr, layout, tile, row, word_col);
+                        let key = (coord.bank, coord.bank_row);
+                        if let Entry::Vacant(entry) = words.entry(key) {
+                            let bytes = {
+                                let mut guard = self.bank_rows[coord.bank as usize]
+                                    [coord.bank_row as usize]
+                                    .lock()
+                                    .await;
+                                guard
+                                    .resolve_with(|tensor| self.tensor_to_word_bytes(&tensor))
+                                    .await
+                                    .clone()
+                            };
+                            entry.insert(self.word_bytes_to_values(&bytes));
+                            per_bank[coord.bank as usize] += 1;
+                        }
+                        logical[(line_offset * line_len + row) as usize] =
+                            words[&key][(line % self.bank_width) as usize];
+                    }
+                }
+            }
+        }
+
+        let service = self.packet_service(&per_bank, logical.len() as u64);
+        self.record_packet(service);
+        (
+            QuantTensor::quantize(tensor_from_f32_slice(&logical), self.ty),
+            service,
+        )
+    }
+
+    /// Read an explicitly ordered packet of logical rows across one or more
+    /// tiles.  `lines` contains `(tile, row)` pairs and the returned tensor is
+    /// the concatenation of those rows in exactly that order.
+    ///
+    /// L-Tile recurrence packets use row-major tile order: for a fixed state
+    /// index they request the same logical row from several head tiles.  Bank
+    /// service is computed from the physical words that supplied those values,
+    /// including de-duplication for an explicitly broadcast source row.
+    pub async fn read_layout_indexed_rows(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+        lines: &[(u32, u32)],
+    ) -> (QuantTensor, MatrixPacketService) {
+        self.validate_layout(addr, layout);
+        assert!(
+            !lines.is_empty(),
+            "Matrix indexed-row packet must be non-empty"
+        );
+
+        let mut logical = vec![0_f32; lines.len() * layout.cols as usize];
+        let mut per_bank = vec![0_u64; self.banks as usize];
+        let mut words: HashMap<(u32, u32), Vec<f32>> = HashMap::new();
+
+        for (line_index, &(tile, row)) in lines.iter().enumerate() {
+            assert!(
+                tile < layout.tile_count,
+                "Matrix indexed-row tile out of bounds"
+            );
+            assert!(row < layout.rows, "Matrix indexed-row row out of bounds");
+            for col in (0..layout.cols).step_by(self.bank_width as usize) {
+                let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
+                let key = (coord.bank, coord.bank_row);
+                if let Entry::Vacant(entry) = words.entry(key) {
+                    let bytes = {
+                        let mut guard = self.bank_rows[coord.bank as usize]
+                            [coord.bank_row as usize]
+                            .lock()
+                            .await;
+                        guard
+                            .resolve_with(|tensor| self.tensor_to_word_bytes(&tensor))
+                            .await
+                            .clone()
+                    };
+                    entry.insert(self.word_bytes_to_values(&bytes));
+                    per_bank[coord.bank as usize] += 1;
+                }
+                let start = line_index * layout.cols as usize + col as usize;
+                logical[start..start + self.bank_width as usize].copy_from_slice(&words[&key]);
+            }
+        }
+
+        let service = self.packet_service(&per_bank, logical.len() as u64);
+        self.record_packet(service);
+        (
+            QuantTensor::quantize(tensor_from_f32_slice(&logical), self.ty),
+            service,
+        )
+    }
+
+    /// Read an explicitly ordered packet of logical columns across tiles.
+    ///
+    /// This is the transpose counterpart of `read_layout_indexed_rows`.  It
+    /// reads the same physical cells and returns `[requested_line][logical_row]`
+    /// order.  A head-major `[head][key]` field can therefore feed a key-major
+    /// recurrence packet without a copied transpose.
+    pub async fn read_layout_indexed_columns(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+        lines: &[(u32, u32)],
+    ) -> (QuantTensor, MatrixPacketService) {
+        self.validate_layout(addr, layout);
+        assert!(
+            !lines.is_empty(),
+            "Matrix indexed-column packet must be non-empty"
+        );
+
+        let mut logical = vec![0_f32; lines.len() * layout.rows as usize];
+        let mut per_bank = vec![0_u64; self.banks as usize];
+        let mut words: HashMap<(u32, u32), Vec<f32>> = HashMap::new();
+
+        for (line_index, &(tile, col)) in lines.iter().enumerate() {
+            assert!(
+                tile < layout.tile_count,
+                "Matrix indexed-column tile out of bounds"
+            );
+            assert!(
+                col < layout.cols,
+                "Matrix indexed-column column out of bounds"
+            );
+            let word_col = col - col % self.bank_width;
+            for row in 0..layout.rows {
+                let coord = self.physical_coord_unchecked(addr, layout, tile, row, word_col);
+                let key = (coord.bank, coord.bank_row);
+                if let Entry::Vacant(entry) = words.entry(key) {
+                    let bytes = {
+                        let mut guard = self.bank_rows[coord.bank as usize]
+                            [coord.bank_row as usize]
+                            .lock()
+                            .await;
+                        guard
+                            .resolve_with(|tensor| self.tensor_to_word_bytes(&tensor))
+                            .await
+                            .clone()
+                    };
+                    entry.insert(self.word_bytes_to_values(&bytes));
+                    per_bank[coord.bank as usize] += 1;
+                }
+                logical[line_index * layout.rows as usize + row as usize] =
+                    words[&key][(col % self.bank_width) as usize];
+            }
+        }
+
+        let service = self.packet_service(&per_bank, logical.len() as u64);
+        self.record_packet(service);
+        (
+            QuantTensor::quantize(tensor_from_f32_slice(&logical), self.ty),
+            service,
+        )
+    }
+
+    /// Write several logical rows from a lane-restored packet.
+    pub async fn write_layout_rows(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+        tile: u32,
+        first_row: u32,
+        row_count: u32,
+        tensor: QuantTensor,
+    ) -> MatrixPacketService {
+        self.validate_layout(addr, layout);
+        assert!(row_count > 0 && first_row + row_count <= layout.rows);
+        let values = tensor_to_f32_vec(tensor.as_tensor());
+        assert_eq!(values.len(), (row_count * layout.cols) as usize);
+        let mut per_bank = vec![0_u64; self.banks as usize];
+        for row_offset in 0..row_count {
+            let row = first_row + row_offset;
+            for col in (0..layout.cols).step_by(self.bank_width as usize) {
+                let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
+                let start = (row_offset * layout.cols + col) as usize;
+                let bytes =
+                    self.values_to_word_bytes(&values[start..start + self.bank_width as usize]);
+                *self.bank_rows[coord.bank as usize][coord.bank_row as usize]
+                    .lock()
+                    .await = Cell::Ready(bytes);
+                per_bank[coord.bank as usize] += 1;
+            }
+        }
+        let service = self.packet_service(&per_bank, values.len() as u64);
+        self.record_packet(service);
+        service
+    }
+
+    /// Write an explicitly ordered packet of logical rows across head tiles.
+    /// Distinct destination words are required to map to distinct physical
+    /// cells; otherwise a purported layout silently aliases recurrent state.
+    pub async fn write_layout_indexed_rows(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+        lines: &[(u32, u32)],
+        tensor: QuantTensor,
+    ) -> MatrixPacketService {
+        self.validate_layout(addr, layout);
+        assert!(
+            !lines.is_empty(),
+            "Matrix indexed-row write must be non-empty"
+        );
+        let values = tensor_to_f32_vec(tensor.as_tensor());
+        assert_eq!(values.len(), lines.len() * layout.cols as usize);
+        let mut per_bank = vec![0_u64; self.banks as usize];
+        let mut destinations = HashMap::new();
+
+        for (line_index, &(tile, row)) in lines.iter().enumerate() {
+            assert!(
+                tile < layout.tile_count,
+                "Matrix indexed-row tile out of bounds"
+            );
+            assert!(row < layout.rows, "Matrix indexed-row row out of bounds");
+            for col in (0..layout.cols).step_by(self.bank_width as usize) {
+                let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
+                let key = (coord.bank, coord.bank_row);
+                assert!(
+                    destinations.insert(key, (tile, row, col)).is_none(),
+                    "Matrix view aliases two logical destination words at bank {} row {}",
+                    coord.bank,
+                    coord.bank_row
+                );
+                let start = line_index * layout.cols as usize + col as usize;
+                let bytes =
+                    self.values_to_word_bytes(&values[start..start + self.bank_width as usize]);
+                *self.bank_rows[coord.bank as usize][coord.bank_row as usize]
+                    .lock()
+                    .await = Cell::Ready(bytes);
+                per_bank[coord.bank as usize] += 1;
+            }
+        }
+
+        let service = self.packet_service(&per_bank, values.len() as u64);
+        self.record_packet(service);
+        service
     }
 
     /// Reconstruct a complete tile while accounting for row- or column-wise
@@ -471,7 +793,7 @@ impl MatrixSram {
         for row in 0..layout.rows {
             for word in 0..words_per_row {
                 let col = word * self.bank_width;
-                let coord = self.physical_coord(addr, layout, tile, row, col);
+                let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
                 let start = (row * layout.cols + col) as usize;
                 let bytes =
                     self.values_to_word_bytes(&logical[start..start + self.bank_width as usize]);
@@ -549,7 +871,7 @@ impl MatrixSram {
             for row in 0..layout.rows {
                 for word in 0..words_per_row {
                     let col = word * self.bank_width;
-                    let coord = self.physical_coord(addr, layout, tile, row, col);
+                    let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
                     let start = ((tile * layout.rows + row) * layout.cols + col) as usize;
                     let bytes =
                         self.values_to_word_bytes(&values[start..start + self.bank_width as usize]);
@@ -617,7 +939,7 @@ impl MatrixSram {
             let col = within % layout.cols;
             assert!(row < layout.rows);
             assert_eq!(col, start_col, "microtile may not wrap a logical row");
-            let coord = self.physical_coord(addr, layout, tile, row, col);
+            let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
             assert_eq!(coord.lane, 0);
             let value_start = (micro_row * micro_cols) as usize;
             let bytes =
@@ -672,16 +994,17 @@ impl MatrixSram {
             for row in 0..self.tile_size as usize {
                 for word in 0..self.banks as usize {
                     let col = word as u32 * self.bank_width;
-                    let coord = self.physical_coord(addr, layout, tile as u32, row as u32, col);
+                    let coord =
+                        self.physical_coord_unchecked(addr, layout, tile as u32, row as u32, col);
                     let (sender, receiver) = tokio::sync::oneshot::channel();
                     *self.bank_rows[coord.bank as usize][coord.bank_row as usize]
                         .lock()
                         .await = Cell::Pending(receiver);
                     pending.push(PendingWord {
                         sender,
-                        tile,
-                        row,
-                        word,
+                        source_offset: tile * self.tile_size as usize * self.tile_size as usize
+                            + row * self.tile_size as usize
+                            + word * self.bank_width as usize,
                     });
                 }
             }
@@ -689,16 +1012,58 @@ impl MatrixSram {
         PendingMatrixTiles { words: pending }
     }
 
+    /// Park every physical bank word selected by an explicit Matrix view.
+    ///
+    /// The completion handle preserves each word's logical packet offset, so
+    /// the DMA result is scattered through the exact same affine map later
+    /// consumed by `read_layout_packet`/`L_TILE_EXEC`.
+    pub async fn mark_pending_layout_packet(
+        &self,
+        addr: u32,
+        layout: MatrixLayout,
+    ) -> (PendingMatrixTiles, MatrixPacketService) {
+        self.validate_layout(addr, layout);
+        let words_per_row = layout.cols / self.bank_width;
+        let mut pending =
+            Vec::with_capacity((layout.tile_count * layout.rows * words_per_row) as usize);
+        let mut destinations = HashMap::new();
+        let mut per_bank = vec![0_u64; self.banks as usize];
+        for tile in 0..layout.tile_count {
+            for row in 0..layout.rows {
+                for word in 0..words_per_row {
+                    let col = word * self.bank_width;
+                    let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
+                    assert!(
+                        destinations
+                            .insert((coord.bank, coord.bank_row), (tile, row, word))
+                            .is_none(),
+                        "Matrix view aliases pending DMA destinations"
+                    );
+                    let (sender, receiver) = tokio::sync::oneshot::channel();
+                    *self.bank_rows[coord.bank as usize][coord.bank_row as usize]
+                        .lock()
+                        .await = Cell::Pending(receiver);
+                    pending.push(PendingWord {
+                        source_offset: ((tile * layout.rows + row) * layout.cols + col) as usize,
+                        sender,
+                    });
+                    per_bank[coord.bank as usize] += 1;
+                }
+            }
+        }
+        let values = u64::from(layout.tile_count) * u64::from(layout.rows) * u64::from(layout.cols);
+        let service = self.packet_service(&per_bank, values);
+        self.record_packet(service);
+        (PendingMatrixTiles { words: pending }, service)
+    }
+
     pub async fn fill_pending(&self, pending: PendingMatrixTiles, tensor: Receiver<QuantTensor>) {
         let tensor = tensor
             .await
             .unwrap_or_else(|error| panic!("delayed Matrix fill sender dropped: {error}"));
         let values = tensor_to_f32_vec(tensor.as_tensor());
-        let tile_elements = (self.tile_size * self.tile_size) as usize;
         for word in pending.words {
-            let source = word.tile * tile_elements
-                + word.row * self.tile_size as usize
-                + word.word * self.bank_width as usize;
+            let source = word.source_offset;
             let mut padded = vec![0_f32; self.bank_width as usize];
             if source < values.len() {
                 let end = (source + self.bank_width as usize).min(values.len());
@@ -764,17 +1129,82 @@ impl MatrixSram {
         assert!(layout.cols.is_multiple_of(self.bank_width));
         assert!(layout.alpha < self.banks);
         let words_per_row = layout.cols / self.bank_width;
-        let minimum_pitch = layout.rows * words_per_row.div_ceil(self.banks);
-        assert!(layout.tile_pitch_rows >= minimum_pitch);
+        let row_groups = words_per_row.div_ceil(self.banks);
         let full_row_elements = self.banks * self.bank_width;
-        assert!(addr.is_multiple_of(full_row_elements));
+        assert!(addr.is_multiple_of(self.bank_width));
         let base_bank_row = addr / full_row_elements;
-        let final_row =
-            base_bank_row + (layout.tile_count - 1) * layout.tile_pitch_rows + minimum_pitch;
+        let base_bank = (addr % full_row_elements) / self.bank_width;
+        let mut occupied = HashMap::new();
+        let mut final_row = base_bank_row;
+        for tile in 0..layout.tile_count {
+            for row in 0..layout.rows {
+                for word in 0..words_per_row {
+                    let bank_row = base_bank_row
+                        + tile * layout.tile_pitch_rows
+                        + row * row_groups
+                        + word / self.banks;
+                    let bank = (base_bank
+                        + layout.alpha * bank_row
+                        + layout.tile_skew * tile
+                        + self.gamma * (bank_row / self.banks)
+                        + word)
+                        % self.banks;
+                    let previous = occupied.insert((bank, bank_row), (tile, row, word));
+                    assert!(
+                        previous.is_none(),
+                        "Matrix view aliases logical words {:?} and {:?} at bank {bank}, row {bank_row}",
+                        previous.unwrap_or_default(),
+                        (tile, row, word),
+                    );
+                    final_row = final_row.max(bank_row + 1);
+                }
+            }
+        }
         assert!(
             final_row <= self.bank_rows[0].len() as u32,
             "Matrix view exceeds SRAM capacity"
         );
+    }
+
+    /// Check that several compiler-managed views can coexist in this SRAM.
+    ///
+    /// A descriptor proves only that a tensor does not alias itself.  A static
+    /// allocator must additionally prove that two live tensors never claim the
+    /// same physical bank word.  This is deliberately not a cache check: there
+    /// are no tags, misses or replacement decisions, only explicit addresses.
+    pub fn validate_disjoint_layouts(
+        &self,
+        views: &[(&str, u32, MatrixLayout)],
+    ) -> Result<(), String> {
+        let mut occupied: HashMap<(u32, u32), (&str, u32, u32, u32)> = HashMap::new();
+        for &(name, addr, layout) in views {
+            self.validate_layout(addr, layout);
+            let words_per_row = layout.cols / self.bank_width;
+            for tile in 0..layout.tile_count {
+                for row in 0..layout.rows {
+                    for word in 0..words_per_row {
+                        let coord = self.physical_coord_unchecked(
+                            addr,
+                            layout,
+                            tile,
+                            row,
+                            word * self.bank_width,
+                        );
+                        let key = (coord.bank, coord.bank_row);
+                        if let Some(previous) = occupied.insert(key, (name, tile, row, word)) {
+                            return Err(format!(
+                                "Matrix views alias physical bank word bank={}, row={}: {:?} and {:?}",
+                                coord.bank,
+                                coord.bank_row,
+                                previous,
+                                (name, tile, row, word),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn read_layout_packet_raw(
@@ -791,7 +1221,7 @@ impl MatrixSram {
             for row in 0..layout.rows {
                 for word in 0..words_per_row {
                     let col = word * self.bank_width;
-                    let coord = self.physical_coord(addr, layout, tile, row, col);
+                    let coord = self.physical_coord_unchecked(addr, layout, tile, row, col);
                     let bytes = {
                         let mut guard = self.bank_rows[coord.bank as usize]
                             [coord.bank_row as usize]
@@ -950,6 +1380,7 @@ mod tests {
             tile_count: 32,
             tile_pitch_rows: 1,
             alpha: 2,
+            tile_skew: 0,
         };
         let values = (0..MLEN)
             .map(|index| ((index % 127) as f32 - 63.0) / 16.0)
@@ -985,6 +1416,7 @@ mod tests {
             tile_count: 1,
             tile_pitch_rows: 4,
             alpha: 1,
+            tile_skew: 0,
         };
         let values = (0..16).map(|v| v as f32 + 1.0).collect::<Vec<_>>();
         m.write_layout_tile(0, view, 0, tile(ty, &values)).await;
@@ -1007,6 +1439,7 @@ mod tests {
             tile_count: 1,
             tile_pitch_rows: 4,
             alpha: 1,
+            tile_skew: 0,
         };
         let wrong = MatrixLayout { alpha: 0, ..placed };
         let values = (0..16).map(|v| v as f32 + 1.0).collect::<Vec<_>>();
@@ -1054,6 +1487,7 @@ mod tests {
             tile_count: 4,
             tile_pitch_rows: 1,
             alpha: 0,
+            tile_skew: 0,
         };
         let affine = MatrixLayout {
             alpha: 1,
@@ -1080,6 +1514,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn bank_word_aligned_base_supplies_a_constant_field_phase() {
+        let ty = f32_plain();
+        let sram = MatrixSram::with_banks(16, 32, 4, ty);
+        let view = MatrixLayout {
+            rows: 1,
+            cols: 4,
+            tile_count: 1,
+            tile_pitch_rows: 1,
+            alpha: 1,
+            tile_skew: 0,
+        };
+        let unphased = sram.physical_coord(0, view, 0, 0, 0);
+        let phased = sram.physical_coord(3 * sram.bank_width(), view, 0, 0, 0);
+        assert_eq!(unphased.bank_row, phased.bank_row);
+        assert_eq!(phased.bank, (unphased.bank + 3) % sram.banks());
+
+        let left = tile(ty, &[1.0, 2.0, 3.0, 4.0]);
+        let right = tile(ty, &[5.0, 6.0, 7.0, 8.0]);
+        sram.write_layout_packet(0, view, left).await;
+        sram.write_layout_packet(3 * sram.bank_width(), view, right)
+            .await;
+        assert_eq!(
+            tensor_to_f32_vec(sram.read_layout_packet(0, view).await.0.as_tensor()),
+            [1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            tensor_to_f32_vec(
+                sram.read_layout_packet(3 * sram.bank_width(), view)
+                    .await
+                    .0
+                    .as_tensor()
+            ),
+            [5.0, 6.0, 7.0, 8.0]
+        );
+    }
+
+    #[tokio::test]
     async fn diagonal_placement_serves_rows_and_columns_at_the_bank_floor() {
         let ty = f32_plain();
         let values = (0..16).map(|value| value as f32 + 1.0).collect::<Vec<_>>();
@@ -1089,6 +1560,7 @@ mod tests {
             tile_count: 1,
             tile_pitch_rows: 4,
             alpha: 0,
+            tile_skew: 0,
         };
         let diagonal = MatrixLayout {
             alpha: 1,
@@ -1167,6 +1639,7 @@ mod tests {
                 tile_count: 1,
                 tile_pitch_rows: ROWS,
                 alpha: u32::from(banks > 1),
+                tile_skew: 0,
             };
             sram.write_layout_tile(0, view, 0, tile(ty, &values)).await;
 
@@ -1197,6 +1670,7 @@ mod tests {
             tile_count: 1,
             tile_pitch_rows: 4,
             alpha: 1,
+            tile_skew: 0,
         };
         let values = (0..4 * MLEN).map(|index| index as f32).collect::<Vec<_>>();
         sram.write_layout_tile(0, view, 0, tile(ty, &values)).await;
@@ -1215,6 +1689,7 @@ mod tests {
             tile_count: 1,
             tile_pitch_rows: DIM,
             alpha: 1,
+            tile_skew: 0,
         };
         // Logical storage is [value, key]. It is intentionally non-symmetric,
         // because Kimi's 128x128 real shape cannot detect an axis error by shape.
@@ -1266,6 +1741,7 @@ mod tests {
             tile_count: tiles,
             tile_pitch_rows: 1,
             alpha: 2,
+            tile_skew: 0,
         };
         let affine = MatrixLayout {
             alpha: affine_alpha,
@@ -1323,6 +1799,7 @@ mod tests {
             tile_count: tiles,
             tile_pitch_rows: 1,
             alpha: 2,
+            tile_skew: 0,
         };
         let affine = MatrixLayout {
             alpha: affine_alpha,
@@ -1368,6 +1845,7 @@ mod tests {
             tile_count: tiles,
             tile_pitch_rows: 1,
             alpha,
+            tile_skew: 0,
         };
         let producer_only = MatrixLayout {
             rows: 1,
@@ -1375,6 +1853,7 @@ mod tests {
             tile_count: MLEN / BLEN,
             tile_pitch_rows: 1,
             alpha: 1,
+            tile_skew: 0,
         };
         let sram = MatrixSram::with_banks_and_map(MLEN, 256, BLEN, 1, 1, ty);
 
@@ -1402,6 +1881,395 @@ mod tests {
                 .as_tensor(),
         );
         assert_ne!(wrong, expected);
+    }
+
+    fn official_recurrent_layout(
+        rows: u32,
+        cols: u32,
+        tiles: u32,
+        bank_width: u32,
+    ) -> MatrixLayout {
+        let words_per_row = cols / bank_width;
+        MatrixLayout {
+            rows,
+            cols,
+            tile_count: tiles,
+            // Both the tile phase and the phase seen by an equal-row packet
+            // must traverse every bank-word group.  Twice the row width is the
+            // smallest pitch that satisfies both constraints for the official
+            // power-of-two Mamba/KDA shapes.
+            tile_pitch_rows: 2 * words_per_row,
+            alpha: 1,
+            tile_skew: words_per_row,
+        }
+    }
+
+    async fn official_recurrent_group_roundtrip(cols: u32, tiles: u32, expected_last_row: u32) {
+        const MLEN: u32 = 2048;
+        const DEPTH_ROWS: usize = 256;
+        const STATE_ROWS: u32 = 128;
+        const BF16_VALUES_PER_BANK_WORD: u32 = 32;
+
+        let ty = bf16_plain();
+        let sram = MatrixSram::with_banks(MLEN, DEPTH_ROWS, BF16_VALUES_PER_BANK_WORD, ty);
+        let view = official_recurrent_layout(STATE_ROWS, cols, tiles, BF16_VALUES_PER_BANK_WORD);
+        let final_row = (tiles - 1) * view.tile_pitch_rows + STATE_ROWS;
+        assert_eq!(final_row, expected_last_row);
+        assert!(final_row <= DEPTH_ROWS as u32);
+
+        let value_count = tiles * STATE_ROWS * cols;
+        let values = (0..value_count)
+            .map(|index| ((index % 257) as f32 - 128.0) / 64.0)
+            .collect::<Vec<_>>();
+        let input = QuantTensor::quantize(Tensor::from_slice(&values), ty);
+        let expected = tensor_to_f32_vec(input.as_tensor());
+        let write = sram.write_layout_packet(0, view, input).await;
+        assert_eq!(write.bank_stall_cycles, 0);
+
+        // This is the recurrence access: the same logical state row from all
+        // heads in the group must fill all 64 bank words exactly once.
+        for row in [0, STATE_ROWS / 2, STATE_ROWS - 1] {
+            let lines = (0..tiles).map(|tile| (tile, row)).collect::<Vec<_>>();
+            let (packet, service) = sram.read_layout_indexed_rows(0, view, &lines).await;
+            assert_eq!(service.ideal_cycles, 1);
+            assert_eq!(service.service_cycles, 1);
+            assert_eq!(service.bank_stall_cycles, 0);
+            let got = tensor_to_f32_vec(packet.as_tensor());
+            let expected_row = (0..tiles)
+                .flat_map(|tile| {
+                    let start = ((tile * STATE_ROWS + row) * cols) as usize;
+                    expected[start..start + cols as usize].iter().copied()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(got, expected_row);
+        }
+
+        let (roundtrip, read) = sram.read_layout_packet(0, view).await;
+        assert_eq!(tensor_to_f32_vec(roundtrip.as_tensor()), expected);
+        assert_eq!(read.bank_stall_cycles, 0);
+
+        // A *single-base descriptor* with no per-tile phase can hold only two
+        // full-height heads. The stronger fixed-wiring D' control is tested
+        // separately below and must not be confused with this ISA limitation.
+        let single_descriptor_required_rows = STATE_ROWS * tiles;
+        assert!(single_descriptor_required_rows > DEPTH_ROWS as u32);
+        assert_eq!(DEPTH_ROWS as u32 / STATE_ROWS, 2);
+    }
+
+    async fn fixed_phased_official_state_roundtrip(cols: u32, tiles: u32) {
+        const MLEN: u32 = 2048;
+        const DEPTH_ROWS: usize = 256;
+        const STATE_ROWS: u32 = 128;
+        const BF16_VALUES_PER_BANK_WORD: u32 = 32;
+
+        let ty = bf16_plain();
+        let sram = MatrixSram::with_banks(MLEN, DEPTH_ROWS, BF16_VALUES_PER_BANK_WORD, ty);
+        let words_per_head = cols / BF16_VALUES_PER_BANK_WORD;
+        assert_eq!(tiles * words_per_head, 64);
+        let fixed = MatrixLayout {
+            rows: STATE_ROWS,
+            cols,
+            tile_count: 1,
+            tile_pitch_rows: STATE_ROWS,
+            alpha: 1,
+            tile_skew: 0,
+        };
+        let affine = MatrixLayout {
+            rows: STATE_ROWS,
+            cols,
+            tile_count: tiles,
+            tile_pitch_rows: 0,
+            alpha: 1,
+            tile_skew: words_per_head,
+        };
+
+        let names = (0..tiles)
+            .map(|tile| format!("head_{tile}"))
+            .collect::<Vec<_>>();
+        let bases = (0..tiles)
+            .map(|tile| tile * words_per_head * BF16_VALUES_PER_BANK_WORD)
+            .collect::<Vec<_>>();
+        let views = names
+            .iter()
+            .zip(&bases)
+            .map(|(name, &base)| (name.as_str(), base, fixed))
+            .collect::<Vec<_>>();
+        sram.validate_disjoint_layouts(&views)
+            .expect("fixed per-head phases must fit without aliases");
+
+        // D' and D occupy exactly the same bank word for every official state
+        // value. D uses one compact descriptor; D' uses one ordinary base per
+        // head. Therefore programmable skew has no pure bank-service credit.
+        for tile in 0..tiles {
+            for row in 0..STATE_ROWS {
+                for word in 0..words_per_head {
+                    let col = word * BF16_VALUES_PER_BANK_WORD;
+                    let fixed_coord =
+                        sram.physical_coord_unchecked(bases[tile as usize], fixed, 0, row, col);
+                    let affine_coord = sram.physical_coord_unchecked(0, affine, tile, row, col);
+                    assert_eq!(fixed_coord, affine_coord);
+                }
+            }
+        }
+
+        let mut expected = Vec::with_capacity(tiles as usize);
+        for tile in 0..tiles {
+            let value_count = (STATE_ROWS * cols) as usize;
+            let values = (0..value_count)
+                .map(|index| {
+                    let code = (tile as usize * 131 + index) % 257;
+                    (code as f32 - 128.0) / 64.0
+                })
+                .collect::<Vec<_>>();
+            let input = QuantTensor::quantize(Tensor::from_slice(&values), ty);
+            expected.push(tensor_to_f32_vec(input.as_tensor()));
+            let write = sram
+                .write_layout_packet(bases[tile as usize], fixed, input)
+                .await;
+            assert_eq!(write.bank_stall_cycles, 0);
+        }
+
+        sram.reset_packet_counters();
+        let requests = bases.iter().map(|&base| (base, fixed)).collect::<Vec<_>>();
+        let (actual, service) = sram.read_layout_packets(&requests).await;
+        assert_eq!(service.ideal_cycles, u64::from(STATE_ROWS));
+        assert_eq!(service.service_cycles, u64::from(STATE_ROWS));
+        assert_eq!(service.bank_stall_cycles, 0);
+        assert_eq!(service.values, u64::from(tiles * STATE_ROWS * cols));
+        for (packet, expected) in actual.iter().zip(expected) {
+            assert_eq!(tensor_to_f32_vec(packet.as_tensor()), expected);
+        }
+    }
+
+    fn paper_addr(row: u32, bank_phase: u32) -> u32 {
+        const MLEN: u32 = 2048;
+        const BLEN: u32 = 32;
+        row * MLEN + bank_phase * BLEN
+    }
+
+    fn expected_after_sram_quantization(sram: &MatrixSram, values: &[f32]) -> Vec<f32> {
+        values
+            .chunks(sram.bank_width as usize)
+            .flat_map(|word| {
+                let bytes = sram.values_to_word_bytes(word);
+                sram.word_bytes_to_values(&bytes)
+                    .into_iter()
+                    .take(word.len())
+            })
+            .collect()
+    }
+
+    async fn assert_colocated_views_roundtrip(
+        sram: &MatrixSram,
+        views: &[(&str, u32, MatrixLayout)],
+    ) {
+        sram.validate_disjoint_layouts(views)
+            .expect("compiler placement must be physically disjoint");
+        let mut expected = Vec::with_capacity(views.len());
+        for (view_index, &(_, base, layout)) in views.iter().enumerate() {
+            let count = (layout.rows * layout.cols * layout.tile_count) as usize;
+            let values = (0..count)
+                .map(|index| (view_index * 100_000 + index) as f32)
+                .collect::<Vec<_>>();
+            let quantized = expected_after_sram_quantization(sram, &values);
+            let input = QuantTensor::quantize(Tensor::from_slice(&values), sram.ty());
+            sram.write_layout_packet(base, layout, input).await;
+            expected.push(quantized);
+        }
+        for ((name, base, layout), expected) in views.iter().zip(expected) {
+            let (output, _) = sram.read_layout_packet(*base, *layout).await;
+            assert_eq!(
+                tensor_to_f32_vec(output.as_tensor()),
+                expected,
+                "co-resident view {name} did not round-trip",
+            );
+        }
+    }
+
+    fn kda_chunk_views(affine: bool) -> Vec<(&'static str, u32, MatrixLayout)> {
+        let (state, scalar, vector, scalar_row, vector_row) = if affine {
+            (
+                MatrixLayout {
+                    rows: 16,
+                    cols: 128,
+                    tile_count: 16,
+                    tile_pitch_rows: 8,
+                    alpha: 1,
+                    tile_skew: 4,
+                },
+                MatrixLayout {
+                    rows: 16,
+                    cols: 32,
+                    tile_count: 16,
+                    tile_pitch_rows: 1,
+                    alpha: 1,
+                    tile_skew: 3,
+                },
+                MatrixLayout {
+                    rows: 1,
+                    cols: 128,
+                    tile_count: 16,
+                    tile_pitch_rows: 1,
+                    alpha: 1,
+                    tile_skew: 3,
+                },
+                136,
+                168,
+            )
+        } else {
+            (
+                MatrixLayout {
+                    rows: 16,
+                    cols: 128,
+                    tile_count: 16,
+                    tile_pitch_rows: 16,
+                    alpha: 1,
+                    tile_skew: 0,
+                },
+                MatrixLayout {
+                    rows: 16,
+                    cols: 32,
+                    tile_count: 16,
+                    tile_pitch_rows: 16,
+                    alpha: 1,
+                    tile_skew: 0,
+                },
+                MatrixLayout {
+                    rows: 1,
+                    cols: 128,
+                    tile_count: 16,
+                    tile_pitch_rows: 16,
+                    alpha: 1,
+                    tile_skew: 0,
+                },
+                0,
+                0,
+            )
+        };
+        vec![
+            ("state", paper_addr(0, 0), state),
+            (
+                "decay",
+                paper_addr(scalar_row, if affine { 0 } else { 4 }),
+                scalar,
+            ),
+            (
+                "key",
+                paper_addr(scalar_row, if affine { 1 } else { 5 }),
+                scalar,
+            ),
+            (
+                "query",
+                paper_addr(scalar_row, if affine { 2 } else { 6 }),
+                scalar,
+            ),
+            (
+                "value_or_error",
+                paper_addr(vector_row, if affine { 0 } else { 8 }),
+                vector,
+            ),
+            (
+                "prediction_or_output",
+                paper_addr(vector_row, if affine { 4 } else { 12 }),
+                vector,
+            ),
+        ]
+    }
+
+    fn mamba_chunk_views(affine: bool) -> Vec<(&'static str, u32, MatrixLayout)> {
+        let tiles = if affine { 32 } else { 16 };
+        let (state, scalar, vector, scalar_row, vector_row) = if affine {
+            (
+                MatrixLayout {
+                    rows: 16,
+                    cols: 64,
+                    tile_count: tiles,
+                    tile_pitch_rows: 4,
+                    alpha: 1,
+                    tile_skew: 2,
+                },
+                MatrixLayout {
+                    rows: 16,
+                    cols: 32,
+                    tile_count: tiles,
+                    tile_pitch_rows: 1,
+                    alpha: 1,
+                    tile_skew: 1,
+                },
+                MatrixLayout {
+                    rows: 1,
+                    cols: 64,
+                    tile_count: tiles,
+                    tile_pitch_rows: 1,
+                    alpha: 1,
+                    tile_skew: 1,
+                },
+                140,
+                188,
+            )
+        } else {
+            (
+                MatrixLayout {
+                    rows: 16,
+                    cols: 64,
+                    tile_count: tiles,
+                    tile_pitch_rows: 16,
+                    alpha: 1,
+                    tile_skew: 0,
+                },
+                MatrixLayout {
+                    rows: 16,
+                    cols: 32,
+                    tile_count: tiles,
+                    tile_pitch_rows: 16,
+                    alpha: 1,
+                    tile_skew: 0,
+                },
+                MatrixLayout {
+                    rows: 1,
+                    cols: 64,
+                    tile_count: tiles,
+                    tile_pitch_rows: 16,
+                    alpha: 1,
+                    tile_skew: 0,
+                },
+                0,
+                0,
+            )
+        };
+        vec![
+            ("state", paper_addr(0, 0), state),
+            (
+                "decay_and_b",
+                paper_addr(scalar_row, if affine { 0 } else { 2 }),
+                scalar,
+            ),
+            (
+                "c",
+                paper_addr(scalar_row, if affine { 16 } else { 3 }),
+                scalar,
+            ),
+            (
+                "dt_and_skip",
+                paper_addr(scalar_row, if affine { 32 } else { 4 }),
+                scalar,
+            ),
+            (
+                "x",
+                paper_addr(vector_row, if affine { 0 } else { 8 }),
+                vector,
+            ),
+            (
+                "scratch",
+                paper_addr(vector_row, if affine { 2 } else { 10 }),
+                vector,
+            ),
+            (
+                "output",
+                paper_addr(vector_row, if affine { 4 } else { 12 }),
+                vector,
+            ),
+        ]
     }
 
     #[tokio::test]
@@ -1436,5 +2304,87 @@ mod tests {
     #[tokio::test]
     async fn paper_kimi_projection_fragments_fill_true_head_tiles() {
         paper_projection_fragments_feed_consumer_view(16, 128, 4).await;
+    }
+
+    #[tokio::test]
+    async fn official_nemotron_state_group_fits_and_reads_32_heads_without_conflict() {
+        // 32 heads x [128,64] BF16 state. The compact affine layout occupies
+        // 252 physical rows; a fixed full-height layout can hold only 2 heads.
+        official_recurrent_group_roundtrip(64, 32, 252).await;
+    }
+
+    #[tokio::test]
+    async fn official_kimi_state_group_fits_and_reads_16_heads_without_conflict() {
+        // 16 heads x [128,128] BF16 state. The compact affine layout occupies
+        // 248 physical rows; a fixed full-height layout can hold only 2 heads.
+        official_recurrent_group_roundtrip(128, 16, 248).await;
+    }
+
+    #[tokio::test]
+    async fn fixed_phased_nemotron_state_matches_affine_without_programmable_skew() {
+        fixed_phased_official_state_roundtrip(64, 32).await;
+    }
+
+    #[tokio::test]
+    async fn fixed_phased_kimi_state_matches_affine_without_programmable_skew() {
+        fixed_phased_official_state_roundtrip(128, 16).await;
+    }
+
+    #[tokio::test]
+    async fn official_kda_chunk_and_all_live_fields_share_one_matrix_sram() {
+        const MLEN: u32 = 2048;
+        const DEPTH_ROWS: usize = 256;
+        const BLEN: u32 = 32;
+        for affine in [false, true] {
+            let sram = MatrixSram::with_banks(MLEN, DEPTH_ROWS, BLEN, bf16_plain());
+            let views = kda_chunk_views(affine);
+            assert_colocated_views_roundtrip(&sram, &views).await;
+            let state = views[0];
+            let lines = (0..state.2.tile_count)
+                .map(|tile| (tile, 0))
+                .collect::<Vec<_>>();
+            let (_, service) = sram
+                .read_layout_indexed_rows(state.1, state.2, &lines)
+                .await;
+            assert_eq!(service.service_cycles, if affine { 1 } else { 4 });
+        }
+    }
+
+    #[tokio::test]
+    async fn official_mamba_chunk_and_all_live_fields_share_one_matrix_sram() {
+        const MLEN: u32 = 2048;
+        const DEPTH_ROWS: usize = 256;
+        const BLEN: u32 = 32;
+        for affine in [false, true] {
+            let sram = MatrixSram::with_banks(MLEN, DEPTH_ROWS, BLEN, bf16_plain());
+            let views = mamba_chunk_views(affine);
+            assert_colocated_views_roundtrip(&sram, &views).await;
+            let state = views[0];
+            let lines = (0..state.2.tile_count)
+                .map(|tile| (tile, 0))
+                .collect::<Vec<_>>();
+            let (_, service) = sram
+                .read_layout_indexed_rows(state.1, state.2, &lines)
+                .await;
+            assert_eq!(service.service_cycles, if affine { 1 } else { 4 });
+        }
+    }
+
+    #[test]
+    fn colocated_view_validator_rejects_cross_tensor_aliases() {
+        let sram = MatrixSram::with_banks(2048, 256, 32, bf16_plain());
+        let view = MatrixLayout {
+            rows: 1,
+            cols: 128,
+            tile_count: 16,
+            tile_pitch_rows: 16,
+            alpha: 1,
+            tile_skew: 0,
+        };
+        let error = sram
+            .validate_disjoint_layouts(&[("first", 0, view), ("second", 0, view)])
+            .unwrap_err();
+        assert!(error.contains("first"));
+        assert!(error.contains("second"));
     }
 }

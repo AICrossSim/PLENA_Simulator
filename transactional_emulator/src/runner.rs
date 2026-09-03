@@ -329,17 +329,22 @@ pub(crate) async fn run_from_cli() {
     let intsram_bytes = accelerator.intsram_dump_bytes();
     dump_to_file("intsram_dump.bin", &intsram_bytes);
 
-    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
-    // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
+    // Dump HBM only on an explicit request or under DEBUG tracing because the
+    // modeled capacity may be 128 GiB+.  The explicit path lets connected
+    // numerical tests inspect state/output writes without enabling noisy logs.
+    if opts.hbm_dump.is_some() || tracing::enabled!(tracing::Level::DEBUG) {
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
             hbm_bytes[..len].copy_from_slice(&f[..len]);
         });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+        let path = opts
+            .hbm_dump
+            .as_deref()
+            .and_then(|path| path.to_str())
+            .unwrap_or("hbm_dump.bin");
+        dump_to_file(path, &hbm_bytes);
     }
 
     let memory_stats = hbm.statistics();

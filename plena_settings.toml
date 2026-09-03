@@ -134,16 +134,16 @@ sign = false
 exponent = 8
 mantissa = 0
 
-# Recurrent Mamba/KDA state is an independent DSE knob.  The profiled official
-# Nemotron and Kimi execution paths both keep it in FP32; it must not inherit
-# the attention KV-cache format.
+# Recurrent state is an independent precision class.  The profiled GPU paths
+# use FP32; this PLENA design point deliberately uses BF16 and reports its
+# numerical error separately instead of inheriting the attention KV format.
 [ANALYTIC.PRECISION.HBM_STATE_TYPE]
 format = "Plain"
 [ANALYTIC.PRECISION.HBM_STATE_TYPE.DATA_TYPE]
 type = "Fp"
 sign = true
 exponent = 8
-mantissa = 23
+mantissa = 7
 
 [ANALYTIC.PRECISION.HBM_V_INT_TYPE]
 format = "Plain"
@@ -366,17 +366,16 @@ sign = false
 exponent = 8
 mantissa = 0
 
-# Recurrent state is not attention KV. The official Nemotron and Kimi
-# implementations profiled for this project carry it in FP32. The current
-# static PLENA lowering may intentionally select a narrower fallback, but that
-# choice must be explicit rather than inherited from HBM_V_KV_TYPE.
+# Recurrent state is not attention KV.  PLENA intentionally uses BF16 here;
+# the profiled official GPU implementations use FP32 and remain the accuracy
+# reference.
 [TRANSACTIONAL.PRECISION.HBM_STATE_TYPE]
 format = "Plain"
 [TRANSACTIONAL.PRECISION.HBM_STATE_TYPE.DATA_TYPE]
 type = "Fp"
 sign = true
 exponent = 8
-mantissa = 23
+mantissa = 7
 
 [TRANSACTIONAL.PRECISION.HBM_V_INT_TYPE]
 format = "Plain"
