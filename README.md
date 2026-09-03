@@ -114,6 +114,18 @@ nix develop --no-write-lock-file --command \
   just test-matrix-lcompute /absolute/path/to/PLENA_Compiler
 ```
 
+The real-checkpoint Nemotron Agentic campaign is now imported separately. It
+replays all 93 length-sorted BFCL/GPQA/SWE groups at B1/B2/B4/B8/B16 for 32
+decode steps. The real routes reduce the median active-expert count from the
+old maximum-distinct B16 bound of 96 to 49. Across the three workloads, D
+(multi-row `L_TILE` plus compact views and affine layout) has median speedup of
+1.545x at B1 and 3.191x at B16 over Arlo B. The programmable-skew-only result
+against the strongest fixed D' control remains 1.00x. These are pre-RTL
+formula-timeline results with symbolic weights, not a PLENA silicon comparison
+with B200. See
+[the Agentic report](docs/MATRIX_LCOMPUTE_AGENTIC_RESULTS_ZH.md) and
+`artifacts/matrix_lcompute_agentic_v1/`.
+
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 
 ---

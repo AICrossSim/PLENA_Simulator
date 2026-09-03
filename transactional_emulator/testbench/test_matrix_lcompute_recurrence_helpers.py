@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+
 import pytest
 import torch
 
-from compiler.aten.plena.matrix_recurrence_lowering import (
+# Honor the same Compiler checkout as the campaign tests before importing the
+# package.  Otherwise pytest collection silently loads the in-tree submodule
+# even when PLENA_COMPILER_ROOT names an external worktree.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_COMPILER_ROOT = Path(os.environ.get("PLENA_COMPILER_ROOT", _REPO_ROOT / "PLENA_Compiler")).resolve()
+for _path in (_REPO_ROOT, _COMPILER_ROOT):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+from compiler.aten.plena.matrix_recurrence_lowering import (  # noqa: E402
     NEMOTRON_MAMBA,
     MatrixRecurrenceSpec,
     RecurrenceKind,
@@ -11,7 +24,7 @@ from compiler.aten.plena.matrix_recurrence_lowering import (
     build_recurrence_field_manifest,
     build_recurrence_working_set,
 )
-from transactional_emulator.testbench.aten.matrix_lcompute_recurrence_test import (
+from transactional_emulator.testbench.aten.matrix_lcompute_recurrence_test import (  # noqa: E402
     _assert_close,
     _mamba_packet_values,
 )

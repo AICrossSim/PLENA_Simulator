@@ -186,6 +186,7 @@ test-matrix-lcompute-python compiler_root="PLENA_Compiler":
     PLENA_COMPILER_ROOT={{compiler_root}} python3 -m pytest -q \
         analytic_models/performance/test_matrix_sram_layout.py \
         analytic_models/performance/test_matrix_state_residency.py \
+        analytic_models/performance/test_agentic_campaign.py \
         analytic_models/performance/test_matrix_lcompute_campaign.py \
         transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py
 
@@ -251,6 +252,14 @@ matrix-lcompute-campaign compiler_root="PLENA_Compiler":
     python3 -m analytic_models.performance.matrix_lcompute_campaign \
         --compiler-root {{compiler_root}} \
         --output-dir artifacts/matrix_lcompute_e2e_v5
+
+# Import the externally archived real-checkpoint Nemotron Agentic campaign and
+# replay its length-sorted B1/B2/B4/B8/B16 route groups in the 52-layer DSE.
+matrix-lcompute-agentic campaign_root compiler_root="PLENA_Compiler":
+    python3 -m analytic_models.performance.agentic_matrix_lcompute_campaign \
+        --campaign-root {{campaign_root}} \
+        --compiler-root {{compiler_root}} \
+        --output-dir artifacts/matrix_lcompute_agentic_v1
 
 # ISA/layout unit tests plus reproducibility checks for both checked campaigns.
 test-hybrid-lcompute:

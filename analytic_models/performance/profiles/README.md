@@ -9,6 +9,7 @@ not committed.
 | B200 formal campaign | Real Nemotron NVFP4 end-to-end baseline, six NCU layer-type cases, routing skew, real-shape KDA stages | PLENA cycles or RTL performance |
 | RTX 5090 Mamba | Official Nemotron Mamba mixer shape, clean CUDA-event latency and NSYS stage split | Full-model latency; the NCU files are concurrency-qualified |
 | B200 supplemental | Long-sequence Mamba state precision and real-shape Kimi MLA/LatentMoE component behavior | Language quality or a full Kimi checkpoint baseline |
+| B200 Agentic campaign | Real Nemotron BFCL/GPQA/SWE timing, energy and eager MoE routing for B1-derived length-sorted batch replay | Direct batched routing, PLENA cycles, or benchmark accuracy in Rust |
 
 `gpu_sources.json` pins four source archives and every imported file hash.
 Collection-machine paths are removed from the checked-in CSV/JSON files.
@@ -35,3 +36,8 @@ rebuilt directly from tar archives by `gpu_evidence_import.py`.
 GPU time is a comparison baseline. It is never converted into PLENA cycles.
 Until RTL supplies frequency, area, power, and calibrated operator latency,
 these files cannot support a PLENA-vs-GPU speedup or token/J claim.
+
+The Agentic raw archive is intentionally external because its routing JSONL is
+613 MiB. `agentic_campaign.py` validates the archive and
+`agentic_matrix_lcompute_campaign.py` produces the compact checked-in DSE
+tables without copying raw token routes into Git.
