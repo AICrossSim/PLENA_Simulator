@@ -38,6 +38,8 @@ from pathlib import Path
 import torch
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 _compiler_override = os.environ.get("PLENA_COMPILER_ROOT")
 _compiler_candidates = (
     [Path(_compiler_override)]
@@ -62,7 +64,13 @@ from compiler.aten.plena.program_kda_prefill import (
     kda_prefill_tile_shapes,
 )
 from compiler.aten.plena.program_kda_common import kda_vector_rows
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import (
+    add_hw_args,
+    bf16_uniform,
+    setup_hw,
+    use_plain_bf16_precision_classes,
+    use_uniform_bf16_hbm_precision,
+)
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
@@ -89,22 +97,11 @@ def use_bf16_kv_precision(build_dir: Path) -> None:
     is a multiplicative accumulator carried across chunks, so three mantissa
     bits at every boundary compounds without bound even where it does not NaN.
     """
-    path = Path(os.environ["PLENA_SETTINGS_TOML"])
-    text = path.read_text()
-    for key in ("HBM_M_KV_TYPE", "HBM_V_KV_TYPE"):
-        head = f"[TRANSACTIONAL.PRECISION.{key}]"
-        start = text.index(head)
-        end = text.index("\n[", start + len(head))
-        text = (
-            text[:start]
-            + (
-                f'{head}\nformat = "Plain"\n'
-                f"[TRANSACTIONAL.PRECISION.{key}.DATA_TYPE]\n"
-                f'type = "Fp"\nsign = true\nexponent = 8\nmantissa = 7\n'
-            )
-            + text[end + 1 :]
-        )
-    path.write_text(text)
+    use_plain_bf16_precision_classes(
+        build_dir,
+        "HBM_M_KV_TYPE",
+        "HBM_V_KV_TYPE",
+    )
 
 
 def _mxfp8_exact(shape_, generator, *, hi: float = 2.0) -> torch.Tensor:
@@ -379,7 +376,15 @@ def _sequential_chunk(q, k, v, beta, per_step_decay, state0, scale):
     return torch.stack(outs), s
 
 
-def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
+def _prefill_case(
+    args,
+    build_dir,
+    hw,
+    *,
+    want: str,
+    chunks: int = 1,
+    uniform_bf16: bool = False,
+):
     """``chunks`` chunks of prefill for one head, against the sequential recurrence.
 
     More than one matters for two reasons the single-chunk case cannot show.
@@ -399,7 +404,10 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
         value_dim=value_dim,
         conv_kernel=4,
     )
-    use_bf16_kv_precision(build_dir)
+    if uniform_bf16:
+        use_uniform_bf16_hbm_precision(build_dir)
+    else:
+        use_bf16_kv_precision(build_dir)
     total = chunk * chunks
     handoff = want == "handoff"
     generated = total + int(handoff)
@@ -413,16 +421,28 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
     # and drove cond(L) to the hundreds -- an artefact of the test, not a
     # property of the workload. Normalised, cond(L) is 1.0 at every chunk size.
     _norm = lambda t: t * torch.rsqrt(t.square().sum(-1, keepdim=True) + 1e-6)  # noqa: E731
-    q = _norm(_mxfp8_exact((generated, key_dim), g, hi=1.0))
-    k = _norm(_mxfp8_exact((generated, key_dim), g, hi=1.0))
-    v = _mxfp8_exact((generated, value_dim), g, hi=1.0)
-    beta = _mxfp8_exact((generated,), g, hi=1.0).abs().clamp(0.125, 1.0)
+    draw = (
+        (lambda shape, hi: bf16_uniform(shape, g, hi=hi))
+        if uniform_bf16
+        else (lambda shape, hi: _mxfp8_exact(shape, g, hi=hi))
+    )
+    q = _norm(draw((generated, key_dim), 1.0))
+    k = _norm(draw((generated, key_dim), 1.0))
+    v = draw((generated, value_dim), 1.0)
+    beta = draw((generated,), 1.0).abs().clamp(0.125, 1.0)
     # Per-step decays. exp(lower_bound * sigmoid(.)) with lower_bound = -5 puts
     # these across (e^-5, 1); the real distribution centres near exp(-2.5), which
     # makes the recurrence strongly contracting -- the reason errors do not
     # compound across chunks.
-    a = torch.exp(shape.gate_lower_bound * torch.sigmoid(torch.randn((generated, key_dim), generator=g)))
-    state0 = _mxfp8_exact((value_dim, key_dim), g, hi=0.5)
+    a = torch.exp(
+        shape.gate_lower_bound
+        * torch.sigmoid(torch.randn((generated, key_dim), generator=g))
+    )
+    state0 = draw((value_dim, key_dim), 0.5)
+    if uniform_bf16:
+        q = q.to(torch.bfloat16).float()
+        k = k.to(torch.bfloat16).float()
+        a = a.to(torch.bfloat16).float()
     scale = 1.0 / key_dim**0.5
     out_ref, state_ref = _sequential_chunk(
         q[:total], k[:total], v[:total], beta[:total], a[:total], state0, scale
@@ -531,7 +551,15 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
             else {}
         ),
     }
-    v_ = {name: prog.input(name, shape=tuple(t.shape)) for name, t in ins.items()}
+    v_ = {
+        name: prog.input(
+            name,
+            shape=tuple(t.shape),
+            real_data_ratio=1.0 if uniform_bf16 else None,
+            hbm_element_bytes=2 if uniform_bf16 else None,
+        )
+        for name, t in ins.items()
+    }
     state_v = prog.load_batch(v_["S0"], name="state")
     ident_v = prog.load_batch(v_["ID"], name="ident")
     ci_v = prog.load_batch(v_["CI"], name="causal_inclusive")
@@ -577,6 +605,27 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
         beta_vars.append(buffers.beta_fp)
         prog.kda_prefill_chunk_v0(buffers=buffers, chunk=chunk, shape=shape)
         outs.append(buffers.out)
+
+    packed_full = None
+    if want == "both":
+        if key_dim > mlen or value_dim > mlen:
+            raise SystemExit(
+                "the complete prefill evidence currently requires key_dim/value_dim <= mlen"
+            )
+        packed_full = prog.alloc(
+            "prefill_full_result",
+            total + value_dim,
+            mlen,
+            strict=False,
+        )
+        packed_row = 0
+        for chunk_out in outs:
+            for row in range(chunk):
+                prog.mamba_row_copy(packed_full, packed_row, chunk_out, row)
+                packed_row += 1
+        for row in range(value_dim):
+            prog.mamba_row_copy(packed_full, packed_row, buffers.state, row)
+            packed_row += 1
 
     handoff_fp_vars = []
     if handoff:
@@ -692,6 +741,15 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
         )
         if affine_handoff and "L_CFG" not in prog.compile():
             raise AssertionError("KDA handoff did not exercise L-Compute packet addressing")
+    elif want == "both":
+        target, rows, cols = packed_full, total + value_dim, mlen
+        golden = torch.cat(
+            (
+                torch.nn.functional.pad(out_ref, (0, mlen - value_dim)),
+                torch.nn.functional.pad(state_ref, (0, mlen - key_dim)),
+            ),
+            dim=0,
+        )
     elif want == "out":
         # The last chunk's output, against the same span of the reference.
         target, golden, rows = outs[-1], out_ref[(chunks - 1) * chunk :], chunk
@@ -706,7 +764,16 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
     # relative bar on values near zero measures nothing. 5e-2 absolute is ~10x
     # the observed 5e-3, and a real lowering error is orders of magnitude larger
     # -- the mutation tests in test_kda_prefill.py are what cover that.
-    _write_comparison(build_dir, prog, target, rows=rows, cols=cols, mlen=mlen, atol=5e-2, rtol=5e-2)
+    _write_comparison(
+        build_dir,
+        prog,
+        target,
+        rows=rows,
+        cols=cols,
+        mlen=mlen,
+        atol=5e-3 if uniform_bf16 else 5e-2,
+        rtol=3e-2 if uniform_bf16 else 5e-2,
+    )
     _finish(build_dir, prog, golden, ins, fp, list(ins), f"prefill_{want}", args)
 
 
@@ -732,6 +799,21 @@ def case_prefill_s128_decode_handoff(args, build_dir, hw):
     if 128 % args.chunk:
         raise SystemExit(f"S128 requires a chunk size that divides 128, got {args.chunk}")
     _prefill_case(args, build_dir, hw, want="handoff", chunks=128 // args.chunk)
+
+
+def case_prefill_s128_full(args, build_dir, hw):
+    """Read back all 128 prompt outputs and the final recurrent state."""
+
+    if 128 % args.chunk:
+        raise SystemExit(f"S128 requires a chunk size that divides 128, got {args.chunk}")
+    _prefill_case(
+        args,
+        build_dir,
+        hw,
+        want="both",
+        chunks=128 // args.chunk,
+        uniform_bf16=True,
+    )
 
 
 def case_state_transpose(args, build_dir, hw):
@@ -1802,6 +1884,7 @@ CASES = {
     "prefill_chain_state": case_prefill_chain_state,
     "prefill_decode_handoff": case_prefill_decode_handoff,
     "prefill_s128_decode_handoff": case_prefill_s128_decode_handoff,
+    "prefill_s128_full": case_prefill_s128_full,
     "state_transpose": case_state_transpose,
     "affine_packet_state": case_affine_packet_state,
     "layer": case_layer,
@@ -1837,9 +1920,17 @@ if __name__ == "__main__":
         help="Absolute floor for the layer cases, above bf16's ~1.8e-4 on this "
         "contraction and ~40x below the smallest golden value.",
     )
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=None,
+        help="override the generated test directory (useful for disposable evidence runs)",
+    )
     args = parser.parse_args()
 
-    build_dir = Path(__file__).parent / "build" / f"kda_{args.case}"
+    build_dir = args.build_dir or (
+        Path(__file__).parent / "build" / f"kda_{args.case}"
+    )
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)

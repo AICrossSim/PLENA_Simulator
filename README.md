@@ -82,10 +82,22 @@ language-quality results.
 All 23 Nemotron Mamba layers and all 69 Kimi KDA layers emit legal `L_TILE`
 instructions in the official 52/93-layer order. Whole-model cycles still come
 from an analytic timeline with official dimensions, GPU calibration and
-symbolic weights; ordinary layers are schedule markers. Real checkpoints have
-not run numerically from first to final layer in Rust. Coefficient generation
-is an upstream Vector stage. Prefill is modeled but not accelerated by
-`L_TILE`.
+symbolic weights; ordinary layers are schedule markers.
+
+A published `AntonV/mamba2-130m-hf` checkpoint now supplies real weights to a
+connected 24-layer decode test. Every recurrent core is compiled and executed
+by Rust `L_TILE`; its output feeds the next layer. The projection, convolution,
+normalization, gate, residual and language-model head remain an explicit host
+BF16 implementation, so this is not an all-operation Rust checkpoint run and
+does not imply that real-weight Nemotron or Kimi has run end to end.
+
+The Rust emulator also executes complete synthetic S128 chunked prefill for
+Mamba-2 and KDA at reduced one-head, 64-wide geometry. Both tests use BF16 for
+HBM inputs, spills, state and SRAM, carry state across every chunk, read back
+all 128 outputs plus final state, and reach zero Matrix-view bank stalls. This
+is functional transactional prefill evidence, not a full-model TTFT or an
+`L_TILE` prefill speedup claim. See
+[the validation note](docs/REAL_CHECKPOINT_PREFILL_VALIDATION_ZH.md).
 
 The BF16 bank word is 512 bits, matching the reference port. Static overlap
 receives no credit: the one-MiB point is short by 45,312 bytes for a second

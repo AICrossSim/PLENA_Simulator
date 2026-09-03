@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "model": "mamba2_130m_real_checkpoint",
+  "layout": "affine",
+  "precision": "bf16_uniform_matrix_recurrence",
+  "tokens": 1,
+  "official_shape": {
+    "heads": 24,
+    "state_rows": 128,
+    "row_elements": 64
+  },
+  "compiler_generated_machine_words": 134,
+  "assembly_sha256": "145431c23727a0b8e513c39e9d1420bc364766011b7eb067f1e69e04126f42a3",
+  "machine_code_sha256": "f0eb11671479a3755501abfbf0830d175b9e4c1662a1c5976907cbc5ed395672",
+  "input_hbm_sha256": "252c71ab874a7e0ff023b23d54c723c745644752cb7cd3436f0824d58a8390f4",
+  "l_tile_exec_count": 4,
+  "state_values_compared": 196608,
+  "output_values_compared": 1536,
+  "state_error": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "output_error": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "rust_simulation_cycles": 216586,
+  "matrix_view_packet_counters": {
+    "packets": 788,
+    "values": 1231104,
+    "bank_words": 38472,
+    "service_cycles": 984,
+    "ideal_cycles": 984,
+    "bank_stall_cycles": 0
+  },
+  "evidence": "Compiler assembly -> Compiler assembler -> Rust opcode decoder -> BF16 banked Matrix SRAM -> explicit HBM state/output readback",
+  "temporary_build_retained": false
+}

@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "evidence": "Compiler assembly -> assembler -> Rust transactional emulator -> all 128 outputs and final recurrent state",
+  "cases": [
+    {
+      "case": "nemotron_mamba2_s128",
+      "shape": {
+        "batch": 1,
+        "tokens": 128,
+        "chunk": 64,
+        "heads": 1,
+        "state_dim": 64,
+        "head_dim": 64
+      },
+      "precision": {
+        "hbm_inputs": "bf16",
+        "matrix_sram": "bf16",
+        "vector_sram": "bf16",
+        "carried_state_and_spills": "bf16",
+        "accumulation": "fp32"
+      },
+      "isa_source_lines": 8587,
+      "machine_words": 6310,
+      "rust_cycles": 188638,
+      "hbm_bytes_read": 181248,
+      "hbm_bytes_written": 32768,
+      "matrix_view_packet_counters": {
+        "packets": 133120,
+        "values": 8519680,
+        "bank_words": 3702784,
+        "service_cycles": 231424,
+        "ideal_cycles": 231424,
+        "bank_stall_cycles": 0
+      },
+      "numerical_comparison": {
+        "mse": 7.494236342608929e-10,
+        "mae": 7.62939453125e-06,
+        "max_error": 0.0009765625,
+        "relative_error": 0.0074462890625,
+        "relative_match_rate": 97.802734375,
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.005,
+        "rtol": 0.03,
+        "golden_shape": [
+          12288
+        ],
+        "simulated_shape": [
+          12288
+        ],
+        "comparison_params": {
+          "start_row_idx": 1344,
+          "num_rows": 192,
+          "num_batches": 192,
+          "elements_per_batch": 64,
+          "row_dim": 64,
+          "use_stride_mode": false,
+          "atol": 0.005,
+          "rtol": 0.03
+        }
+      },
+      "machine_code_sha256": "37d6eb4d5678370447a7a76a54aacc9aed2a449327830976004c78a613253384",
+      "hbm_preload_sha256": "a5cb8642f05f5367df524a555f05ae7b995d1356b26673ad9417f747c20dd42f"
+    },
+    {
+      "case": "kimi_kda_s128",
+      "shape": {
+        "batch": 1,
+        "tokens": 128,
+        "chunk": 16,
+        "heads": 1,
+        "key_dim": 64,
+        "value_dim": 64
+      },
+      "precision": {
+        "hbm_inputs": "bf16",
+        "matrix_sram": "bf16",
+        "vector_sram": "bf16",
+        "carried_state_and_spills": "bf16",
+        "accumulation": "fp32"
+      },
+      "isa_source_lines": 17513,
+      "machine_words": 13656,
+      "rust_cycles": 1346121,
+      "hbm_bytes_read": 1146880,
+      "hbm_bytes_written": 393216,
+      "matrix_view_packet_counters": {
+        "packets": 917504,
+        "values": 58720256,
+        "bank_words": 52428800,
+        "service_cycles": 3276800,
+        "ideal_cycles": 3276800,
+        "bank_stall_cycles": 0
+      },
+      "numerical_comparison": {
+        "mse": 1.2689270079135895e-08,
+        "mae": 3.743171691894531e-05,
+        "max_error": 0.0009765625,
+        "relative_error": 0.73828125,
+        "relative_match_rate": 95.32877604166666,
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.005,
+        "rtol": 0.03,
+        "golden_shape": [
+          12288
+        ],
+        "simulated_shape": [
+          12288
+        ],
+        "comparison_params": {
+          "start_row_idx": 3584,
+          "num_rows": 192,
+          "num_batches": 192,
+          "elements_per_batch": 64,
+          "physical_rows": 192,
+          "row_dim": 64,
+          "use_stride_mode": false,
+          "atol": 0.005,
+          "rtol": 0.03
+        }
+      },
+      "machine_code_sha256": "4d29c9ab39b01b91e5a2317f2df4a905a66b42e8af73e3d1578e023d3aae084b",
+      "hbm_preload_sha256": "23d875cc4e3d428f2121d598d4baaa1aa03596e99d52155aab9c5e83a9c35941"
+    }
+  ],
+  "claim_boundary": "complete recurrence/chunk prefill at reduced 64-wide geometry; not a complete real-weight Nemotron or Kimi layer"
+}

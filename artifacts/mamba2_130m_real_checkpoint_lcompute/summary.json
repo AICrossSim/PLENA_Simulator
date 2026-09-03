@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "model": "AntonV/mamba2-130m-hf",
+  "snapshot": "05e8773fc4ac1cd067e8a18a5c45372ce5178405",
+  "checkpoint_sha256": "bc188e3050316757031670438228283928cf721e4e6b0338da614b8d69c7b8b5",
+  "precision": {
+    "weights": "bf16",
+    "activations": "bf16",
+    "recurrent_state": "bf16",
+    "matrix_accumulator": "fp32"
+  },
+  "prompt_tokens": [
+    1,
+    17,
+    42,
+    9
+  ],
+  "decode_token": 17,
+  "layers_executed": 24,
+  "full_checkpoint_layer_chain": true,
+  "rust_l_tile_layers": 24,
+  "rust_cycles_sum": 5198064,
+  "matrix_bank_stall_cycles_sum": 0,
+  "worst_layer_recurrence_output_max_abs_error": 0.0,
+  "worst_layer_recurrence_state_max_abs_error": 0.0,
+  "final_hidden_max_abs_error": 0.0,
+  "final_logit_max_abs_error": 0.0,
+  "bf16_reference_top1_equal": true,
+  "bf16_reference_top5_equal": true,
+  "official_fp32_logit_max_abs_error": 1.688262939453125,
+  "official_fp32_logit_relative_l2": 0.007879387587308884,
+  "official_fp32_top1_equal": true,
+  "official_fp32_top5_equal": true,
+  "layer_reports": [
+    {
+      "layer": 0,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 1,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 2,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 3,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 4,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 5,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 6,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 7,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 8,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 9,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 10,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 11,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 12,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 13,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 14,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 15,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 16,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 17,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 18,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 19,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 20,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 21,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 22,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    },
+    {
+      "layer": 23,
+      "cycles": 216586,
+      "state_max_abs_error": 0.0,
+      "output_max_abs_error": 0.0,
+      "bank_stall_cycles": 0,
+      "machine_words": 134
+    }
+  ],
+  "claim_boundary": "real checkpoint and first-to-last hidden flow; every recurrent core executes in Rust L_TILE, while projection/conv/norm/residual execute in an explicit host BF16 model",
+  "not_claimed": "the complete checkpoint does not yet execute every non-recurrent operation inside the Rust emulator"
+}

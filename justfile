@@ -295,6 +295,19 @@ test-hybrid-prefill-handoff:
     python3 transactional_emulator/testbench/kda/kda_stage_test.py \
         --case prefill_s128_decode_handoff --chunk 16
 
+# Full transactional S128 prefill: all token outputs and final state are read
+# back and compared. Large SRAM dumps live only in a temporary directory.
+test-transactional-prefill-full compiler_root="PLENA_Compiler" output="artifacts/transactional_prefill_bf16/summary.json":
+    python3 transactional_emulator/testbench/aten/transactional_prefill_evidence.py \
+        --compiler-root {{compiler_root}} --output {{output}}
+
+# Published 24-layer Mamba-2 checkpoint: host BF16 perimeter with every
+# recurrent core compiled, assembled and executed by the Rust L_TILE path.
+test-mamba2-real-checkpoint python_bin="python3" compiler_root="PLENA_Compiler" checkpoint="/scratch/shared/mcl123/plena/model_cache/huggingface/hub/models--AntonV--mamba2-130m-hf/snapshots/05e8773fc4ac1cd067e8a18a5c45372ce5178405" output_dir="artifacts/mamba2_130m_real_checkpoint_lcompute":
+    PLENA_COMPILER_ROOT={{compiler_root}} PLENA_USE_NIX_BUILD=1 {{python_bin}} \
+        transactional_emulator/testbench/aten/mamba2_real_checkpoint_lcompute_test.py \
+        --checkpoint {{checkpoint}} --output-dir {{output_dir}}
+
 test-aten-rms-norm *args:
     python3 transactional_emulator/testbench/aten/rms_norm_test.py {{args}}
 

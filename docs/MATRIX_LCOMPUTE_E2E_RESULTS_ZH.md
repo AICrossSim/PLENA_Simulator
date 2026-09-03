@@ -223,9 +223,15 @@ Kimi 的完整时间线被巨大的 projection/MoE 权重流量支配，所以�
 1 MiB 点无法同时容纳当前 working set 和下一组 state：Nemotron 至少还需要
 45,312 bytes，Kimi 至少还需要 28,736 bytes。因此 E=D，没有虚构 overlap。
 
-Prefill 可以生成 workload timeline，column view 也通过 numbered-value 转置
-等价测试，但还没有两条可比 transactional prefill 路径。旧的
-`3.387x/1.713x` 已撤回，本轮不报告 TTFT 加速。
+现在已有两条完整的 transactional S128 功能路径：Mamba-2 连续执行两个
+64-token SSD chunk，KDA 连续执行八个 16-token chunk。两者都从 BF16 HBM
+输入开始，在 Rust 中执行全部 chunk，读回 128 个输出和最终 state；共比较
+12,288 个值，最大绝对误差均为 `0.0009765625`，allclose 通过率 100%，
+Matrix-view bank stall 均为 0。对应周期分别为 `188,638` 和 `1,346,121`。
+
+这些测试采用一头、64-wide 的缩小外围几何，证明 chunk 计算与 state 生命周期，
+但没有 row-major/affine A/B 对照，因此仍不报告 transactional prefill 加速或
+整模 TTFT。旧的 `3.387x/1.713x` 继续撤回。
 
 当前只有 pre-RTL 结构代理：额外 SRAM payload/cache/new MAC/额外 SRAM 端口
 均为 0；4 个 view record 共 256 bits；sequencer 上界 256 bits 加 3 个计数器；
@@ -244,6 +250,9 @@ segment，Kimi 为 16 个 128-value segment）；cyclic restore 是 64 个 512-b
 - Compiler、assembler 和 Rust decoder 的 `L_TILE` 契约一致；
 - Rust 物理 bank、行/列读取、lane restore、viewed DMA 和 output 写回正确；
 - 官方递推几何下四 token 的 Mamba/KDA 机器码数值对拍；
+- 缩小外围几何下 Mamba/KDA 的完整 S128 transactional prefill 数值与最终 state；
+- 公开 Mamba2-130M checkpoint 的 24 层真实权重连续 hidden 链，其中每层递推
+  核心由 Rust `L_TILE` 执行；
 - 52/93 层中全部 recurrent layer 都发出合法 `L_TILE`；
 - D' 与 D 的物理 state 坐标相同，纯 bank speedup 是 1.00x；
 - 普通 Attention/MLA/MoE row/column service 在全部 64 个 base phase 不退化；
@@ -251,8 +260,8 @@ segment，Kimi 为 16 个 128-value segment）；cyclic restore 是 64 个 512-b
 
 未证明：
 
-- Nemotron/Kimi 真实 checkpoint 从第一层到最后一层的 Rust 数值执行；
-- transactional prefill 加速；
+- Nemotron/Kimi 真实 checkpoint 的全算子、第一层到最后一层 Rust 数值执行；
+- transactional prefill 的 A/B 加速和完整模型 TTFT；
 - 1 MiB 下 producer/consumer overlap；
 - view DMA/L_TILE 在 scoreboard 中按精确物理 bank-word 足迹进行的重叠时序；
   当前使用保守逻辑区间，物理 `Cell::Pending` 保证数值正确，本轮也未给 E

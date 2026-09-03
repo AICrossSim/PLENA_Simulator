@@ -43,6 +43,8 @@ import torch
 # sibling checkout: a sibling may be on a different branch and would otherwise
 # silently shadow the submodule on sys.path.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 _compiler_override = os.environ.get("PLENA_COMPILER_ROOT")
 _compiler_candidates = (
     [Path(_compiler_override)]
@@ -61,8 +63,14 @@ if _ACTIVE_COMPILER_ROOT is None:
 from compiler.aten.plena import PlenaCompiler
 from compiler.aten.plena.program_mamba_common import Mamba2Shape
 from compiler.aten.plena.program_ssm_recurrent import MambaDecodeInvocation
-from compiler.aten.plena.program_ssd import HOST_STAGED
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from compiler.aten.plena.program_ssd import HOST_STAGED, SPILLED_ACTIVATION
+from transactional_emulator.testbench.aten.configurable import (
+    add_hw_args,
+    bf16_uniform,
+    setup_hw,
+    use_plain_bf16_precision_classes,
+    use_uniform_bf16_hbm_precision,
+)
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
@@ -104,6 +112,16 @@ def _shape(args, *, seq_len: int) -> Mamba2Shape:
         seq_len=seq_len,
         time_step_min=args.dt_min,
         time_step_max=args.dt_max,
+    )
+
+
+def use_bf16_kv_precision(build_dir: Path) -> None:
+    """Make every program-produced spill use the uniform BF16 data path."""
+
+    use_plain_bf16_precision_classes(
+        build_dir,
+        "HBM_M_KV_TYPE",
+        "HBM_V_KV_TYPE",
     )
 
 
@@ -526,6 +544,224 @@ def case_decode_batch(args, build_dir, hw):
     )
 
 
+def case_prefill_s128_full(args, build_dir, hw):
+    """Execute both SSD chunks and read back every prompt output plus state."""
+
+    from compiler.aten.models.mamba2.reference import ssd_chunk_reference
+
+    mlen = args.mlen
+    if mlen != 64:
+        raise SystemExit(f"this S128 evidence requires MLEN=64, got {mlen}")
+    chunks = 2
+    total = chunks * mlen
+    shape = Mamba2Shape(
+        hidden_size=mlen,
+        num_heads=1,
+        head_dim=mlen,
+        state_size=mlen,
+        n_groups=1,
+        conv_kernel=4,
+        chunk_size=mlen,
+        seq_len=total,
+    )
+    use_uniform_bf16_hbm_precision(build_dir)
+    generator = torch.Generator().manual_seed(args.seed + 701)
+    x = bf16_uniform((1, total, 1, mlen), generator, hi=0.125)
+    b = bf16_uniform((1, total, 1, mlen), generator, hi=0.125)
+    c = bf16_uniform((1, total, 1, mlen), generator, hi=0.125)
+    state0 = bf16_uniform((1, 1, mlen, mlen), generator, hi=0.125)
+    dt = torch.full((1, total, 1), 0.25)
+    a = torch.tensor([-0.5])
+    d = torch.tensor([0.125])
+    output_ref, state_ref = ssd_chunk_reference(
+        x,
+        dt,
+        a,
+        b,
+        c,
+        d,
+        mlen,
+        initial_state=state0,
+    )
+
+    prog = PlenaCompiler(
+        mlen=mlen,
+        blen=args.blen,
+        real_data_ratio=hw.real_data_ratio,
+    )
+    consts = prog.mamba_fp_constants(shape)
+    inputs = {
+        "S0": state0[0, 0],
+        "TRI": torch.tril(torch.ones(mlen, mlen)).T,
+        "CAUSAL": torch.tril(torch.ones(mlen, mlen)),
+    }
+    for chunk in range(chunks):
+        start = chunk * mlen
+        end = start + mlen
+        x_chunk = x[0, start:end, 0]
+        inputs[f"X{chunk}"] = x_chunk
+        inputs[f"XDT{chunk}"] = (x_chunk * dt[0, start:end, 0, None]).to(
+            torch.bfloat16
+        ).float()
+        inputs[f"B{chunk}"] = b[0, start:end, 0]
+        inputs[f"BT{chunk}"] = b[0, start:end, 0].T.contiguous()
+        inputs[f"C{chunk}"] = c[0, start:end, 0]
+        inputs[f"AT{chunk}"] = (
+            dt[0, start:end].T * a[:, None]
+        ).to(torch.bfloat16).float().contiguous()
+
+    staged = {
+        name: prog.input(
+            name,
+            shape=tuple(value.shape),
+            real_data_ratio=1.0,
+            hbm_element_bytes=2,
+        )
+        for name, value in inputs.items()
+    }
+    state = prog.load_batch(staged["S0"], name="state")
+    state_prev = staged["S0"]
+    causal = prog.load_batch(staged["CAUSAL"], name="causal")
+    outputs = []
+    scale_vars = []
+    decay_vars = []
+    d_fp = prog.fp_var("skip_d", size=1)
+
+    for chunk in range(chunks):
+        a_t = prog.load_batch(staged[f"AT{chunk}"], name=f"a_t{chunk}")
+        x_v = prog.load_batch(staged[f"X{chunk}"], name=f"x{chunk}")
+        c_v = prog.load_batch(staged[f"C{chunk}"], name=f"c{chunk}")
+        b_t = prog.load_batch(staged[f"BT{chunk}"], name=f"b_t{chunk}")
+        cs = prog.alloc(f"cs{chunk}", 1, mlen, strict=False)
+        decay = prog.alloc(f"decay{chunk}", mlen, mlen, strict=False)
+        scores = prog.alloc(f"scores{chunk}", mlen, mlen, strict=False)
+        output = prog.alloc(f"output{chunk}", mlen, mlen, strict=False)
+        cs_fp = prog.fp_var(f"cs_fp{chunk}", size=mlen)
+
+        prog.ssd_chunk_cumsum_v0(
+            a_t,
+            staged["TRI"],
+            cs,
+            shape,
+            precision=SPILLED_ACTIVATION,
+        )
+        prog.ssd_decay_mask_v0(
+            cs,
+            cs_fp,
+            decay,
+            causal,
+            consts,
+            shape,
+            head_row=0,
+        )
+        prog.ssd_chunk_head_v0(
+            b_chunk=staged[f"B{chunk}"],
+            c_chunk=c_v,
+            x_chunk=staged[f"XDT{chunk}"],
+            decay=decay,
+            scores=scores,
+            y_out=output,
+            shape=shape,
+            precision=SPILLED_ACTIVATION,
+        )
+        prog.ssd_inter_chunk_output_v0(
+            c_chunk=c_v,
+            state_prev=state_prev,
+            y_out=output,
+            cs_fp=cs_fp,
+            shape=shape,
+            precision=SPILLED_ACTIVATION,
+        )
+        prog.tile_row_fma_fp_broadcast(
+            output,
+            x_v,
+            d_fp,
+            dst_rows=range(mlen),
+            src_rows=range(mlen),
+        )
+        outputs.append(output)
+
+        start = chunk * mlen
+        end = start + mlen
+        cs_host = torch.cumsum((dt[0, start:end].T * a[:, None]), dim=1)[0]
+        x_d_scale = torch.exp(cs_host[-1] - cs_host) * dt[0, start:end, 0]
+        scale_fp = prog.fp_var(f"x_d_scale{chunk}", size=mlen)
+        scale_vars.append((scale_fp, x_d_scale))
+        x_d = prog.alloc(f"x_d{chunk}", mlen, mlen, strict=False)
+        prog.mamba_block_copy(x_d, x_v, num_rows=mlen)
+        prog.tile_row_mul_fp(x_d, scale_fp, rows=range(mlen))
+        x_d_spill = prog.store(
+            x_d,
+            name=f"x_d_spill{chunk}",
+            precision=1,
+            hbm_element_bytes=2,
+            real_data_ratio=1.0,
+        )
+        chunk_decay = prog.fp_var(f"chunk_decay{chunk}", size=1)
+        decay_vars.append((chunk_decay, torch.exp(cs_host[-1]).item()))
+        prog.ssd_state_update_v0(
+            state=state,
+            b_t_chunk=b_t,
+            x_d_chunk=x_d_spill,
+            decay_fp=chunk_decay,
+            shape=shape,
+            precision=SPILLED_ACTIVATION,
+        )
+        state_prev = prog.store(
+            state,
+            name=f"state_after_chunk{chunk}",
+            precision=1,
+            hbm_element_bytes=2,
+            real_data_ratio=1.0,
+        )
+
+    packed = prog.alloc("prefill_full_result", total + mlen, mlen, strict=False)
+    packed_row = 0
+    for output in outputs:
+        for row in range(mlen):
+            prog.mamba_row_copy(packed, packed_row, output, row)
+            packed_row += 1
+    for row in range(mlen):
+        prog.mamba_row_copy(packed, packed_row, state, row)
+        packed_row += 1
+    golden = torch.cat((output_ref[0, :, 0], state_ref[0, 0]), dim=0)
+
+    tail = max(
+        [consts.zero.address + len(prog.mamba_fp_constant_values(shape)), d_fp.address + 1]
+        + [var.address + var.size for var, _ in scale_vars]
+        + [var.address + 1 for var, _ in decay_vars]
+    )
+    fp = [0.0] * tail
+    constants = prog.mamba_fp_constant_values(shape)
+    fp[consts.zero.address : consts.zero.address + len(constants)] = constants
+    fp[d_fp.address] = d.item()
+    for var, values in scale_vars:
+        fp[var.address : var.address + var.size] = values.tolist()
+    for var, value in decay_vars:
+        fp[var.address] = value
+
+    _write_comparison(
+        build_dir,
+        prog,
+        packed,
+        rows=total + mlen,
+        cols=mlen,
+        mlen=mlen,
+        atol=5e-3,
+        rtol=3e-2,
+    )
+    _finish(
+        build_dir,
+        prog,
+        golden,
+        inputs,
+        fp,
+        list(inputs),
+        "prefill_s128_full",
+        args,
+    )
+
+
 def _prefill_decode_handoff(args, build_dir, hw, *, chunks: int):
     """One or more prefill chunks feed decode through packet addressing."""
 
@@ -734,6 +970,7 @@ CASES = {
     "decay": case_decay,
     "conv1d": case_conv1d,
     "decode_batch": case_decode_batch,
+    "prefill_s128_full": case_prefill_s128_full,
     "prefill_decode_handoff": case_prefill_decode_handoff,
     "prefill_s128_decode_handoff": case_prefill_s128_decode_handoff,
 }
@@ -747,9 +984,17 @@ if __name__ == "__main__":
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--dt-min", type=float, default=0.0)
     parser.add_argument("--dt-max", type=float, default=float("inf"))
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=None,
+        help="override the generated test directory (useful for disposable evidence runs)",
+    )
     args = parser.parse_args()
 
-    build_dir = Path(__file__).parent / "build" / f"mamba2_{args.case}"
+    build_dir = args.build_dir or (
+        Path(__file__).parent / "build" / f"mamba2_{args.case}"
+    )
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)

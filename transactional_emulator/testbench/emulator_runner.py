@@ -27,6 +27,9 @@ if str(_TOOLS_ROOT) not in sys.path:
 from verification.check_mem import compare_vram_with_golden, print_comparison_results  # noqa: E402
 
 
+_BUILT_EMULATOR_BINARIES: set[Path] = set()
+
+
 def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
     """Compile the release emulator binary on demand.
 
@@ -35,6 +38,8 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
     with a dead-end error, build it here once — `cargo build` is a fast no-op when
     the binary is already up to date, so this stays out of the way on warm runs.
     """
+    if binary in _BUILT_EMULATOR_BINARIES and binary.exists():
+        return
     print(
         f"Ensuring emulator binary is current at {binary}\n"
         "Running cargo build --release (incremental/no-op when already current)...",
@@ -58,9 +63,12 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
             f"Failed to build the emulator binary (cargo exit {result.returncode}).\n"
             f"Build it manually with: cd {emulator_dir} && cargo build --release"
         )
+    _BUILT_EMULATOR_BINARIES.add(binary)
 
 
 def _release_build_command(emulator_dir: Path) -> list[str]:
+    if _env_flag("PLENA_USE_NIX_BUILD") and (emulator_dir.parent / "flake.nix").exists():
+        return ["nix", "develop", "-c", "cargo", "build", "--release"]
     cargo_probe = subprocess.run(
         ["cargo", "--version"],
         cwd=str(emulator_dir),

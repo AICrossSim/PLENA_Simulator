@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -42,6 +43,7 @@ from compiler.aten.plena.matrix_recurrence_lowering import (  # noqa: E402
     MatrixSramPoint,
     RecurrenceFieldManifest,
     RecurrenceFieldPacket,
+    RecurrenceKind,
     RecurrenceLayout,
     RecurrenceWorkingSet,
     build_recurrence_field_manifest,
@@ -122,7 +124,7 @@ def _mamba_reference(
         + operands["b"][:, :, None] * scratch[:, None, :]
     )
     accumulator = torch.zeros_like(x)
-    for row in range(NEMOTRON_MAMBA.recurrence_rows):
+    for row in range(state.shape[1]):
         accumulator += state[:, row, :] * operands["c"][:, row, None]
     output = _bf16(accumulator)
     output = _bf16(output + operands["d"][:, None] * x)
@@ -143,23 +145,33 @@ def _mamba_packet_values(
     if packet.field in {"scratch_zero", "output_zero", "output_result"}:
         return torch.zeros(packet.logical_values)
     if packet.field == "dt":
-        values = torch.zeros(2 * group_heads)
-        values[1::2] = operands["dt"][first:last]
+        values = torch.zeros(packet.logical_values)
+        values[1 : 2 * group_heads : 2] = operands["dt"][first:last]
         return values
     if packet.field == "d":
-        values = torch.zeros(2 * group_heads)
-        values[0::2] = 1.0
-        values[1::2] = operands["d"][first:last]
+        values = torch.zeros(packet.logical_values)
+        values[0 : 2 * group_heads : 2] = 1.0
+        values[1 : 2 * group_heads : 2] = operands["d"][first:last]
         return values
     row_first = chunk * working_set.state_rows_per_chunk
     row_last = row_first + working_set.state_rows_per_chunk
     if packet.field == "update":
-        values = torch.empty(working_set.state_rows_per_chunk, 2 * group_heads)
-        values[:, 0::2] = operands["a"][first:last, row_first:row_last].T
-        values[:, 1::2] = operands["b"][first:last, row_first:row_last].T
+        values = torch.zeros(
+            working_set.state_rows_per_chunk,
+            working_set.allocation(packet.target).descriptor.shape.cols,
+        )
+        values[:, 0 : 2 * group_heads : 2] = operands[
+            "a"
+        ][first:last, row_first:row_last].T
+        values[:, 1 : 2 * group_heads : 2] = operands[
+            "b"
+        ][first:last, row_first:row_last].T
         return values
     if packet.field == "c":
-        values = torch.zeros(working_set.state_rows_per_chunk, 2 * group_heads)
+        values = torch.zeros(
+            working_set.state_rows_per_chunk,
+            working_set.allocation(packet.target).descriptor.shape.cols,
+        )
         values[:, :group_heads] = operands["c"][first:last, row_first:row_last].T
         return values
     raise KeyError(packet.field)
@@ -183,7 +195,7 @@ def _kda_reference(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     state = _bf16(operands["decay"][:, :, None] * state)
     prediction = torch.zeros_like(operands["value"])
-    for key in range(KIMI_KDA.recurrence_rows):
+    for key in range(state.shape[1]):
         prediction += state[:, key, :] * operands["key"][:, key, None]
     prediction = _bf16(prediction)
     error = _bf16(
@@ -192,7 +204,7 @@ def _kda_reference(
     )
     state = _bf16(state + operands["key"][:, :, None] * error[:, None, :])
     output = torch.zeros_like(error)
-    for key in range(KIMI_KDA.recurrence_rows):
+    for key in range(state.shape[1]):
         output += state[:, key, :] * operands["query"][:, key, None]
     return _bf16(output), state
 
@@ -235,7 +247,7 @@ def _kda_packet_values(
 
 def _state_seed(spec: MatrixRecurrenceSpec) -> torch.Tensor:
     generator = torch.Generator().manual_seed(
-        SEED + (0 if spec is NEMOTRON_MAMBA else 5003)
+        SEED + (0 if spec.kind is RecurrenceKind.MAMBA else 5003)
     )
     return _bf16(
         torch.randn(
@@ -354,24 +366,46 @@ def _assert_close(name: str, actual: torch.Tensor, expected: torch.Tensor) -> di
     return {"max_abs": max_abs, "relative_l2": relative_l2}
 
 
-def run_case(
+@dataclass(frozen=True)
+class ConnectedRecurrenceExecution:
+    """Machine-readable report plus the values Rust actually wrote to HBM."""
+
+    report: dict[str, object]
+    outputs: tuple[torch.Tensor, ...]
+    state: torch.Tensor
+
+
+def run_prepared_case(
     spec: MatrixRecurrenceSpec,
     layout: RecurrenceLayout,
     output_root: Path,
     *,
+    initial_state: torch.Tensor,
+    operands_by_token: tuple[dict[str, torch.Tensor], ...],
+    point: MatrixSramPoint | None = None,
+    case_name: str | None = None,
     keep_build: bool = False,
-) -> dict[str, object]:
+) -> ConnectedRecurrenceExecution:
+    """Execute prepared BF16 operands through Compiler assembly and Rust."""
+
+    if not operands_by_token:
+        raise ValueError("at least one recurrence token is required")
     output_root = output_root.resolve()
-    point = MatrixSramPoint()
+    point = point or MatrixSramPoint()
     working_set = build_recurrence_working_set(spec, layout=layout, point=point)
-    state = _state_seed(spec)
+    expected_shape = (spec.heads, spec.recurrence_rows, spec.row_elements)
+    if tuple(initial_state.shape) != expected_shape:
+        raise ValueError(
+            f"initial state shape {tuple(initial_state.shape)} != {expected_shape}"
+        )
+    state = _bf16(initial_state)
     expected_state = state.clone()
     expected_outputs: list[torch.Tensor] = []
     manifests: list[RecurrenceFieldManifest] = []
     assemblies: list[str] = []
     field_base = _round_up(spec.state_bytes_per_layer, 64)
 
-    for token in range(TOKENS):
+    for token, operands in enumerate(operands_by_token):
         manifest = build_recurrence_field_manifest(
             working_set,
             field_hbm_base=field_base,
@@ -387,8 +421,7 @@ def run_case(
             assembly,
             expected_groups=working_set.groups,
         )
-        operands = _mamba_inputs(token) if spec is NEMOTRON_MAMBA else _kda_inputs(token)
-        if spec is NEMOTRON_MAMBA:
+        if spec.kind is RecurrenceKind.MAMBA:
             expected_output, expected_state = _mamba_reference(expected_state, operands)
         else:
             expected_output, expected_state = _kda_reference(expected_state, operands)
@@ -400,7 +433,8 @@ def run_case(
     program = "\n".join(assemblies)
     validate_matrix_view_dominance(program)
     assembly_sha256 = hashlib.sha256(program.encode()).hexdigest()
-    build_dir = output_root / spec.name / layout.value
+    stem = case_name or spec.name
+    build_dir = output_root / stem / layout.value
     if build_dir.exists():
         shutil.rmtree(build_dir)
     build_dir.mkdir(parents=True)
@@ -419,12 +453,11 @@ def run_case(
 
     image = bytearray(field_base)
     image[: spec.state_bytes_per_layer] = _pack_state_hbm(state, working_set)
-    for token, manifest in enumerate(manifests):
-        operands = _mamba_inputs(token) if spec is NEMOTRON_MAMBA else _kda_inputs(token)
+    for operands, manifest in zip(operands_by_token, manifests, strict=True):
         for packet in manifest.packets:
             values = (
                 _mamba_packet_values(packet, operands, working_set)
-                if spec is NEMOTRON_MAMBA
+                if spec.kind is RecurrenceKind.MAMBA
                 else _kda_packet_values(packet, operands, working_set)
             )
             _write_packet(image, packet, values)
@@ -463,7 +496,7 @@ def run_case(
         "model": spec.name,
         "layout": str(layout),
         "precision": "bf16_uniform_matrix_recurrence",
-        "tokens": TOKENS,
+        "tokens": len(operands_by_token),
         "official_shape": {
             "heads": spec.heads,
             "state_rows": spec.recurrence_rows,
@@ -491,14 +524,55 @@ def run_case(
     }
     (build_dir / "connected_result.json").write_text(json.dumps(result, indent=2) + "\n")
     output_root.mkdir(parents=True, exist_ok=True)
-    result_path = output_root / f"{spec.name}_{layout.value}.json"
+    result_path = output_root / f"{stem}_{layout.value}.json"
     result_path.write_text(json.dumps(result, indent=2) + "\n")
     if not keep_build:
         shutil.rmtree(build_dir)
         model_dir = build_dir.parent
         if model_dir.exists() and not any(model_dir.iterdir()):
             model_dir.rmdir()
-    return result
+    return ConnectedRecurrenceExecution(
+        report=result,
+        outputs=tuple(
+            torch.cat(
+                [
+                    _read_bf16(
+                        post,
+                        manifest.packet("output_result", group=group).hbm_byte_offset,
+                        manifest.packet("output_result", group=group).logical_values,
+                    ).reshape(working_set.group_heads, spec.row_elements)
+                    for group in range(working_set.groups)
+                ],
+                dim=0,
+            )
+            for manifest in manifests
+        ),
+        state=actual_state,
+    )
+
+
+def run_case(
+    spec: MatrixRecurrenceSpec,
+    layout: RecurrenceLayout,
+    output_root: Path,
+    *,
+    keep_build: bool = False,
+) -> dict[str, object]:
+    operands = tuple(
+        _mamba_inputs(token)
+        if spec.kind is RecurrenceKind.MAMBA
+        else _kda_inputs(token)
+        for token in range(TOKENS)
+    )
+    execution = run_prepared_case(
+        spec,
+        layout,
+        output_root,
+        initial_state=_state_seed(spec),
+        operands_by_token=operands,
+        keep_build=keep_build,
+    )
+    return execution.report
 
 
 def main() -> None:
