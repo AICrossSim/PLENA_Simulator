@@ -117,8 +117,8 @@ def test_d_prime_remains_a_bank_only_control() -> None:
                     "ideal_cycles": 1,
                     "bank_stall_cycles": 0,
                     "roundtrip_values_checked": 262_144,
-                    "same_physical_coordinates_as_affine_tile_skew": True,
-                    "programmable_skew_bank_speedup": 1.0,
+                    "same_physical_coordinates_as_compact_tile_phase": True,
+                    "compact_phase_vs_explicit_bases_bank_speedup": 1.0,
                 }
             }
         },
@@ -181,7 +181,7 @@ def test_summary_marks_low_sample_p95_as_exploratory(monkeypatch: pytest.MonkeyP
         "A_original_cycles",
         "B_arlo_cycles",
         "C_fixed_cycles",
-        "D_affine_cycles",
+        "D_phased_cycles",
         "D_speedup_vs_A",
         "D_speedup_vs_B",
         "D_speedup_vs_B_ideal_resource_overlap",

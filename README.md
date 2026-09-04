@@ -34,8 +34,10 @@ L_TILE_CFG   slot, shape_reg, map_reg
 L_TILE_EXEC  dst, src, scale, primitive[, axis_mask]
 ```
 
-One opcode (`0x3f`) serves both forms while preserving legacy `L_CFG` at
-`funct1=0`. The primitives are generic scale-accumulate, dot-reduce and
+One physical opcode (`0x3f`, named `L_TILE`) serves both forms. The historical
+Vector-stream `L_CFG` form at `funct1=0` remains executable only for reproducing
+the software baseline; official schedules never emit it and it is excluded
+from the pre-RTL handoff. The primitives are generic scale-accumulate, dot-reduce and
 outer-update; model names do not appear in the encoding or decoder. Viewed
 `H_PREFETCH_V`/`H_STORE_V` words use bit 31 plus a two-bit view slot. Legacy DMA
 words and their KV precision interpretation are unchanged.
@@ -43,10 +45,10 @@ words and their KV precision interpretation are unchanged.
 At `MLEN=2048`, `BLEN=32`, 64 banks, a 1 MiB BF16 Matrix SRAM and 1560 HBM
 bytes/cycle, the fresh formula-based B1 decode timeline is:
 
-| Model | Original A | Arlo B | Fixed single-base C | Affine D | D/A | D/B |
+| Model | Original A | Arlo B | Fixed single-base C | Phased D | D/A | D/B |
 |---|---:|---:|---:|---:|---:|---:|
-| Nemotron 3 | 4,055,091 | 3,110,067 | 2,210,882 | 2,014,554 | 2.0129x | 1.5438x |
-| Kimi K3 | 103,816,704 | 97,013,856 | 93,286,200 | 91,178,043 | 1.1386x | 1.0640x |
+| Nemotron 3 | 4,055,091 | 3,110,067 | 2,192,850 | 2,014,094 | 2.0134x | 1.5442x |
+| Kimi K3 | 103,816,704 | 97,013,856 | 93,124,740 | 91,173,903 | 1.1387x | 1.0641x |
 
 `A` and `B` are one-cycle-per-issued-instruction proxies, not transactional
 Rust timings. `C` and `D` include explicit Matrix service, arithmetic and HBM
@@ -71,7 +73,7 @@ phases.
 Compiler-generated recurrence programs run through the assembler and Rust
 decoder for four consecutive tokens at official recurrence geometry. The test
 compares 524,288 Nemotron and 1,572,864 Kimi state values plus every head-group
-output. Fixed and affine cases all pass; the largest relative-L2 error is
+output. Fixed and compact-phased cases all pass; the largest relative-L2 error is
 0.0071 under BF16. Every output group has a distinct HBM destination.
 
 The separate long-sequence storage study reports BF16 output relative-L2 error
@@ -106,7 +108,8 @@ PPA, frequency, power, Token/J or silicon claim. The timing scoreboard still
 uses conservative logical extents for Matrix views; physical `Cell::Pending`
 state enforces correctness, but exact bank-word overlap timing is not claimed.
 
-See [the full result report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md) and
+See [the pre-RTL freeze](docs/MATRIX_LCOMPUTE_PRE_RTL_FREEZE_ZH.md),
+[the full result report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md), and
 `artifacts/matrix_lcompute_e2e_v5/`. Run:
 
 ```bash
@@ -120,11 +123,11 @@ decode steps. Strict import validates all 140,921 routing events and uses exactl
 35,328 decode events; no route mismatch may fall back to an expert-count bound.
 The reconstructed route unions reduce the median active-expert count from the
 old maximum-distinct B16 bound of 96 to 49. Under the current strict-serial
-timeline, D (multi-row `L_TILE` plus compact views and affine layout) is 1.545x
+timeline, D (multi-row `L_TILE` plus compact compiler-phased views) is 1.545x
 at B1 and 3.191x at B16 over Arlo B. Under ideal resource overlap those endpoints
 are 1.000x and 3.274x, exposing where HBM hides the compute gain. Uniform MX8
 and BF16 weight-traffic sensitivities are reported separately. The strongest
-fixed D' bank control still matches programmable skew at 1.00x, so the supported
+fixed D' bank control still matches the compact phased mapping at 1.00x, so the supported
 contribution is multi-row Matrix-SRAM recurrence, not an independent skew
 speedup. These are pre-RTL formula-timeline results with symbolic weights, not
 a PLENA silicon comparison with B200. See

@@ -105,35 +105,35 @@ def _variant_records(result: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _precision_result(result: dict[str, Any], description: str) -> dict[str, Any]:
     variants = _variant_records(result)
     baseline = variants[str(MatrixVariant.B_ARLO)]
-    affine = variants[str(MatrixVariant.D_AFFINE)]
+    phased = variants[str(MatrixVariant.D_AFFINE)]
     baseline_timeline = _timeline_endpoints(baseline)
-    affine_timeline = _timeline_endpoints(affine)
+    phased_timeline = _timeline_endpoints(phased)
     return {
         "description": description,
         "weight_precision": str(result["weight_precision"]),
         "weight_precision_policy": result["weight_precision_policy"],
         "B_timeline": baseline_timeline,
-        "D_timeline": affine_timeline,
+        "D_timeline": phased_timeline,
         "D_speedup_vs_B_strict_serial": (
-            baseline_timeline["strict_serial_cycles"] / affine_timeline["strict_serial_cycles"]
+            baseline_timeline["strict_serial_cycles"] / phased_timeline["strict_serial_cycles"]
         ),
         "D_speedup_vs_B_ideal_resource_overlap": (
             baseline_timeline["ideal_resource_overlap_lower_bound_cycles"]
-            / affine_timeline["ideal_resource_overlap_lower_bound_cycles"]
+            / phased_timeline["ideal_resource_overlap_lower_bound_cycles"]
         ),
-        "D_logical_weight_read_bytes": int(affine["logical_weight_read_bytes"]),
-        "D_physical_hbm_read_bytes": int(affine["physical_hbm_read_bytes"]),
-        "D_physical_hbm_write_bytes": int(affine["physical_hbm_write_bytes"]),
+        "D_logical_weight_read_bytes": int(phased["logical_weight_read_bytes"]),
+        "D_physical_hbm_read_bytes": int(phased["physical_hbm_read_bytes"]),
+        "D_physical_hbm_write_bytes": int(phased["physical_hbm_write_bytes"]),
     }
 
 
-def _d_prime_bank_control(physical: dict[str, Any], affine: dict[str, Any]) -> dict[str, Any]:
+def _d_prime_bank_control(physical: dict[str, Any], phased: dict[str, Any]) -> dict[str, Any]:
     control = physical["fixed_phased_bank_control"]["nemotron3"]
     if (
         int(control["bank_stall_cycles"]) != 0
-        or float(control["programmable_skew_bank_speedup"]) != 1.0
-        or not bool(control["same_physical_coordinates_as_affine_tile_skew"])
-        or int(affine["bank_stall_cycles"]) != 0
+        or float(control["compact_phase_vs_explicit_bases_bank_speedup"]) != 1.0
+        or not bool(control["same_physical_coordinates_as_compact_tile_phase"])
+        or int(phased["bank_stall_cycles"]) != 0
     ):
         raise AssertionError("D' is no longer a conflict-free fixed-wiring control for D")
     return {
@@ -144,7 +144,7 @@ def _d_prime_bank_control(physical: dict[str, Any], affine: dict[str, Any]) -> d
         "packet_ideal_cycles": int(control["ideal_cycles"]),
         "packet_bank_stall_cycles": int(control["bank_stall_cycles"]),
         "roundtrip_values_checked": int(control["roundtrip_values_checked"]),
-        "workload_matrix_service_cycles": int(affine["matrix_sram_service_cycles"]),
+        "workload_matrix_service_cycles": int(phased["matrix_sram_service_cycles"]),
         "workload_bank_stall_cycles": 0,
         "D_vs_D_prime_pure_bank_speedup": 1.0,
     }
@@ -183,7 +183,7 @@ def _group_result(
         )
     result = precision_runs["checkpoint_mixed_nvfp4_bf16"][0]
     variants = _variant_records(result)
-    affine = variants[str(MatrixVariant.D_AFFINE)]
+    phased = variants[str(MatrixVariant.D_AFFINE)]
     timeline = {name: _timeline_endpoints(record) for name, record in variants.items()}
     ideal_d = timeline[str(MatrixVariant.D_AFFINE)]["ideal_resource_overlap_lower_bound_cycles"]
     return {
@@ -200,21 +200,21 @@ def _group_result(
             "cycles": {name: record["cycles"] for name, record in variants.items()},
             "timeline_endpoints": timeline,
             "bank_stall_cycles": {name: record["bank_stall_cycles"] for name, record in variants.items()},
-            "speedup_D_vs_A": affine["speedup_vs_A"],
-            "speedup_D_vs_B": affine["speedup_vs_B"],
-            "speedup_D_vs_C": affine["speedup_vs_C_fixed"],
+            "speedup_D_vs_A": phased["speedup_vs_A"],
+            "speedup_D_vs_B": phased["speedup_vs_B"],
+            "speedup_D_vs_C": phased["speedup_vs_C_fixed"],
             "speedup_D_vs_B_ideal_resource_overlap": (
                 timeline[str(MatrixVariant.B_ARLO)]["ideal_resource_overlap_lower_bound_cycles"] / ideal_d
             ),
-            "D_tpot_ms_proxy": affine["cycles"] / decode_steps / (hardware.clock_hz / 1000),
+            "D_tpot_ms_proxy": phased["cycles"] / decode_steps / (hardware.clock_hz / 1000),
             "D_tpot_ms_ideal_resource_overlap_lower_bound": (ideal_d / decode_steps / (hardware.clock_hz / 1000)),
             "D_aggregate_throughput_tokens_s_proxy": (
-                group.batch_size * decode_steps * hardware.clock_hz / affine["cycles"]
+                group.batch_size * decode_steps * hardware.clock_hz / phased["cycles"]
             ),
             "D_aggregate_throughput_tokens_s_ideal_resource_overlap_upper_bound": (
                 group.batch_size * decode_steps * hardware.clock_hz / ideal_d
             ),
-            "D_prime_bank_control": _d_prime_bank_control(physical, affine),
+            "D_prime_bank_control": _d_prime_bank_control(physical, phased),
             "weight_precision_sensitivity": {
                 name: _precision_result(precision_result, description)
                 for name, (precision_result, description) in precision_runs.items()
@@ -251,7 +251,7 @@ def _flatten_group(row: dict[str, Any]) -> dict[str, Any]:
         "A_original_cycles": cycles[str(MatrixVariant.A_ORIGINAL)],
         "B_arlo_cycles": cycles[str(MatrixVariant.B_ARLO)],
         "C_fixed_cycles": cycles[str(MatrixVariant.C_FIXED)],
-        "D_affine_cycles": cycles[str(MatrixVariant.D_AFFINE)],
+        "D_phased_cycles": cycles[str(MatrixVariant.D_AFFINE)],
         "E_overlap_cycles": cycles[str(MatrixVariant.E_AFFINE_OVERLAP)],
         "D_speedup_vs_A": plena["speedup_D_vs_A"],
         "D_speedup_vs_B": plena["speedup_D_vs_B"],
@@ -301,7 +301,7 @@ def _summary_rows(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "A_original_cycles",
         "B_arlo_cycles",
         "C_fixed_cycles",
-        "D_affine_cycles",
+        "D_phased_cycles",
         "D_speedup_vs_A",
         "D_speedup_vs_B",
         "D_speedup_vs_B_ideal_resource_overlap",

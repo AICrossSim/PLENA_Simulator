@@ -168,7 +168,7 @@ test-aten-softmax *args:
 test-aten-linear *args:
     python3 transactional_emulator/testbench/aten/linear_test.py {{args}}
 
-# Compiler-generated Matrix writeback -> affine bank placement -> Vector lane restore.
+# Historical Vector-stream affine projection check (not the frozen Matrix path).
 test-lcompute-affine-projection:
     python3 transactional_emulator/testbench/aten/affine_projection_test.py
 
@@ -181,7 +181,7 @@ test-matrix-view-projection compiler_root="PLENA_Compiler":
 
 # Matrix-SRAM-only L-Compute Python gate. This deliberately excludes the older
 # Vector-SRAM L_CFG campaign so its speedups cannot be attributed to Matrix
-# affine co-layout.
+# compiler-phased co-layout.
 test-matrix-lcompute-python compiler_root="PLENA_Compiler":
     PLENA_COMPILER_ROOT={{compiler_root}} python3 -m pytest -q \
         analytic_models/performance/test_matrix_sram_layout.py \

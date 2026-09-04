@@ -49,7 +49,10 @@ from compiler.aten.plena.matrix_recurrence_lowering import (  # noqa: E402
     lower_matrix_recurrence,
     validate_recurrence_output_stores,
 )
-from compiler.aten.plena.mview import validate_matrix_view_dominance  # noqa: E402
+from compiler.aten.plena.mview import (  # noqa: E402
+    L_MVIEW_CONTRACT_VERSION,
+    validate_matrix_view_dominance,
+)
 from transactional_emulator.testbench.emulator_runner import run_emulator  # noqa: E402
 
 
@@ -462,7 +465,8 @@ def run_prepared_case(
 
     counters = metrics.get("matrix_view_packet_counters", {})
     result: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "matrix_view_contract_version": L_MVIEW_CONTRACT_VERSION,
         "model": spec.name,
         "layout": str(layout),
         "precision": "bf16_uniform_matrix_recurrence",

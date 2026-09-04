@@ -1,5 +1,6 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "matrix_view_contract_version": 3,
   "model": "nemotron3_mamba2",
   "layout": "fixed",
   "precision": "bf16_uniform_matrix_recurrence",
@@ -9,9 +10,9 @@
     "state_rows": 128,
     "row_elements": 64
   },
-  "compiler_generated_machine_words": 33360,
-  "assembly_sha256": "f938d05595cc9fec6614362e9219731b6d4d9936ed8d535e9961e79caf57d40e",
-  "machine_code_sha256": "0b6481b74e5706ea404a9892c72c7f2447d5c13d2106f825e321f46f9b14768f",
+  "compiler_generated_machine_words": 30224,
+  "assembly_sha256": "a83fa79b6f4b26099065782d4a3cd48c5ae7a59057b2b853652069c59d944c0e",
+  "machine_code_sha256": "c6878d229c698726144f2ad7b4f71a9fa65d9022f30e3a31057dc77695b89145",
   "input_hbm_sha256": "2f3655507ecdb4b383565f4fa9ce1c52eea239133d9f908ed438835847a444c8",
   "l_tile_exec_count": 1040,
   "state_values_compared": 524288,
@@ -24,7 +25,7 @@
     "max_abs": 0.000732421875,
     "relative_l2": 0.005383844953030348
   },
-  "rust_simulation_cycles": 2345850,
+  "rust_simulation_cycles": 2341335,
   "matrix_view_packet_counters": {
     "packets": 9328,
     "values": 15108096,

@@ -181,7 +181,7 @@ async fn run_matrix_view_packet_roundtrip(tile_pitch_rows: u32) -> (Vec<f32>, u6
     // Eight 1x8 tiles form one 64-value packet. Pitch 1 overlaps adjacent
     // two-word tiles on the fixed diagonal banks; pitch 2 uses every bank once.
     let shape = (7 << 12) | (7 << 24);
-    let mapping = tile_pitch_rows | (1 << 28);
+    let mapping = tile_pitch_rows;
     let ops = vec![
         set_gp(1, shape),
         set_gp(2, mapping),
@@ -284,7 +284,7 @@ async fn run_matrix_accumulator_view_writeback(tile_pitch_rows: u32) -> (Vec<f32
     let consumer_cols = 2 * *BLEN;
     let consumer_tiles = *VLEN / consumer_cols;
     let shape = (consumer_cols - 1) << 12 | ((consumer_tiles - 1) << 24);
-    let mapping = tile_pitch_rows | (1 << 28);
+    let mapping = tile_pitch_rows;
     let matrix_output_base = *MLEN * *MLEN;
     let vector_output_base = output_blocks * *BLEN * *VLEN;
     let mut ops = Vec::new();

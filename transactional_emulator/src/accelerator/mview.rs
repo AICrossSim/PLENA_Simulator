@@ -10,10 +10,7 @@ const VIEW_SLOTS: usize = 4;
 const DIM_MASK: u32 = (1 << 12) - 1;
 const TILE_COUNT_MASK: u32 = (1 << 8) - 1;
 const PITCH_MASK: u32 = (1 << 16) - 1;
-const SKEW_MASK: u32 = (1 << 6) - 1;
-const STRICT_BOUNDS: u8 = 1;
-const AFFINE: u8 = 1 << 1;
-const FP32: u8 = 1 << 2;
+const PHASE_MASK: u32 = (1 << 6) - 1;
 const BROADCAST_MINOR: u8 = 1 << 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,29 +34,26 @@ impl MatrixViewShape {
 pub(crate) struct MatrixViewMap {
     /// Distance between consecutive logical tiles, measured in physical rows.
     pub(crate) tile_pitch_rows: u32,
-    /// Affine coefficient applied to the logical/physical row term.
-    pub(crate) row_skew: u32,
-    /// Additional affine phase applied to the logical tile term.
-    pub(crate) tile_skew: u32,
+    /// Compiler-selected bank phase stride between consecutive logical tiles.
+    pub(crate) tile_phase_stride: u32,
     pub(crate) flags: u8,
 }
 
 impl MatrixViewMap {
     pub(crate) fn unpack(word: u32) -> Result<Self, String> {
+        if (word >> 16) & PHASE_MASK != 0 {
+            return Err("Matrix-view mapping bits [21:16] are reserved".into());
+        }
         let mapping = Self {
             tile_pitch_rows: word & PITCH_MASK,
-            row_skew: (word >> 16) & SKEW_MASK,
-            tile_skew: (word >> 22) & SKEW_MASK,
+            tile_phase_stride: (word >> 22) & PHASE_MASK,
             flags: ((word >> 28) & 0xf) as u8,
         };
-        if mapping.flags & !(STRICT_BOUNDS | AFFINE | FP32 | BROADCAST_MINOR) != 0 {
+        if mapping.flags & !BROADCAST_MINOR != 0 {
             return Err(format!(
                 "Matrix-view flags contain reserved bits: {:#x}",
                 mapping.flags
             ));
-        }
-        if mapping.flags & AFFINE == 0 && (mapping.row_skew != 0 || mapping.tile_skew != 0) {
-            return Err("non-zero Matrix-view skew requires the AFFINE flag".into());
         }
         Ok(mapping)
     }
@@ -96,16 +90,15 @@ impl MatrixViewDescriptor {
         }
         let words_per_row = self.shape.cols / bank_width;
         let row_groups = words_per_row.div_ceil(banks);
-        let affine = self.mapping.flags & AFFINE != 0;
-        let alpha = if affine { self.mapping.row_skew } else { 1 };
-        let tile_skew = if affine { self.mapping.tile_skew } else { 0 };
+        let alpha = 1;
+        let tile_phase_stride = self.mapping.tile_phase_stride;
         let mut occupied = std::collections::HashMap::new();
         for tile in 0..self.shape.tile_count {
             for row in 0..self.shape.rows {
                 for word in 0..words_per_row {
                     let bank_row =
                         tile * self.mapping.tile_pitch_rows + row * row_groups + word / banks;
-                    let bank = (alpha * bank_row + tile_skew * tile + word) % banks;
+                    let bank = (alpha * bank_row + tile_phase_stride * tile + word) % banks;
                     if let Some(previous) = occupied.insert((bank, bank_row), (tile, row, word)) {
                         return Err(format!(
                             "Matrix view aliases logical bank words: {previous:?} and {:?} at bank={bank}, row={bank_row}",
@@ -119,21 +112,16 @@ impl MatrixViewDescriptor {
     }
 
     pub(crate) fn layout(self) -> MatrixLayout {
-        let affine = self.mapping.flags & AFFINE != 0;
         MatrixLayout {
             rows: self.shape.rows,
             cols: self.shape.cols,
             tile_count: self.shape.tile_count,
             tile_pitch_rows: self.mapping.tile_pitch_rows,
-            // The control uses PLENA's prior-work diagonal wiring. Treatment
-            // views make the row/tile phases explicit and compiler-selected.
-            alpha: if affine { self.mapping.row_skew } else { 1 },
-            tile_skew: if affine { self.mapping.tile_skew } else { 0 },
+            // The row term always uses PLENA's prior-work diagonal wiring.
+            // Only the inter-tile phase is compiler selected.
+            alpha: 1,
+            tile_skew: self.mapping.tile_phase_stride,
         }
-    }
-
-    pub(crate) fn fp32(self) -> bool {
-        self.mapping.flags & FP32 != 0
     }
 
     pub(crate) fn broadcast_minor(self) -> bool {
@@ -206,7 +194,14 @@ mod tests {
     }
 
     fn mapping(pitch: u32) -> u32 {
-        pitch | (u32::from(STRICT_BOUNDS) << 28)
+        pitch
+    }
+
+    #[test]
+    fn v3_mapping_words_match_the_python_contract() {
+        assert_eq!(mapping(64), 0x0000_0040);
+        assert_eq!(mapping(0) | (4 << 22), 0x0100_0000);
+        assert_eq!(mapping(0) | (4 << 22) | (8 << 28), 0x8100_0000);
     }
 
     #[test]
@@ -223,11 +218,11 @@ mod tests {
             }
         );
         assert_eq!(view.mapping.tile_pitch_rows, 64);
-        assert_eq!((view.mapping.row_skew, view.mapping.tile_skew), (0, 0));
+        assert_eq!(view.mapping.tile_phase_stride, 0);
     }
 
     #[test]
-    fn rejects_aliasing_pitch_and_noncanonical_affine_bits() {
+    fn rejects_aliasing_pitch_and_reserved_mapping_bits() {
         let mut table = MatrixViewTable::new(16, 4);
         assert!(table.configure(0, shape(64, 64, 2), mapping(63)).is_err());
         assert!(
@@ -235,17 +230,28 @@ mod tests {
                 .configure(0, shape(64, 64, 2), mapping(64) | (1 << 16))
                 .is_err()
         );
-        let affine = mapping(64) | (1 << 16) | (5 << 22) | (u32::from(AFFINE) << 28);
-        table.configure(0, shape(64, 64, 2), affine).unwrap();
+        let phased = mapping(64) | (5 << 22);
+        table.configure(0, shape(64, 64, 2), phased).unwrap();
         let view = table.get(0).unwrap();
         assert_eq!((view.layout().alpha, view.layout().tile_skew), (1, 5));
+
+        let programmable_row = mapping(64) | (3 << 16) | (5 << 22);
+        assert!(
+            table
+                .configure(0, shape(64, 64, 2), programmable_row)
+                .is_err()
+        );
+        for reserved_flag in [1_u32, 2, 4] {
+            let invalid = mapping(64) | (5 << 22) | (reserved_flag << 28);
+            assert!(table.configure(0, shape(64, 64, 2), invalid).is_err());
+        }
     }
 
     #[test]
     fn zero_pitch_is_legal_only_when_tile_phase_prevents_aliasing() {
         let mut table = MatrixViewTable::new(64, 32);
         assert!(table.configure(0, shape(128, 128, 8), mapping(0)).is_err());
-        let compact = mapping(0) | (1 << 16) | (4 << 22) | (u32::from(AFFINE) << 28);
+        let compact = mapping(0) | (4 << 22);
         table.configure(0, shape(128, 128, 8), compact).unwrap();
         let view = table.get(0).unwrap();
         assert_eq!(view.mapping.tile_pitch_rows, 0);

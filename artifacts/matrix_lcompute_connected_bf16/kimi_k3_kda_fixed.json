@@ -1,5 +1,6 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "matrix_view_contract_version": 3,
   "model": "kimi_k3_kda",
   "layout": "fixed",
   "precision": "bf16_uniform_matrix_recurrence",
@@ -9,9 +10,9 @@
     "state_rows": 128,
     "row_elements": 128
   },
-  "compiler_generated_machine_words": 101064,
-  "assembly_sha256": "8ee02ec966448c711f2695ed7de8e7c2c38b3bf44cfeade47443d009f24fcdb1",
-  "machine_code_sha256": "5019d008a826e1b2f4cd1ee67cfa72ece16803ef0e5a584c6f4fff2bdd02809c",
+  "compiler_generated_machine_words": 91704,
+  "assembly_sha256": "f05e6afe4557de1606555d52927b6de997a28024a79f5704d7273ffc3b486d9c",
+  "machine_code_sha256": "0d34794f572aa72f2f61188c08a48c7400dc0b6d83e04998c209579a90024d41",
   "input_hbm_sha256": "3fb0bc863ec2d7d6896c1a29ee5134b0922fe7e34fdaf011ad7284349ce85989",
   "l_tile_exec_count": 3096,
   "state_values_compared": 1572864,
@@ -24,7 +25,7 @@
     "max_abs": 0.0006103515625,
     "relative_l2": 0.0070751686580479145
   },
-  "rust_simulation_cycles": 13922560,
+  "rust_simulation_cycles": 13930240,
   "matrix_view_packet_counters": {
     "packets": 46296,
     "values": 84346368,

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import functools
+import json
 import os
 from pathlib import Path
+
+import pytest
 
 from .matrix_lcompute_campaign import (
     EVIDENCE_LEVELS,
@@ -17,6 +20,7 @@ from .matrix_lcompute_campaign import (
     build_prefill_handoff_timeline_delta,
     build_static_overlap_feasibility,
     build_physical_evidence,
+    load_connected_recurrence_evidence,
     measure_packet,
     load_compiler_evidence,
     measure_fixed_phased_packet,
@@ -118,6 +122,38 @@ def test_active_lcompute_point_is_uniform_bf16() -> None:
     assert hardware.matrix_sram_bytes == 1024 * 1024
 
 
+def test_compiler_evidence_uses_frozen_matrix_view_v3() -> None:
+    assert _real_compiler_evidence()["matrix_view_contract_version"] == 3
+
+
+def test_checked_connected_evidence_uses_frozen_matrix_view_v3() -> None:
+    simulator_root = Path(__file__).resolve().parents[2]
+    evidence = load_connected_recurrence_evidence(
+        simulator_root,
+        expected_contract_version=3,
+    )
+    assert evidence["status"] == "EXECUTED_AND_NUMERICALLY_VERIFIED"
+    assert all(record["schema_version"] == 2 for record in evidence["records"])
+    assert all(record["matrix_view_contract_version"] == 3 for record in evidence["records"])
+
+
+def test_connected_evidence_rejects_a_stale_matrix_view_contract(tmp_path: Path) -> None:
+    source = Path(__file__).resolve().parents[2] / "artifacts" / "matrix_lcompute_connected_bf16"
+    destination = tmp_path / "artifacts" / "matrix_lcompute_connected_bf16"
+    destination.mkdir(parents=True)
+    payload = json.loads((source / "summary.json").read_text())
+    for record in payload:
+        record["schema_version"] = 2
+        record["matrix_view_contract_version"] = 2
+    (destination / "summary.json").write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="contract differs"):
+        load_connected_recurrence_evidence(
+            tmp_path,
+            expected_contract_version=3,
+        )
+
+
 def test_real_packets_move_values_and_reach_the_expected_bank_floor() -> None:
     hardware = MatrixHardwarePoint()
     cases = (
@@ -132,17 +168,19 @@ def test_real_packets_move_values_and_reach_the_expected_bank_floor() -> None:
             gamma=0,
             tile_pitch_rows=words_per_head,
         )
-        affine = measure_packet(
+        phased = measure_packet(
             spec,
             hardware=hardware,
-            alpha=words_per_head,
-            gamma=1,
+            alpha=1,
+            gamma=0,
+            tile_pitch_rows=0,
+            tile_phase_stride=words_per_head,
         )
         assert fixed["roundtrip_values_checked"] == 2048
-        assert affine["roundtrip_values_checked"] == 2048
+        assert phased["roundtrip_values_checked"] == 2048
         assert fixed["service_cycles"] == fixed["ideal_cycles"] == 1
-        assert affine["service_cycles"] == affine["ideal_cycles"] == 1
-        assert affine["wrong_alpha_changes_data"] is True
+        assert phased["service_cycles"] == phased["ideal_cycles"] == 1
+        assert phased["wrong_mapping_changes_data"] is True
 
 
 def test_strongest_fixed_phased_control_matches_affine_bank_coordinates() -> None:
@@ -161,8 +199,8 @@ def test_strongest_fixed_phased_control_matches_affine_bank_coordinates() -> Non
         assert control["physical_rows"] == spec.recurrence_rows
         assert control["capacity_bytes"] == hardware.matrix_sram_bytes // 2
         assert control["roundtrip_values_checked"] == expected_values[spec.model]
-        assert control["same_physical_coordinates_as_affine_tile_skew"] is True
-        assert control["programmable_skew_bank_speedup"] == 1.0
+        assert control["same_physical_coordinates_as_compact_tile_phase"] is True
+        assert control["compact_phase_vs_explicit_bases_bank_speedup"] == 1.0
 
 
 def test_fixed_and_affine_packet_controls_have_explicit_freedoms() -> None:
@@ -175,13 +213,14 @@ def test_fixed_and_affine_packet_controls_have_explicit_freedoms() -> None:
         "group_phase",
         "chunking",
     ]
-    assert "row_skew" in evidence["degrees_of_freedom"]["D"]["compiler_controls"]
-    assert "tile_skew" in evidence["degrees_of_freedom"]["D"]["compiler_controls"]
+    assert evidence["degrees_of_freedom"]["D"]["alpha"] == 1
+    assert "row_skew" not in evidence["degrees_of_freedom"]["D"]["compiler_controls"]
+    assert "tile_phase_stride" in evidence["degrees_of_freedom"]["D"]["compiler_controls"]
     assert evidence["degrees_of_freedom"]["D_prime"]["compact_single_descriptor"] is False
     for model in ("nemotron3", "kimi_k3"):
         control = evidence["fixed_phased_bank_control"][model]
         assert control["bank_stall_cycles"] == 0
-        assert control["programmable_skew_bank_speedup"] == 1.0
+        assert control["compact_phase_vs_explicit_bases_bank_speedup"] == 1.0
 
 
 def test_real_lowering_service_replays_fixed_and_affine_paths() -> None:
@@ -189,9 +228,9 @@ def test_real_lowering_service_replays_fixed_and_affine_paths() -> None:
     nemotron = physical["nemotron3"]["real_lowering_service"][StateMode.PLENA_BF16]
     kimi = physical["kimi_k3"]["real_lowering_service"][StateMode.PLENA_BF16]
 
-    # Fixed diagonal cannot separate the adjacent row/word phases in Mamba's
-    # compact update/C DMA blocks. This is the only measured programmable-skew
-    # bank benefit at the BF16 point.
+    # The executable single-base C form still stalls on Mamba's compact
+    # update/C DMA blocks. D uses the frozen fixed row map plus tile phase; D'
+    # proves this is not an independently claimable programmable-skew gain.
     assert nemotron[MatrixVariant.C_FIXED]["bank_stall_cycles"] == 256
     assert nemotron[MatrixVariant.D_AFFINE]["bank_stall_cycles"] == 0
     assert kimi[MatrixVariant.C_FIXED]["bank_stall_cycles"] == 0
@@ -277,7 +316,7 @@ def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identi
         assert by_variant[MatrixVariant.D_AFFINE]["bank_stall_cycles"] == 0
         assert by_variant[MatrixVariant.D_AFFINE]["speedup_vs_C_fixed"] >= 1
         assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["cycles"] == by_variant[MatrixVariant.D_AFFINE]["cycles"]
-        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["speedup_vs_D_affine"] == 1
+        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["speedup_vs_D_phased"] == 1
 
 
 def test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop() -> None:
@@ -354,6 +393,10 @@ def test_resource_contract_has_no_cache_private_sram_or_new_macs() -> None:
     assert resources["sequencer_state_bits_upper_bound"] == 256
     assert resources["segment_scalar_broadcast_lanes"] == 32
     assert resources["segment_scalar_broadcast_mux_input_bits"] == 512
+    assert resources["additional_programmable_bank_select_adders_upper_bound"] == 0
+    assert resources["programmable_row_bank_coefficient"] is False
+    assert resources["tile_phase_accumulator_count_upper_bound"] == 4
+    assert resources["tile_phase_accumulator_bits_upper_bound"] == 24
 
     by_variant = MatrixHardwarePoint().resource_proxies_by_variant()
     assert all(record["fixed_diagonal_address_adders_existing"] == 64 for record in by_variant.values())
@@ -365,7 +408,9 @@ def test_resource_contract_has_no_cache_private_sram_or_new_macs() -> None:
     assert by_variant[MatrixVariant.C_FIXED]["compiler_programmable_tile_pitch"] is True
     assert by_variant[MatrixVariant.D_AFFINE]["configuration_register_bits"] == 256
     assert by_variant[MatrixVariant.D_AFFINE]["architectural_variant"] is True
-    assert by_variant[MatrixVariant.D_AFFINE]["compiler_programmable_alpha"] is True
+    assert by_variant[MatrixVariant.D_AFFINE]["compiler_programmable_alpha"] is False
+    assert by_variant[MatrixVariant.D_AFFINE]["compiler_programmable_tile_phase"] is True
+    assert by_variant[MatrixVariant.D_AFFINE]["additional_programmable_skew_address_adders_upper_bound"] == 0
     assert by_variant[MatrixVariant.D_AFFINE]["layout_added_sram_payload_bytes"] == 0
     assert by_variant[MatrixVariant.D_AFFINE]["additional_operand_staging_bytes"] == 0
     assert by_variant[MatrixVariant.D_AFFINE]["existing_vector_operand_buffer_reused"] is True
@@ -400,12 +445,12 @@ def test_dse_packet_sweeps_move_values_instead_of_only_applying_a_formula() -> N
     )
     assert mamba["values_checked_per_variant"] == 512
     assert kda["values_checked_per_variant"] == 2048
-    assert mamba["D_affine"]["bank_stall_cycles"] == 0
-    assert kda["D_affine"]["bank_stall_cycles"] == 0
+    assert mamba["D_compact_phased"]["bank_stall_cycles"] == 0
+    assert kda["D_compact_phased"]["bank_stall_cycles"] == 0
     assert mamba["C_fixed"]["bank_stall_cycles"] == 0
     assert kda["C_fixed"]["bank_stall_cycles"] == 0
-    assert mamba["affine_speedup_over_fixed"] == 1
-    assert kda["affine_speedup_over_fixed"] == 1
+    assert mamba["compact_phase_speedup_over_fixed"] == 1
+    assert kda["compact_phase_speedup_over_fixed"] == 1
 
 
 def test_ordinary_attention_and_moe_matrix_lines_do_not_regress() -> None:

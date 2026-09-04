@@ -199,8 +199,8 @@ impl Accelerator {
     /// Execute one model-independent recurrence primitive over Matrix views.
     ///
     /// Views 0/1/2 are destination/source/scalars.  The decoder owns only a
-    /// deterministic row/column walk; all bases, shapes, layouts and precision
-    /// choices remain compiler-visible architectural state.
+    /// deterministic row/column walk; all bases, shapes and layouts remain
+    /// compiler-visible architectural state. Matrix-view storage is BF16.
     async fn execute_l_tile(&mut self, args: LTileExecArgs, pc: usize) {
         let LTileExecArgs {
             destination_register,
@@ -217,18 +217,6 @@ impl Accelerator {
         let src_base = self.reg_file.read_gp(source_register);
         let scale_base = self.reg_file.read_gp(scale_register);
 
-        for (name, view) in [
-            ("destination", destination),
-            ("source", source),
-            ("scale", scales),
-        ] {
-            if view.fp32() && self.m_machine.mram.element_bits() != 32 {
-                panic!(
-                    "{name} L_TILE view requests FP32 but Matrix SRAM stores {}-bit elements",
-                    self.m_machine.mram.element_bits()
-                );
-            }
-        }
         if !scales.broadcast_minor() {
             panic!("L_TILE scale view must set BROADCAST_MINOR");
         }
@@ -1260,12 +1248,6 @@ impl Accelerator {
                     view,
                 } => {
                     let descriptor = self.resolve_matrix_view(Some(*view), pc).unwrap();
-                    if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
-                        panic!(
-                            "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
-                            self.m_machine.mram.element_bits()
-                        );
-                    }
                     let values = descriptor.values();
                     let dtype = match precision {
                         op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
@@ -1345,12 +1327,6 @@ impl Accelerator {
                     view,
                 } => {
                     let descriptor = self.resolve_matrix_view(Some(*view), pc).unwrap();
-                    if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
-                        panic!(
-                            "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
-                            self.m_machine.mram.element_bits()
-                        );
-                    }
                     let (packet, service) = self
                         .m_machine
                         .mram
@@ -1913,12 +1889,6 @@ impl Accelerator {
                     .reg_file
                     .matrix_view(*view)
                     .unwrap_or_else(|error| panic!("{error} while issuing Matrix-view prefetch"));
-                if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
-                    panic!(
-                        "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
-                        self.m_machine.mram.element_bits()
-                    );
-                }
                 let values = descriptor.values();
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
@@ -2002,12 +1972,6 @@ impl Accelerator {
                     .reg_file
                     .matrix_view(*view)
                     .unwrap_or_else(|error| panic!("{error} while issuing Matrix-view store"));
-                if descriptor.fp32() && self.m_machine.mram.element_bits() != 32 {
-                    panic!(
-                        "Matrix-view DMA requests FP32 but Matrix SRAM stores {}-bit elements",
-                        self.m_machine.mram.element_bits()
-                    );
-                }
                 let (packet, service) = self
                     .m_machine
                     .mram

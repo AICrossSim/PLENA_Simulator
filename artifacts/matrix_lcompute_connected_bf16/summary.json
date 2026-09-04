@@ -1,6 +1,7 @@
 [
   {
-    "schema_version": 1,
+    "schema_version": 2,
+    "matrix_view_contract_version": 3,
     "model": "nemotron3_mamba2",
     "layout": "fixed",
     "precision": "bf16_uniform_matrix_recurrence",
@@ -10,9 +11,9 @@
       "state_rows": 128,
       "row_elements": 64
     },
-    "compiler_generated_machine_words": 33360,
-    "assembly_sha256": "f938d05595cc9fec6614362e9219731b6d4d9936ed8d535e9961e79caf57d40e",
-    "machine_code_sha256": "0b6481b74e5706ea404a9892c72c7f2447d5c13d2106f825e321f46f9b14768f",
+    "compiler_generated_machine_words": 30224,
+    "assembly_sha256": "a83fa79b6f4b26099065782d4a3cd48c5ae7a59057b2b853652069c59d944c0e",
+    "machine_code_sha256": "c6878d229c698726144f2ad7b4f71a9fa65d9022f30e3a31057dc77695b89145",
     "input_hbm_sha256": "2f3655507ecdb4b383565f4fa9ce1c52eea239133d9f908ed438835847a444c8",
     "l_tile_exec_count": 1040,
     "state_values_compared": 524288,
@@ -25,7 +26,7 @@
       "max_abs": 0.000732421875,
       "relative_l2": 0.005383844953030348
     },
-    "rust_simulation_cycles": 2345850,
+    "rust_simulation_cycles": 2341335,
     "matrix_view_packet_counters": {
       "packets": 9328,
       "values": 15108096,
@@ -38,7 +39,8 @@
     "temporary_build_retained": false
   },
   {
-    "schema_version": 1,
+    "schema_version": 2,
+    "matrix_view_contract_version": 3,
     "model": "nemotron3_mamba2",
     "layout": "affine",
     "precision": "bf16_uniform_matrix_recurrence",
@@ -48,9 +50,9 @@
       "state_rows": 128,
       "row_elements": 64
     },
-    "compiler_generated_machine_words": 1200,
-    "assembly_sha256": "fdfc1add0b03a516842df131bcfafe4e65f32196e43f623a684de3735cbe0f23",
-    "machine_code_sha256": "0260fc159217fdc10767742d85ed7e31498dadf4573e238df0b9c723192d9257",
+    "compiler_generated_machine_words": 1120,
+    "assembly_sha256": "fe9fd24360686a07ff68dcdb9f63d61983cba850cc401864acebfc41a17ed7e8",
+    "machine_code_sha256": "614140de0a9d6370ff7790448b87c227cdf15c7025f7b60e3ea64f3e696d556e",
     "input_hbm_sha256": "c4185b7164d0c5700af24898d7cc7714ecaa46ea0ce4fb706bd693c9d4aa087c",
     "l_tile_exec_count": 32,
     "state_values_compared": 524288,
@@ -63,7 +65,7 @@
       "max_abs": 0.0,
       "relative_l2": 0.0
     },
-    "rust_simulation_cycles": 2307301,
+    "rust_simulation_cycles": 2307298,
     "matrix_view_packet_counters": {
       "packets": 6304,
       "values": 13043712,
@@ -76,7 +78,8 @@
     "temporary_build_retained": false
   },
   {
-    "schema_version": 1,
+    "schema_version": 2,
+    "matrix_view_contract_version": 3,
     "model": "kimi_k3_kda",
     "layout": "fixed",
     "precision": "bf16_uniform_matrix_recurrence",
@@ -86,9 +89,9 @@
       "state_rows": 128,
       "row_elements": 128
     },
-    "compiler_generated_machine_words": 101064,
-    "assembly_sha256": "8ee02ec966448c711f2695ed7de8e7c2c38b3bf44cfeade47443d009f24fcdb1",
-    "machine_code_sha256": "5019d008a826e1b2f4cd1ee67cfa72ece16803ef0e5a584c6f4fff2bdd02809c",
+    "compiler_generated_machine_words": 91704,
+    "assembly_sha256": "f05e6afe4557de1606555d52927b6de997a28024a79f5704d7273ffc3b486d9c",
+    "machine_code_sha256": "0d34794f572aa72f2f61188c08a48c7400dc0b6d83e04998c209579a90024d41",
     "input_hbm_sha256": "3fb0bc863ec2d7d6896c1a29ee5134b0922fe7e34fdaf011ad7284349ce85989",
     "l_tile_exec_count": 3096,
     "state_values_compared": 1572864,
@@ -101,7 +104,7 @@
       "max_abs": 0.0006103515625,
       "relative_l2": 0.0070751686580479145
     },
-    "rust_simulation_cycles": 13922560,
+    "rust_simulation_cycles": 13930240,
     "matrix_view_packet_counters": {
       "packets": 46296,
       "values": 84346368,
@@ -114,7 +117,8 @@
     "temporary_build_retained": false
   },
   {
-    "schema_version": 1,
+    "schema_version": 2,
+    "matrix_view_contract_version": 3,
     "model": "kimi_k3_kda",
     "layout": "affine",
     "precision": "bf16_uniform_matrix_recurrence",
@@ -124,9 +128,9 @@
       "state_rows": 128,
       "row_elements": 128
     },
-    "compiler_generated_machine_words": 4104,
-    "assembly_sha256": "be8fa9db588c8ff755ee0aa70c2eedb2bfe1a90c82024993f304a468065b13ab",
-    "machine_code_sha256": "fe461b8bb5dcd3b6782e4a280ef67d8b7234b918f9854d745a5c8f03833cd9e7",
+    "compiler_generated_machine_words": 3864,
+    "assembly_sha256": "d3e2e7431a36c4f97177f5cd99681e94038d270ada9bc25d67544b948a589cbd",
+    "machine_code_sha256": "28fed366637e86230257669768f4db663a769503daadab1439f849e18f1e40cf",
     "input_hbm_sha256": "0e12c1984bff9e8468fb087a1da40101df1aba4809b2e496650ef7e19ec732d9",
     "l_tile_exec_count": 120,
     "state_values_compared": 1572864,
@@ -139,7 +143,7 @@
       "max_abs": 0.0,
       "relative_l2": 0.0
     },
-    "rust_simulation_cycles": 6945885,
+    "rust_simulation_cycles": 6945884,
     "matrix_view_packet_counters": {
       "packets": 37296,
       "values": 63899136,

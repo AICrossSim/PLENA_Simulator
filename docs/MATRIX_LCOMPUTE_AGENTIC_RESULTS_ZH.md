@@ -144,8 +144,9 @@ scale、物理 padding/alignment 和反量化计算。因此这是流量敏感�
 - D′ 使用原固定对角接线和合法 per-tile base phase，同样 0 stall；
 - D/D′ 的纯 bank-service speedup 是 `1.00x`。
 
-因此当前证据支持 **Matrix SRAM 上的多行递推执行**，但不支持“新增可编程
-row/tile skew 加法器带来整模加速”。若论文要把可编程斜存作为主贡献，必须找到
+因此当前证据支持 **Matrix SRAM 上的多行递推执行**，但不支持“新增任意可编程
+row-skew 加法器带来整模加速”。最终 pre-RTL 候选已经删除该系数，只保留紧凑
+编码多 tile base phase 的 6-bit phase accumulator。若论文要把任意可编程斜率作为主贡献，必须找到
 D′ 无法用普通 base placement 表达的真实多对象 packet；不能再拿被限制的 C 当
 最强固定对照。
 
@@ -157,7 +158,7 @@ D′ 无法用普通 base placement 表达的真实多对象 packet；不能再�
 2. 在严格串行模型中，多行 L-Compute 相对 Arlo 的收益随 batch 增大；
 3. B4 以上，这项收益在理想资源重叠端点仍存在；
 4. 结论对权重精度敏感，BF16 会显著放大 HBM 下界；
-5. 公平固定 D′ 已达到 affine D 的 bank floor，当前 programmable skew 没有独立收益。
+5. 公平固定 D′ 已达到 phased D 的 bank floor，当前任意 programmable row skew 没有独立收益。
 
 不能声称：
 

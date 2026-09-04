@@ -11,7 +11,7 @@ Compiler/Rust 未联通、对照不公平、端口暗中加宽和测试假红等
 > `L_TILE` 指令；这些机器码可由 Rust 通过真实 banked Matrix SRAM 连续执行
 > 四个 token，并正确写回全部 state 和每个 head group 的 output。
 
-现在不能证明的是“可编程 skew 比现有固定斜存更快”。最强固定对照 `D'`
+现在不能证明的是“任意可编程 row skew 比现有固定斜存更快”。最强固定对照 `D'`
 已经能用固定对角接线和普通 tile 基址达到零冲突，因此 `D/D'` 的纯 bank
 收益在两个模型上都是 `1.00x`。这一点是本轮最重要的纠正。
 
@@ -26,7 +26,7 @@ prepared x/B/C/dt or q/k/v/decay/beta
                     |
                     v
        existing 1 MiB BF16 Matrix SRAM
-        fixed diagonal / affine view
+     fixed diagonal / compiler-phased view
                     |
        bank packet read + lane restore
                     |
@@ -82,8 +82,10 @@ L_TILE_CFG   slot, shape_reg, map_reg
 L_TILE_EXEC  dst, src, scale, primitive[, axis_mask]
 ```
 
-两种形式共用 opcode `0x3f`，并保留 `funct1=0` 的旧 `L_CFG` 编码。配置是
-原子写入，不存在部分更新的隐藏状态。三个通用代数原语为：
+两种形式共用物理 opcode `0x3f`（`L_TILE`）。`funct1=0` 的旧 `L_CFG`
+仅用于复现历史 Vector-stream 软件实验；官方 52/93 层程序不会发出它，它也不
+属于交给 RTL 的冻结接口。配置是原子写入，不存在部分更新的隐藏状态。三个通用
+代数原语为：
 
 | 原语 | 语义 |
 |---|---|
@@ -107,7 +109,7 @@ BF16 state selector。
 | B | Arlo 的地址/循环压缩 | Compiler 优化 |
 | C | 单一 base phase 的固定 view | 可执行但受限的 descriptor 对照 |
 | D' | 固定对角接线 + 每 tile 普通 base phase | 最强、零新 skew 硬件的 bank 对照 |
-| D | compact affine descriptor + `L_TILE` | descriptor/分块/发射/溢出优化 |
+| D | compact phased descriptor + `L_TILE` | descriptor/分块/发射/溢出优化 |
 | E | D + 容量合法的静态 overlap | overlap；当前为 0 |
 
 公平原则是：对照组和处理组必须拥有相同容量、bank、端口、算术和合法物理
@@ -121,7 +123,7 @@ BF16 state selector。
 
 所以当前数据不支持“新增可编程 row/tile skew 是 bank-conflict novelty”。
 真正成立的贡献候选是：通用 Matrix view + 多行 packet + `L_TILE` sequencer
-把逐行递推压缩成紧凑执行。若论文一定要主张可编程 skew，必须先找到固定
+把逐行递推压缩成紧凑执行。若论文一定要主张任意可编程 row skew，必须先找到固定
 对角加普通 base phase 无法实现的真实访问模式。
 
 ## 6. Compiler 到 Rust 的数值证据
@@ -133,17 +135,20 @@ Compiler lowering -> assembler -> canonical 32-bit words -> Rust decoder
 -> BF16 banked Matrix SRAM -> explicit HBM state/output readback
 ```
 
+checked artifact 使用 schema v2 并记录 Matrix-view contract v3；campaign 会在
+artifact 与当前 Compiler 合约版本不一致时直接失败。
+
 | 模型 | layout | 机器码 | `L_TILE_EXEC` | state 比较值 | output 比较值 | state max abs | output rel-L2 | Rust cycles |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Nemotron | fixed | 33,360 | 1,040 | 524,288 | 16,384 | 0 | 0.00538 | 2,345,850 |
-| Nemotron | affine | 1,200 | 32 | 524,288 | 16,384 | 0 | 0 | 2,307,301 |
-| Kimi | fixed | 101,064 | 3,096 | 1,572,864 | 49,152 | 0.000977 | 0.00708 | 13,922,560 |
-| Kimi | affine | 4,104 | 120 | 1,572,864 | 49,152 | 0 | 0 | 6,945,885 |
+| Nemotron | fixed | 30,224 | 1,040 | 524,288 | 16,384 | 0 | 0.00538 | 2,341,335 |
+| Nemotron | phased（artifact 兼容标签 affine） | 1,120 | 32 | 524,288 | 16,384 | 0 | 0 | 2,307,298 |
+| Kimi | fixed | 91,704 | 3,096 | 1,572,864 | 49,152 | 0.000977 | 0.00708 | 13,930,240 |
+| Kimi | phased（artifact 兼容标签 affine） | 3,864 | 120 | 1,572,864 | 49,152 | 0 | 0 | 6,945,884 |
 
 几何是官方递推尺寸，连续执行四个 token：Nemotron `64x128x64`，Kimi
-`96x128x128`。输入不是全零路径，state 和 output 都检查。这里的 fixed/affine
+`96x128x128`。输入不是全零路径，state 和 output 都检查。这里的 fixed/phased
 周期差主要来自 descriptor 展开、指令数量和 Kimi 中间搬运；不能归因给
-可编程 skew，因为公平的 bank-only D' 已经达到同一 bank 下界。
+任意可编程 row skew，因为公平的 bank-only D' 已经达到同一 bank 下界。
 
 ## 7. 官方尺寸单层解析回放
 
@@ -167,8 +172,8 @@ HBM 1560 B/cycle。B1 结果：
 
 | 模型 | A | B | C | D | D/A | D/B | D/C |
 |---|---:|---:|---:|---:|---:|---:|
-| Nemotron 3 | 4,055,091 | 3,110,067 | 2,210,882 | 2,014,554 | 2.0129x | 1.5438x | 1.0975x |
-| Kimi K3 | 103,816,704 | 97,013,856 | 93,286,200 | 91,178,043 | 1.1386x | 1.0640x | 1.0231x |
+| Nemotron 3 | 4,055,091 | 3,110,067 | 2,192,850 | 2,014,094 | 2.0134x | 1.5442x | 1.0888x |
+| Kimi K3 | 103,816,704 | 97,013,856 | 93,124,740 | 91,173,903 | 1.1387x | 1.0641x | 1.0214x |
 
 这些是公式时间线，不是整模 Rust 执行。它使用官方 52/93 层结构、官方维度、
 GPU calibration、Nemotron 实测 routing（可用处）和 symbolic PLENA weights。
@@ -183,8 +188,8 @@ C/D 才另外加入 Matrix service、算术和 HBM 项。因此 `D/A`、`D/B` �
 
 | 模型 | 总节省 | HBM | issue | ideal service | bank stall | 只消 stall 的整模加速 |
 |---|---:|---:|---:|---:|---:|---:|
-| Nemotron | 196,328 | 0 | 179,124 | 11,316 | 5,888 | 1.00267x |
-| Kimi | 2,108,157 | 278,277 | 1,621,224 | 208,656 | 0 | 1.00000x |
+| Nemotron | 178,756 | 0 | 161,552 | 11,316 | 5,888 | 1.00269x |
+| Kimi | 1,950,837 | 278,277 | 1,463,904 | 208,656 | 0 | 1.00000x |
 
 `D/C` 不能叫“斜存硬件加速”：C 是受限的 single-base descriptor，D 同时减少
 chunk、issue、ideal service 和 Kimi spill。纯 bank 比较必须看 D'，结果 1.00x。
@@ -193,13 +198,13 @@ chunk、issue、ideal service 和 Kimi spill。纯 bank 比较必须看 D'，结
 
 | Batch | Nem D/A | Nem D/B | Nem D/C | Kimi D/A | Kimi D/B | Kimi D/C |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 2.013x | 1.544x | 1.097x | 1.139x | 1.064x | 1.023x |
-| 2 | 2.516x | 1.814x | 1.146x | 1.228x | 1.105x | 1.038x |
-| 4 | 3.016x | 2.082x | 1.194x | 1.335x | 1.155x | 1.056x |
-| 8 | 3.415x | 2.296x | 1.232x | 1.438x | 1.202x | 1.073x |
-| 16 | 3.679x | 2.439x | 1.258x | 1.518x | 1.239x | 1.086x |
-| 32 | 4.681x | 2.976x | 1.354x | 1.570x | 1.263x | 1.095x |
-| 64 | 6.546x | 3.978x | 1.534x | 1.666x | 1.308x | 1.111x |
+| 1 | 2.013x | 1.544x | 1.089x | 1.139x | 1.064x | 1.021x |
+| 2 | 2.517x | 1.814x | 1.133x | 1.228x | 1.105x | 1.035x |
+| 4 | 3.017x | 2.083x | 1.177x | 1.335x | 1.155x | 1.052x |
+| 8 | 3.417x | 2.298x | 1.212x | 1.438x | 1.203x | 1.068x |
+| 16 | 3.682x | 2.440x | 1.235x | 1.518x | 1.240x | 1.080x |
+| 32 | 4.685x | 2.979x | 1.323x | 1.571x | 1.264x | 1.088x |
+| 64 | 6.555x | 3.983x | 1.486x | 1.666x | 1.308x | 1.103x |
 
 Nemotron B1 使用已有真实 routing。更大 batch 和 Kimi routing 仍使用 DSE
 边界，不是 GPU 实测 throughput，不能直接写成真实批量性能。
@@ -210,10 +215,10 @@ Nemotron B1 使用已有真实 routing。更大 batch 和 Kimi routing 仍使用
 |---:|---:|---:|
 | 64 | 1.0239x | 1.0027x |
 | 256 | 1.0947x | 1.0108x |
-| 512 | 1.1871x | 1.0215x |
-| 1024 | 1.3656x | 1.0425x |
-| 1560 | 1.5438x | 1.0640x |
-| 8192 | 3.2115x | 1.2945x |
+| 512 | 1.1872x | 1.0215x |
+| 1024 | 1.3658x | 1.0425x |
+| 1560 | 1.5442x | 1.0641x |
+| 8192 | 3.2145x | 1.2947x |
 
 Kimi 的完整时间线被巨大的 projection/MoE 权重流量支配，所以单独缩短 KDA
 递推无法变成很大的整模收益。这个带宽边界必须和 headline 一起报告。
@@ -230,15 +235,16 @@ Kimi 的完整时间线被巨大的 projection/MoE 权重流量支配，所以�
 Matrix-view bank stall 均为 0。对应周期分别为 `188,638` 和 `1,346,121`。
 
 这些测试采用一头、64-wide 的缩小外围几何，证明 chunk 计算与 state 生命周期，
-但没有 row-major/affine A/B 对照，因此仍不报告 transactional prefill 加速或
+但没有 row-major/phased A/B 对照，因此仍不报告 transactional prefill 加速或
 整模 TTFT。旧的 `3.387x/1.713x` 继续撤回。
 
 当前只有 pre-RTL 结构代理：额外 SRAM payload/cache/new MAC/额外 SRAM 端口
 均为 0；4 个 view record 共 256 bits；sequencer 上界 256 bits 加 3 个计数器；
 最坏情况的 segment broadcast 是 `32x16` bits（Nemotron 为 32 个 64-value
-segment，Kimi 为 16 个 128-value segment）；cyclic restore 是 64 个 512-bit bank word、
-6 级 mux。可编程 bank select 上界是 128 个 6-bit 加法器，但当前 bank 数据
-并未证明这些加法器值得保留。
+segment，Kimi 为 16 个 128-value segment）；cyclic restore 是 64 个 512-bit
+bank word、6 级 mux。公平 D' 对照已经证明任意可编程 row coefficient 没有
+bank-service 收益，因此最终设计删除它：新增这类加法器为 0。保留的可编程量
+只有每个活动 view 一个 6-bit tile-phase accumulator，4 个 slot 上界合计 24 bits。
 
 没有 RTL 与综合，所以不能给 LUT、面积、频率、功耗、PPA、Token/J 或相对 GPU
 的硬件加速比。
@@ -266,7 +272,7 @@ segment，Kimi 为 16 个 128-value segment）；cyclic restore 是 64 个 512-b
 - view DMA/L_TILE 在 scoreboard 中按精确物理 bank-word 足迹进行的重叠时序；
   当前使用保守逻辑区间，物理 `Cell::Pending` 保证数值正确，本轮也未给 E
   任何 overlap 加速；
-- 可编程 skew 相对最强固定斜存的性能收益；
+- compact tile phase 相对最强固定摆放的纯 bank 性能收益（当前为 1.00x）；
 - RTL timing、PPA、能耗或相对 GPU 的最终硬件性能。
 
 ## 13. 复现

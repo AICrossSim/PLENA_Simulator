@@ -117,22 +117,20 @@ fn packet_shape_word() -> u32 {
 }
 
 fn packet_map_word(tile_pitch_rows: u32) -> u32 {
-    tile_pitch_rows | (1 << 28)
+    tile_pitch_rows
 }
 
 fn ltile_shape_word(rows: u32, cols: u32, tiles: u32) -> u32 {
     (rows - 1) | ((cols - 1) << 12) | ((tiles - 1) << 24)
 }
 
-fn ltile_map_word(pitch: u32, tile_skew: Option<u32>, broadcast_minor: bool) -> u32 {
-    let mut flags = 1_u32;
+fn ltile_map_word(pitch: u32, tile_phase_stride: Option<u32>, broadcast_minor: bool) -> u32 {
+    let mut flags = 0_u32;
     let mut word = pitch;
-    if let Some(skew) = tile_skew {
-        flags |= 1 << 1;
+    if let Some(phase) = tile_phase_stride {
         // Match the physical layout used to seed the SRAM: treatment changes
         // only the per-tile phase, while retaining PLENA's diagonal row term.
-        word |= 1 << 16;
-        word |= skew << 22;
+        word |= phase << 22;
     }
     if broadcast_minor {
         flags |= 1 << 3;
