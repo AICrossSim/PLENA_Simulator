@@ -82,12 +82,38 @@ descriptor 中重复编码。`tile_phase_stride=0` 是普通固定布局；非�
 | `V_SOFTPLUS_V=0x3D` | 生成 Mamba/KDA 系数 |
 | `S_MAP_FP_V=0x3E` | 整行 Vector 到 FP register file 的反向映射 |
 
-因此完整功能相对共同 main 的物理 opcode 增量是 3 个；其中 Matrix
-L-Compute 本身只占 `0x3F`。`V_FMA_VF` 是现有 `V_MUL_VF` 的编码模式，不另占
-opcode。
+因此，窄口径的 Mamba/KDA 功能路径相对共同 main 需要 3 个物理 opcode；
+其中 Matrix L-Compute 本身只占 `0x3F`。`V_FMA_VF` 是现有 `V_MUL_VF`
+的编码模式，不另占 opcode。
 
 旧 `L_CFG` 位于 `0x3F/funct1=0`，仅用于复现历史 Vector-stream 实验。官方
 52/93 层 schedule 有测试保证不会发出它；它不属于交给 RTL 的冻结接口。
+
+### 2.1 相对 main 的完整 opcode 增量
+
+上面的 3 个是功能路径口径，不是整条分支的合并口径。相对 Compiler main
+`d89ad59`，本分支占用了原先剩余的全部 7 个 6-bit opcode：
+
+| Opcode | 名称 | 引入 commit | 递推 lowering 是否使用 |
+|---|---|---|---|
+| `0x39` | `C_ROUTE_BEGIN` | `aec6dcb` | 否 |
+| `0x3A` | `C_ROUTE_LOOP_START` | `aec6dcb` | 否 |
+| `0x3B` | `C_ROUTE_LOOP_END` | `aec6dcb` | 否 |
+| `0x3C` | `V_ROUTE_MUL` | `aec6dcb` | 否 |
+| `0x3D` | `V_SOFTPLUS_V` | `56fd25a` | 是 |
+| `0x3E` | `S_MAP_FP_V` | `56fd25a` | 是 |
+| `0x3F` | `L_TILE` | `01f37ea` | 是 |
+
+Matrix L-Compute 自身增加 1 个 opcode，完整静态递推路径需要 3 个，而原样合并
+本分支会增加 7 个。`0x39..0x3C` 属于与 Matrix L-Compute 正交的 MoE routing
+分析路径，`matrix_recurrence_lowering.py` 不会发射它们。**本次 Matrix
+L-Compute 交接明确不包含这四条指令**；它们在实现前必须拆到 routed-MoE
+分支，或作为另一个阶段单独评审。
+
+若七条全部合并，main 的 6-bit opcode 空槽会从 7 个降为 0；后续扩展只能复用
+`funct1` 子形式或使用扩展编码。交接评审必须附带
+`git diff main..HEAD -- doc/operation.svh` 的完整输出，不能用“功能路径 3 条”
+替代真实分支差异。
 
 ## 3. 冻结物理映射
 
@@ -151,16 +177,61 @@ Arlo 的逐行静态 lowering 保留为功能 fallback 和 B baseline。它与 L
   programmable-skew 收益写进结论。
 
 公式时间线在 `MLEN=2048`、`BLEN=32`、64 banks、1 MiB BF16 Matrix SRAM、
-1560 HBM B/cycle 下给出 B1 decode：
+1560 HBM B/cycle 下给出如下 B1 decode 敏感性：
 
-| Model | Original A | Arlo B | L-Tile D | D/A | D/B |
-|---|---:|---:|---:|---:|---:|
-| Nemotron 3 | 4,055,091 | 3,110,067 | 2,014,094 | 2.0134x | 1.5442x |
-| Kimi K3 | 103,816,704 | 97,013,856 | 91,173,903 | 1.1387x | 1.0641x |
+| 模型 | 权重密度 | 端点 | A | B | C | D | D/A | D/B | D/C |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Nemotron 3 | mixed NVFP4 | 严格串行 | 4,055,091 | 3,110,067 | 2,192,850 | 2,014,094 | 2.0134x | 1.5442x | 1.0888x |
+| Nemotron 3 | mixed NVFP4 | 理想重叠 | 2,127,686 | 1,876,583 | 1,876,583 | 1,876,583 | 1.1338x | 1.0000x | 1.0000x |
+| Nemotron 3 | uniform BF16 | 严格串行 | 6,360,486 | 5,415,462 | 4,498,245 | 4,319,489 | 1.4725x | 1.2537x | 1.0414x |
+| Nemotron 3 | uniform BF16 | 理想重叠 | 4,181,978 | 4,181,978 | 4,181,978 | 4,181,978 | 1.0000x | 1.0000x | 1.0000x |
+| Kimi K3 | mixed NVFP4 | 严格串行 | 103,816,704 | 97,013,856 | 93,124,740 | 91,173,903 | 1.1387x | 1.0641x | 1.0214x |
+| Kimi K3 | mixed NVFP4 | 理想重叠 | 88,142,659 | 88,142,659 | 88,420,867 | 88,142,590 | 1.0000x | 1.0000x | 1.0032x |
+| Kimi K3 | uniform BF16 | 严格串行 | 149,593,151 | 142,790,303 | 138,901,187 | 136,950,350 | 1.0923x | 1.0426x | 1.0142x |
+| Kimi K3 | uniform BF16 | 理想重叠 | 133,919,106 | 133,919,106 | 134,197,314 | 133,919,037 | 1.0000x | 1.0000x | 1.0021x |
 
-这些是带显式 SRAM/HBM/算术项的 pre-RTL timeline，不是硅上周期，也不是相对
-GPU 的加速。D/B 主要来自多行执行、紧凑 descriptor、减少发射和 spill；纯
-bank mapping 收益必须单独写成 D/D′=`1.00x`。
+严格串行端点等于 `HBM + Matrix + Vector + L-Compute`，是当前依赖安全的
+结果。理想重叠端点等于 `max(HBM, Matrix, Vector + L-Compute)`，假设三类
+资源完全重叠，不考虑依赖、SRAM 容量和仲裁；它只是下界，不是 Compiler 已经
+发出的 schedule。
+
+五个变体的 Matrix 周期相同。上表 Nemotron 的 HBM 周期也相同，但这个结论
+**不能推广到 Kimi**：Kimi C 有固定布局的中间 spill，C/D 还使用精确 state-DMA
+计数。例如 mixed Kimi B1 的 C 为 88,420,867 HBM 周期，D 为 88,142,590，
+所以理想端点的 D/C 是 1.0032x，而不是 1.0000x。这是数据对“所有变体的 HBM
+周期完全相同”这一更强假设的直接反例。
+
+A/B 的递推成本采用“每条动态指令 1 周期”的发行代理，并把 Matrix service 与
+Vector arithmetic 成本置零；C/D/E 来自真实 lowering 的 service 模型。因此
+D/A 和 D/B 的分子、分母属于两类不同证据。表中收益合并了多行执行、紧凑
+descriptor、减少发射以及可能的 spill 变化；它们不是硅上加速，也不是可编程
+skew 的加速。
+
+### 5.1 Agentic 工作负载包络
+
+下表对 93 个按长度排序且互不重叠的 workload group 取中位数。每组运行 32 个
+decode step，并严格重放实测 Nemotron eager-routing 专家并集；`N` 是 group
+数量。B4、B8、B16 的 P95 因 `N < 20` 只能作为探索性结果。
+
+| B | N | D/A 理想 | D/C 理想 | D/B 理想 | D/C 串行 | D/B 串行 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 48 | 1.1361x | 1.0000x | 1.0000x | 1.0890x | 1.5456x |
+| 2 | 24 | 1.8423x | 1.0000x | 1.0239x | 1.1385x | 1.8490x |
+| 4 | 12 | 2.8151x | 1.0000x | 1.5642x | 1.2003x | 2.2282x |
+| 8 | 6 | 4.0843x | 1.0000x | 2.2699x | 1.2717x | 2.6661x |
+| 16 | 3 | 5.8904x | 1.0000x | 3.2743x | 1.3579x | 3.1943x |
+
+| B | N | mixed NVFP4 D/B 串行 / 理想 | MXFP8 D/B 串行 / 理想 | BF16 D/B 串行 / 理想 |
+|---:|---:|---:|---:|---:|
+| 1 | 48 | 1.546 / 1.000 | 1.485 / 1.000 | 1.254 / 1.000 |
+| 2 | 24 | 1.849 / 1.024 | 1.697 / 1.000 | 1.371 / 1.000 |
+| 4 | 12 | 2.228 / 1.564 | 1.945 / 1.154 | 1.515 / 1.000 |
+| 8 | 6 | 2.666 / 2.270 | 2.236 / 1.576 | 1.692 / 1.000 |
+| 16 | 3 | 3.194 / 3.274 | 2.628 / 2.211 | 1.950 / 1.165 |
+
+Agentic 中 D/C 理想端点恒为 1.0000x 是 Nemotron 结论：routing 会改变 MoE
+时间线，但不改变递推 state packet 的 bank 坐标。它不能推广到有固定布局 spill
+的 Kimi C。
 
 ## 6. 资源代理
 
@@ -183,7 +254,15 @@ bank mapping 收益必须单独写成 D/D′=`1.00x`。
 - Nemotron/Kimi 真实完整 checkpoint 的全算子 Rust 执行；
 - 完整 transactional prefill 的 A/B 加速与整模 TTFT；
 - 精确 scoreboard bank-word overlap；当前 E 不获得虚构 overlap 收益；
-- RTL、PPA、Token/J 或相对 B200/5090 的硬件加速。
+- RTL、PPA、Token/J 或相对 B200/5090 的硬件加速；
+- 能达到理想资源重叠下界的可执行 schedule；Agentic 包络中所有 batch 的
+  D/C 理想端点均为 1.0000x，B1 的 D/B 理想端点为 1.000x，因此不能把严格
+  串行下的发行节省写成在完全重叠机器上的必然收益；
+- 超出当前流量公式的权重与反量化行为：mixed NVFP4 按约 0.5625 byte/元素
+  计数（每 16 个值一个 FP8 block scale），不含反量化计算、tensor-global
+  scale 和物理 padding；Matrix SRAM 元素仍为 BF16。Agentic B16 中，权重从
+  mixed NVFP4 改成 uniform BF16 后，D/B 从 3.194/3.274（串行/理想）降为
+  1.950/1.165。
 
 这些不影响 ISA/Compiler/Simulator 的 pre-RTL 冻结，但在论文中必须明确区分。
 
@@ -195,14 +274,17 @@ nix develop --no-write-lock-file --command \
 ```
 
 只有该命令退出码为 0，且官方 schedule 不含 `L_CFG`、所有数值对拍和 D′ 公平
-检查通过，才允许进入 RTL 阶段。
+检查通过，才允许进入 RTL 阶段。交接材料还必须附带
+`git diff main..HEAD -- doc/operation.svh` 的完整输出。
 
-本次冻结使用 Compiler commit
-`c2e7d03e14b4c43350fd3d232cb2ee6058a494c4`，门禁退出码为 0：
+本次冻结的 Simulator gitlink 使用 Compiler tip
+`330e93da425eee107a0f3299f5f039fad1d74cd4`；其中机制实现 commit 是
+`c2e7d03e14b4c43350fd3d232cb2ee6058a494c4`。门禁退出码为 0：
 
-- Simulator Python：105 passed；
+- Simulator Python：108 passed；
 - Compiler：188 passed；
-- Rust workspace：180 passed；
+- Rust workspace：298 passed（13 个 test binary 合计；其中
+  `transactional_emulator` 单体 180）；
 - Matrix projection：65,664 个 BF16 值逐项一致，0 bank stall；
 - official-geometry recurrence：Nemotron/Kimi fixed/phased 四组全部通过。
 
@@ -210,8 +292,8 @@ nix develop --no-write-lock-file --command \
 
 ```text
 01a8965c58c9203c05272edab50459b64fe66fb5f4340166d57218c6d5b180c6  artifacts/matrix_lcompute_connected_bf16/summary.json
-d775693d8284e4ebf9454e7fd753f56cf05b3ef73ecdd5ef79b8ed9fafae2e06  artifacts/matrix_lcompute_e2e_v5/campaign.json
-9ca3e834f5968cefae47272991d87af86bd33109b19062d05d9ba3c44c1b02fc  artifacts/matrix_lcompute_e2e_v5/headline.csv
+cfd26f07ce7c81b36f11532c31bd6435f8e8d24a138029fba7ab467bd60dd6c1  artifacts/matrix_lcompute_e2e_v5/campaign.json
+2ee3fa0d15f65e276f71b6763c5b55de078efef816be81ddc7f143242f135aed  artifacts/matrix_lcompute_e2e_v5/headline.csv
 3f0f015c2dc420b3ee13c827a61b086ec78904a5005efa72e6a303864af7534b  artifacts/matrix_lcompute_agentic_v1/campaign.json
 11c549ad31da440fe8973af98eca5e2234b4d99bdb4a061cd27a019e5bab41c5  artifacts/matrix_lcompute_agentic_v1/summary.csv
 ```

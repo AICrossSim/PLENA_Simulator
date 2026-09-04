@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import functools
 import json
 import os
@@ -15,6 +16,7 @@ from .matrix_lcompute_campaign import (
     MatrixVariant,
     StateMode,
     _dse_packet,
+    _timeline_endpoints,
     attach_real_service_evidence,
     build_ordinary_no_regression_evidence,
     build_prefill_handoff_timeline_delta,
@@ -27,7 +29,7 @@ from .matrix_lcompute_campaign import (
     recurrent_core_metrics,
     run_ablation,
 )
-from .nemotron3_workload import InferencePhase
+from .nemotron3_workload import InferencePhase, Precision
 
 
 COMPILER_ROOT = Path(
@@ -36,6 +38,7 @@ COMPILER_ROOT = Path(
         Path(__file__).resolve().parents[2] / "PLENA_Compiler",
     )
 ).resolve()
+ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "artifacts/matrix_lcompute_e2e_v5"
 
 
 @functools.lru_cache(maxsize=1)
@@ -317,6 +320,92 @@ def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identi
         assert by_variant[MatrixVariant.D_AFFINE]["speedup_vs_C_fixed"] >= 1
         assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["cycles"] == by_variant[MatrixVariant.D_AFFINE]["cycles"]
         assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["speedup_vs_D_phased"] == 1
+
+
+def test_basic_model_records_publish_strict_and_ideal_timeline_endpoints() -> None:
+    result = run_ablation(
+        model="nemotron3",
+        phase=InferencePhase.DECODE,
+        batch_size=1,
+        tokens=1,
+        context_length=2048,
+        state_mode=StateMode.PLENA_BF16,
+        hardware=MatrixHardwarePoint(),
+        compiler_root=COMPILER_ROOT,
+        compiler=_real_compiler_evidence(),
+        physical=_real_physical_evidence(),
+    )
+    assert {record["variant"] for record in result["records"]} == set(MatrixVariant)
+    for record in result["records"]:
+        endpoints = _timeline_endpoints(record)
+        assert record["strict_serial_cycles"] == endpoints["strict_serial_cycles"]
+        assert record["ideal_resource_overlap_lower_bound_cycles"] == endpoints[
+            "ideal_resource_overlap_lower_bound_cycles"
+        ]
+        assert record["cycles"] == (
+            record["hbm_cycles"]
+            + record["matrix_cycles"]
+            + record["vector_cycles"]
+            + record["lcompute_cycles"]
+        )
+        assert record["ideal_resource_overlap_lower_bound_cycles"] == max(
+            record["hbm_cycles"],
+            record["matrix_cycles"],
+            record["vector_cycles"] + record["lcompute_cycles"],
+        )
+
+
+def test_uniform_bf16_weight_sensitivity_is_numerically_pinned() -> None:
+    result = run_ablation(
+        model="nemotron3",
+        phase=InferencePhase.DECODE,
+        batch_size=1,
+        tokens=1,
+        context_length=2048,
+        state_mode=StateMode.PLENA_BF16,
+        hardware=MatrixHardwarePoint(),
+        compiler_root=COMPILER_ROOT,
+        compiler=_real_compiler_evidence(),
+        physical=_real_physical_evidence(),
+        weight_precision=Precision.BF16,
+    )
+    records = {record["variant"]: record for record in result["records"]}
+    baseline = records[MatrixVariant.B_ARLO]
+    phased = records[MatrixVariant.D_AFFINE]
+    assert phased["logical_weight_read_bytes"] == 6_455_212_288
+    assert (
+        baseline["ideal_resource_overlap_lower_bound_cycles"]
+        / phased["ideal_resource_overlap_lower_bound_cycles"]
+    ) == 1.0
+    assert baseline["cycles"] / phased["cycles"] == pytest.approx(1.253727466373916)
+
+
+def test_checked_headline_endpoints_and_resource_sums_are_self_consistent() -> None:
+    with (ARTIFACT_ROOT / "headline.csv").open() as source:
+        rows = list(csv.DictReader(source))
+    assert rows
+    for row in rows:
+        for label, serial_column in (
+            ("A", "A_original_cycles"),
+            ("B", "B_arlo_cycles"),
+            ("C", "C_fixed_l_tile_cycles"),
+            ("D", "D_compact_phased_l_tile_cycles"),
+        ):
+            serial = int(row[serial_column])
+            ideal = int(row[f"{label}_ideal_overlap_cycles"])
+            resources = sum(
+                int(row[f"{label}_{resource}_cycles"])
+                for resource in ("hbm", "matrix", "vector", "lcompute")
+            )
+            assert serial == resources
+            assert ideal <= serial
+        assert float(row["D_speedup_vs_B_ideal_overlap"]) == pytest.approx(
+            int(row["B_ideal_overlap_cycles"]) / int(row["D_ideal_overlap_cycles"])
+        )
+        assert float(row["uniform_bf16_D_speedup_vs_B_ideal_overlap"]) == pytest.approx(
+            int(row["uniform_bf16_B_ideal_overlap_cycles"])
+            / int(row["uniform_bf16_D_ideal_overlap_cycles"])
+        )
 
 
 def test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop() -> None:

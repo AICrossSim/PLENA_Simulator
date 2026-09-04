@@ -57,6 +57,30 @@ class StateMode(StrEnum):
     PLENA_BF16 = "plena_bf16_matrix_streamed"
 
 
+def _timeline_endpoints(record: dict[str, Any]) -> dict[str, Any]:
+    """Return the dependency-safe serial point and an optimistic overlap bound.
+
+    L-Compute reuses Vector arithmetic, so those two terms share one resource.
+    The ideal endpoint is deliberately not an executable schedule: it assumes
+    complete overlap among HBM, Matrix, and the combined Vector/L-Compute path.
+    """
+
+    resources = {
+        "hbm": int(record["hbm_cycles"]),
+        "matrix": int(record["matrix_cycles"]),
+        "vector_plus_lcompute": int(record["vector_cycles"])
+        + int(record["lcompute_cycles"]),
+    }
+    serial = sum(resources.values())
+    if serial != int(record["cycles"]):
+        raise AssertionError("strict-serial timeline no longer equals the resource sum")
+    return {
+        "strict_serial_cycles": serial,
+        "ideal_resource_overlap_lower_bound_cycles": max(resources.values()),
+        "resource_cycles": resources,
+    }
+
+
 @dataclass(frozen=True)
 class MatrixHardwarePoint:
     mlen: int = 2048
@@ -1819,6 +1843,7 @@ def run_ablation(
         record["vector_cycle_share"] = record["vector_cycles"] / record["cycles"]
         record["lcompute_cycle_share"] = record["lcompute_cycles"] / record["cycles"]
         record["recurrence_cycle_share"] = record["recurrence_cycles"] / record["cycles"]
+        record.update(_timeline_endpoints(record))
         layer_types = {name for piece in pieces for name in piece["by_layer_type"]}
         record["by_layer_type"] = {
             layer_type: {
@@ -2341,8 +2366,38 @@ def build_campaign(
                     ):
                         raise AssertionError("E received overlap credit without a capacity-legal schedule")
 
+    weight_precision_sensitivity = {
+        "scope": (
+            "formula timeline sensitivity only; the default experiments retain the "
+            "checkpoint mixed NVFP4/BF16 storage policy"
+        ),
+        "uniform_bf16": {
+            "weight_precision": Precision.BF16,
+            "models": {
+                model: {
+                    f"decode_b{batch}_t1": run_ablation(
+                        model=model,
+                        phase=InferencePhase.DECODE,
+                        batch_size=batch,
+                        tokens=1,
+                        context_length=2048,
+                        state_mode=StateMode.PLENA_BF16,
+                        hardware=hardware,
+                        compiler_root=compiler_root,
+                        compiler=compiler,
+                        physical=physical,
+                        profile=(routing if model == "nemotron3" and batch == 1 else None),
+                        weight_precision=Precision.BF16,
+                    )
+                    for batch in (1, 2, 4, 8, 16, 32, 64)
+                }
+                for model in ("nemotron3", "kimi_k3")
+            },
+        },
+    }
+
     return {
-        "schema_version": 6,
+        "schema_version": 7,
         "outcome": (
             "The executable phased descriptor removes stalls relative to the constrained "
             "single-base C lowering, but the fair fixed-wiring D' control reaches the same "
@@ -2386,6 +2441,7 @@ def build_campaign(
             "prefill_to_decode_handoff": compiler["prefill_handoff"],
         },
         "experiments": experiments,
+        "weight_precision_sensitivity": weight_precision_sensitivity,
         "bandwidth_sweep": bandwidth_sweep,
         "matrix_port_width_sweep": port_width_sweep,
         "layout_dse": layout_dse,
@@ -2518,20 +2574,87 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                 records = {
                     variant: _record(campaign, str(mode), model, case, str(variant)) for variant in MatrixVariant
                 }
+                bf16_case = campaign["weight_precision_sensitivity"]["uniform_bf16"]["models"][model][case]
+                bf16_records = {
+                    MatrixVariant(record["variant"]): record for record in bf16_case["records"]
+                }
                 fixed_phased = campaign["physical_packet_evidence"]["fixed_phased_bank_control"][model]
+                a = records[MatrixVariant.A_ORIGINAL]
+                b = records[MatrixVariant.B_ARLO]
+                c = records[MatrixVariant.C_FIXED]
+                d = records[MatrixVariant.D_AFFINE]
+                bf16_a = bf16_records[MatrixVariant.A_ORIGINAL]
+                bf16_b = bf16_records[MatrixVariant.B_ARLO]
+                bf16_c = bf16_records[MatrixVariant.C_FIXED]
+                bf16_d = bf16_records[MatrixVariant.D_AFFINE]
                 summary.append(
                     {
                         "state_mode": mode,
                         "model": model,
                         "batch": batch,
-                        "A_original_cycles": records[MatrixVariant.A_ORIGINAL]["cycles"],
-                        "B_arlo_cycles": records[MatrixVariant.B_ARLO]["cycles"],
-                        "C_fixed_l_tile_cycles": records[MatrixVariant.C_FIXED]["cycles"],
-                        "D_compact_phased_l_tile_cycles": records[MatrixVariant.D_AFFINE]["cycles"],
+                        "A_original_cycles": a["cycles"],
+                        "B_arlo_cycles": b["cycles"],
+                        "C_fixed_l_tile_cycles": c["cycles"],
+                        "D_compact_phased_l_tile_cycles": d["cycles"],
                         "E_static_overlap_cycles": records[MatrixVariant.E_AFFINE_OVERLAP]["cycles"],
-                        "D_speedup_vs_A": records[MatrixVariant.D_AFFINE]["speedup_vs_A"],
-                        "D_speedup_vs_B": records[MatrixVariant.D_AFFINE]["speedup_vs_B"],
-                        "D_speedup_vs_C_single_base": records[MatrixVariant.D_AFFINE]["speedup_vs_C_fixed"],
+                        "D_speedup_vs_A": d["speedup_vs_A"],
+                        "D_speedup_vs_B": d["speedup_vs_B"],
+                        "D_speedup_vs_C_single_base": d["speedup_vs_C_fixed"],
+                        "A_ideal_overlap_cycles": a["ideal_resource_overlap_lower_bound_cycles"],
+                        "B_ideal_overlap_cycles": b["ideal_resource_overlap_lower_bound_cycles"],
+                        "C_ideal_overlap_cycles": c["ideal_resource_overlap_lower_bound_cycles"],
+                        "D_ideal_overlap_cycles": d["ideal_resource_overlap_lower_bound_cycles"],
+                        "D_speedup_vs_A_ideal_overlap": (
+                            a["ideal_resource_overlap_lower_bound_cycles"]
+                            / d["ideal_resource_overlap_lower_bound_cycles"]
+                        ),
+                        "D_speedup_vs_B_ideal_overlap": (
+                            b["ideal_resource_overlap_lower_bound_cycles"]
+                            / d["ideal_resource_overlap_lower_bound_cycles"]
+                        ),
+                        "D_speedup_vs_C_ideal_overlap": (
+                            c["ideal_resource_overlap_lower_bound_cycles"]
+                            / d["ideal_resource_overlap_lower_bound_cycles"]
+                        ),
+                        **{
+                            f"{label}_{resource}_cycles": record[f"{resource}_cycles"]
+                            for label, record in (("A", a), ("B", b), ("C", c), ("D", d))
+                            for resource in ("hbm", "matrix", "vector", "lcompute")
+                        },
+                        "uniform_bf16_A_cycles": bf16_a["cycles"],
+                        "uniform_bf16_B_cycles": bf16_b["cycles"],
+                        "uniform_bf16_C_cycles": bf16_c["cycles"],
+                        "uniform_bf16_D_cycles": bf16_d["cycles"],
+                        "uniform_bf16_A_ideal_overlap_cycles": bf16_a[
+                            "ideal_resource_overlap_lower_bound_cycles"
+                        ],
+                        "uniform_bf16_B_ideal_overlap_cycles": bf16_b[
+                            "ideal_resource_overlap_lower_bound_cycles"
+                        ],
+                        "uniform_bf16_C_ideal_overlap_cycles": bf16_c[
+                            "ideal_resource_overlap_lower_bound_cycles"
+                        ],
+                        "uniform_bf16_D_ideal_overlap_cycles": bf16_d[
+                            "ideal_resource_overlap_lower_bound_cycles"
+                        ],
+                        "uniform_bf16_D_speedup_vs_A_serial": bf16_a["cycles"] / bf16_d["cycles"],
+                        "uniform_bf16_D_speedup_vs_B_serial": bf16_b["cycles"] / bf16_d["cycles"],
+                        "uniform_bf16_D_speedup_vs_C_serial": bf16_c["cycles"] / bf16_d["cycles"],
+                        "uniform_bf16_D_speedup_vs_A_ideal_overlap": (
+                            bf16_a["ideal_resource_overlap_lower_bound_cycles"]
+                            / bf16_d["ideal_resource_overlap_lower_bound_cycles"]
+                        ),
+                        "uniform_bf16_D_speedup_vs_B_ideal_overlap": (
+                            bf16_b["ideal_resource_overlap_lower_bound_cycles"]
+                            / bf16_d["ideal_resource_overlap_lower_bound_cycles"]
+                        ),
+                        "uniform_bf16_D_speedup_vs_C_ideal_overlap": (
+                            bf16_c["ideal_resource_overlap_lower_bound_cycles"]
+                            / bf16_d["ideal_resource_overlap_lower_bound_cycles"]
+                        ),
+                        "uniform_bf16_D_logical_weight_read_bytes": bf16_d[
+                            "logical_weight_read_bytes"
+                        ],
                         "D_prime_fixed_phased_bank_service_cycles": fixed_phased["service_cycles"],
                         "D_prime_fixed_phased_bank_stall": fixed_phased["bank_stall_cycles"],
                         "D_vs_D_prime_pure_bank_speedup": fixed_phased[

@@ -25,6 +25,7 @@ from .matrix_lcompute_campaign import (
     StateMode,
     attach_real_service_evidence,
     build_physical_evidence,
+    _timeline_endpoints,
     load_compiler_evidence,
     run_ablation,
 )
@@ -67,30 +68,6 @@ def _route_statistics(campaign: AgenticCampaign, group: AgenticBatchGroup, decod
         "active_experts_median": statistics.median(counts),
         "active_experts_p95": _percentile([float(count) for count in counts], 0.95),
         "active_experts_max": max(counts),
-    }
-
-
-def _timeline_endpoints(record: dict[str, Any]) -> dict[str, Any]:
-    """Return a legal serial endpoint and an intentionally optimistic lower bound.
-
-    L-Compute reuses Vector arithmetic, so its cycles share the Vector resource.
-    The ideal endpoint allows HBM, Matrix and the combined Vector/L-Compute path
-    to overlap completely. It is not an executable schedule and gives no credit
-    for dependencies, SRAM capacity or arbitration.
-    """
-
-    resources = {
-        "hbm": int(record["hbm_cycles"]),
-        "matrix": int(record["matrix_cycles"]),
-        "vector_plus_lcompute": int(record["vector_cycles"]) + int(record["lcompute_cycles"]),
-    }
-    serial = sum(resources.values())
-    if serial != int(record["cycles"]):
-        raise AssertionError("strict-serial timeline no longer equals the resource sum")
-    return {
-        "strict_serial_cycles": serial,
-        "ideal_resource_overlap_lower_bound_cycles": max(resources.values()),
-        "resource_cycles": resources,
     }
 
 
