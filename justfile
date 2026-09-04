@@ -187,6 +187,7 @@ test-matrix-lcompute-python compiler_root="PLENA_Compiler":
         analytic_models/performance/test_matrix_sram_layout.py \
         analytic_models/performance/test_matrix_state_residency.py \
         analytic_models/performance/test_agentic_campaign.py \
+        analytic_models/performance/test_agentic_matrix_lcompute_campaign.py \
         analytic_models/performance/test_matrix_lcompute_campaign.py \
         transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py
 

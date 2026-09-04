@@ -13,7 +13,7 @@ import json
 import math
 import statistics
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +46,17 @@ NEMOTRON_MOE_LAYER_IDS = (
     47,
     49,
     51,
+)
+
+REQUIRED_CAMPAIGN_FILES = (
+    "manifest.json",
+    "validation.json",
+    "samples.json",
+    "latency_raw.jsonl",
+    "routing_raw.jsonl",
+    "token_traces.jsonl",
+    "token_traces_timing.jsonl",
+    "campaign_summary.json",
 )
 
 
@@ -85,6 +96,76 @@ class AgenticSample:
     prompt_length: int
     prompt_sha256: str
     generated_token_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class AgenticRoutingCounters:
+    """Separate source validation coverage from the replay window actually used."""
+
+    raw_events: int
+    conservation_validated_events: int
+    prefill_events: int
+    decode_events: int
+    fully_validated_decode_events: int
+    used_decode_events: int
+    ignored_decode_events: int
+
+    def __post_init__(self) -> None:
+        if (
+            min(
+                self.raw_events,
+                self.conservation_validated_events,
+                self.prefill_events,
+                self.decode_events,
+                self.fully_validated_decode_events,
+                self.used_decode_events,
+                self.ignored_decode_events,
+            )
+            < 0
+        ):
+            raise AgenticCampaignFormatError("routing counters must be non-negative")
+        if self.raw_events != self.prefill_events + self.decode_events:
+            raise AgenticCampaignFormatError("routing phase counters do not sum to raw events")
+        if self.conservation_validated_events != self.raw_events:
+            raise AgenticCampaignFormatError("not every raw routing event passed conservation checks")
+        if self.fully_validated_decode_events != self.decode_events:
+            raise AgenticCampaignFormatError("not every decode event received full row validation")
+        if self.decode_events != self.used_decode_events + self.ignored_decode_events:
+            raise AgenticCampaignFormatError("used and ignored decode counters do not cover decode events")
+
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "raw_events": self.raw_events,
+            "conservation_validated_events": self.conservation_validated_events,
+            "prefill_events": self.prefill_events,
+            "decode_events": self.decode_events,
+            "fully_validated_decode_events": self.fully_validated_decode_events,
+            "used_decode_events": self.used_decode_events,
+            "ignored_decode_events": self.ignored_decode_events,
+        }
+
+
+@dataclass(frozen=True)
+class AgenticGpuBatchAggregate:
+    """Pinned global GPU aggregate copied from the external campaign summary."""
+
+    batch_size: int
+    request_measurements: int
+    trial_measurements: int
+    ttft_ms_median: float
+    ttft_ms_p95: float
+    itl_ms_median: float
+    itl_ms_p95: float
+    e2e_ms_median: float
+    e2e_ms_p95: float
+    throughput_tokens_s_median: float
+    throughput_tokens_s_p95: float
+    batch_joules_median: float
+    batch_joules_p95: float
+    peak_memory_bytes: int
+
+    def to_dict(self) -> dict[str, int | float]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -157,12 +238,20 @@ class AgenticCampaign:
     top_k: int
     routing_source_sha256: str
     timing_source_sha256: str
+    campaign_summary_source_sha256: str
     samples: tuple[AgenticSample, ...]
     groups: tuple[AgenticBatchGroup, ...]
     # sample -> decode step -> ((layer, active experts), ...)
     decode_routes: dict[str, tuple[tuple[tuple[int, tuple[int, ...]], ...], ...]]
-    raw_routing_events: int
+    routing_counters: AgenticRoutingCounters
+    gpu_global_aggregates: tuple[AgenticGpuBatchAggregate, ...]
     timing_and_routing_tokens_identical_samples: int
+    timing_and_routing_replay_window_identical_samples: int
+    checksum_manifest_entries: int
+
+    @property
+    def raw_routing_events(self) -> int:
+        return self.routing_counters.raw_events
 
     def group(self, benchmark: str, batch_size: int, group_index: int) -> AgenticBatchGroup:
         matches = [
@@ -225,7 +314,7 @@ class AgenticCampaign:
         benchmark_counts = Counter(sample.benchmark for sample in self.samples)
         group_counts = Counter((group.benchmark, group.batch_size) for group in self.groups)
         return {
-            "contract": "nemotron-agentic-campaign-import-v1",
+            "contract": "nemotron-agentic-campaign-import-v2",
             "model_id": self.model_id,
             "revision": self.revision,
             "gpu_uuid": self.gpu_uuid,
@@ -235,16 +324,31 @@ class AgenticCampaign:
                 f"{benchmark}_b{batch}": count for (benchmark, batch), count in sorted(group_counts.items())
             },
             "raw_routing_events": self.raw_routing_events,
+            "routing_event_accounting": self.routing_counters.to_dict(),
             "decode_steps_imported_per_sample": min(map(len, self.decode_routes.values())),
             "routing_source_sha256": self.routing_source_sha256,
             "timing_source_sha256": self.timing_source_sha256,
+            "campaign_summary_source_sha256": self.campaign_summary_source_sha256,
+            "checksum_manifest_entries": self.checksum_manifest_entries,
+            "verified_consumed_files": len(REQUIRED_CAMPAIGN_FILES),
             "timing_and_routing_tokens_identical_samples": self.timing_and_routing_tokens_identical_samples,
+            "timing_and_routing_replay_window_identical_samples": (
+                self.timing_and_routing_replay_window_identical_samples
+            ),
+            "gpu_global_aggregate_scope": "campaign_summary.timing.aggregate.all",
+            "gpu_global_aggregates": {
+                f"batch_b{aggregate.batch_size}": aggregate.to_dict() for aggregate in self.gpu_global_aggregates
+            },
             "routing_semantics": (
                 "eager routing token traces are authoritative for replay; optimized timing token traces are baseline only"
             ),
             "batch_routing_semantics": (
                 "length-sorted GPU batch membership with active-expert unions reconstructed from independent "
                 "real-checkpoint B1 eager traces; not a direct batched routing capture"
+            ),
+            "privacy": (
+                "the external archive contains prompt token IDs and must not be published; "
+                "only hashes, aggregate measurements and derived routing counts enter this artifact"
             ),
         }
 
@@ -285,16 +389,7 @@ def _checksum_manifest(root: Path) -> dict[str, str]:
 
 
 def _verify_required_checksums(root: Path, checksums: dict[str, str]) -> None:
-    required = (
-        "manifest.json",
-        "validation.json",
-        "samples.json",
-        "latency_raw.jsonl",
-        "routing_raw.jsonl",
-        "token_traces.jsonl",
-        "token_traces_timing.jsonl",
-    )
-    for name in required:
+    for name in REQUIRED_CAMPAIGN_FILES:
         expected = checksums.get(name)
         if expected is None:
             raise AgenticCampaignFormatError(f"campaign checksum is missing {name}")
@@ -323,7 +418,7 @@ def _jsonl(path: Path):
 def _load_samples(
     root: Path,
     contract: AgenticCampaignContract,
-) -> tuple[dict[str, AgenticSample], int]:
+) -> tuple[dict[str, AgenticSample], int, int]:
     document = _read_json(root / "samples.json")
     rows = document.get("samples")
     if not isinstance(rows, list):
@@ -345,6 +440,7 @@ def _load_samples(
 
     samples: dict[str, AgenticSample] = {}
     identical_count = 0
+    replay_window_identical_count = 0
     for row in rows:
         sample_id = row.get("sample_id")
         trace = token_traces.get(sample_id)
@@ -376,6 +472,9 @@ def _load_samples(
         if trace.get("timing_vs_routing_identical") != identical:
             raise AgenticCampaignFormatError(f"{sample_id}: token-trace equality flag is incorrect")
         identical_count += int(identical)
+        replay_window_identical_count += int(
+            generated_ids[: contract.decode_steps] == timing_ids[: contract.decode_steps]
+        )
         samples[sample_id] = AgenticSample(
             benchmark=str(row["benchmark"]),
             sample_id=sample_id,
@@ -392,7 +491,7 @@ def _load_samples(
         )
     if set(token_traces) != set(samples) or set(timing_traces) != set(samples):
         raise AgenticCampaignFormatError("token traces contain unknown or missing samples")
-    return samples, identical_count
+    return samples, identical_count, replay_window_identical_count
 
 
 def _load_batch_groups(
@@ -494,6 +593,70 @@ def _load_batch_groups(
     return tuple(groups)
 
 
+def _load_gpu_global_aggregates(
+    root: Path,
+    contract: AgenticCampaignContract,
+    *,
+    timing_and_routing_identical_samples: int,
+) -> tuple[AgenticGpuBatchAggregate, ...]:
+    """Validate the exact global GPU rows quoted next to the DSE results."""
+
+    document = _read_json(root / "campaign_summary.json")
+    routing = document.get("routing")
+    if not isinstance(routing, dict) or int(routing.get("timing_vs_routing_identical_samples", -1)) != (
+        timing_and_routing_identical_samples
+    ):
+        raise AgenticCampaignFormatError("campaign summary routing identity count disagrees with token traces")
+    timing = document.get("timing")
+    aggregate = timing.get("aggregate") if isinstance(timing, dict) else None
+    all_rows = aggregate.get("all") if isinstance(aggregate, dict) else None
+    if not isinstance(all_rows, dict):
+        raise AgenticCampaignFormatError("campaign summary has no timing.aggregate.all table")
+
+    float_fields = (
+        "ttft_ms_median",
+        "ttft_ms_p95",
+        "itl_ms_median",
+        "itl_ms_p95",
+        "e2e_ms_median",
+        "e2e_ms_p95",
+        "throughput_tokens_s_median",
+        "throughput_tokens_s_p95",
+        "batch_joules_median",
+        "batch_joules_p95",
+    )
+    rows = []
+    for batch_size in contract.batch_sizes:
+        source = all_rows.get(f"batch_b{batch_size}")
+        if not isinstance(source, dict):
+            raise AgenticCampaignFormatError(f"campaign summary is missing global batch B{batch_size}")
+        expected_requests = contract.sample_count * contract.measurements
+        expected_trials = sum(
+            math.ceil(sample_count / batch_size) * contract.measurements
+            for _, sample_count in contract.benchmark_sample_counts
+        )
+        if int(source.get("request_measurements", -1)) != expected_requests:
+            raise AgenticCampaignFormatError(f"global B{batch_size} request count is inconsistent")
+        if int(source.get("trial_measurements", -1)) != expected_trials:
+            raise AgenticCampaignFormatError(f"global B{batch_size} trial count is inconsistent")
+        values = {name: float(source.get(name, math.nan)) for name in float_fields}
+        if any(not math.isfinite(value) or value < 0 for value in values.values()):
+            raise AgenticCampaignFormatError(f"global B{batch_size} contains invalid timing or energy")
+        peak_memory = source.get("peak_memory_bytes")
+        if type(peak_memory) is not int or peak_memory <= 0:
+            raise AgenticCampaignFormatError(f"global B{batch_size} peak memory is invalid")
+        rows.append(
+            AgenticGpuBatchAggregate(
+                batch_size=batch_size,
+                request_measurements=expected_requests,
+                trial_measurements=expected_trials,
+                peak_memory_bytes=peak_memory,
+                **values,
+            )
+        )
+    return tuple(rows)
+
+
 def _validate_used_routing_rows(
     *,
     event: dict[str, Any],
@@ -535,11 +698,19 @@ def _load_decode_routes(
     samples: dict[str, AgenticSample],
     contract: AgenticCampaignContract,
     expected_event_count: int,
-) -> tuple[dict[str, tuple[tuple[tuple[int, tuple[int, ...]], ...], ...]], int]:
+) -> tuple[
+    dict[str, tuple[tuple[tuple[int, tuple[int, ...]], ...], ...]],
+    AgenticRoutingCounters,
+]:
     routes: dict[str, dict[int, dict[int, tuple[int, ...]]]] = defaultdict(lambda: defaultdict(dict))
     prefill_layers: dict[str, set[int]] = defaultdict(set)
     generation_checked: set[str] = set()
+    seen_decode_events: set[tuple[str, int, int]] = set()
     event_count = 0
+    prefill_event_count = 0
+    decode_event_count = 0
+    fully_validated_decode_event_count = 0
+    used_decode_event_count = 0
     for line_number, event in _jsonl(root / "routing_raw.jsonl"):
         event_count += 1
         sample_id = event.get("sample_id")
@@ -574,6 +745,7 @@ def _load_decode_routes(
 
         phase = event.get("phase")
         if phase == "prefill":
+            prefill_event_count += 1
             if event.get("decode_step") != -1 or token_count != sample.prompt_length:
                 raise AgenticCampaignFormatError(f"routing_raw.jsonl:{line_number}: invalid prefill event")
             if layer_id in prefill_layers[sample_id]:
@@ -582,12 +754,19 @@ def _load_decode_routes(
             continue
         if phase != "decode":
             raise AgenticCampaignFormatError(f"routing_raw.jsonl:{line_number}: invalid phase")
+        decode_event_count += 1
         step = int(event.get("decode_step", -1))
         if step < 0 or token_count != 1:
             raise AgenticCampaignFormatError(f"routing_raw.jsonl:{line_number}: invalid decode event")
+        key = (sample_id, step, layer_id)
+        if key in seen_decode_events:
+            raise AgenticCampaignFormatError(f"{sample_id}: duplicate decode step/layer routing event")
+        seen_decode_events.add(key)
+        active = _validate_used_routing_rows(event=event, line_number=line_number, contract=contract)
+        fully_validated_decode_event_count += 1
         if step >= contract.decode_steps:
             continue
-        active = _validate_used_routing_rows(event=event, line_number=line_number, contract=contract)
+        used_decode_event_count += 1
         if layer_id in routes[sample_id][step]:
             raise AgenticCampaignFormatError(f"{sample_id}: duplicate decode step/layer routing event")
         routes[sample_id][step][layer_id] = active
@@ -611,7 +790,21 @@ def _load_decode_routes(
                 raise AgenticCampaignFormatError(f"{sample_id}: decode step {step} has incomplete layers")
             step_rows.append(tuple((layer, by_layer[layer]) for layer in contract.moe_layer_ids))
         normalized[sample_id] = tuple(step_rows)
-    return normalized, event_count
+    expected_used = len(samples) * contract.decode_steps * len(contract.moe_layer_ids)
+    if used_decode_event_count != expected_used:
+        raise AgenticCampaignFormatError(
+            f"used decode event count {used_decode_event_count} != replay contract {expected_used}"
+        )
+    counters = AgenticRoutingCounters(
+        raw_events=event_count,
+        conservation_validated_events=event_count,
+        prefill_events=prefill_event_count,
+        decode_events=decode_event_count,
+        fully_validated_decode_events=fully_validated_decode_event_count,
+        used_decode_events=used_decode_event_count,
+        ignored_decode_events=decode_event_count - used_decode_event_count,
+    )
+    return normalized, counters
 
 
 def load_agentic_campaign(
@@ -640,10 +833,15 @@ def load_agentic_campaign(
     checksums = _checksum_manifest(root)
     if verify_checksums:
         _verify_required_checksums(root, checksums)
-    samples, identical_count = _load_samples(root, contract)
+    samples, identical_count, replay_window_identical_count = _load_samples(root, contract)
     groups = _load_batch_groups(root, samples, contract)
+    gpu_global_aggregates = _load_gpu_global_aggregates(
+        root,
+        contract,
+        timing_and_routing_identical_samples=identical_count,
+    )
     routing_manifest = manifest.get("routing", {})
-    routes, event_count = _load_decode_routes(
+    routes, routing_counters = _load_decode_routes(
         root,
         samples,
         contract,
@@ -662,11 +860,15 @@ def load_agentic_campaign(
         top_k=contract.top_k,
         routing_source_sha256=checksums["routing_raw.jsonl"],
         timing_source_sha256=checksums["latency_raw.jsonl"],
+        campaign_summary_source_sha256=checksums["campaign_summary.json"],
         samples=tuple(samples[sample_id] for sample_id in sorted(samples)),
         groups=groups,
         decode_routes=routes,
-        raw_routing_events=event_count,
+        routing_counters=routing_counters,
+        gpu_global_aggregates=gpu_global_aggregates,
         timing_and_routing_tokens_identical_samples=identical_count,
+        timing_and_routing_replay_window_identical_samples=replay_window_identical_count,
+        checksum_manifest_entries=len(checksums),
     )
 
 
@@ -679,5 +881,7 @@ __all__ = [
     "AgenticCampaign",
     "AgenticCampaignContract",
     "AgenticCampaignFormatError",
+    "AgenticGpuBatchAggregate",
+    "AgenticRoutingCounters",
     "load_agentic_campaign",
 ]

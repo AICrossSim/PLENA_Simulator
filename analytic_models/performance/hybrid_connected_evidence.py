@@ -91,8 +91,7 @@ def _fixed_cases(python: str) -> tuple[ConnectedCase, ...]:
                 "prefill_s128_decode_handoff",
             ),
             build_dir=(
-                SIMULATOR_ROOT
-                / "transactional_emulator/testbench/mamba2/build/mamba2_prefill_s128_decode_handoff"
+                SIMULATOR_ROOT / "transactional_emulator/testbench/mamba2/build/mamba2_prefill_s128_decode_handoff"
             ),
             scope="two 64-token Mamba chunks -> affine state handoff -> one packetized decode step",
             require_l_cfg=True,
@@ -108,10 +107,7 @@ def _fixed_cases(python: str) -> tuple[ConnectedCase, ...]:
                 "--chunk",
                 "16",
             ),
-            build_dir=(
-                SIMULATOR_ROOT
-                / "transactional_emulator/testbench/kda/build/kda_prefill_s128_decode_handoff"
-            ),
+            build_dir=(SIMULATOR_ROOT / "transactional_emulator/testbench/kda/build/kda_prefill_s128_decode_handoff"),
             scope="eight 16-token KDA chunks -> state transpose/affine handoff -> one packetized decode step",
             require_l_cfg=True,
             require_conflict_free_packet=True,
@@ -134,10 +130,7 @@ def _batch_cases(python: str, batch_sizes: tuple[int, ...]) -> tuple[ConnectedCa
                         "--batch-size",
                         str(batch),
                     ),
-                    build_dir=(
-                        SIMULATOR_ROOT
-                        / "transactional_emulator/testbench/mamba2/build/mamba2_decode_batch"
-                    ),
+                    build_dir=(SIMULATOR_ROOT / "transactional_emulator/testbench/mamba2/build/mamba2_decode_batch"),
                     scope=(
                         f"B{batch} independent Mamba states; reduced 4-head x 64-state x 64-head-dim "
                         "functional geometry"
@@ -157,10 +150,7 @@ def _batch_cases(python: str, batch_sizes: tuple[int, ...]) -> tuple[ConnectedCa
                         "--key-dim",
                         "128",
                     ),
-                    build_dir=(
-                        SIMULATOR_ROOT
-                        / "transactional_emulator/testbench/kda/build/kda_recurrent_batch"
-                    ),
+                    build_dir=(SIMULATOR_ROOT / "transactional_emulator/testbench/kda/build/kda_recurrent_batch"),
                     scope=(
                         f"B{batch} independent KDA states; one full 128-key x 128-value head "
                         "with a request-reused FPRAM scalar window"
@@ -230,9 +220,7 @@ def run_campaign(
         **os.environ,
         "PLENA_COMPILER_ROOT": str(compiler_root),
         "PYTHONPATH": os.pathsep.join(
-            value
-            for value in (str(SIMULATOR_ROOT), str(compiler_root), os.environ.get("PYTHONPATH", ""))
-            if value
+            value for value in (str(SIMULATOR_ROOT), str(compiler_root), os.environ.get("PYTHONPATH", "")) if value
         ),
     }
     cases = (*_fixed_cases(sys.executable), *_batch_cases(sys.executable, batch_sizes))

@@ -80,10 +80,7 @@ def _emit_affine_restore(
             for row in range(physical_rows):
                 logical_offset = col_block * physical_rows * MLEN + row * MLEN
                 lines.extend(load_large_int(gp_dst, target_base + logical_offset))
-                lines.append(
-                    f"V_MUL_VF gp{gp_dst}, gp{gp_src}, f{fp_one}, 0, "
-                    f"{stream_view_mask(0)}"
-                )
+                lines.append(f"V_MUL_VF gp{gp_dst}, gp{gp_src}, f{fp_one}, 0, {stream_view_mask(0)}")
         lines.append(f"L_CFG gp0, gp{gp_src}, 0, {int(StreamConfigField.RESET)}")
         program._emit("\n".join(lines) + "\n")
     finally:

@@ -1292,10 +1292,7 @@ def run_ablation(
             "kv_read_bytes_per_decode_step": sum(stage.traffic.kv_read_bytes for stage in reports[0].stages),
             "kv_write_bytes_per_decode_step": sum(stage.traffic.kv_write_bytes for stage in reports[0].stages),
             "routed_experts_per_layer": (
-                {
-                    str(layer_id): count
-                    for layer_id, count in reports[0].scenario.moe_unique_experts_by_layer
-                }
+                {str(layer_id): count for layer_id, count in reports[0].scenario.moe_unique_experts_by_layer}
                 if routing_profile is not None
                 else routed_experts(tokens if phase == InferencePhase.PREFILL else 1)
             ),

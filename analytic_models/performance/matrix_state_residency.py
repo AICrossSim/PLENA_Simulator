@@ -25,9 +25,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SETTINGS = ROOT / "plena_settings.toml"
-MAMBA_PRECISION_CSV = (
-    Path(__file__).with_name("profiles") / "b200_supplemental" / "mamba_precision.csv"
-)
+MAMBA_PRECISION_CSV = Path(__file__).with_name("profiles") / "b200_supplemental" / "mamba_precision.csv"
 KDA_PRECISION_JSON = Path(__file__).with_name("profiles") / "kda_state_precision.json"
 
 KIMI_K3_STATE_ELEMENTS = 96 * 128 * 128

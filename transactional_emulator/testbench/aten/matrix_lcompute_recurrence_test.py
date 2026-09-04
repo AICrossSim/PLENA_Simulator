@@ -26,9 +26,7 @@ import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-COMPILER_ROOT = Path(
-    os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")
-).resolve()
+COMPILER_ROOT = Path(os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")).resolve()
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 if str(COMPILER_ROOT) not in sys.path:
@@ -84,10 +82,7 @@ def _write_packet(
 ) -> None:
     flat = _bf16(values).flatten()
     if flat.numel() != packet.logical_values:
-        raise AssertionError(
-            f"{packet.key}: generated {flat.numel()} values, expected "
-            f"{packet.logical_values}"
-        )
+        raise AssertionError(f"{packet.key}: generated {flat.numel()} values, expected {packet.logical_values}")
     padded = torch.zeros(packet.transfer_values, dtype=torch.float32)
     padded[: flat.numel()] = flat
     payload = _bf16_bytes(padded)
@@ -119,10 +114,7 @@ def _mamba_reference(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     x, dt = operands["x"], operands["dt"]
     scratch = _bf16(dt[:, None] * x)
-    state = _bf16(
-        operands["a"][:, :, None] * state
-        + operands["b"][:, :, None] * scratch[:, None, :]
-    )
+    state = _bf16(operands["a"][:, :, None] * state + operands["b"][:, :, None] * scratch[:, None, :])
     accumulator = torch.zeros_like(x)
     for row in range(state.shape[1]):
         accumulator += state[:, row, :] * operands["c"][:, row, None]
@@ -160,12 +152,8 @@ def _mamba_packet_values(
             working_set.state_rows_per_chunk,
             working_set.allocation(packet.target).descriptor.shape.cols,
         )
-        values[:, 0 : 2 * group_heads : 2] = operands[
-            "a"
-        ][first:last, row_first:row_last].T
-        values[:, 1 : 2 * group_heads : 2] = operands[
-            "b"
-        ][first:last, row_first:row_last].T
+        values[:, 0 : 2 * group_heads : 2] = operands["a"][first:last, row_first:row_last].T
+        values[:, 1 : 2 * group_heads : 2] = operands["b"][first:last, row_first:row_last].T
         return values
     if packet.field == "c":
         values = torch.zeros(
@@ -198,10 +186,7 @@ def _kda_reference(
     for key in range(state.shape[1]):
         prediction += state[:, key, :] * operands["key"][:, key, None]
     prediction = _bf16(prediction)
-    error = _bf16(
-        operands["beta"][:, None]
-        * (operands["value"] - prediction)
-    )
+    error = _bf16(operands["beta"][:, None] * (operands["value"] - prediction))
     state = _bf16(state + operands["key"][:, :, None] * error[:, None, :])
     output = torch.zeros_like(error)
     for key in range(state.shape[1]):
@@ -232,23 +217,17 @@ def _kda_packet_values(
     descriptor = working_set.allocation(packet.target).descriptor
     if packet.field == "decay":
         values = torch.zeros(group_heads, 2, descriptor.shape.cols)
-        values[:, 0, : working_set.state_rows_per_chunk] = operands["decay"][
-            first:last, row_first:row_last
-        ]
+        values[:, 0, : working_set.state_rows_per_chunk] = operands["decay"][first:last, row_first:row_last]
         return values
     if packet.field in {"key", "query"}:
         values = torch.zeros(group_heads, 1, descriptor.shape.cols)
-        values[:, 0, : working_set.state_rows_per_chunk] = operands[packet.field][
-            first:last, row_first:row_last
-        ]
+        values[:, 0, : working_set.state_rows_per_chunk] = operands[packet.field][first:last, row_first:row_last]
         return values
     raise KeyError(packet.field)
 
 
 def _state_seed(spec: MatrixRecurrenceSpec) -> torch.Tensor:
-    generator = torch.Generator().manual_seed(
-        SEED + (0 if spec.kind is RecurrenceKind.MAMBA else 5003)
-    )
+    generator = torch.Generator().manual_seed(SEED + (0 if spec.kind is RecurrenceKind.MAMBA else 5003))
     return _bf16(
         torch.randn(
             spec.heads,
@@ -287,11 +266,7 @@ def _unpack_state_hbm(
         spec.row_elements,
         dtype=torch.float32,
     )
-    packet_values = (
-        working_set.group_heads
-        * working_set.state_rows_per_chunk
-        * spec.row_elements
-    )
+    packet_values = working_set.group_heads * working_set.state_rows_per_chunk * spec.row_elements
     packet_bytes = packet_values * BF16_BYTES
     packet_index = 0
     for group in range(working_set.groups):
@@ -360,8 +335,7 @@ def _assert_close(name: str, actual: torch.Tensor, expected: torch.Tensor) -> di
     if not torch.allclose(actual, expected, atol=1e-2, rtol=1e-2):
         mismatch = int((error > (1e-2 + 1e-2 * expected.abs())).sum())
         raise AssertionError(
-            f"{name}: {mismatch}/{actual.numel()} values mismatch; "
-            f"max_abs={max_abs}, relative_l2={relative_l2}"
+            f"{name}: {mismatch}/{actual.numel()} values mismatch; max_abs={max_abs}, relative_l2={relative_l2}"
         )
     return {"max_abs": max_abs, "relative_l2": relative_l2}
 
@@ -395,9 +369,7 @@ def run_prepared_case(
     working_set = build_recurrence_working_set(spec, layout=layout, point=point)
     expected_shape = (spec.heads, spec.recurrence_rows, spec.row_elements)
     if tuple(initial_state.shape) != expected_shape:
-        raise ValueError(
-            f"initial state shape {tuple(initial_state.shape)} != {expected_shape}"
-        )
+        raise ValueError(f"initial state shape {tuple(initial_state.shape)} != {expected_shape}")
     state = _bf16(initial_state)
     expected_state = state.clone()
     expected_outputs: list[torch.Tensor] = []
@@ -484,9 +456,7 @@ def run_prepared_case(
         for group in range(working_set.groups):
             packet = manifest.packet("output_result", group=group)
             values = _read_bf16(post, packet.hbm_byte_offset, packet.logical_values)
-            actual_groups.append(
-                values.reshape(working_set.group_heads, spec.row_elements)
-            )
+            actual_groups.append(values.reshape(working_set.group_heads, spec.row_elements))
         actual = torch.cat(actual_groups, dim=0)
         output_errors.append(_assert_close(f"token {token} output", actual, expected))
 
@@ -559,10 +529,7 @@ def run_case(
     keep_build: bool = False,
 ) -> dict[str, object]:
     operands = tuple(
-        _mamba_inputs(token)
-        if spec.kind is RecurrenceKind.MAMBA
-        else _kda_inputs(token)
-        for token in range(TOKENS)
+        _mamba_inputs(token) if spec.kind is RecurrenceKind.MAMBA else _kda_inputs(token) for token in range(TOKENS)
     )
     execution = run_prepared_case(
         spec,
@@ -606,14 +573,10 @@ def main() -> None:
     }
     selected = specs.values() if args.model == "both" else (specs[args.model],)
     layouts = (
-        (RecurrenceLayout.FIXED, RecurrenceLayout.AFFINE)
-        if args.layout == "both"
-        else (RecurrenceLayout(args.layout),)
+        (RecurrenceLayout.FIXED, RecurrenceLayout.AFFINE) if args.layout == "both" else (RecurrenceLayout(args.layout),)
     )
     results = [
-        run_case(spec, layout, args.output_dir, keep_build=args.keep_build)
-        for spec in selected
-        for layout in layouts
+        run_case(spec, layout, args.output_dir, keep_build=args.keep_build) for spec in selected for layout in layouts
     ]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "summary.json").write_text(json.dumps(results, indent=2) + "\n")

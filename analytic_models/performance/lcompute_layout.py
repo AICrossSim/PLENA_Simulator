@@ -135,11 +135,7 @@ class LayoutConfig:
             minor_steps = math.ceil(self.minors / geometry.bank_width)
             major_blocks = math.ceil(self.majors / geometry.banks)
             field_group = coord.group * self.fields + coord.field
-            packed_row = (
-                (field_group * major_blocks + coord.major // geometry.banks)
-                * minor_steps
-                + stripe
-            )
+            packed_row = (field_group * major_blocks + coord.major // geometry.banks) * minor_steps + stripe
             row = self.bank_row_base + packed_row * self.pitch(geometry)
         else:
             row = self.bank_row_base + outer * self.pitch(geometry) + stripe // geometry.banks

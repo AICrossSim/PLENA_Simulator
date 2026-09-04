@@ -513,11 +513,7 @@ def test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds() -> N
     case = report["cases"]["prefill_s2048"]
 
     def hbm_read(result: dict, variant: Variant) -> int:
-        return next(
-            record["physical_hbm_read_bytes"]
-            for record in result["records"]
-            if record["variant"] == variant
-        )
+        return next(record["physical_hbm_read_bytes"] for record in result["records"] if record["variant"] == variant)
 
     low = hbm_read(case["bounds"][str(RoutingAssumption.FULL_OVERLAP)], Variant.B_ARLO_POSTINC)
     exact = hbm_read(case["measured"], Variant.B_ARLO_POSTINC)

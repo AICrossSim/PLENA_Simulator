@@ -434,19 +434,14 @@ def _prefill_case(
     # these across (e^-5, 1); the real distribution centres near exp(-2.5), which
     # makes the recurrence strongly contracting -- the reason errors do not
     # compound across chunks.
-    a = torch.exp(
-        shape.gate_lower_bound
-        * torch.sigmoid(torch.randn((generated, key_dim), generator=g))
-    )
+    a = torch.exp(shape.gate_lower_bound * torch.sigmoid(torch.randn((generated, key_dim), generator=g)))
     state0 = draw((value_dim, key_dim), 0.5)
     if uniform_bf16:
         q = q.to(torch.bfloat16).float()
         k = k.to(torch.bfloat16).float()
         a = a.to(torch.bfloat16).float()
     scale = 1.0 / key_dim**0.5
-    out_ref, state_ref = _sequential_chunk(
-        q[:total], k[:total], v[:total], beta[:total], a[:total], state0, scale
-    )
+    out_ref, state_ref = _sequential_chunk(q[:total], k[:total], v[:total], beta[:total], a[:total], state0, scale)
     if handoff:
         handoff_out_ref, handoff_state_ref = _sequential_chunk(
             q[total:], k[total:], v[total:], beta[total:], a[total:], state_ref, scale
@@ -609,9 +604,7 @@ def _prefill_case(
     packed_full = None
     if want == "both":
         if key_dim > mlen or value_dim > mlen:
-            raise SystemExit(
-                "the complete prefill evidence currently requires key_dim/value_dim <= mlen"
-            )
+            raise SystemExit("the complete prefill evidence currently requires key_dim/value_dim <= mlen")
         packed_full = prog.alloc(
             "prefill_full_result",
             total + value_dim,
@@ -688,9 +681,7 @@ def _prefill_case(
             # affine state through the same existing V_FMA_VF view used by the
             # recurrence; this also proves that a non-packet row consumer sees
             # exactly the same physical bytes as the packet path.
-            state_result = prog.alloc(
-                "state_T_row_major", *transpose_shapes["out"], strict=False
-            )
+            state_result = prog.alloc("state_T_row_major", *transpose_shapes["out"], strict=False)
             state_copy_ones = prog.fp_var("state_copy_ones", size=key_dim)
             rows = list(range(key_dim))
             prog.vram_fill_zero(state_result, rows=rows)
@@ -726,9 +717,7 @@ def _prefill_case(
         fp[decay_next_fp.address : decay_next_fp.address + key_dim] = a[total].tolist()
         fp[beta_next_fp.address] = beta[total].item()
         if affine_handoff:
-            fp[
-                state_copy_ones.address : state_copy_ones.address + state_copy_ones.size
-            ] = [1.0] * state_copy_ones.size
+            fp[state_copy_ones.address : state_copy_ones.address + state_copy_ones.size] = [1.0] * state_copy_ones.size
 
     if handoff:
         target, rows, cols = packed_handoff, key_dim + 1, mlen
@@ -895,9 +884,7 @@ def case_state_transpose(args, build_dir, hw):
         ones = prog.fp_var("state_copy_ones", size=key_dim)
         rows = list(range(key_dim))
         prog.vram_fill_zero(result, rows=rows)
-        prog.tile_row_fma_fp_sweep(
-            result, out_v, ones, dst_rows=rows, src_rows=rows
-        )
+        prog.tile_row_fma_fp_sweep(result, out_v, ones, dst_rows=rows, src_rows=rows)
         fp_preload.extend([0.0] * max(0, ones.address + ones.size - len(fp_preload)))
         fp_preload[ones.address : ones.address + ones.size] = [1.0] * ones.size
     _write_comparison(
@@ -954,9 +941,7 @@ def case_affine_packet_state(args, build_dir, hw):
     want = kda_prefill_state_transpose_shapes(shape, mlen)
     ins = {
         "S": state,
-        "ID": torch.tensor(
-            KdaPrefillBuffers.state_transpose_identity_values(mlen)
-        ),
+        "ID": torch.tensor(KdaPrefillBuffers.state_transpose_identity_values(mlen)),
     }
     v_ = {name: prog.input(name, shape=tuple(value.shape)) for name, value in ins.items()}
     state_v = prog.load_batch(v_["S"], name="state")
@@ -986,9 +971,7 @@ def case_affine_packet_state(args, build_dir, hw):
     result = prog.alloc("row_major_result", mlen, mlen, strict=False)
     ones = prog.fp_var("copy_ones", size=mlen)
     prog.vram_fill_zero(result, rows=rows)
-    prog.tile_row_fma_fp_sweep(
-        result, affine_state, ones, dst_rows=rows, src_rows=rows
-    )
+    prog.tile_row_fma_fp_sweep(result, affine_state, ones, dst_rows=rows, src_rows=rows)
     tail = max(scale_fp.address + scale_fp.size, ones.address + ones.size)
     fp.extend([0.0] * max(0, tail - len(fp)))
     fp[scale_fp.address : scale_fp.address + scale_fp.size] = scales.tolist()
@@ -1348,16 +1331,10 @@ def case_recurrent_batch(args, build_dir, hw):
     scale = torch.tensor(1.0 / shape.key_dim**0.5, dtype=torch.float16).float().item()
     cases = []
     for request in range(batch):
-        state = _mxfp8_exact(
-            (shape.num_heads, shape.key_dim, shape.value_dim), g, hi=0.25
-        )
+        state = _mxfp8_exact((shape.num_heads, shape.key_dim, shape.value_dim), g, hi=0.25)
         v = _mxfp8_exact((shape.num_heads, shape.value_dim), g, hi=0.5)
-        q_hat = torch.stack(
-            [exact_unit_vector(head, request, phase=0) for head in range(shape.num_heads)]
-        )
-        k_hat = torch.stack(
-            [exact_unit_vector(head, request, phase=1) for head in range(shape.num_heads)]
-        )
+        q_hat = torch.stack([exact_unit_vector(head, request, phase=0) for head in range(shape.num_heads)])
+        k_hat = torch.stack([exact_unit_vector(head, request, phase=1) for head in range(shape.num_heads)])
         decay = torch.empty(shape.num_heads, shape.key_dim)
         for head in range(shape.num_heads):
             decay[head] = 0.5 + ((torch.arange(key_dim) + head + request) % 3).float() * 0.125
@@ -1402,9 +1379,7 @@ def case_recurrent_batch(args, build_dir, hw):
                 lanes = slice(block * mlen, (block + 1) * mlen)
                 v_tensor[kda_vector_row(shape, mlen, head, block)] = case["v"][head, lanes]
                 for key in range(shape.key_dim):
-                    state_tensor[kda_state_row(shape, mlen, head, block, key)] = case["state"][
-                        head, key, lanes
-                    ]
+                    state_tensor[kda_state_row(shape, mlen, head, block, key)] = case["state"][head, key, lanes]
             for key_block in range(key_blocks):
                 lanes = slice(key_block * mlen, (key_block + 1) * mlen)
                 row = kda_key_row(shape, mlen, head, key_block)
@@ -1465,9 +1440,7 @@ def case_recurrent_batch(args, build_dir, hw):
                 fp_head_stride=0,
             )
 
-    active_rows = batch * (
-        kda_vector_rows(shape, mlen) + kda_state_rows(shape, mlen)
-    )
+    active_rows = batch * (kda_vector_rows(shape, mlen) + kda_state_rows(shape, mlen))
     packed = prog.alloc("batch_result", up(active_rows), mlen)
     golden_rows = []
     dst = 0
@@ -1928,9 +1901,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    build_dir = args.build_dir or (
-        Path(__file__).parent / "build" / f"kda_{args.case}"
-    )
+    build_dir = args.build_dir or (Path(__file__).parent / "build" / f"kda_{args.case}")
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)

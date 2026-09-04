@@ -205,8 +205,7 @@ def load_pinned_nemotron_profile(path: Path = PINNED_NEMOTRON_ROUTING) -> Routin
             index=0,
             token_count=shape["context_tokens"],
             active_experts_by_layer=tuple(
-                (layer_id, tuple(sorted(set(experts))))
-                for layer_id, experts in zip(layer_ids, prefill, strict=True)
+                (layer_id, tuple(sorted(set(experts)))) for layer_id, experts in zip(layer_ids, prefill, strict=True)
             ),
         )
     ]
@@ -219,8 +218,7 @@ def load_pinned_nemotron_profile(path: Path = PINNED_NEMOTRON_ROUTING) -> Routin
                 index=index,
                 token_count=1,
                 active_experts_by_layer=tuple(
-                    (layer_id, tuple(sorted(set(experts))))
-                    for layer_id, experts in zip(layer_ids, rows, strict=True)
+                    (layer_id, tuple(sorted(set(experts)))) for layer_id, experts in zip(layer_ids, rows, strict=True)
                 ),
             )
         )

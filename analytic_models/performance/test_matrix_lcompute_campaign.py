@@ -94,11 +94,7 @@ def _compiler_fixture() -> dict:
                         "packet_reads": 1_024,
                         "packet_writes": 256,
                     },
-                    "capacity_points": {
-                        str(1024 * 1024): {
-                            "affine": {"metrics": {"l_tile_exec_count": 8}}
-                        }
-                    },
+                    "capacity_points": {str(1024 * 1024): {"affine": {"metrics": {"l_tile_exec_count": 8}}}},
                 },
                 "kimi_k3_kda": {
                     "metrics": {
@@ -106,11 +102,7 @@ def _compiler_fixture() -> dict:
                         "packet_reads": 4_608,
                         "packet_writes": 1_536,
                     },
-                    "capacity_points": {
-                        str(1024 * 1024): {
-                            "affine": {"metrics": {"l_tile_exec_count": 30}}
-                        }
-                    },
+                    "capacity_points": {str(1024 * 1024): {"affine": {"metrics": {"l_tile_exec_count": 30}}}},
                 },
             }
         },
@@ -183,12 +175,8 @@ def test_fixed_and_affine_packet_controls_have_explicit_freedoms() -> None:
         "group_phase",
         "chunking",
     ]
-    assert "row_skew" in evidence["degrees_of_freedom"]["D"][
-        "compiler_controls"
-    ]
-    assert "tile_skew" in evidence["degrees_of_freedom"]["D"][
-        "compiler_controls"
-    ]
+    assert "row_skew" in evidence["degrees_of_freedom"]["D"]["compiler_controls"]
+    assert "tile_skew" in evidence["degrees_of_freedom"]["D"]["compiler_controls"]
     assert evidence["degrees_of_freedom"]["D_prime"]["compact_single_descriptor"] is False
     for model in ("nemotron3", "kimi_k3"):
         control = evidence["fixed_phased_bank_control"][model]
@@ -198,9 +186,7 @@ def test_fixed_and_affine_packet_controls_have_explicit_freedoms() -> None:
 
 def test_real_lowering_service_replays_fixed_and_affine_paths() -> None:
     physical = _real_physical_evidence()
-    nemotron = physical["nemotron3"]["real_lowering_service"][
-        StateMode.PLENA_BF16
-    ]
+    nemotron = physical["nemotron3"]["real_lowering_service"][StateMode.PLENA_BF16]
     kimi = physical["kimi_k3"]["real_lowering_service"][StateMode.PLENA_BF16]
 
     # Fixed diagonal cannot separate the adjacent row/word phases in Mamba's
@@ -229,22 +215,18 @@ def test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls() -
             )
             for variant in (MatrixVariant.C_FIXED, MatrixVariant.D_AFFINE)
         }
-        assert metrics[MatrixVariant.C_FIXED]["logical_state_values"] == metrics[
-            MatrixVariant.D_AFFINE
-        ]["logical_state_values"]
-        assert metrics[MatrixVariant.C_FIXED]["arithmetic_element_ops"] == metrics[
-            MatrixVariant.D_AFFINE
-        ]["arithmetic_element_ops"]
-        assert metrics[MatrixVariant.C_FIXED]["issued"] > metrics[
-            MatrixVariant.D_AFFINE
-        ]["issued"]
-        assert metrics[MatrixVariant.C_FIXED]["cycles"] > metrics[
-            MatrixVariant.D_AFFINE
-        ]["cycles"]
+        assert (
+            metrics[MatrixVariant.C_FIXED]["logical_state_values"]
+            == metrics[MatrixVariant.D_AFFINE]["logical_state_values"]
+        )
+        assert (
+            metrics[MatrixVariant.C_FIXED]["arithmetic_element_ops"]
+            == metrics[MatrixVariant.D_AFFINE]["arithmetic_element_ops"]
+        )
+        assert metrics[MatrixVariant.C_FIXED]["issued"] > metrics[MatrixVariant.D_AFFINE]["issued"]
+        assert metrics[MatrixVariant.C_FIXED]["cycles"] > metrics[MatrixVariant.D_AFFINE]["cycles"]
         assert metrics[MatrixVariant.C_FIXED]["stall"] >= 0
-        assert metrics[MatrixVariant.D_AFFINE]["stall"] <= metrics[
-            MatrixVariant.C_FIXED
-        ]["stall"]
+        assert metrics[MatrixVariant.D_AFFINE]["stall"] <= metrics[MatrixVariant.C_FIXED]["stall"]
         assert metrics[MatrixVariant.D_AFFINE]["stall"] == 0
 
 
@@ -269,34 +251,24 @@ def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identi
             physical=physical,
         )
         assert result["ordinary_attention_moe_cycles_identical"] is True
-        assert result["compiler_l_tile_schedule"][
-            "all_recurrent_layers_emit_l_tile"
-        ] is True
-        assert result["compiler_l_tile_schedule"]["recurrent_layer_count"] == (
-            23 if model == "nemotron3" else 69
-        )
+        assert result["compiler_l_tile_schedule"]["all_recurrent_layers_emit_l_tile"] is True
+        assert result["compiler_l_tile_schedule"]["recurrent_layer_count"] == (23 if model == "nemotron3" else 69)
         for layer_type, count in expected.items():
             assert result["layer_counts"][layer_type] == count
         by_variant = {record["variant"]: record for record in result["records"]}
-        coefficient_prep = {
-            record["recurrence_coefficient_prep_cycles"]
-            for record in result["records"]
-        }
+        coefficient_prep = {record["recurrence_coefficient_prep_cycles"] for record in result["records"]}
         assert coefficient_prep == ({0} if model == "nemotron3" else {4_485})
-        assert {
-            record["recurrence_coefficient_prep_elementwise_ops"]
-            for record in result["records"]
-        } == ({0} if model == "nemotron3" else {5_107_104})
-        assert {
-            record["recurrence_coefficient_prep_exp_ops"]
-            for record in result["records"]
-        } == ({0} if model == "nemotron3" else {1_702_368})
+        assert {record["recurrence_coefficient_prep_elementwise_ops"] for record in result["records"]} == (
+            {0} if model == "nemotron3" else {5_107_104}
+        )
+        assert {record["recurrence_coefficient_prep_exp_ops"] for record in result["records"]} == (
+            {0} if model == "nemotron3" else {1_702_368}
+        )
         ordinary_vector_cycles = {
             record["vector_cycles"]
             - (
                 record["recurrence_cycles"]
-                if record["variant"]
-                in {MatrixVariant.A_ORIGINAL, MatrixVariant.B_ARLO}
+                if record["variant"] in {MatrixVariant.A_ORIGINAL, MatrixVariant.B_ARLO}
                 else 0
             )
             for record in result["records"]
@@ -304,12 +276,8 @@ def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identi
         assert len(ordinary_vector_cycles) == 1
         assert by_variant[MatrixVariant.D_AFFINE]["bank_stall_cycles"] == 0
         assert by_variant[MatrixVariant.D_AFFINE]["speedup_vs_C_fixed"] >= 1
-        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["cycles"] == by_variant[
-            MatrixVariant.D_AFFINE
-        ]["cycles"]
-        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP][
-            "speedup_vs_D_affine"
-        ] == 1
+        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["cycles"] == by_variant[MatrixVariant.D_AFFINE]["cycles"]
+        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["speedup_vs_D_affine"] == 1
 
 
 def test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop() -> None:
@@ -389,32 +357,19 @@ def test_resource_contract_has_no_cache_private_sram_or_new_macs() -> None:
 
     by_variant = MatrixHardwarePoint().resource_proxies_by_variant()
     assert all(record["fixed_diagonal_address_adders_existing"] == 64 for record in by_variant.values())
-    assert all(
-        record["incremental_fixed_diagonal_address_adders"] == 0
-        for record in by_variant.values()
-    )
-    assert by_variant[MatrixVariant.C_FIXED][
-        "configuration_register_bits"
-    ] == 256
+    assert all(record["incremental_fixed_diagonal_address_adders"] == 0 for record in by_variant.values())
+    assert by_variant[MatrixVariant.C_FIXED]["configuration_register_bits"] == 256
     assert by_variant[MatrixVariant.A_ORIGINAL]["architectural_variant"] is False
     assert by_variant[MatrixVariant.B_ARLO]["architectural_variant"] is False
     assert by_variant[MatrixVariant.C_FIXED]["architectural_variant"] is True
-    assert by_variant[MatrixVariant.C_FIXED][
-        "compiler_programmable_tile_pitch"
-    ] is True
+    assert by_variant[MatrixVariant.C_FIXED]["compiler_programmable_tile_pitch"] is True
     assert by_variant[MatrixVariant.D_AFFINE]["configuration_register_bits"] == 256
     assert by_variant[MatrixVariant.D_AFFINE]["architectural_variant"] is True
-    assert by_variant[MatrixVariant.D_AFFINE][
-        "compiler_programmable_alpha"
-    ] is True
+    assert by_variant[MatrixVariant.D_AFFINE]["compiler_programmable_alpha"] is True
     assert by_variant[MatrixVariant.D_AFFINE]["layout_added_sram_payload_bytes"] == 0
     assert by_variant[MatrixVariant.D_AFFINE]["additional_operand_staging_bytes"] == 0
-    assert by_variant[MatrixVariant.D_AFFINE][
-        "existing_vector_operand_buffer_reused"
-    ] is True
-    assert by_variant[MatrixVariant.E_AFFINE_OVERLAP][
-        "overlap_requires_runtime_scheduler"
-    ] is False
+    assert by_variant[MatrixVariant.D_AFFINE]["existing_vector_operand_buffer_reused"] is True
+    assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["overlap_requires_runtime_scheduler"] is False
     assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["architectural_variant"] is True
 
 
@@ -426,10 +381,7 @@ def test_one_mib_point_cannot_claim_unemitted_static_overlap() -> None:
     assert feasibility["variant_e_credit_allowed"] is False
     assert feasibility["models"]["nemotron3"]["minimum_additional_bytes"] >= 0
     assert feasibility["models"]["kimi_k3"]["minimum_additional_bytes"] >= 0
-    assert all(
-        record["fits_same_capacity"] is False
-        for record in feasibility["models"].values()
-    )
+    assert all(record["fits_same_capacity"] is False for record in feasibility["models"].values())
 
 
 def test_dse_packet_sweeps_move_values_instead_of_only_applying_a_formula() -> None:
@@ -480,10 +432,6 @@ def test_ordinary_attention_and_moe_matrix_lines_do_not_regress() -> None:
 
 
 def test_evidence_levels_do_not_overclaim_full_real_weight_execution() -> None:
-    assert "Four-token official recurrence geometry" in EVIDENCE_LEVELS[
-        "multi_token_recurrence"
-    ]
+    assert "Four-token official recurrence geometry" in EVIDENCE_LEVELS["multi_token_recurrence"]
     assert "symbolic PLENA weights" in EVIDENCE_LEVELS["full_model_timeline"]
-    assert "No real-weight first-to-last-layer Rust execution" in EVIDENCE_LEVELS[
-        "not_demonstrated"
-    ]
+    assert "No real-weight first-to-last-layer Rust execution" in EVIDENCE_LEVELS["not_demonstrated"]

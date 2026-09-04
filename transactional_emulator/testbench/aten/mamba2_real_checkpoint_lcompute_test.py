@@ -27,9 +27,7 @@ import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-COMPILER_ROOT = Path(
-    os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")
-).resolve()
+COMPILER_ROOT = Path(os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")).resolve()
 for path in (REPO_ROOT, COMPILER_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
@@ -59,9 +57,7 @@ DEFAULT_CHECKPOINT = (
 
 
 def _checkpoint_path(explicit: Path | None = None) -> Path:
-    candidate = explicit or Path(
-        os.environ.get("PLENA_MAMBA2_130M_CHECKPOINT", DEFAULT_CHECKPOINT)
-    )
+    candidate = explicit or Path(os.environ.get("PLENA_MAMBA2_130M_CHECKPOINT", DEFAULT_CHECKPOINT))
     required = (candidate / "config.json", candidate / "model.safetensors")
     if not all(path.exists() for path in required):
         raise FileNotFoundError(
@@ -227,15 +223,9 @@ def run_real_checkpoint(
         prefill = model(prompt_tensor, use_cache=True)
     cache = prefill.cache_params
     token = int(prefill.logits[0, -1].argmax())
-    actual_states = [
-        _bf16(cache.ssm_states[index][0]).permute(0, 2, 1).contiguous()
-        for index in range(layer_count)
-    ]
+    actual_states = [_bf16(cache.ssm_states[index][0]).permute(0, 2, 1).contiguous() for index in range(layer_count)]
     reference_states = [state.clone() for state in actual_states]
-    actual_conv = [
-        _bf16(cache.conv_states[index][0]).contiguous()
-        for index in range(layer_count)
-    ]
+    actual_conv = [_bf16(cache.conv_states[index][0]).contiguous() for index in range(layer_count)]
     reference_conv = [state.clone() for state in actual_conv]
 
     # This independent Transformers forward checks the host-side split order,
@@ -245,12 +235,16 @@ def run_real_checkpoint(
     official_logits = None
     if layer_count == config.num_hidden_layers:
         with torch.inference_mode():
-            official_logits = model(
-                torch.tensor([[token]], dtype=torch.long),
-                cache_params=cache,
-                use_cache=True,
-                cache_position=torch.tensor([len(prompt)]),
-            ).logits[0, -1].float()
+            official_logits = (
+                model(
+                    torch.tensor([[token]], dtype=torch.long),
+                    cache_params=cache,
+                    use_cache=True,
+                    cache_position=torch.tensor([len(prompt)]),
+                )
+                .logits[0, -1]
+                .float()
+            )
 
     embedding = _bf16(model.backbone.embeddings.weight[token])
     actual_hidden = embedding.clone()
@@ -357,9 +351,7 @@ def run_real_checkpoint(
         official_top1_equal = bool(actual_logits.argmax() == official_logits.argmax())
         official_top5_equal = _topk_equal(actual_logits, official_logits, 5)
     if not torch.allclose(actual_logits, reference_logits, atol=2e-2, rtol=2e-2):
-        raise AssertionError(
-            f"24-layer BF16 logits diverged: max_abs={logit_error:.6g}"
-        )
+        raise AssertionError(f"24-layer BF16 logits diverged: max_abs={logit_error:.6g}")
 
     summary: dict[str, object] = {
         "schema_version": 1,
@@ -396,8 +388,7 @@ def run_real_checkpoint(
             "in an explicit host BF16 model"
         ),
         "not_claimed": (
-            "the complete checkpoint does not yet execute every non-recurrent "
-            "operation inside the Rust emulator"
+            "the complete checkpoint does not yet execute every non-recurrent operation inside the Rust emulator"
         ),
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

@@ -108,6 +108,7 @@ def test_only_the_group_phase_fixes_an_even_stride(stride):
     stride never takes `row mod banks` through all its values. No skew reaches
     what is not there; the high-row-bit term does."""
     from .matrix_sram_layout import stride_service
+
     plain = stride_service(MatrixView(64, 64, BANKS, skew=1), stride=stride)
     grouped = stride_service(MatrixView(64, 64, BANKS, skew=1, grp=1), stride=stride)
     assert plain["cycles"] > grouped["cycles"]
@@ -120,6 +121,7 @@ def test_the_group_phase_costs_on_odd_strides(stride):
     to be a per-tile compiler choice rather than a hardware constant: neither
     setting dominates, and each is several times worse on the other's strides."""
     from .matrix_sram_layout import stride_service
+
     plain = stride_service(MatrixView(64, 64, BANKS, skew=1), stride=stride)
     grouped = stride_service(MatrixView(64, 64, BANKS, skew=1, grp=1), stride=stride)
     assert grouped["cycles"] > plain["cycles"]
@@ -143,11 +145,10 @@ def test_a_better_fixed_map_beats_the_hardware_on_every_stride():
     justified.
     """
     from .matrix_sram_layout import stride_service
+
     strides = [1, 2, 3, 4, 5, 8, 16]
-    hardwired = {s: stride_service(MatrixView(64, 64, BANKS, skew=1, grp=0),
-                                   stride=s)["cycles"] for s in strides}
-    better = {s: stride_service(MatrixView(64, 64, BANKS, skew=1, grp=5),
-                                stride=s)["cycles"] for s in strides}
+    hardwired = {s: stride_service(MatrixView(64, 64, BANKS, skew=1, grp=0), stride=s)["cycles"] for s in strides}
+    better = {s: stride_service(MatrixView(64, 64, BANKS, skew=1, grp=5), stride=s)["cycles"] for s in strides}
     for s in strides:
         assert better[s] <= hardwired[s], f"stride {s} regressed"
     assert better[2] * 2 == hardwired[2]
@@ -166,9 +167,9 @@ def test_a_better_fixed_map_beats_the_hardware_on_every_stride():
 PAPER_BANKS = 64
 
 
-def _co_access_cost(heads: int, cells_per_head: int, *, per_tile: bool,
-                    skew: int = 1, grp: int = 5) -> int:
+def _co_access_cost(heads: int, cells_per_head: int, *, per_tile: bool, skew: int = 1, grp: int = 5) -> int:
     from collections import Counter
+
     counts: Counter[int] = Counter()
     for h in range(heads):
         rot = (h * cells_per_head) % PAPER_BANKS if per_tile else 0
@@ -200,9 +201,7 @@ def test_no_fixed_constant_repairs_the_cross_tile_gather():
     compiler knows which tiles a kernel reads together.
     """
     best = min(
-        _co_access_cost(16, 4, per_tile=False, skew=k, grp=g)
-        for k in range(PAPER_BANKS)
-        for g in range(PAPER_BANKS)
+        _co_access_cost(16, 4, per_tile=False, skew=k, grp=g) for k in range(PAPER_BANKS) for g in range(PAPER_BANKS)
     )
     assert best == 16
     assert _co_access_cost(16, 4, per_tile=True) == 1

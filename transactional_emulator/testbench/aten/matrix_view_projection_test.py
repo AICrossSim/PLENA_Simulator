@@ -34,10 +34,7 @@ for _compiler_root in _compiler_candidates:
         _ACTIVE_COMPILER_ROOT = _compiler_root
         break
 if _ACTIVE_COMPILER_ROOT is None:
-    raise RuntimeError(
-        "A Compiler checkout with Matrix-view support was not found; set "
-        "PLENA_COMPILER_ROOT"
-    )
+    raise RuntimeError("A Compiler checkout with Matrix-view support was not found; set PLENA_COMPILER_ROOT")
 
 from compiler.asm_templates._imm import load_large_int  # noqa: E402
 from compiler.aten.plena import PlenaCompiler  # noqa: E402
@@ -171,9 +168,7 @@ def main() -> None:
         [0.0] * 10,
         build_dir=str(build_dir),
     )
-    hbm_addrs = {
-        name: program._compiler.get_hbm_layout(name).hbm_base_addr for name in inputs
-    }
+    hbm_addrs = {name: program._compiler.get_hbm_layout(name).hbm_base_addr for name in inputs}
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
@@ -222,15 +217,9 @@ def main() -> None:
         weight_read_packets = projection_fragments * K
         producer_write_packets = projection_fragments
         consumer_read_packets = 1
-        expected_packets = (
-            weight_read_packets + producer_write_packets + consumer_read_packets
-        )
+        expected_packets = weight_read_packets + producer_write_packets + consumer_read_packets
         expected_values = weight_read_packets * MLEN + 2 * N
-        expected_bank_words = (
-            weight_read_packets * (MLEN // BLEN)
-            + producer_write_packets
-            + N // BLEN
-        )
+        expected_bank_words = weight_read_packets * (MLEN // BLEN) + producer_write_packets + N // BLEN
         assert counters == {
             # The physical counter includes ordinary M_MM weight-row reads,
             # direct affine accumulator writes, and the restored consumer read.
@@ -241,9 +230,7 @@ def main() -> None:
             "ideal_cycles": expected_packets,
             "bank_stall_cycles": 0,
         }
-        (build_dir / "connected_result.json").write_text(
-            json.dumps(metrics, indent=2, sort_keys=True)
-        )
+        (build_dir / "connected_result.json").write_text(json.dumps(metrics, indent=2, sort_keys=True))
     finally:
         for dump_path in dump_paths:
             dump_path.unlink(missing_ok=True)

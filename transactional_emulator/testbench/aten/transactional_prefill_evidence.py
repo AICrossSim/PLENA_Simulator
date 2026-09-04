@@ -77,10 +77,7 @@ def _run_case(
             stderr=subprocess.STDOUT,
         )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"{name} transactional prefill failed with exit {result.returncode}:\n"
-            f"{_tail(log_path)}"
-        )
+        raise RuntimeError(f"{name} transactional prefill failed with exit {result.returncode}:\n{_tail(log_path)}")
 
     stats_path = build_dir / "rust_emulator_run_stats.json"
     stats = json.loads(stats_path.read_text())
@@ -123,8 +120,7 @@ def run_evidence(*, compiler_root: Path, output: Path) -> dict[str, object]:
         cases = [
             _run_case(
                 name="nemotron_mamba2_s128",
-                script=REPO_ROOT
-                / "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+                script=REPO_ROOT / "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
                 arguments=("--case", "prefill_s128_full"),
                 shape={
                     "batch": 1,
@@ -139,8 +135,7 @@ def run_evidence(*, compiler_root: Path, output: Path) -> dict[str, object]:
             ),
             _run_case(
                 name="kimi_kda_s128",
-                script=REPO_ROOT
-                / "transactional_emulator/testbench/kda/kda_stage_test.py",
+                script=REPO_ROOT / "transactional_emulator/testbench/kda/kda_stage_test.py",
                 arguments=("--case", "prefill_s128_full", "--chunk", "16"),
                 shape={
                     "batch": 1,
@@ -158,8 +153,7 @@ def run_evidence(*, compiler_root: Path, output: Path) -> dict[str, object]:
     summary: dict[str, object] = {
         "schema_version": 1,
         "evidence": (
-            "Compiler assembly -> assembler -> Rust transactional emulator -> "
-            "all 128 outputs and final recurrent state"
+            "Compiler assembly -> assembler -> Rust transactional emulator -> all 128 outputs and final recurrent state"
         ),
         "cases": cases,
         "claim_boundary": (

@@ -600,15 +600,11 @@ def case_prefill_s128_full(args, build_dir, hw):
         end = start + mlen
         x_chunk = x[0, start:end, 0]
         inputs[f"X{chunk}"] = x_chunk
-        inputs[f"XDT{chunk}"] = (x_chunk * dt[0, start:end, 0, None]).to(
-            torch.bfloat16
-        ).float()
+        inputs[f"XDT{chunk}"] = (x_chunk * dt[0, start:end, 0, None]).to(torch.bfloat16).float()
         inputs[f"B{chunk}"] = b[0, start:end, 0]
         inputs[f"BT{chunk}"] = b[0, start:end, 0].T.contiguous()
         inputs[f"C{chunk}"] = c[0, start:end, 0]
-        inputs[f"AT{chunk}"] = (
-            dt[0, start:end].T * a[:, None]
-        ).to(torch.bfloat16).float().contiguous()
+        inputs[f"AT{chunk}"] = (dt[0, start:end].T * a[:, None]).to(torch.bfloat16).float().contiguous()
 
     staged = {
         name: prog.input(
@@ -781,17 +777,11 @@ def _prefill_decode_handoff(args, build_dir, hw, *, chunks: int):
     )
     g = torch.Generator().manual_seed(args.seed)
     state0 = _mxfp8_exact((mlen, mlen), g, hi=0.125)
-    b_t_chunks = [
-        _mxfp8_exact((mlen, mlen), g, hi=0.125) for _ in range(chunks)
-    ]
-    x_d_chunks = [
-        _mxfp8_exact((mlen, mlen), g, hi=0.125) for _ in range(chunks)
-    ]
+    b_t_chunks = [_mxfp8_exact((mlen, mlen), g, hi=0.125) for _ in range(chunks)]
+    x_d_chunks = [_mxfp8_exact((mlen, mlen), g, hi=0.125) for _ in range(chunks)]
     chunk_decays = [0.5 + 0.125 * (index % 2) for index in range(chunks)]
     state_after_prefill = state0
-    for chunk_decay, b_t, x_d in zip(
-        chunk_decays, b_t_chunks, x_d_chunks, strict=True
-    ):
+    for chunk_decay, b_t, x_d in zip(chunk_decays, b_t_chunks, x_d_chunks, strict=True):
         state_after_prefill = chunk_decay * state_after_prefill + b_t @ x_d
 
     x = _mxfp8_exact((1, mlen), g, hi=0.125)
@@ -915,13 +905,8 @@ def _prefill_decode_handoff(args, build_dir, hw, *, chunks: int):
     fp[d_fp.address] = d.item()
     values = prog.mamba_fp_constant_values(shape)
     fp[consts.zero.address : consts.zero.address + len(values)] = values
-    fp.extend(
-        [0.0]
-        * max(0, state_copy_ones.address + state_copy_ones.size - len(fp))
-    )
-    fp[
-        state_copy_ones.address : state_copy_ones.address + state_copy_ones.size
-    ] = [1.0] * state_copy_ones.size
+    fp.extend([0.0] * max(0, state_copy_ones.address + state_copy_ones.size - len(fp)))
+    fp[state_copy_ones.address : state_copy_ones.address + state_copy_ones.size] = [1.0] * state_copy_ones.size
 
     code = prog.compile()
     if "L_CFG" not in code:
@@ -958,9 +943,7 @@ def case_prefill_s128_decode_handoff(args, build_dir, hw):
     """Two 64-token chunks, then one recurrent decode token."""
 
     if args.mlen != 64:
-        raise SystemExit(
-            f"this transactional S128 case requires mlen=64, got {args.mlen}"
-        )
+        raise SystemExit(f"this transactional S128 case requires mlen=64, got {args.mlen}")
     _prefill_decode_handoff(args, build_dir, hw, chunks=2)
 
 
@@ -992,9 +975,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    build_dir = args.build_dir or (
-        Path(__file__).parent / "build" / f"mamba2_{args.case}"
-    )
+    build_dir = args.build_dir or (Path(__file__).parent / "build" / f"mamba2_{args.case}")
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)

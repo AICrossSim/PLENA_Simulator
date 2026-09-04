@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ TEST_CONTRACT = AgenticCampaignContract(
     benchmark_sample_counts=(("bfcl_v3", 2),),
     batch_sizes=(1, 2),
     moe_layer_ids=(1, 3),
-    expert_count=4,
+    expert_count=8,
     top_k=2,
     decode_steps=2,
     measurements=2,
@@ -120,6 +121,7 @@ def _refresh_checksums(root: Path) -> None:
         "routing_raw.jsonl",
         "token_traces.jsonl",
         "token_traces_timing.jsonl",
+        "campaign_summary.json",
     )
     lines = []
     for name in names:
@@ -206,12 +208,12 @@ def _campaign_fixture(root: Path) -> Path:
 
     route_patterns = {
         "bfcl_v3:a": {
-            0: {1: [0, 1], 3: [1, 2]},
-            1: {1: [0, 2], 3: [2, 3]},
+            0: {1: [0, 1], 3: [2, 3]},
+            1: {1: [0, 2], 3: [4, 5]},
         },
         "bfcl_v3:b": {
-            0: {1: [2, 3], 3: [0, 3]},
-            1: {1: [1, 3], 3: [0, 1]},
+            0: {1: [1, 2], 3: [3, 4]},
+            1: {1: [0, 1], 3: [5, 6]},
         },
     }
     events = []
@@ -225,7 +227,31 @@ def _campaign_fixture(root: Path) -> Path:
     _write_jsonl(root / "routing_raw.jsonl", events)
     _write_json(
         root / "campaign_summary.json",
-        {"routing": {"timing_vs_routing_identical_samples": 0}},
+        {
+            "routing": {"timing_vs_routing_identical_samples": 0},
+            "timing": {
+                "aggregate": {
+                    "all": {
+                        f"batch_b{batch_size}": {
+                            "request_measurements": 4,
+                            "trial_measurements": 4 // batch_size,
+                            "ttft_ms_median": 10.0,
+                            "ttft_ms_p95": 11.0,
+                            "itl_ms_median": 2.5,
+                            "itl_ms_p95": 3.0,
+                            "e2e_ms_median": 20.0,
+                            "e2e_ms_p95": 21.0,
+                            "throughput_tokens_s_median": 100.0 * batch_size,
+                            "throughput_tokens_s_p95": 110.0 * batch_size,
+                            "batch_joules_median": 4.0 * batch_size,
+                            "batch_joules_p95": 5.0 * batch_size,
+                            "peak_memory_bytes": 1024,
+                        }
+                        for batch_size in TEST_CONTRACT.batch_sizes
+                    }
+                }
+            },
+        },
     )
     _refresh_checksums(root)
     return root
@@ -237,6 +263,17 @@ def test_agentic_campaign_rebuilds_gpu_batch_membership_and_route_union(tmp_path
         contract=TEST_CONTRACT,
     )
     assert campaign.timing_and_routing_tokens_identical_samples == 0
+    assert campaign.timing_and_routing_replay_window_identical_samples == 0
+    assert campaign.routing_counters.to_dict() == {
+        "raw_events": 12,
+        "conservation_validated_events": 12,
+        "prefill_events": 4,
+        "decode_events": 8,
+        "fully_validated_decode_events": 8,
+        "used_decode_events": 8,
+        "ignored_decode_events": 0,
+    }
+    assert [row.trial_measurements for row in campaign.gpu_global_aggregates] == [4, 2]
     assert campaign.to_summary()["batch_group_counts"] == {
         "bfcl_v3_b1": 2,
         "bfcl_v3_b2": 1,
@@ -251,20 +288,31 @@ def test_agentic_campaign_rebuilds_gpu_batch_membership_and_route_union(tmp_path
     assert profile.batch_size == 2
     assert profile.context_length == 3
     assert profile.step("decode", 0).active_experts_by_layer == (
-        (1, (0, 1, 2, 3)),
-        (3, (0, 1, 2, 3)),
+        (1, (0, 1, 2)),
+        (3, (2, 3, 4)),
     )
     assert profile.step("decode", 1).active_experts_by_layer == (
-        (1, (0, 1, 2, 3)),
-        (3, (0, 1, 2, 3)),
+        (1, (0, 1, 2)),
+        (3, (4, 5, 6)),
     )
+
+
+def test_agentic_campaign_counts_fully_validated_events_outside_the_replay_window(tmp_path: Path) -> None:
+    campaign = load_agentic_campaign(
+        _campaign_fixture(tmp_path),
+        contract=replace(TEST_CONTRACT, decode_steps=1),
+    )
+    assert campaign.routing_counters.fully_validated_decode_events == 8
+    assert campaign.routing_counters.used_decode_events == 4
+    assert campaign.routing_counters.ignored_decode_events == 4
+    assert len(campaign.decode_routes["bfcl_v3:a"]) == 1
 
 
 def test_agentic_campaign_rejects_route_counts_that_disagree_with_ids(tmp_path: Path) -> None:
     root = _campaign_fixture(tmp_path)
     rows = [json.loads(line) for line in (root / "routing_raw.jsonl").read_text().splitlines()]
     decode = next(row for row in rows if row["phase"] == "decode")
-    decode["expert_counts_128"] = [2, 0, 0, 0]
+    decode["expert_counts_128"] = [2, 0, 0, 0, 0, 0, 0, 0]
     _write_jsonl(root / "routing_raw.jsonl", rows)
     _refresh_checksums(root)
     with pytest.raises(AgenticCampaignFormatError, match="expert counts disagree"):
@@ -296,4 +344,14 @@ def test_agentic_campaign_rejects_a_file_changed_after_manifest_hashing(tmp_path
     with (root / "latency_raw.jsonl").open("a") as destination:
         destination.write("{}\n")
     with pytest.raises(AgenticCampaignFormatError, match=r"checksum mismatch for latency_raw\.jsonl"):
+        load_agentic_campaign(root, contract=TEST_CONTRACT)
+
+
+def test_agentic_campaign_rejects_inconsistent_global_gpu_aggregate(tmp_path: Path) -> None:
+    root = _campaign_fixture(tmp_path)
+    summary = json.loads((root / "campaign_summary.json").read_text())
+    summary["timing"]["aggregate"]["all"]["batch_b2"]["trial_measurements"] = 99
+    _write_json(root / "campaign_summary.json", summary)
+    _refresh_checksums(root)
+    with pytest.raises(AgenticCampaignFormatError, match="global B2 trial count"):
         load_agentic_campaign(root, contract=TEST_CONTRACT)
