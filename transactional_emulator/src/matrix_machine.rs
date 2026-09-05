@@ -15,9 +15,11 @@
 use std::sync::Arc;
 
 use quantize::QuantTensor;
+use sram::matrix::MatrixAccessAxis;
 use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
+use crate::accelerator::MatrixViewDescriptor;
 use crate::matrix_core::{MatrixCore, MatrixCoreProfile};
 use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
 
@@ -97,11 +99,53 @@ impl MatrixMachine {
         self.core.profile()
     }
 
+    async fn read_matrix_view(
+        &mut self,
+        addr: u32,
+        view: Option<MatrixViewDescriptor>,
+        axis: MatrixAccessAxis,
+    ) -> QuantTensor {
+        let layout = view.map_or_else(|| self.mram.default_layout(), |view| view.layout());
+        // Existing Matrix arithmetic consumes one tile. Multi-tile packet
+        // consumers are introduced separately; silently dropping tile_count
+        // here would make a plausible but incorrect result.
+        assert_eq!(
+            layout.tile_count, 1,
+            "a scalar Matrix opcode cannot consume a multi-tile view"
+        );
+        let (viewed, _service) = self.mram.read_layout_tile_axis(addr, layout, 0, axis).await;
+        if layout.rows == self.mlen && layout.cols == self.mlen {
+            return viewed;
+        }
+
+        assert!(layout.rows <= self.mlen && layout.cols <= self.mlen);
+        let padded = Tensor::zeros(
+            [self.mlen as i64, self.mlen as i64],
+            (viewed.as_tensor().kind(), tch::Device::Cpu),
+        );
+        let source = viewed
+            .as_tensor()
+            .view([layout.rows as i64, layout.cols as i64]);
+        let mut destination = padded.i((0..layout.rows as i64, 0..layout.cols as i64));
+        destination.copy_(&source);
+        QuantTensor::quantize(padded.flatten(0, -1), self.mram.ty())
+    }
+
     fn core(&self) -> MatrixCore {
         self.core
     }
 
+    #[cfg(test)]
     pub(crate) async fn mm(&mut self, m_addr: u32, v_addr: u32) {
+        self.mm_with_view(m_addr, v_addr, None).await;
+    }
+
+    pub(crate) async fn mm_with_view(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         // Row-granular projection ABI: the M_MM column stride is `blen * mlen`
         // (compiler e852c88, isa_matrix.py vram_sub_projection*), so the within-tile
@@ -112,7 +156,9 @@ impl MatrixMachine {
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
-        let full_mat = self.mram.read(mat_base).await;
+        let full_mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Row)
+            .await;
         // Slice columns instead of rows: [mlen, blen]
         let mat = full_mat
             .as_tensor()
@@ -143,7 +189,13 @@ impl MatrixMachine {
         self.m_accum += vec_f32.matmul(&mat_f32);
     }
 
-    pub(crate) async fn bmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
+    pub(crate) async fn bmm(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        bmm_scale: f32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.blen);
@@ -151,7 +203,9 @@ impl MatrixMachine {
 
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(head_offset.is_multiple_of(self.hlen));
-        let full_mat = self.mram.read(mat_base).await;
+        let full_mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Row)
+            .await;
 
         // Slice columns instead of rows: [hlen, mlen]
         let mat = full_mat
@@ -202,7 +256,13 @@ impl MatrixMachine {
         tracing::trace!("hm_accum = {}", self.hm_accum);
     }
 
-    pub(crate) async fn bmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
+    pub(crate) async fn bmv(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        bmm_scale: f32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.blen);
@@ -210,7 +270,9 @@ impl MatrixMachine {
 
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(head_offset.is_multiple_of(self.hlen));
-        let full_mat = self.mram.read(mat_base).await;
+        let full_mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Row)
+            .await;
 
         // Slice columns instead of rows: [hlen, mlen]
         let mat = full_mat
@@ -260,7 +322,13 @@ impl MatrixMachine {
         tracing::trace!("hv_accum = {}", self.hv_accum);
     }
 
-    pub(crate) async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
+    pub(crate) async fn btmm(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        bmm_scale: f32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
@@ -268,7 +336,9 @@ impl MatrixMachine {
 
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(head_offset.is_multiple_of(self.hlen));
-        let full_mat = self.mram.read(mat_base).await;
+        let full_mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Column)
+            .await;
 
         // Slice columns instead of rows: [hlen, mlen]
         let mat = full_mat
@@ -326,7 +396,13 @@ impl MatrixMachine {
         self.hm_accum += result_tensor;
     }
 
-    pub(crate) async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
+    pub(crate) async fn btmv(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        bmm_scale: f32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
@@ -334,7 +410,9 @@ impl MatrixMachine {
 
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(head_offset.is_multiple_of(self.hlen));
-        let full_mat = self.mram.read(mat_base).await;
+        let full_mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Column)
+            .await;
 
         // Slice columns instead of rows: [mlen, hlen]
         let mat = full_mat
@@ -391,11 +469,18 @@ impl MatrixMachine {
         self.hv_accum += result_tensor;
     }
 
-    pub(crate) async fn tmm(&mut self, v_addr: u32, m_addr: u32) {
+    pub(crate) async fn tmm(
+        &mut self,
+        v_addr: u32,
+        m_addr: u32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         let mat_offset = assert_multiple_of(mat_offset, self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
-        let full_mat = self.mram.read(mat_base).await;
+        let full_mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Column)
+            .await;
         // Transpose then slice columns: [mlen, blen]
         let mat = full_mat
             .as_tensor()
@@ -445,6 +530,49 @@ impl MatrixMachine {
         self.m_accum = Tensor::zeros([self.blen as i64, self.blen as i64], ACCUM_OPTS);
     }
 
+    /// Flush the ordinary Matrix accumulator directly into Matrix SRAM.
+    pub(crate) async fn mview_wo(
+        &mut self,
+        matrix_base: u32,
+        logical_offset: u32,
+        view: MatrixViewDescriptor,
+    ) -> sram::matrix::MatrixPacketService {
+        assert!(
+            view.shape.rows <= self.blen,
+            "Matrix-view writeback has {} live rows but BLEN is {}",
+            view.shape.rows,
+            self.blen
+        );
+        assert!(
+            view.shape.cols >= self.blen && view.shape.cols.is_multiple_of(self.blen),
+            "Matrix-view output rows must contain whole BLEN-wide accumulator blocks"
+        );
+        assert!(
+            logical_offset.is_multiple_of(self.blen),
+            "Matrix-view accumulator writeback must start at a BLEN-wide fragment boundary"
+        );
+        self.core().compute(1).await;
+        let tensor = self
+            .m_accum
+            .narrow(0, 0, i64::from(view.shape.rows))
+            .flatten(0, -1)
+            .contiguous();
+        let tensor = QuantTensor::quantize(tensor, self.mram.ty());
+        let service = self
+            .mram
+            .write_layout_microtile(
+                matrix_base,
+                view.layout(),
+                logical_offset,
+                tensor,
+                view.shape.rows,
+                self.blen,
+            )
+            .await;
+        self.m_accum = Tensor::zeros([self.blen as i64, self.blen as i64], ACCUM_OPTS);
+        service
+    }
+
     pub(crate) async fn bmm_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));
@@ -490,7 +618,12 @@ impl MatrixMachine {
         self.hv_accum = Tensor::zeros([self.broadcast_amount as i64, self.mlen as i64], ACCUM_OPTS);
     }
 
-    pub(crate) async fn mv(&mut self, m_addr: u32, v_addr: u32) {
+    pub(crate) async fn mv(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         tracing::debug!("======================== MV ==========================");
         tracing::debug!("m_addr = {:?}", m_addr);
@@ -499,7 +632,9 @@ impl MatrixMachine {
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
-        let mat = self.mram.read(mat_base).await;
+        let mat = self
+            .read_matrix_view(mat_base, view, MatrixAccessAxis::Row)
+            .await;
         let vec = self.vram.read(v_addr).await;
         self.core().compute(self.mlen).await;
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
@@ -517,14 +652,21 @@ impl MatrixMachine {
         self.v_accum += result;
     }
 
-    pub(crate) async fn tmv(&mut self, m_addr: u32, v_addr: u32) {
+    pub(crate) async fn tmv(
+        &mut self,
+        m_addr: u32,
+        v_addr: u32,
+        view: Option<MatrixViewDescriptor>,
+    ) {
         // TODO: `_mat_base` is computed for the assertion below but the read
         // uses `m_addr` directly. For tile-aligned reads they're equivalent
         // (integer division), but other matrix ops here use `mat_base`. Worth
         // investigating whether this should be `mram.read(mat_base)`.
         let (_mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
-        let mat = self.mram.read(m_addr).await;
+        let mat = self
+            .read_matrix_view(m_addr, view, MatrixAccessAxis::Column)
+            .await;
         let vec = self.vram.read(v_addr).await;
         self.core().compute(self.mlen).await;
         // vec @ transpose(mat): [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
@@ -698,5 +840,77 @@ mod tests {
         let a1 = vram.read(12).await.as_tensor().shallow_clone();
         assert!(a0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
         assert!(a1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
+    }
+
+    #[tokio::test]
+    async fn transposed_matrix_ops_match_mathematical_transpose_with_wide_banks() {
+        let executor = Executor::new();
+        let matrix = [
+            1.0, 2.0, 3.0, 4.0, //
+            5.0, 6.0, 7.0, 8.0, //
+            9.0, 10.0, 11.0, 12.0, //
+            13.0, 14.0, 15.0, 16.0,
+        ];
+
+        let tmv_mram = Arc::new(MatrixSram::with_banks(4, 64, 2, bf16_plain()));
+        let tmv_vram = Arc::new(VectorSram::from_mx_type(4, 64, bf16_plain()));
+        tmv_mram.write(0, quant(&matrix)).await;
+        tmv_vram.write(0, quant(&[1.0, 2.0, 3.0, 4.0])).await;
+        let mut tmv_machine = MatrixMachine::new_with_core(
+            tmv_mram,
+            tmv_vram.clone(),
+            4,
+            2,
+            2,
+            2,
+            MatrixCoreProfile::big_default(),
+        );
+
+        let tmm_mram = Arc::new(MatrixSram::with_banks(4, 64, 2, bf16_plain()));
+        let tmm_vram = Arc::new(VectorSram::from_mx_type(4, 64, bf16_plain()));
+        tmm_mram.write(0, quant(&matrix)).await;
+        tmm_vram.write(0, quant(&[1.0, 2.0, 3.0, 4.0])).await;
+        tmm_vram.write(4, quant(&[2.0, 0.0, 1.0, 3.0])).await;
+        let mut tmm_machine = MatrixMachine::new_with_core(
+            tmm_mram,
+            tmm_vram.clone(),
+            4,
+            2,
+            2,
+            2,
+            MatrixCoreProfile::big_default(),
+        );
+
+        executor.spawn(async move {
+            tmv_machine.tmv(0, 0, None).await;
+            tmv_machine.mv_wo(8).await;
+        });
+        executor.spawn(async move {
+            tmm_machine.tmm(0, 0, None).await;
+            tmm_machine.mm_wo(8, 1).await;
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        assert!(
+            tmv_vram
+                .read(8)
+                .await
+                .as_tensor()
+                .equal(&Tensor::from_slice(&[30.0f32, 70.0, 0.0, 0.0]))
+        );
+        assert!(
+            tmm_vram
+                .read(8)
+                .await
+                .as_tensor()
+                .equal(&Tensor::from_slice(&[30.0f32, 70.0, 0.0, 0.0]))
+        );
+        assert!(
+            tmm_vram
+                .read(12)
+                .await
+                .as_tensor()
+                .equal(&Tensor::from_slice(&[17.0f32, 41.0, 0.0, 0.0]))
+        );
     }
 }

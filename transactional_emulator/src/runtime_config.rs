@@ -40,6 +40,7 @@ pub(crate) static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(matrix_kv
 pub(crate) static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> =
     LazyLock::new(vector_activation_type);
 pub(crate) static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(vector_kv_type);
+pub(crate) static STATE_TYPE: LazyLock<MxDataType> = LazyLock::new(state_type);
 pub(crate) static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| {
     let raw = hbm_m_prefetch_amount();
     let mlen = mlen();
