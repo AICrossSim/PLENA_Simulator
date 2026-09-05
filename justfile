@@ -80,6 +80,66 @@ build-perf-model model batch="4" input_seq="2048" output_seq="1024":
         --config "$(pwd)/plena_settings.toml" \
         --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
+# Run the Mamba-2 (selective SSM) performance model.
+# just build-perf-model-mamba2 <model> [batch] [input_seq] [output_seq]
+build-perf-model-mamba2 model="mamba2-2.7b" batch="4" input_seq="2048" output_seq="1024":
+    python3 analytic_models/performance/mamba2_model.py \
+        --model {{model}} \
+        --batch-size {{batch}} \
+        --input-seq {{input_seq}} \
+        --output-seq {{output_seq}} \
+        --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
+
+# Same, but against a model config outside Model_Lib.
+# just build-perf-model-mamba2-path /path/to/mamba2-2.7b.json 1 2048 128
+build-perf-model-mamba2-path path batch="4" input_seq="2048" output_seq="1024":
+    python3 analytic_models/performance/mamba2_model.py \
+        --model-path {{path}} \
+        --batch-size {{batch}} \
+        --input-seq {{input_seq}} \
+        --output-seq {{output_seq}} \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
+
+# TTFT/TPS sweep for one model across several context lengths, JSON per point.
+# just latency-sweep llama-3.1-8b 1 128 "512 2048 8192"
+latency-sweep model batch="1" output_seq="128" contexts="512 2048 8192":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    script=analytic_models/performance/llama_model.py
+    case "{{model}}" in
+        mamba2*) script=analytic_models/performance/mamba2_model.py ;;
+        gpt-oss*) script=analytic_models/performance/gpt_oss_model.py ;;
+    esac
+    for ctx in {{contexts}}; do
+        python3 "$script" \
+            --model {{model}} \
+            --batch-size {{batch}} \
+            --input-seq "$ctx" \
+            --output-seq {{output_seq}} \
+            --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+            --config "$(pwd)/plena_settings.toml" \
+            --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json" \
+            --json --quiet
+    done
+
+# Bandwidth-model + KV-store-bugfix regression tests for the analytic perf model.
+test-perf-model:
+    python3 analytic_models/test_perf_model_bandwidth.py
+
+# Validate the checked-in GPU workload/baseline contracts. Raw Nsight reports
+# are optional and are only needed by the importer-reproduction test.
+test-gpu-evidence:
+    python3 -m pytest \
+        analytic_models/performance/test_b200_formal_campaign.py \
+        analytic_models/performance/test_gpu_evidence.py \
+        -v
+
+gpu-evidence-report:
+    python3 -m analytic_models.performance.gpu_evidence
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
@@ -107,6 +167,169 @@ test-aten-softmax *args:
 
 test-aten-linear *args:
     python3 transactional_emulator/testbench/aten/linear_test.py {{args}}
+
+# Historical Vector-stream affine projection check (not the frozen Matrix path).
+test-lcompute-affine-projection:
+    python3 transactional_emulator/testbench/aten/affine_projection_test.py
+
+# Compiler projection -> M_MM_WO consumer-shaped Matrix view -> existing
+# V_ADD_VV.MV consumer, checked numerically by the Rust emulator.
+test-matrix-view-projection compiler_root="PLENA_Compiler":
+    PLENA_SETTINGS_TOML="$PWD/plena_settings.toml" \
+      PLENA_COMPILER_ROOT={{compiler_root}} \
+      python3 transactional_emulator/testbench/aten/matrix_view_projection_test.py
+
+# Matrix-SRAM-only L-Compute Python gate. This deliberately excludes the older
+# Vector-SRAM L_CFG campaign so its speedups cannot be attributed to Matrix
+# compiler-phased co-layout.
+test-matrix-lcompute-python compiler_root="PLENA_Compiler":
+    PLENA_COMPILER_ROOT={{compiler_root}} python3 -m pytest -q \
+        analytic_models/performance/test_matrix_sram_layout.py \
+        analytic_models/performance/test_matrix_state_residency.py \
+        analytic_models/performance/test_agentic_campaign.py \
+        analytic_models/performance/test_agentic_matrix_lcompute_campaign.py \
+        analytic_models/performance/test_gpu_energy.py \
+        analytic_models/performance/test_precision_contract.py \
+        analytic_models/performance/test_matrix_lcompute_campaign.py \
+        transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py \
+        transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py
+
+# Preserve the raw archive and produce a separately labelled request-window
+# approximation. This does not recapture or certify exact legacy batch energy.
+gpu-energy-reanalysis campaign_root output="artifacts/gpu_energy_reanalysis_v1/summary.json":
+    python3 -m analytic_models.performance.gpu_energy \
+        --campaign-root {{campaign_root}} --output {{output}}
+
+# Compiler encoding, dominance, packet extraction, physical writeback and
+# official-shape workload guards used by the Matrix L-Compute campaign.
+test-matrix-lcompute-compiler compiler_root="PLENA_Compiler":
+    env -u LD_LIBRARY_PATH -u LIBRARY_PATH -u NIX_LDFLAGS -u PYTHONPATH \
+      PLENA_SETTINGS_TOML="$PWD/plena_settings.toml" \
+      PYTHONPATH={{compiler_root}} \
+      uv run --directory {{compiler_root}} python -m pytest -q \
+        assembler/tests/test_l_mview.py \
+        assembler/tests/test_experimental_fp32_dot.py \
+        aten/tests/test_affine_layout.py \
+        aten/tests/test_hybrid_compile_report.py \
+        aten/tests/test_hybrid_l_tile_schedule.py \
+        aten/tests/test_hybrid_workloads.py \
+        aten/tests/test_kda_precision_campaign.py \
+        aten/tests/test_kda_official_layer.py \
+        aten/tests/test_l_stream_cfg.py \
+        aten/tests/test_layout_planner.py \
+        aten/tests/test_lstream_lowering.py \
+        aten/tests/test_lstream_packet_lowering.py \
+        aten/tests/test_matrix_access_packets.py \
+        aten/tests/test_matrix_packet_report.py \
+        aten/tests/test_matrix_prefill_handoff.py \
+        aten/tests/test_matrix_recurrence_lowering.py \
+        aten/tests/test_prepared_vector_recurrence.py \
+        aten/tests/test_python_310_enum_compat.py \
+        aten/tests/test_mview_contract.py \
+        aten/tests/test_projection_affine_writeback.py
+
+# Physical banks, lane restoration, recurrence numerics and all existing Rust
+# emulator regressions. Nix supplies ramulator and libtorch to the linker.
+test-matrix-lcompute-rust:
+    nix develop --no-write-lock-file --command bash -c \
+        'cd transactional_emulator && cargo test --workspace --release -- --test-threads=1'
+
+# Internal form used after the caller has already entered `nix develop`.
+_test-matrix-lcompute-rust-in-dev-shell:
+    # Ramulator2 owns process-global native state; parallel Rust test binaries
+    # can otherwise race and intermittently SIGSEGV despite each test passing.
+    cd transactional_emulator && cargo test --workspace --release -- --test-threads=1
+
+# Official recurrence geometry, four consecutive tokens, Compiler assembly and
+# machine words executed by the Rust emulator. Temporary HBM dumps are removed;
+# the command fails on state/output mismatch or lane/head permutation.
+test-matrix-lcompute-recurrence compiler_root="PLENA_Compiler":
+    tmp_dir="$(mktemp -d)"; trap 'rm -rf "$tmp_dir"' EXIT; \
+      PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      "$PWD/transactional_emulator/testbench/aten/matrix_lcompute_recurrence_test.py" \
+      --output-dir "$tmp_dir"
+
+# Complete pre-RTL gate: Compiler contract + analytic campaign + physical Rust
+# simulator + Compiler-generated recurrence binaries executed by Rust. Invoke this recipe
+# through `nix develop` as shown in README.md; entering Nix once keeps Cargo's
+# build fingerprint stable across both Rust checks.
+test-matrix-lcompute compiler_root="PLENA_Compiler":
+    just test-matrix-lcompute-python {{compiler_root}}
+    just test-matrix-lcompute-compiler {{compiler_root}}
+    just _test-matrix-lcompute-rust-in-dev-shell
+    just test-matrix-view-projection {{compiler_root}}
+    just test-matrix-lcompute-recurrence {{compiler_root}}
+    just test-matrix-lcompute-execution {{compiler_root}}
+
+# Write A/B/C/D/E tables plus state capacity, precision and overlap contracts.
+matrix-lcompute-campaign compiler_root="PLENA_Compiler":
+    python3 -m analytic_models.performance.matrix_lcompute_campaign \
+        --compiler-root {{compiler_root}} \
+        --output-dir artifacts/matrix_lcompute_e2e_v6
+
+# Import the externally archived real-checkpoint Nemotron Agentic campaign and
+# replay its length-sorted B1/B2/B4/B8/B16 route groups in the 52-layer DSE.
+matrix-lcompute-agentic campaign_root compiler_root="PLENA_Compiler":
+    python3 -m analytic_models.performance.agentic_matrix_lcompute_campaign \
+        --campaign-root {{campaign_root}} \
+        --compiler-root {{compiler_root}} \
+        --output-dir artifacts/matrix_lcompute_agentic_v2
+
+# ISA/layout unit tests plus reproducibility checks for both checked campaigns.
+test-hybrid-lcompute:
+    python3 -m pytest -q \
+        analytic_models/performance/test_lcompute_layout.py \
+        analytic_models/performance/test_hybrid_lcompute_campaign.py \
+        analytic_models/performance/test_hybrid_routing.py \
+        analytic_models/performance/test_hybrid_connected_evidence.py \
+        transactional_emulator/testbench/test_emulator_runner_metrics.py
+
+# Slow executable evidence: Matrix affine writeback, S128 prefill-to-decode
+# handoff, and request-private recurrent state at B=1/2/4/8/16. This uses only
+# deterministic synthetic values and the Rust emulator; no GPU/checkpoint is
+# required. The JSON keeps cycles, bank counters, numerical error and hashes.
+hybrid-connected-evidence compiler_root="PLENA_Compiler":
+    python3 -m analytic_models.performance.hybrid_connected_evidence \
+        --compiler-root {{compiler_root}} \
+        --json-out artifacts/hybrid_lcompute_connected_v1/evidence.json
+
+# Official 52/93-layer timelines, A-J ablation, bandwidth/bank/FIFO DSE and
+# exact lane recompilation at the PLENA paper's 2048-wide system point.
+hybrid-paper2048-campaign compiler_root="PLENA_Compiler":
+    python3 -m analytic_models.performance.hybrid_lcompute_campaign \
+        --compiler-root {{compiler_root}} --hardware-profile paper2048 \
+        --long --lane-sweep \
+        --json-out artifacts/hybrid_lcompute_paper2048_v1/campaign.json \
+        --csv-dir artifacts/hybrid_lcompute_paper2048_v1/tables
+
+# B=1/2/4/8/16 full-model bounds plus replay of the pinned B200 Nemotron
+# routing trace. Kimi remains explicitly bounded until its real trace arrives.
+hybrid-paper2048-batch-campaign compiler_root="PLENA_Compiler":
+    python3 -m analytic_models.performance.hybrid_lcompute_campaign \
+        --compiler-root {{compiler_root}} --hardware-profile paper2048 \
+        --batch-sweep --measured-routing \
+        --json-out artifacts/hybrid_lcompute_paper2048_batch_v1/campaign.json \
+        --csv-dir artifacts/hybrid_lcompute_paper2048_batch_v1/tables
+
+# Faster focused gate when only the S128 handoff needs to be rechecked.
+test-hybrid-prefill-handoff:
+    python3 transactional_emulator/testbench/mamba2/mamba2_stage_test.py \
+        --case prefill_s128_decode_handoff
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+        --case prefill_s128_decode_handoff --chunk 16
+
+# Full transactional S128 prefill: all token outputs and final state are read
+# back and compared. Large SRAM dumps live only in a temporary directory.
+test-transactional-prefill-full compiler_root="PLENA_Compiler" output="artifacts/transactional_prefill_bf16/summary.json":
+    python3 transactional_emulator/testbench/aten/transactional_prefill_evidence.py \
+        --compiler-root {{compiler_root}} --output {{output}}
+
+# Published 24-layer Mamba-2 checkpoint: host BF16 perimeter with every
+# recurrent core compiled, assembled and executed by the Rust L_TILE path.
+test-mamba2-real-checkpoint python_bin="python3" compiler_root="PLENA_Compiler" checkpoint="/scratch/shared/mcl123/plena/model_cache/huggingface/hub/models--AntonV--mamba2-130m-hf/snapshots/05e8773fc4ac1cd067e8a18a5c45372ce5178405" output_dir="artifacts/mamba2_130m_real_checkpoint_lcompute":
+    PLENA_COMPILER_ROOT={{compiler_root}} PLENA_USE_NIX_BUILD=1 {{python_bin}} \
+        transactional_emulator/testbench/aten/mamba2_real_checkpoint_lcompute_test.py \
+        --checkpoint {{checkpoint}} --output-dir {{output_dir}}
 
 test-aten-rms-norm *args:
     python3 transactional_emulator/testbench/aten/rms_norm_test.py {{args}}
@@ -201,6 +424,71 @@ test-moe-shared-all:
     just test-shared-moe-deepseek-fused
     just test-router-policy-all
 
+# ==================== Mamba-2 / selective SSM ====================
+
+# Per-stage numerical checks of the Mamba-2 lowering against a float32 torch
+# golden. Fully synthetic -- no checkpoint, no HF libs. Cases:
+#   dt      softplus + clamp        (exercises V_SOFTPLUS_V)
+#   cumsum  a @ lower-tri ones      (the prefix-scan substitute; f32 accumulate)
+#   decay   exp(min(cs_i-cs_j,0))   (exercises S_MAP_FP_V and V_SUB_VF rorder=1)
+#   conv1d  causal depthwise k=4
+#   decode_batch  four request-private recurrent states in one Rust program
+# NOTE: the emulator's V_EXP_V is libtorch's exact exp, not the RTL's fixed-point
+# model, so passing here bounds the lowering and not the silicon. See the module
+# docstring of mamba2_stage_test.py.
+test-mamba2-stage case="dt" *args:
+    python3 transactional_emulator/testbench/mamba2/mamba2_stage_test.py --case {{case}} {{args}}
+
+# Every Mamba-2 stage.
+test-mamba2-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for case in dt cumsum decay conv1d decode_batch; do
+        echo "=== Mamba-2 stage: $case ==="
+        just test-mamba2-stage "$case"
+    done
+
+# The chunked-SSD reference vs the plain recurrence. Pure torch, no emulator:
+# this is what makes the chunked form usable as an intermediate golden at all.
+test-mamba2-reference:
+    python3 -m unittest compiler.aten.tests.test_mamba2_reference compiler.aten.tests.test_mamba_stage_contract -v
+
+# ==================== KDA / gated delta attention ====================
+
+test-kda-stage case="cumprod" *args:
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py --case {{case}} {{args}}
+
+# Every KDA stage at the transactional machine width, followed by the cases
+# that cross two 64-lane blocks at Kimi's 128x128 head geometry.
+test-kda-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    build_root=transactional_emulator/testbench/kda/build
+    cleanup() {
+        if [[ -d "$build_root" ]]; then
+            find "$build_root" -depth -delete
+        fi
+        find transactional_emulator -maxdepth 1 -type f \
+            \( -name 'vram_dump.bin' -o -name 'mram_dump.bin' \
+               -o -name 'fpsram_dump.bin' -o -name 'intsram_dump.bin' \) \
+            -delete
+    }
+    trap cleanup EXIT
+    for case in cumprod ut prefill_out prefill_state prefill_chain_out \
+        prefill_chain_state state_transpose layer layer_chain recurrent_batch; do
+        python3 transactional_emulator/testbench/kda/kda_stage_test.py --case "$case"
+    done
+    for case in prefill_out prefill_state prefill_chain_out \
+        prefill_chain_state state_transpose layer layer_chain; do
+        python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+            --case "$case" --key-dim 128 --value-dim 128
+    done
+    # The complete official decode order: eight Matrix projections, three
+    # convolutions, recurrent KDA, gated RMSNorm, and output projection.
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+        --case official_layer --mlen 8 --blen 2 --num-heads 2 \
+        --key-dim 8 --value-dim 8
+
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:
 #   just aten-compile smollm2 --config sliced_64x64x16_b1
@@ -256,3 +544,16 @@ multilayer-decoder-profile model="smolvlm2":
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
 
+# Controlled executable baseline gate; this is not the historical Arlo census.
+# The report separately exposes common-reference budget failures.
+test-matrix-lcompute-execution compiler_root="PLENA_Compiler":
+    tmp_dir="$(mktemp -d)"; trap 'rm -rf "$tmp_dir"' EXIT; \
+      PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      -m transactional_emulator.testbench.aten.matrix_lcompute_execution_compare \
+      --output-dir "$tmp_dir" --batches 1 --tokens 2
+
+# Full seed/state diagnostic sweep (snapshot DMA is excluded from performance claims).
+matrix-lcompute-numeric-sweep compiler_root="PLENA_Compiler":
+    PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      -m transactional_emulator.testbench.aten.matrix_lcompute_numeric_sweep \
+      --output-dir artifacts/matrix_lcompute_numeric_v2

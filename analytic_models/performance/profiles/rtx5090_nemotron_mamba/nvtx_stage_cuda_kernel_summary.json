@@ -1,0 +1,148 @@
+{
+  "cases": {
+    "decode_b1": {
+      "batch": 1,
+      "full_mixer_gpu_time_us": 62.944,
+      "full_mixer_kernel_count": 9,
+      "nvtx_selection": "unique child stage range nested inside nemotron.profile",
+      "phase": "decode",
+      "sequence_length": 1,
+      "source_report": "mamba_decode_b1.nsys-rep",
+      "stages": {
+        "mamba_conv1d": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 1.9318759532282663,
+          "total_gpu_time_us": 1.216
+        },
+        "mamba_dt_exp": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 1.3218098627351296,
+          "total_gpu_time_us": 0.832
+        },
+        "mamba_gate_group_rms_norm": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 1.626842907981698,
+          "total_gpu_time_us": 1.024
+        },
+        "mamba_in_projection": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 63.44687341128622,
+          "total_gpu_time_us": 39.936
+        },
+        "mamba_out_projection": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 24.961870869344178,
+          "total_gpu_time_us": 15.712
+        },
+        "mamba_state_update_output_fused": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 2.8469750889679717,
+          "total_gpu_time_us": 1.792
+        }
+      },
+      "unassigned_gpu_time_us": 2.432,
+      "unassigned_kernel_count": 3,
+      "unassigned_percentage": 3.8637519064565327
+    },
+    "decode_b8": {
+      "batch": 8,
+      "full_mixer_gpu_time_us": 45.856,
+      "full_mixer_kernel_count": 9,
+      "nvtx_selection": "unique child stage range nested inside nemotron.profile",
+      "phase": "decode",
+      "sequence_length": 1,
+      "source_report": "mamba_decode_b8.nsys-rep",
+      "stages": {
+        "mamba_conv1d": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 3.4891835310537336,
+          "total_gpu_time_us": 1.6
+        },
+        "mamba_dt_exp": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 1.674808094905792,
+          "total_gpu_time_us": 0.768
+        },
+        "mamba_gate_group_rms_norm": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 2.3028611304954643,
+          "total_gpu_time_us": 1.056
+        },
+        "mamba_in_projection": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 36.217725052337755,
+          "total_gpu_time_us": 16.608
+        },
+        "mamba_out_projection": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 38.032100488485696,
+          "total_gpu_time_us": 17.44
+        },
+        "mamba_state_update_output_fused": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 13.677599441730635,
+          "total_gpu_time_us": 6.272
+        }
+      },
+      "unassigned_gpu_time_us": 2.112,
+      "unassigned_kernel_count": 3,
+      "unassigned_percentage": 4.6057222609909285
+    },
+    "prefill_b1_s2048": {
+      "batch": 1,
+      "full_mixer_gpu_time_us": 838.005,
+      "full_mixer_kernel_count": 16,
+      "nvtx_selection": "unique child stage range nested inside nemotron.profile",
+      "phase": "prefill",
+      "sequence_length": 2048,
+      "source_report": "mamba_prefill_b1_s2048.nsys-rep",
+      "stages": {
+        "mamba_conv1d": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 1.5121628152576656,
+          "total_gpu_time_us": 12.672
+        },
+        "mamba_dt_exp": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 0.10310201013120447,
+          "total_gpu_time_us": 0.864
+        },
+        "mamba_gate_group_rms_norm": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 1.9664560473982853,
+          "total_gpu_time_us": 16.479
+        },
+        "mamba_in_projection": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 60.82946999122917,
+          "total_gpu_time_us": 509.754
+        },
+        "mamba_out_projection": {
+          "kernel_count": 1,
+          "percentage_of_full_mixer_time": 24.079808593027487,
+          "total_gpu_time_us": 201.79
+        },
+        "mamba_state_update_output_fused": {
+          "kernel_count": 5,
+          "percentage_of_full_mixer_time": 10.653635718163972,
+          "total_gpu_time_us": 89.278
+        }
+      },
+      "unassigned_gpu_time_us": 7.168,
+      "unassigned_kernel_count": 6,
+      "unassigned_percentage": 0.8553648247922149
+    }
+  },
+  "denominator_definition": "sum of CUDA GPU kernel durations whose CUDA launch API occurs inside the measured nemotron.profile NVTX range; CPU launch gaps are excluded",
+  "model_rerun": false,
+  "schema_version": "nemotron3-nsys-nvtx-stage-summary-v2",
+  "source": "offline export from three existing .nsys-rep files",
+  "stage_order": [
+    "mamba_in_projection",
+    "mamba_conv1d",
+    "mamba_dt_exp",
+    "mamba_state_update_output_fused",
+    "mamba_gate_group_rms_norm",
+    "mamba_out_projection"
+  ]
+}

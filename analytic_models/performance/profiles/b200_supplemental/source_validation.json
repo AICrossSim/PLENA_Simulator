@@ -1,0 +1,15 @@
+{
+  "status": "COMPLETE",
+  "validations": {
+    "precision_rows": true,
+    "precision_three_seeds": true,
+    "precision_no_nan_inf": true,
+    "parity_all_exact": true,
+    "latency_eight_cases": true,
+    "ncu_42_pass": true,
+    "nsys_8x7_pass": true,
+    "traffic_563_unknown_zero": true,
+    "no_complete_kimi_checkpoint_downloaded": true,
+    "single_gpu_only": true
+  }
+}

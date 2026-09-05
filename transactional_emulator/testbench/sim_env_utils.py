@@ -515,6 +515,7 @@ def create_mem_for_sim(
     input_tensors: Mapping[str, Any] | None = None,
     tensor_layouts: dict | None = None,
     hbm_addrs: dict[str, int] | None = None,
+    compiler_root: Path | None = None,
 ):
     plena_toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(REPO_ROOT / "plena_settings.toml"))
     config_settings = load_toml_config(plena_toml_path, "CONFIG", mode="TRANSACTIONAL")
@@ -535,17 +536,41 @@ def create_mem_for_sim(
         if not tensor_layouts and input_tensors is not None:
             tensor_layouts = infer_hbm_tensor_layouts(input_tensors)
 
+    # Legacy random-data mode needs one default MX description.  Behavioral
+    # tests with explicit tensors do not: every MX tensor carries its own class,
+    # and an all-Plain BF16 configuration has no block/ELEM/SCALE fields at all.
+    # Building this dictionary unconditionally made a valid all-BF16 run fail
+    # before a byte reached the emulator.
+    floating_hbm_classes = (
+        "HBM_M_WEIGHT_TYPE",
+        "HBM_M_KV_TYPE",
+        "HBM_V_ACT_TYPE",
+        "HBM_V_KV_TYPE",
+    )
+    default_mx = next(
+        (
+            precision_settings[name]
+            for name in floating_hbm_classes
+            if not _is_plain_precision(precision_settings[name])
+        ),
+        None,
+    )
+    if default_mx is None:
+        if mode != "behave_sim":
+            raise ValueError("random MX data generation requires at least one MX HBM class")
+        quant_config = {
+            "exp_width": 0,
+            "man_width": 0,
+            "exp_bias_width": 0,
+            "block_size": [1, 1],
+            "int_width": precision_settings["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
+            "skip_first_dim": False,
+        }
+    else:
+        quant_config = _mx_quant_config(default_mx, precision_settings)
     data_config = {
         "tensor_size": [1, data_size],
-        "block_size": [1, precision_settings["HBM_M_WEIGHT_TYPE"]["block"]],
-    }
-    quant_config = {
-        "exp_width": precision_settings["HBM_V_ACT_TYPE"]["ELEM"]["exponent"],
-        "man_width": precision_settings["HBM_V_ACT_TYPE"]["ELEM"]["mantissa"],
-        "exp_bias_width": precision_settings["HBM_V_ACT_TYPE"]["SCALE"]["exponent"],
-        "block_size": data_config["block_size"],
-        "int_width": precision_settings["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
-        "skip_first_dim": False,
+        "block_size": quant_config["block_size"],
     }
 
     memory_data_manager = MemoryDataManager()
@@ -664,6 +689,7 @@ def create_mem_for_sim(
         quant_config,
         hbm_row_width=config_settings["HBM_WIDTH"]["value"],
         logical_row_elements=config_settings["MLEN"]["value"],
+        compiler_root=compiler_root,
     )
 
 
@@ -750,9 +776,11 @@ def env_setup(
     quant_config,
     hbm_row_width=256,
     logical_row_elements=None,
+    compiler_root: Path | None = None,
 ) -> None:
-    isa_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "operation.svh"
-    config_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "configuration.svh"
+    compiler_root = REPO_ROOT / "PLENA_Compiler" if compiler_root is None else Path(compiler_root)
+    isa_file_path = compiler_root / "doc" / "operation.svh"
+    config_file_path = compiler_root / "doc" / "configuration.svh"
 
     assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
     assembler.generate_binary(build_path / "generated_asm_code.asm", build_path / "generated_machine_code.mem")

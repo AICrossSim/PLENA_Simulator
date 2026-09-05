@@ -1,0 +1,6 @@
+model,batch,tokens,common_numeric_budget_passed,D_speedup_vs_B_qualified,scope
+nemotron3_mamba2,1,2,True,1.1105195245238348,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay
+nemotron3_mamba2,2,2,True,1.1171670765214914,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay
+nemotron3_mamba2,4,2,True,1.1269509407222411,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay
+nemotron3_mamba2,8,2,True,1.1334599588833276,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay
+nemotron3_mamba2,16,2,True,1.1499466351160155,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay

@@ -1,0 +1,86 @@
+{
+  "records": [
+    {
+      "component": "MLA",
+      "size": "small",
+      "shape": [
+        1,
+        7,
+        64
+      ],
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "cosine": 1.0,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    {
+      "component": "MLA",
+      "size": "real_shape",
+      "shape": [
+        1,
+        16,
+        7168
+      ],
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "cosine": 1.0,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    {
+      "component": "LatentMoE",
+      "size": "small",
+      "shape": [
+        1,
+        5,
+        64
+      ],
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "cosine": 1.0,
+      "nan_count": 0,
+      "inf_count": 0,
+      "active_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "component": "LatentMoE",
+      "size": "real_shape_active_expert_proxy",
+      "shape": [
+        1,
+        2,
+        7168
+      ],
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "cosine": 1.0,
+      "nan_count": 0,
+      "inf_count": 0,
+      "active_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    }
+  ]
+}

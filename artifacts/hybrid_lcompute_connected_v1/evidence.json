@@ -1,0 +1,924 @@
+{
+  "batch_sizes": [
+    1,
+    2,
+    4,
+    8,
+    16
+  ],
+  "claim_boundary": {
+    "functional_batch_geometry": "reduced outer dimensions; every state value is checked",
+    "gpu_routing": "not required and not used",
+    "official_dimensions": "covered by the separate full-model analytic campaign",
+    "prefill_packetization": "prefill itself uses the existing chunked path; the state handoff and following decode use affine packet addressing",
+    "rtl": "not evaluated",
+    "weights": "deterministic synthetic values; this artifact is not a real-checkpoint execution"
+  },
+  "claims": {
+    "bank_conflict": "zero stalls only for the affine packet cases explicitly listed above",
+    "matrix_to_vector_affine_handoff": "executable and numerically verified",
+    "request_private_state": "executable for B=1/2/4/8/16",
+    "s128_prefill_to_packet_decode": "executable for Mamba and KDA"
+  },
+  "compiler": {
+    "commit": "aec6dcbfea6e69f8dcf3c00797f58885983bb851",
+    "dirty_during_campaign": true
+  },
+  "records": [
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/aten/affine_projection_test.py"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 19542,
+          "sha256": "2d6ea30de1615657bb691418f6d2804ba0987cb3a7439c210526e6bf8a67ada0"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 5324,
+          "sha256": "8b33196c648f355529947624040873d0c411ec2ff27b3bcfe988b389b67c5edd"
+        },
+        "golden_result.txt": {
+          "bytes": 50247,
+          "sha256": "515fdf29233fae0a41306822d3c8c5be693172ebd0e2783e506dc05a3451c64e"
+        }
+      },
+      "hbm_bytes_read": 263168,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 654,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 484,
+      "name": "matrix_affine_writeback",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.2,
+        "comparison_params": {
+          "elements_per_batch": 64,
+          "num_batches": 4,
+          "num_rows": 4,
+          "row_dim": 64,
+          "start_row_idx": 128
+        },
+        "golden_shape": [
+          256
+        ],
+        "mae": 0.0,
+        "max_error": 0.0,
+        "mse": 0.0,
+        "relative_error": 0.0,
+        "relative_match_rate": 100.0,
+        "rtol": 0.2,
+        "simulated_shape": [
+          256
+        ]
+      },
+      "scope": "Matrix final writeback -> affine bank placement -> ordinary Vector lane restore",
+      "sim_latency_cycles": 6789
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+        "--case",
+        "prefill_s128_decode_handoff"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 42801,
+          "sha256": "8ac3d485b8537a9c74db58d6165f8e6ba946adc9444c5e1b20ba12ef56d36d32"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 11044,
+          "sha256": "f2daa4e781c171340064ae15079a5b8f624afbe0e9c418c44baab6b922aa0669"
+        },
+        "golden_result.txt": {
+          "bytes": 185775,
+          "sha256": "b26e868b7b47531355d1d0a3ce30b3396c8085948029727db190be32b9340bdb"
+        }
+      },
+      "hbm_bytes_read": 49664,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 1363,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 320,
+        "packet_bank_words": 4160,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 12288,
+        "packet_reads": 192,
+        "packet_service_cycles": 320,
+        "packet_writes": 128
+      },
+      "machine_code_lines": 1004,
+      "name": "nemotron_mamba_s128_handoff",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.01,
+        "comparison_params": {
+          "atol": 0.01,
+          "elements_per_batch": 64,
+          "num_batches": 65,
+          "num_rows": 65,
+          "row_dim": 64,
+          "rtol": 0.03,
+          "start_row_idx": 512,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          4160
+        ],
+        "mae": 4.291534423828125e-05,
+        "max_error": 0.00244140625,
+        "mse": 2.8405338525772095e-08,
+        "relative_error": 0.00087738037109375,
+        "relative_match_rate": 99.85576923076923,
+        "rtol": 0.03,
+        "simulated_shape": [
+          4160
+        ]
+      },
+      "scope": "two 64-token Mamba chunks -> affine state handoff -> one packetized decode step",
+      "sim_latency_cycles": 62723
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/kda/kda_stage_test.py",
+        "--case",
+        "prefill_s128_decode_handoff",
+        "--chunk",
+        "16"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 544264,
+          "sha256": "4e0e1ea9814661c04e1216d4030672dae6fbf5001157542c1e0ce9922eebe99f"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 170962,
+          "sha256": "2dbb3deaac004f14b3192542c237a559b77b9549c01de4ac188b5ef4d96bf0a1"
+        },
+        "golden_result.txt": {
+          "bytes": 834744,
+          "sha256": "3fd036f0323a0b727212d475323f1640a5a66bdfbcf06adba348edc739f62abe"
+        }
+      },
+      "hbm_bytes_read": 1171968,
+      "hbm_bytes_written": 401408,
+      "isa_source_lines": 19132,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 320,
+        "packet_bank_words": 4160,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 12288,
+        "packet_reads": 192,
+        "packet_service_cycles": 320,
+        "packet_writes": 128
+      },
+      "machine_code_lines": 15542,
+      "name": "kimi_kda_s128_handoff",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.05,
+        "comparison_params": {
+          "atol": 0.05,
+          "elements_per_batch": 64,
+          "num_batches": 65,
+          "num_rows": 65,
+          "physical_rows": 68,
+          "row_dim": 64,
+          "rtol": 0.05,
+          "start_row_idx": 4032,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          4160
+        ],
+        "mae": 0.00010251998901367188,
+        "max_error": 0.0015869140625,
+        "mse": 4.7264620661735535e-08,
+        "relative_error": 0.017333984375,
+        "relative_match_rate": 96.03365384615384,
+        "rtol": 0.05,
+        "simulated_shape": [
+          4160
+        ]
+      },
+      "scope": "eight 16-token KDA chunks -> state transpose/affine handoff -> one packetized decode step",
+      "sim_latency_cycles": 1398237
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+        "--case",
+        "decode_batch",
+        "--batch-size",
+        "1"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 115817,
+          "sha256": "4deef2e3a4d323300276e929f1aa463af5e1bbb6471107c7636564552d2cd61c"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 26125,
+          "sha256": "791c26fd55d2e2b35cc4b558b9f8cd4d5ae7a211b5634066056c24d887049272"
+        },
+        "golden_result.txt": {
+          "bytes": 285897,
+          "sha256": "dd5a8d25b5065b4d33270440a6da389b07ae326745c6b33f97d2ff6fc18e8802"
+        }
+      },
+      "hbm_bytes_read": 49152,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 3484,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 2375,
+      "name": "mamba_private_state_b1",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.03,
+        "comparison_params": {
+          "atol": 0.03,
+          "elements_per_batch": 64,
+          "num_batches": 260,
+          "num_rows": 260,
+          "row_dim": 64,
+          "rtol": 0.03,
+          "start_row_idx": 512,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          16640
+        ],
+        "mae": 5.632638931274414e-06,
+        "max_error": 0.00390625,
+        "mse": 9.371433407068253e-09,
+        "relative_error": 9.679794311523438e-05,
+        "relative_match_rate": 99.93990384615384,
+        "rtol": 0.03,
+        "simulated_shape": [
+          16640
+        ]
+      },
+      "scope": "B1 independent Mamba states; reduced 4-head x 64-state x 64-head-dim functional geometry",
+      "sim_latency_cycles": 11905
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/kda/kda_stage_test.py",
+        "--case",
+        "recurrent_batch",
+        "--batch-size",
+        "1",
+        "--mlen",
+        "128",
+        "--key-dim",
+        "128"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 59733,
+          "sha256": "3f30cee414acc7908d60fecff855c1d144893d657e049e8735ee178ba912870c"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 13497,
+          "sha256": "132f0af0a6dc15d1b76e80a1fbc2da8ffaa54ffd6b2f80bf6963f6d370060462"
+        },
+        "golden_result.txt": {
+          "bytes": 581389,
+          "sha256": "9c23e8dd9eed25703288f7fc1868e4b173eebc153dda08ebfc1a0c6353072fb5"
+        }
+      },
+      "hbm_bytes_read": 122880,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 1794,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 1227,
+      "name": "kda_private_state_b1",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.04,
+        "comparison_params": {
+          "atol": 0.04,
+          "elements_per_batch": 128,
+          "num_batches": 129,
+          "num_rows": 129,
+          "physical_rows": 256,
+          "row_dim": 128,
+          "rtol": 0.04,
+          "start_row_idx": 1024,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          16512
+        ],
+        "mae": 4.112720489501953e-06,
+        "max_error": 0.0015869140625,
+        "mse": 2.837623469531536e-09,
+        "relative_error": 0.000335693359375,
+        "relative_match_rate": 99.7577519379845,
+        "rtol": 0.04,
+        "simulated_shape": [
+          16512
+        ]
+      },
+      "scope": "B1 independent KDA states; one full 128-key x 128-value head with a request-reused FPRAM scalar window",
+      "sim_latency_cycles": 14039
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+        "--case",
+        "decode_batch",
+        "--batch-size",
+        "2"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 232131,
+          "sha256": "b4eb2437b14f3b1fd8973600f155ccfb93e5f0c65d848c59470597ede80bfff8"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 52250,
+          "sha256": "9e31bf4282d18636031f877c8a3625f8601c7d1e637190669534962bd1814e9b"
+        },
+        "golden_result.txt": {
+          "bytes": 586579,
+          "sha256": "de3608b12d86d92fd64546ea50b8f42ce136d7c2c9ee4d1869f2e73120a599f9"
+        }
+      },
+      "hbm_bytes_read": 98304,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 6967,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 4750,
+      "name": "mamba_private_state_b2",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.03,
+        "comparison_params": {
+          "atol": 0.03,
+          "elements_per_batch": 64,
+          "num_batches": 520,
+          "num_rows": 520,
+          "row_dim": 64,
+          "rtol": 0.03,
+          "start_row_idx": 1024,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          33280
+        ],
+        "mae": 5.811452865600586e-06,
+        "max_error": 0.00390625,
+        "mse": 1.0593794286251068e-08,
+        "relative_error": 0.00010061264038085938,
+        "relative_match_rate": 99.93990384615384,
+        "rtol": 0.03,
+        "simulated_shape": [
+          33280
+        ]
+      },
+      "scope": "B2 independent Mamba states; reduced 4-head x 64-state x 64-head-dim functional geometry",
+      "sim_latency_cycles": 24076
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/kda/kda_stage_test.py",
+        "--case",
+        "recurrent_batch",
+        "--batch-size",
+        "2",
+        "--mlen",
+        "128",
+        "--key-dim",
+        "128"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 127689,
+          "sha256": "c245db80ddf7a7635562bd10eec6533622d267759093e19bf99eb422700c2057"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 32472,
+          "sha256": "aef0355c097bdc0eed970b61606909cd885cfd0e737bcd5bde29bdd715afb351"
+        },
+        "golden_result.txt": {
+          "bytes": 1162136,
+          "sha256": "f772d4d183ce3078a856d104f036d0b0762c04c9c10f94712f49702b10a5284b"
+        }
+      },
+      "hbm_bytes_read": 245760,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 4085,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 2952,
+      "name": "kda_private_state_b2",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.04,
+        "comparison_params": {
+          "atol": 0.04,
+          "elements_per_batch": 128,
+          "num_batches": 258,
+          "num_rows": 258,
+          "physical_rows": 384,
+          "row_dim": 128,
+          "rtol": 0.04,
+          "start_row_idx": 2048,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          33024
+        ],
+        "mae": 5.3942203521728516e-06,
+        "max_error": 0.0015869140625,
+        "mse": 4.190951585769653e-09,
+        "relative_error": 0.000354766845703125,
+        "relative_match_rate": 99.72747093023256,
+        "rtol": 0.04,
+        "simulated_shape": [
+          33024
+        ]
+      },
+      "scope": "B2 independent KDA states; one full 128-key x 128-value head with a request-reused FPRAM scalar window",
+      "sim_latency_cycles": 28287
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+        "--case",
+        "decode_batch",
+        "--batch-size",
+        "4"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 469369,
+          "sha256": "7efb47f273899a6439b13bff629ec9f73217891157ffda49b947709c565b5ebe"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 104500,
+          "sha256": "34648c814dddaf01bec1a96f5a741bc3ce15b4daf884341752f1ff47c93bf848"
+        },
+        "golden_result.txt": {
+          "bytes": 1179782,
+          "sha256": "d989cc67267df9f137d408553eb050af2c61306987a4a47d21cad872aa071974"
+        }
+      },
+      "hbm_bytes_read": 196608,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 13933,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 9500,
+      "name": "mamba_private_state_b4",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.03,
+        "comparison_params": {
+          "atol": 0.03,
+          "elements_per_batch": 64,
+          "num_batches": 1040,
+          "num_rows": 1040,
+          "row_dim": 64,
+          "rtol": 0.03,
+          "start_row_idx": 2048,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          66560
+        ],
+        "mae": 7.271766662597656e-06,
+        "max_error": 0.0078125,
+        "mse": 1.525040715932846e-08,
+        "relative_error": 0.000102996826171875,
+        "relative_match_rate": 99.93239182692307,
+        "rtol": 0.03,
+        "simulated_shape": [
+          66560
+        ]
+      },
+      "scope": "B4 independent Mamba states; reduced 4-head x 64-state x 64-head-dim functional geometry",
+      "sim_latency_cycles": 48353
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/kda/kda_stage_test.py",
+        "--case",
+        "recurrent_batch",
+        "--batch-size",
+        "4",
+        "--mlen",
+        "128",
+        "--key-dim",
+        "128"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 260393,
+          "sha256": "7f31cb0625ac27def36d7d6c0f77042976623769c00e7f8fe43983fa50b7c9d1"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 67727,
+          "sha256": "e1229fe286abcd9e101b302c1a80ebcb32c96d09423d39554d5e8fd4606c23d9"
+        },
+        "golden_result.txt": {
+          "bytes": 2325137,
+          "sha256": "f31c21fc985e5f2197671548188f7856e0bf523eee56e4dc5e5083102b4ad042"
+        }
+      },
+      "hbm_bytes_read": 491520,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 8422,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 6157,
+      "name": "kda_private_state_b4",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.04,
+        "comparison_params": {
+          "atol": 0.04,
+          "elements_per_batch": 128,
+          "num_batches": 516,
+          "num_rows": 516,
+          "physical_rows": 640,
+          "row_dim": 128,
+          "rtol": 0.04,
+          "start_row_idx": 4096,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          66048
+        ],
+        "mae": 6.407499313354492e-06,
+        "max_error": 0.002197265625,
+        "mse": 5.1513779908418655e-09,
+        "relative_error": 0.0003948211669921875,
+        "relative_match_rate": 99.70324612403101,
+        "rtol": 0.04,
+        "simulated_shape": [
+          66048
+        ]
+      },
+      "scope": "B4 independent KDA states; one full 128-key x 128-value head with a request-reused FPRAM scalar window",
+      "sim_latency_cycles": 57775
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+        "--case",
+        "decode_batch",
+        "--batch-size",
+        "8"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 1007181,
+          "sha256": "c668ae664b8ab143ceaa774f9e8f56366b48cdd629aba56520f87ccf30c71667"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 254034,
+          "sha256": "c122564a177a165be2fce5ebf34a8a85dc249f17e001c9b972e1cbcc9bb1965f"
+        },
+        "golden_result.txt": {
+          "bytes": 2345264,
+          "sha256": "c7579ddd62430f97727862c602ceb5b8128dd5e273310be479a695be980ae49c"
+        }
+      },
+      "hbm_bytes_read": 393216,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 31959,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 23094,
+      "name": "mamba_private_state_b8",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.03,
+        "comparison_params": {
+          "atol": 0.03,
+          "elements_per_batch": 64,
+          "num_batches": 2080,
+          "num_rows": 2080,
+          "row_dim": 64,
+          "rtol": 0.03,
+          "start_row_idx": 4096,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          133120
+        ],
+        "mae": 7.987022399902344e-06,
+        "max_error": 0.0078125,
+        "mse": 1.7578713595867157e-08,
+        "relative_error": 0.00012159347534179688,
+        "relative_match_rate": 99.9286358173077,
+        "rtol": 0.03,
+        "simulated_shape": [
+          133120
+        ]
+      },
+      "scope": "B8 independent Mamba states; reduced 4-head x 64-state x 64-head-dim functional geometry",
+      "sim_latency_cycles": 101012
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/kda/kda_stage_test.py",
+        "--case",
+        "recurrent_batch",
+        "--batch-size",
+        "8",
+        "--mlen",
+        "128",
+        "--key-dim",
+        "128"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 527535,
+          "sha256": "c6af2209f3a19b41518051fe2359777e852ebb4aabc3c489188e4914af5b0aa9"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 138281,
+          "sha256": "408c7635983f07a7fb8274fb0a0388712653fc5196312edde2dd51ac542bf583"
+        },
+        "golden_result.txt": {
+          "bytes": 4651280,
+          "sha256": "6438e1aae569b626a520907283a682d773f0988eb7a76c79a88350f02075f349"
+        }
+      },
+      "hbm_bytes_read": 983040,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 17100,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 12571,
+      "name": "kda_private_state_b8",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.04,
+        "comparison_params": {
+          "atol": 0.04,
+          "elements_per_batch": 128,
+          "num_batches": 1032,
+          "num_rows": 1032,
+          "physical_rows": 1152,
+          "row_dim": 128,
+          "rtol": 0.04,
+          "start_row_idx": 8192,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          132096
+        ],
+        "mae": 6.198883056640625e-06,
+        "max_error": 0.0023193359375,
+        "mse": 4.918547347187996e-09,
+        "relative_error": 0.000530242919921875,
+        "relative_match_rate": 99.72292877906976,
+        "rtol": 0.04,
+        "simulated_shape": [
+          132096
+        ]
+      },
+      "scope": "B8 independent KDA states; one full 128-key x 128-value head with a request-reused FPRAM scalar window",
+      "sim_latency_cycles": 117661
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/mamba2/mamba2_stage_test.py",
+        "--case",
+        "decode_batch",
+        "--batch-size",
+        "16"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 2061290,
+          "sha256": "f8d896fa1aa81009d6024697584dc43470e0e81bdf0496c0676abdd10ff29db0"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 532389,
+          "sha256": "7ea2bcf91204af1748b483ff1eef66f4f96ff04b6844d2d2b9c4a626ca2233ab"
+        },
+        "golden_result.txt": {
+          "bytes": 4696853,
+          "sha256": "ff0d31740bcf12d0c15139761912c6eb254fb63aeb562c3a6c779ad155ee7f75"
+        }
+      },
+      "hbm_bytes_read": 786432,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 66128,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 48399,
+      "name": "mamba_private_state_b16",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.03,
+        "comparison_params": {
+          "atol": 0.03,
+          "elements_per_batch": 64,
+          "num_batches": 4160,
+          "num_rows": 4160,
+          "row_dim": 64,
+          "rtol": 0.03,
+          "start_row_idx": 8192,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          266240
+        ],
+        "mae": 8.106231689453125e-06,
+        "max_error": 0.0078125,
+        "mse": 1.8044374883174896e-08,
+        "relative_error": 0.0001277923583984375,
+        "relative_match_rate": 99.93201622596153,
+        "rtol": 0.03,
+        "simulated_shape": [
+          266240
+        ]
+      },
+      "scope": "B16 independent Mamba states; reduced 4-head x 64-state x 64-head-dim functional geometry",
+      "sim_latency_cycles": 204886
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest/.venv/bin/python",
+        "transactional_emulator/testbench/kda/kda_stage_test.py",
+        "--case",
+        "recurrent_batch",
+        "--batch-size",
+        "16",
+        "--mlen",
+        "128",
+        "--key-dim",
+        "128"
+      ],
+      "files": {
+        "generated_asm_code.asm": {
+          "bytes": 1063750,
+          "sha256": "620e8dd3be1b75c09a0cc553cdca41b01aa4de5828e47f80a69f91c3c3367d31"
+        },
+        "generated_machine_code.mem": {
+          "bytes": 279389,
+          "sha256": "46ba7cbc8955ee75b08d2dc218e05c1c4043b1475927fe24df40bfa8b9371275"
+        },
+        "golden_result.txt": {
+          "bytes": 9303518,
+          "sha256": "80427c9958a4f35d889b984f36862cf8e69d3cabd5be5b7e2425cf98e860cac7"
+        }
+      },
+      "hbm_bytes_read": 1966080,
+      "hbm_bytes_written": 0,
+      "isa_source_lines": 34456,
+      "lstream_packet_counters": {
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_bank_words": 0,
+        "packet_conflict_stall_cycles": 0,
+        "packet_lane_restore_values": 0,
+        "packet_reads": 0,
+        "packet_service_cycles": 0,
+        "packet_writes": 0
+      },
+      "machine_code_lines": 25399,
+      "name": "kda_private_state_b16",
+      "numerical_comparison": {
+        "allclose_match_rate": 100.0,
+        "allclose_pass": true,
+        "atol": 0.04,
+        "comparison_params": {
+          "atol": 0.04,
+          "elements_per_batch": 128,
+          "num_batches": 2064,
+          "num_rows": 2064,
+          "physical_rows": 2176,
+          "row_dim": 128,
+          "rtol": 0.04,
+          "start_row_idx": 16384,
+          "use_stride_mode": false
+        },
+        "golden_shape": [
+          264192
+        ],
+        "mae": 6.109476089477539e-06,
+        "max_error": 0.0023193359375,
+        "mse": 4.8603396862745285e-09,
+        "relative_error": 0.000614166259765625,
+        "relative_match_rate": 99.72330729166666,
+        "rtol": 0.04,
+        "simulated_shape": [
+          264192
+        ]
+      },
+      "scope": "B16 independent KDA states; one full 128-key x 128-value head with a request-reused FPRAM scalar window",
+      "sim_latency_cycles": 236129
+    }
+  ],
+  "report_sha256": "e1a4418028fd3e285c3388f621c5ce74b34c5c6ba75aafaf2ab32fcc806b2e12",
+  "schema_version": 1,
+  "simulator": {
+    "commit": "9c16218c5fc9a393819ca4db9407f748fc058071",
+    "dirty_during_campaign": true
+  },
+  "status": "complete"
+}

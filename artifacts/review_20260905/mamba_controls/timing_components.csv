@@ -1,0 +1,4 @@
+model,experimental_fp32_dot,pairwise_bf16_dot,diagnostic_state_snapshots,variant,batch,tokens,issued_instructions,issue_cycles,bank_service_cycles,arithmetic_cycles,scalar_control_cycles,dma_memory_wait_cycles,total_cycles,physical_hbm_bytes_read,physical_hbm_bytes_written,common_budget_passed,max_output_relative_l2
+nemotron3_mamba2,False,False,False,A,1,2,20368,20368,10308,2576,15212,1233095.0,1281559.0,10567680,2113536,True,0.0077334437519311905
+nemotron3_mamba2,False,False,False,B,1,2,19340,19340,10308,2576,14184,1235086.0,1281494.0,10567680,2113536,True,0.0077334437519311905
+nemotron3_mamba2,False,False,False,D,1,2,596,596,4192,2584,540,1146047.0,1153959.0,4423680,2113536,True,0.0

@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "compiler_commit": "1955abba267e4c9d9874221f53a9c16db984c8cf",
+  "simulator_source_feature_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+  "scope": "Fresh review: projection, 4-token official-shape recurrence, B1 2-token prepared A/B/D; no GPU/checkpoint run",
+  "files": [
+    {
+      "path": "recurrences/summary.json",
+      "sha256": "df4b6fb42ab65da84e0e1b4de7020be6f105beb81e6bf1f2dd82df20e042987e",
+      "bytes": 8137
+    },
+    {
+      "path": "mamba_controls/summary.json",
+      "sha256": "b49a085038747f25790441ab2131e400776e2a501491051ae6bf16a93ead4418",
+      "bytes": 13470
+    },
+    {
+      "path": "mamba_controls/qualified_comparison.csv",
+      "sha256": "3225ea33ca8853455c48a0fe793a32ec242e4737a4722e8607f56f46ecb498f9",
+      "bytes": 277
+    },
+    {
+      "path": "mamba_controls/timing_components.csv",
+      "sha256": "cb2d9cb837f796fb60eba87bfb76f9a68e9c370a424e3555b5af0bb83e9ab40a",
+      "bytes": 694
+    },
+    {
+      "path": "kda_controls/summary.json",
+      "sha256": "691f669a821d18230caa6489c91b6f80ffd988c3fe599ad2853edd6e12b5f523",
+      "bytes": 13803
+    },
+    {
+      "path": "kda_controls/qualified_comparison.csv",
+      "sha256": "10895d1ad6ecdaf08728037f71c3fe47131a9131f8b775723c8092e33d4364fd",
+      "bytes": 256
+    },
+    {
+      "path": "kda_controls/timing_components.csv",
+      "sha256": "c5b0f49c7c0e567c23ff95e341d6f22fc2603739cf4b4fe474e8d365a06cddd0",
+      "bytes": 689
+    }
+  ],
+  "executed_source_sha256": {
+    "transactional_emulator/src/accelerator/dispatch.rs": "793bfd2f2752bbf14b66c5d14f3bcd72fc4c9b1821c148fff0386e5c21d97aed",
+    "transactional_emulator/src/accelerator/mview_recurrence_tests.rs": "c5e907e13588a46ccf971db2bb3545e4439850d154f3fa03dbe57ae8316c7696",
+    "transactional_emulator/testbench/aten/matrix_lcompute_recurrence_test.py": "90b9fe4176259e8778cd1456e88c6f908498bce78e981816a0948da54b2aed42",
+    "transactional_emulator/testbench/aten/matrix_lcompute_execution_compare.py": "ee1c98cc9e2eb7f9762991e6696697f60a56742cfb894fec8ed2cb7d2e5cbd8b",
+    "transactional_emulator/testbench/aten/matrix_view_projection_test.py": "3840cbbdb43f4a15425474eb5ae8763d1adcf57eb6f883ccada6a6d2d5f4acf7",
+    "plena_settings.toml": "31500fd8dcdc2b79af6720a7526a5542579865efe11848e5e65eb16aeb3450ad"
+  },
+  "gates": {
+    "compiler_pytest": {
+      "passed": 231,
+      "exit_code": 0
+    },
+    "simulator_pytest": {
+      "passed": 187,
+      "exit_code": 0
+    },
+    "rust_workspace": {
+      "passed": 308,
+      "failed": 0,
+      "ignored": 0,
+      "exit_code": 0
+    },
+    "rust_fmt": {
+      "exit_code": 0
+    },
+    "rust_clippy": {
+      "exit_code": 0
+    },
+    "projection": {
+      "exit_code": 0,
+      "observed_max_error": 0,
+      "acceptance_atol": 0.2,
+      "acceptance_rtol": 0.2
+    },
+    "connected_cli_exit_codes": {
+      "projection": 0,
+      "recurrences": 0,
+      "mamba_controls": 0,
+      "kda_controls": 0
+    },
+    "kda_AB_common_numeric_budget_passed": false
+  }
+}

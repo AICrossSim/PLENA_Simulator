@@ -1,0 +1,2 @@
+# Generated campaign payloads remain available; review source and CSV summaries first.
+artifacts/**/campaign.json linguist-generated=true
