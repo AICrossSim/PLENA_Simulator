@@ -653,6 +653,182 @@ struct LTileResult {
     matrix: MatrixPacketCounterSnapshot,
 }
 
+async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
+    assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let results = Arc::new(Mutex::new(Vec::new()));
+    let task_results = results.clone();
+    executor.spawn(async move {
+        // Three full single-tile packets; a full packet plus a one-tile tail;
+        // and two full multi-tile packets. Different coefficients per tile
+        // make the global compact offset observable in every case.
+        for (cols, tiles) in [(64_u32, 3_u32), (32, 3), (32, 4)] {
+            for compact in [true, false] {
+                for shared_source in [false, true] {
+                    let is_dot = matches!(primitive, op::LTilePrimitive::DotReduce);
+                    if is_dot && shared_source {
+                        // DOT_REDUCE requires one source tile per output tile.
+                        continue;
+                    }
+                    let is_scale = matches!(primitive, op::LTilePrimitive::ScaleAccum);
+                    let dst_rows = if is_dot { 1 } else { 2 };
+                    let src_rows = if is_dot { 2 } else { 1 };
+                    let src_tiles = if shared_source { 1 } else { tiles };
+                    let scale_tiles = if compact { 1 } else { tiles };
+                    let per_tile = if is_scale { 2 } else { 1 };
+                    let scale_cols = if compact {
+                        (per_tile * tiles).div_ceil(*BLEN) * *BLEN
+                    } else {
+                        *BLEN
+                    };
+                    let make_layout = |rows, cols, tile_count| MatrixLayout {
+                        rows,
+                        cols,
+                        tile_count,
+                        tile_pitch_rows: 2,
+                        alpha: 1,
+                        tile_skew: 0,
+                    };
+                    let dst_layout = make_layout(dst_rows, cols, tiles);
+                    let src_layout = make_layout(src_rows, cols, src_tiles);
+                    let scale_layout = make_layout(2, scale_cols, scale_tiles);
+                    let source_value = |tile: u32, row: u32, col: u32| {
+                        (1 + if shared_source { 0 } else { tile } + row + col % 3) as f32
+                    };
+                    let mut source = Vec::new();
+                    for tile in 0..src_tiles {
+                        for row in 0..src_rows {
+                            for col in 0..cols {
+                                source.push(source_value(tile, row, col));
+                            }
+                        }
+                    }
+                    let mut scales = vec![-16.0; (scale_tiles * 2 * scale_cols) as usize];
+                    for tile in 0..tiles {
+                        for row in 0..2 {
+                            let index = if compact {
+                                row * scale_cols + per_tile * tile
+                            } else {
+                                (tile * 2 + row) * scale_cols
+                            } as usize;
+                            if is_scale {
+                                scales[index] = 0.5;
+                                scales[index + 1] = (tile + row + 1) as f32;
+                            } else {
+                                scales[index] = (tile + row + 1) as f32;
+                            }
+                        }
+                    }
+                    let destination = vec![1.0; (tiles * dst_rows * cols) as usize];
+                    let mram = Arc::new(MatrixSram::with_banks(
+                        *MLEN,
+                        *MLEN as usize * 64,
+                        *BLEN,
+                        full_state_type(),
+                    ));
+                    let vram = Arc::new(VectorSram::from_mx_type(*VLEN, 32, *VECTOR_SRAM_TYPE));
+                    let mut ops = Vec::new();
+                    for (slot, base, layout, values) in [
+                        (0, 0, dst_layout, &destination),
+                        (1, 1024, src_layout, &source),
+                        (2, 2048, scale_layout, &scales),
+                    ] {
+                        mram.write_layout_packet(
+                            base,
+                            layout,
+                            QuantTensor::quantize(Tensor::from_slice(values), full_state_type()),
+                        )
+                        .await;
+                        configure_ltile_view(
+                            &mut ops,
+                            slot,
+                            ltile_shape_word(layout.rows, layout.cols, layout.tile_count),
+                            ltile_map_word(layout.tile_pitch_rows, None, slot == 2),
+                        );
+                    }
+                    ops.extend([
+                        set_gp(1, 0),
+                        set_gp(2, 1024),
+                        set_gp(3, 2048),
+                        op::Opcode::L_TILE_EXEC {
+                            rd: 1,
+                            rs1: 2,
+                            rs2: 3,
+                            primitive,
+                            source_axis: op::LTileAxis::Row,
+                            scale_axis: op::LTileAxis::Row,
+                        },
+                    ]);
+                    let mut accelerator = new_accelerator(mram.clone(), vram).await;
+                    accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+                    let actual = tensor_to_f32_vec(
+                        mram.read_layout_packet(0, dst_layout).await.0.as_tensor(),
+                    );
+                    let mut expected = Vec::with_capacity(destination.len());
+                    for tile in 0..tiles {
+                        for row in 0..dst_rows {
+                            for col in 0..cols {
+                                let value = match primitive {
+                                    op::LTilePrimitive::ScaleAccum => {
+                                        0.5 + (tile + row + 1) as f32 * source_value(tile, 0, col)
+                                    }
+                                    op::LTilePrimitive::OuterUpdate => {
+                                        1.0 + (tile + row + 1) as f32 * source_value(tile, 0, col)
+                                    }
+                                    op::LTilePrimitive::DotReduce => {
+                                        1.0 + (0..src_rows)
+                                            .map(|r| {
+                                                (tile + r + 1) as f32 * source_value(tile, r, col)
+                                            })
+                                            .sum::<f32>()
+                                    }
+                                };
+                                expected.push(value);
+                            }
+                        }
+                    }
+                    task_results.lock().unwrap().push((
+                        format!(
+                            "cols={cols}, tiles={tiles}, compact={compact}, shared={shared_source}"
+                        ),
+                        actual,
+                        expected,
+                    ));
+                }
+            }
+        }
+    });
+    executor.enter(Instant::ETERNITY).await;
+    let results = results.lock().unwrap();
+    let expected_cases = if matches!(primitive, op::LTilePrimitive::DotReduce) {
+        6
+    } else {
+        12
+    };
+    assert_eq!(results.len(), expected_cases);
+    for (case, actual, expected) in results.iter() {
+        // All inputs and outputs are BF16-exact; no tolerance can hide a
+        // coefficient, tile, row, or broadcast selection error.
+        assert_eq!(actual, expected, "{case}");
+    }
+}
+
+#[tokio::test]
+async fn l_tile_scale_accum_preserves_coefficient_layout_across_packets() {
+    check_ltile_coefficient_packets(op::LTilePrimitive::ScaleAccum).await;
+}
+
+#[tokio::test]
+async fn l_tile_dot_reduce_preserves_coefficient_layout_across_packets() {
+    check_ltile_coefficient_packets(op::LTilePrimitive::DotReduce).await;
+}
+
+#[tokio::test]
+async fn l_tile_outer_update_preserves_coefficient_layout_across_packets() {
+    check_ltile_coefficient_packets(op::LTilePrimitive::OuterUpdate).await;
+}
+
 async fn run_ltile_primitives(tile_skew: Option<u32>) -> LTileResult {
     const ROWS: u32 = 2;
     const TILES: u32 = 8;

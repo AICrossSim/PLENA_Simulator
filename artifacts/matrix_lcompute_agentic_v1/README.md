@@ -5,7 +5,11 @@ campaign. `group_results.csv` preserves every length-sorted workload group;
 `summary.csv` reports N, medians and descriptive P95 values by benchmark and
 batch size. P95 rows with fewer than 20 groups are explicitly exploratory.
 
-GPU timing/energy columns are measurements. PLENA cycle/TPOT columns are
+GPU timing columns are measurements. Energy columns explicitly marked
+`archived` retain the original legacy integral, whose sample order and window
+were incorrect. See `../gpu_energy_reanalysis_v1/summary.json` for an approximate
+request-window reanalysis; a corrected batch-energy baseline requires a new
+capture with the maintained `gpu_timing_campaign` recorder. PLENA cycle/TPOT columns are
 pre-RTL Compiler/Simulator estimates with symbolic weights. They are shown
 side by side but must not be presented as a measured GPU speedup. Routing uses
 the eager run's self-consistent token trace; the optimized timing run remains

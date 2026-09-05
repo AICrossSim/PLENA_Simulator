@@ -28,6 +28,7 @@ from .matrix_lcompute_campaign import (
     measure_fixed_phased_packet,
     recurrent_core_metrics,
     run_ablation,
+    write_artifacts,
 )
 from .nemotron3_workload import InferencePhase, Precision
 
@@ -272,6 +273,47 @@ def test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls() -
         assert metrics[MatrixVariant.D_AFFINE]["stall"] == 0
 
 
+@pytest.mark.parametrize("spec", [NEMOTRON_PACKET, KIMI_PACKET])
+def test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch(spec) -> None:
+    physical = _real_physical_evidence()
+    compiler = _real_compiler_evidence()
+    state_values = spec.heads * spec.recurrence_rows * spec.elements_per_head
+    arithmetic_ops = (
+        6 * spec.heads * spec.elements_per_head + 5 * state_values
+        if spec.model == "nemotron3"
+        else 3 * spec.heads * spec.elements_per_head + 9 * state_values
+    )
+    for variant in MatrixVariant:
+        metrics = {
+            batch: recurrent_core_metrics(
+                spec=spec,
+                variant=variant,
+                state_mode=StateMode.PLENA_BF16,
+                compiler=compiler,
+                physical=physical,
+                batch_size=batch,
+            )
+            for batch in (1, 16)
+        }
+        for batch, record in metrics.items():
+            assert record["logical_state_values"] == batch * state_values
+            assert record["arithmetic_element_ops"] == batch * arithmetic_ops
+            # C can spill intermediate state; every variant must at least
+            # load and store each request's distinct BF16 recurrent state.
+            for field in ("explicit_state_hbm_read_bytes", "explicit_state_hbm_write_bytes"):
+                assert record[field] >= batch * state_values * 2
+                if variant in (MatrixVariant.A_ORIGINAL, MatrixVariant.B_ARLO):
+                    assert record[field] == batch * state_values * 2
+        for field in (
+            "cycles",
+            "logical_state_values",
+            "arithmetic_element_ops",
+            "explicit_state_hbm_read_bytes",
+            "explicit_state_hbm_write_bytes",
+        ):
+            assert metrics[16][field] == 16 * metrics[1][field]
+
+
 def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical() -> None:
     hardware = MatrixHardwarePoint()
     physical = _real_physical_evidence()
@@ -339,14 +381,12 @@ def test_basic_model_records_publish_strict_and_ideal_timeline_endpoints() -> No
     for record in result["records"]:
         endpoints = _timeline_endpoints(record)
         assert record["strict_serial_cycles"] == endpoints["strict_serial_cycles"]
-        assert record["ideal_resource_overlap_lower_bound_cycles"] == endpoints[
-            "ideal_resource_overlap_lower_bound_cycles"
-        ]
+        assert (
+            record["ideal_resource_overlap_lower_bound_cycles"]
+            == endpoints["ideal_resource_overlap_lower_bound_cycles"]
+        )
         assert record["cycles"] == (
-            record["hbm_cycles"]
-            + record["matrix_cycles"]
-            + record["vector_cycles"]
-            + record["lcompute_cycles"]
+            record["hbm_cycles"] + record["matrix_cycles"] + record["vector_cycles"] + record["lcompute_cycles"]
         )
         assert record["ideal_resource_overlap_lower_bound_cycles"] == max(
             record["hbm_cycles"],
@@ -372,12 +412,34 @@ def test_uniform_bf16_weight_sensitivity_is_numerically_pinned() -> None:
     records = {record["variant"]: record for record in result["records"]}
     baseline = records[MatrixVariant.B_ARLO]
     phased = records[MatrixVariant.D_AFFINE]
-    assert phased["logical_weight_read_bytes"] == 6_455_212_288
+    # The output RMSNorm adds 2,688 BF16 weights, 11 HBM cycles and
+    # 7 Vector cycles. Correct Vector MUL+ADD pricing adds 529 cycles.
+    assert phased["logical_weight_read_bytes"] == 6_455_217_664
+    assert baseline["cycles"] == 5_416_009
+    assert phased["cycles"] == 4_320_036
     assert (
-        baseline["ideal_resource_overlap_lower_bound_cycles"]
-        / phased["ideal_resource_overlap_lower_bound_cycles"]
+        baseline["ideal_resource_overlap_lower_bound_cycles"] / phased["ideal_resource_overlap_lower_bound_cycles"]
     ) == 1.0
-    assert baseline["cycles"] / phased["cycles"] == pytest.approx(1.253727466373916)
+    assert baseline["cycles"] / phased["cycles"] == pytest.approx(1.2536953395758739)
+
+
+def test_exported_tables_identify_each_models_actual_mixed_checkpoint_policy(tmp_path: Path) -> None:
+    campaign = json.loads((ARTIFACT_ROOT / "campaign.json").read_text())
+    write_artifacts(campaign, tmp_path)
+    for filename in ("headline.csv", "ablation.csv"):
+        with (tmp_path / filename).open() as source:
+            rows = list(csv.DictReader(source))
+        assert {row["model"] for row in rows} == {"nemotron3", "kimi_k3"}
+        for row in rows:
+            model = row["model"]
+            expected_precision = "nvfp4" if model == "nemotron3" else "mxfp4"
+            expected_policy = (
+                "nemotron3_nano_30b_a3b_nvfp4_checkpoint_mixed_v1"
+                if model == "nemotron3"
+                else "kimi_k3_mxfp4_checkpoint_mixed_v1"
+            )
+            assert row["weight_precision"] == expected_precision
+            assert row["weight_precision_policy"] == expected_policy
 
 
 def test_checked_headline_endpoints_and_resource_sums_are_self_consistent() -> None:
@@ -394,8 +456,7 @@ def test_checked_headline_endpoints_and_resource_sums_are_self_consistent() -> N
             serial = int(row[serial_column])
             ideal = int(row[f"{label}_ideal_overlap_cycles"])
             resources = sum(
-                int(row[f"{label}_{resource}_cycles"])
-                for resource in ("hbm", "matrix", "vector", "lcompute")
+                int(row[f"{label}_{resource}_cycles"]) for resource in ("hbm", "matrix", "vector", "lcompute")
             )
             assert serial == resources
             assert ideal <= serial
@@ -403,8 +464,7 @@ def test_checked_headline_endpoints_and_resource_sums_are_self_consistent() -> N
             int(row["B_ideal_overlap_cycles"]) / int(row["D_ideal_overlap_cycles"])
         )
         assert float(row["uniform_bf16_D_speedup_vs_B_ideal_overlap"]) == pytest.approx(
-            int(row["uniform_bf16_B_ideal_overlap_cycles"])
-            / int(row["uniform_bf16_D_ideal_overlap_cycles"])
+            int(row["uniform_bf16_B_ideal_overlap_cycles"]) / int(row["uniform_bf16_D_ideal_overlap_cycles"])
         )
 
 

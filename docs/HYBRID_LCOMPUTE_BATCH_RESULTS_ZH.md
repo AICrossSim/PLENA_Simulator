@@ -5,6 +5,11 @@
 > Compiler-to-Rust 数值证据和最新周期请只看
 > [MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md](MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)。
 
+> 2026-09-05：下文数字与 hash 保留为历史叙述，未升级为当前性能结论。共享
+> Vector MAC 计费和 Nemotron final RMSNorm 修复后，所链接的旧架构 artifact
+> 已重新生成，故不再与本文旧表逐项一致；修正后的历史控制数据、复现命令和
+> SHA256 见 [hybrid_lcompute_paper2048_batch_v1/README.md](../artifacts/hybrid_lcompute_paper2048_batch_v1/README.md)。
+
 ## 1. 这次实际跑了什么
 
 这次没有使用 GPU，也没有把 B1 周期简单乘以 batch。Simulator 对每个点重新构建并调度：

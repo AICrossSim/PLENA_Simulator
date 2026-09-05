@@ -7,6 +7,9 @@ on:
     paths:
       - 'transactional_emulator/**'
       - 'analytic_models/**'
+      - 'artifacts/matrix_lcompute*/**'
+      - 'artifacts/gpu_energy_reanalysis_v1/**'
+      - 'docs/MATRIX_LCOMPUTE*'
       - 'doc/**'
       - 'PLENA_Tools/**'
       # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
@@ -23,6 +26,9 @@ on:
     paths:
       - 'transactional_emulator/**'
       - 'analytic_models/**'
+      - 'artifacts/matrix_lcompute*/**'
+      - 'artifacts/gpu_energy_reanalysis_v1/**'
+      - 'docs/MATRIX_LCOMPUTE*'
       - 'doc/**'
       - 'PLENA_Tools/**'
       - 'PLENA_Compiler'
@@ -132,7 +138,7 @@ jobs:
 
       - name: Run Rust tests
         run: |
-          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release"
+          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release -- --test-threads=1"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -190,6 +196,12 @@ jobs:
       - name: Run Hybrid L-Compute integration and artifact guards
         run: |
           nix develop --command bash -c "just test-lcompute-affine-projection && just test-hybrid-lcompute"
+
+      # The canonical Matrix-view v3 gate uses the checked-out Compiler pin and
+      # includes legal/invalid allocation cases plus actual Compiler-to-Rust DMA.
+      - name: Run canonical Matrix L-Compute pre-RTL gate
+        run: |
+          nix develop --no-write-lock-file --command just test-matrix-lcompute PLENA_Compiler
 
       # Bandwidth term + the two KV-cost bugs it exposed in the analytic model.
       - name: Run analytic performance-model regression tests

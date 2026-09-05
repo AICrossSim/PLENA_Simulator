@@ -1,9 +1,13 @@
 # Matrix SRAM L-Compute：修复后的结果与边界
 
+2026-09-05 更新：本页的解析周期使用修复后的 Vector MAC 计费、batch 工作量和
+Nemotron final RMSNorm；数值以重新生成的 `matrix_lcompute_e2e_v5` 为准。
+
 ## 1. 当前结论
 
-这轮已经把 PLENA 路径统一为 BF16，并修复了上一轮评审指出的输出丢失、
-Compiler/Rust 未联通、对照不公平、端口暗中加宽和测试假红等问题。
+PLENA 递推路径统一使用 BF16。此前已接通 Compiler/Rust、固定公平对照与端口
+定义；2026-09-05 修复继续覆盖 view 地址所有权、宽 projection、单 tile 系数布局，
+并纠正本页的解析计时和工作量统计。完整门禁与修复范围见当前冻结说明。
 
 现在能够证明的是：
 
@@ -68,6 +72,11 @@ SRAM 却按 FP32 一拍读取、等价于把端口暗中扩大到 1024 bit 的�
 
 1 MiB SRAM 每次流式处理一个 head group：Nemotron 32 heads，Kimi 16 heads。
 完整 state 不要求同时常驻；Compiler 用现有 HBM load/store 显式换组。
+
+权重存储与 state 格式分开：Nemotron 使用 checkpoint mixed NVFP4/BF16，
+Kimi 使用 checkpoint mixed **MXFP4/BF16**，不是 NVFP4。Kimi 多个普通算子仍
+使用 BF16 权重，不能把默认流量解释为整模型统一 4-bit。headline/ablation CSV
+现包含 `weight_precision` 和 `weight_precision_policy`，避免脱离策略解释数字。
 
 已有的独立长序列存储实验给出：Nemotron 在 S=32,768 时，BF16 state 相对
 FP32 的 output/state 平均 relative-L2 分别是 `0.000312/0.001668`；Kimi 在
@@ -171,9 +180,9 @@ Headline point：`MLEN=2048`、`BLEN=32`、64 banks、1 MiB BF16 Matrix SRAM、
 HBM 1560 B/cycle。B1 结果：
 
 | 模型 | A | B | C | D | D/A | D/B | D/C |
-|---|---:|---:|---:|---:|---:|---:|
-| Nemotron 3 | 4,055,091 | 3,110,067 | 2,192,850 | 2,014,094 | 2.0134x | 1.5442x | 1.0888x |
-| Kimi K3 | 103,816,704 | 97,013,856 | 93,124,740 | 91,173,903 | 1.1387x | 1.0641x | 1.0214x |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Nemotron 3 | 4,055,638 | 3,110,614 | 2,193,397 | 2,014,641 | 2.0131x | 1.5440x | 1.0887x |
+| Kimi K3 | 103,826,433 | 97,023,585 | 93,134,469 | 91,183,632 | 1.1387x | 1.0640x | 1.0214x |
 
 这些是公式时间线，不是整模 Rust 执行。它使用官方 52/93 层结构、官方维度、
 GPU calibration、Nemotron 实测 routing（可用处）和 symbolic PLENA weights。
@@ -181,8 +190,15 @@ GPU calibration、Nemotron 实测 routing（可用处）和 symbolic PLENA weigh
 Attention、MLA、MoE、dense 等仍是解析模型 stage。
 
 其中 A/B 是“每发一条动态指令计一拍”的发行周期代理，并没有在 Rust 中执行；
-C/D 才另外加入 Matrix service、算术和 HBM 项。因此 `D/A`、`D/B` 的主要来源是
+C/D 的递推核心另计 Matrix SRAM service 和 Vector 算术，所有版本均计普通
+算子及各自显式 HBM 流量。因此 `D/A`、`D/B` 的主要来源是
 多行利用率和指令压缩，不能叫可编程斜存本身的加速。
+
+普通 `conv/state/exp` 的 MAC 现在按 `ceil(MAC/VLEN)` 组 Vector MUL + ADD
+计费，默认每个 pass 一拍，和当前 `L_TILE` 算术代理一致。它不会随 Matrix
+BLEN 增大而变快。该公式仍假设 lane 充分利用，不包含额外 issue、SRAM service
+或数据依赖开销，不能代替这些普通 stage 的 transactional schedule。
+Nemotron 时间线还包含第 52 层之后、LM head 之前的 final RMSNorm。
 
 ### C 到 D 的归因（B1）
 
@@ -199,15 +215,27 @@ chunk、issue、ideal service 和 Kimi spill。纯 bank 比较必须看 D'，结
 | Batch | Nem D/A | Nem D/B | Nem D/C | Kimi D/A | Kimi D/B | Kimi D/C |
 |---:|---:|---:|---:|---:|---:|---:|
 | 1 | 2.013x | 1.544x | 1.089x | 1.139x | 1.064x | 1.021x |
-| 2 | 2.517x | 1.814x | 1.133x | 1.228x | 1.105x | 1.035x |
-| 4 | 3.017x | 2.083x | 1.177x | 1.335x | 1.155x | 1.052x |
-| 8 | 3.417x | 2.298x | 1.212x | 1.438x | 1.203x | 1.068x |
-| 16 | 3.682x | 2.440x | 1.235x | 1.518x | 1.240x | 1.080x |
-| 32 | 4.685x | 2.979x | 1.323x | 1.571x | 1.264x | 1.088x |
-| 64 | 6.555x | 3.983x | 1.486x | 1.666x | 1.308x | 1.103x |
+| 2 | 2.516x | 1.814x | 1.133x | 1.228x | 1.105x | 1.035x |
+| 4 | 3.016x | 2.083x | 1.177x | 1.335x | 1.155x | 1.052x |
+| 8 | 3.415x | 2.297x | 1.212x | 1.438x | 1.202x | 1.068x |
+| 16 | 3.680x | 2.439x | 1.235x | 1.518x | 1.239x | 1.080x |
+| 32 | 4.682x | 2.977x | 1.322x | 1.570x | 1.263x | 1.088x |
+| 64 | 6.546x | 3.978x | 1.486x | 1.666x | 1.308x | 1.103x |
 
 Nemotron B1 使用已有真实 routing。更大 batch 和 Kimi routing 仍使用 DSE
 边界，不是 GPU 实测 throughput，不能直接写成真实批量性能。
+
+同一 batch 的 A/B/C/D/E 现在报告相同的逻辑 state 数与数学 operation 数，A/B
+显式 state 读写字节也正确乘 batch。C 的中间 spill/reload 是真实 lowering 流量，
+仍单独保留。这里的 B16 是多请求解析时间线，不是声称单请求 Rust wrapper 已
+实现 B16：未提供请求私有地址的 wrapper 会拒绝不支持的 batch。
+
+每个 B16 decode step 的递推数学量（所有 A/B/C/D/E 相同）：
+
+| 模型 | 逻辑 state values | 算术 element ops |
+|---|---:|---:|
+| Nemotron，23 个 recurrent layer | 192,937,984 | 973,733,888 |
+| Kimi，69 个 recurrent layer | 1,736,441,856 | 15,668,674,560 |
 
 ## 10. HBM 敏感性（D 相对 B，B1）
 
@@ -216,14 +244,22 @@ Nemotron B1 使用已有真实 routing。更大 batch 和 Kimi routing 仍使用
 | 64 | 1.0239x | 1.0027x |
 | 256 | 1.0947x | 1.0108x |
 | 512 | 1.1872x | 1.0215x |
-| 1024 | 1.3658x | 1.0425x |
-| 1560 | 1.5442x | 1.0641x |
-| 8192 | 3.2145x | 1.2947x |
+| 1024 | 1.3657x | 1.0425x |
+| 1560 | 1.5440x | 1.0640x |
+| 8192 | 3.2121x | 1.2946x |
 
 Kimi 的完整时间线被巨大的 projection/MoE 权重流量支配，所以单独缩短 KDA
 递推无法变成很大的整模收益。这个带宽边界必须和 headline 一起报告。
 
 ## 11. Overlap、Prefill 和资源边界
+
+修复后的完整层级 prefill 解析周期如下；A/B/C/D/E 在此处相同，未给 decode
+packet lowering 虚构 prefill 加速。这些周期也不是下方缩小几何的 Rust 测量。
+
+| 模型，B1 | S16 cycles | S128 cycles |
+|---|---:|---:|
+| Nemotron | 10,643,440 | 22,765,583 |
+| Kimi | 368,904,485 | 1,259,436,407 |
 
 1 MiB 点无法同时容纳当前 working set 和下一组 state：Nemotron 至少还需要
 45,312 bytes，Kimi 至少还需要 28,736 bytes。因此 E=D，没有虚构 overlap。
@@ -245,6 +281,10 @@ segment，Kimi 为 16 个 128-value segment）；cyclic restore 是 64 个 512-b
 bank word、6 级 mux。公平 D' 对照已经证明任意可编程 row coefficient 没有
 bank-service 收益，因此最终设计删除它：新增这类加法器为 0。保留的可编程量
 只有每个活动 view 一个 6-bit tile-phase accumulator，4 个 slot 上界合计 24 bits。
+
+另外，Rust `DOT_REDUCE` 跨行保留每个 lane 的 FP32 累加值；VLEN=2048 时为
+65,536 bits（8 KiB）的算术状态。寄存器复用、反馈 mux、舍入点和吞吐仍需 RTL
+明确映射。“新增 SRAM payload 为零”不等于已经证明“新增算术存储为零”。
 
 没有 RTL 与综合，所以不能给 LUT、面积、频率、功耗、PPA、Token/J 或相对 GPU
 的硬件加速比。

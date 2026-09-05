@@ -1,5 +1,8 @@
 # Nemotron Agentic Workload：Matrix L-Compute DSE
 
+2026-09-05 更新：PLENA 周期已重生成；B200 timing 继续使用原始实测归档。
+旧能耗积分存在采样顺序和窗口问题，现单独标为历史值，离线重积分不能冒充新 GPU 测量。
+
 ## 1. 这轮解决了什么
 
 这轮没有增加 ISA、cache 或硬件结构。它修复的是实验可信度：把真实 B200
@@ -46,7 +49,9 @@ expert 并集，不是直接采集的 batched route。
 
 | 数据 | 含义 |
 |---|---|
-| GPU timing/energy | 真实 B200 NVFP4 测量 |
+| GPU timing | 真实 B200 NVFP4 时间测量 |
+| GPU archived energy | 原始采样的旧积分结果，存在已知方法缺陷 |
+| GPU energy reanalysis | 对同一采样的离线 request-window 近似重积分，不是新测量 |
 | GPU eager routing | 真实 checkpoint route，决定每步读取哪些专家权重 |
 | PLENA cycles | 官方尺寸、Compiler recurrence、symbolic weights 的 pre-RTL 公式时间线 |
 
@@ -55,20 +60,32 @@ GPU 毫秒没有进入 PLENA 周期公式。PLENA 的 1 GHz 代理也不能除�
 
 ## 4. GPU baseline 的可追溯来源
 
-下表逐项来自外部 `campaign_summary.json -> timing.aggregate.all`，而不是从本仓
-`summary.csv` 二次推断。每个 batch 都有 960 个 request measurement；trial 数依次为
-960、480、240、120、60。
+下表的 TTFT、ITL、request E2E 和吞吐来自外部
+`campaign_summary.json -> timing.aggregate.all`；TPOT 和 batch E2E 从相同
+`latency_raw.jsonl` 的 measurement 行重算。每个 batch 都有 960 个 request
+measurement；去重后的 trial 数依次为 960、480、240、120、60。
 
-| Batch | TTFT median | ITL median | 吞吐 median | Batch 能耗 median |
-|---:|---:|---:|---:|---:|
-| 1 | 81.79 ms | 4.454 ms | 144.80 tok/s | 65.30 J |
-| 2 | 80.82 ms | 5.086 ms | 267.54 tok/s | 75.78 J |
-| 4 | 83.73 ms | 5.614 ms | 494.06 tok/s | 97.90 J |
-| 8 | 86.44 ms | 5.766 ms | 969.99 tok/s | 129.02 J |
-| 16 | 122.05 ms | 6.738 ms | 1569.63 tok/s | 186.69 J |
+| Batch | TTFT median | ITL median | TPOT median | Request E2E median | Batch E2E median | 吞吐 median |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 81.79 ms | 4.454 ms | 4.475 ms | 220.98 ms | 220.99 ms | 144.80 tok/s |
+| 2 | 80.82 ms | 5.086 ms | 5.102 ms | 239.11 ms | 239.21 ms | 267.54 tok/s |
+| 4 | 83.73 ms | 5.614 ms | 5.621 ms | 258.85 ms | 259.08 ms | 494.06 tok/s |
+| 8 | 86.44 ms | 5.766 ms | 5.722 ms | 263.61 ms | 263.92 ms | 969.99 tok/s |
+| 16 | 122.05 ms | 6.738 ms | 6.577 ms | 325.64 ms | 326.19 ms | 1569.63 tok/s |
+
+ITL 是逐 token 间隔的中位数；TPOT 是每个 request 平均间隔再取中位数，不能
+合并为一个统计量。吞吐基于整批生成 token 数和 batch E2E；`325.64 ms` 是 B16
+的 request E2E，不能把它标成整批时间。B16 峰值显存为 `71.5145 GiB`。
 
 本仓 `summary.csv` 的 GPU 列是“workload-group 中位数的中位数”，用于和同一组
 PLENA DSE 对齐；它与上面的“全部 request/trial 全局聚合”是两个统计量。
+
+旧 power trace 来自两个线程，B16 的 60 个 trial 中有 12 个时间戳乱序，且旧积分
+没有精确裁剪 batch 窗口。旧 `186.69 J` 只能作为归档结果。离线重新排序、线性
+插值并裁剪已观察到的 request 窗口后，B16 中位数约为 `180.795 J`；由于历史
+日志没有记录准确 batch 起止与 power-read 时刻，这仍是 request-window 近似，
+不是精确校正后的 batch 能耗 baseline，也不是新一次 B200 测量。完整证据见
+[`gpu_energy_reanalysis_v1/summary.json`](../artifacts/gpu_energy_reanalysis_v1/summary.json)。
 
 ## 5. 路由负载与样本数
 
@@ -90,17 +107,23 @@ PLENA DSE 对齐；它与上面的“全部 request/trial 全局聚合”是两�
 固定硬件假设：`MLEN=2048`、`BLEN=32`、64 banks、1 MiB BF16 Matrix SRAM、
 1 GHz、1560 B/cycle HBM。每个 group 连续模拟 32 个 decode step。
 
+普通 conv/state/exp MAC 按 VLEN 的 MUL + ADD 两个 pass 计费，默认各一拍；
+不再借用 Matrix 阵列吞吐。该计费仍是满 lane 的算术代理，未替代普通算子的
+Rust 调度。Nemotron 的 final RMSNorm 已计入；同 batch 的所有 A..E 具有相同
+逻辑 state 数和数学工作量。batch 时间线重复单请求递推、保留请求私有 state，
+不表示当前单请求 L-Tile wrapper 可以静默接受 B16。
+
 - **严格串行**：`HBM + Matrix + Vector + L-Compute`。这是当前依赖安全的结果。
 - **理想资源重叠下界**：`max(HBM, Matrix, Vector + L-Compute)`。它假设三个资源
   完全重叠，不考虑依赖、容量和仲裁；不是 Compiler 已发射的调度。
 
 | B | N | D/A 串行 | D/B 串行 | D/C 串行 | D/B 理想重叠端点 | D TPOT 串行 | D TPOT 理想下界 |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 48 | 2.016x | 1.545x | 1.098x | 1.000x | 2.009 ms | 1.872 ms |
-| 2 | 24 | 2.580x | 1.848x | 1.152x | 1.024x | 2.583 ms | 2.309 ms |
-| 4 | 12 | 3.286x | 2.227x | 1.220x | 1.564x | 3.571 ms | 3.022 ms |
-| 8 | 6 | 4.100x | 2.664x | 1.298x | 2.270x | 5.267 ms | 4.168 ms |
-| 16 | 3 | 5.082x | 3.191x | 1.393x | 3.274x | 7.999 ms | 5.780 ms |
+| 1 | 48 | 2.016x | 1.545x | 1.089x | 1.000x | 2.009 ms | 1.872 ms |
+| 2 | 24 | 2.580x | 1.849x | 1.138x | 1.024x | 2.583 ms | 2.309 ms |
+| 4 | 12 | 3.286x | 2.227x | 1.200x | 1.565x | 3.572 ms | 3.022 ms |
+| 8 | 6 | 4.100x | 2.665x | 1.272x | 2.271x | 5.268 ms | 4.168 ms |
+| 16 | 3 | 5.082x | 3.192x | 1.357x | 3.276x | 8.000 ms | 5.780 ms |
 
 低 batch 时 HBM 是 B 和 D 的共同下界：理想重叠会把 B1 的 D/B 收益完全隐藏。
 batch 增大后 Arlo B 转为 Vector/issue 主导，而 D 仍接近 HBM 主导，所以 B4 以后即使
@@ -123,11 +146,11 @@ scale、物理 padding/alignment 和反量化计算。因此这是流量敏感�
 
 | B | Mixed NVFP4 D/B（串行 / 理想） | MXFP8 D/B（串行 / 理想） | BF16 D/B（串行 / 理想） |
 |---:|---:|---:|---:|
-| 1 | 1.545x / 1.000x | 1.484x / 1.000x | 1.254x / 1.000x |
-| 2 | 1.848x / 1.024x | 1.696x / 1.000x | 1.371x / 1.000x |
-| 4 | 2.227x / 1.564x | 1.945x / 1.154x | 1.514x / 1.000x |
-| 8 | 2.664x / 2.270x | 2.235x / 1.577x | 1.692x / 1.000x |
-| 16 | 3.191x / 3.274x | 2.626x / 2.211x | 1.949x / 1.165x |
+| 1 | 1.545x / 1.000x | 1.485x / 1.000x | 1.254x / 1.000x |
+| 2 | 1.849x / 1.024x | 1.696x / 1.000x | 1.371x / 1.000x |
+| 4 | 2.227x / 1.565x | 1.945x / 1.155x | 1.514x / 1.000x |
+| 8 | 2.665x / 2.271x | 2.235x / 1.577x | 1.692x / 1.000x |
+| 16 | 3.192x / 3.276x | 2.626x / 2.212x | 1.950x / 1.165x |
 
 以 workload-group 中位数计，B1 的 32-step logical weight read 为 85.20 GiB
 (mixed NVFP4)、96.94 GiB (MXFP8)、192.38 GiB (BF16)；B16 分别为 234.96、
@@ -138,7 +161,7 @@ scale、物理 padding/alignment 和反量化计算。因此这是流量敏感�
 在 93 个 group 中：
 
 - C 的累计 bank stall 为 `188,416 × B` cycles，占 C 整模周期中位数约
-  `0.27%` (B1) 到 `0.85%` (B16)；
+  `0.27%` (B1) 到 `0.87%` (B16)；
 - D 的 bank stall 全部为 0；
 - 本轮每个 group 都显式携带重新计算的 D′ packet evidence；
 - D′ 使用原固定对角接线和合法 per-tile base phase，同样 0 stall；

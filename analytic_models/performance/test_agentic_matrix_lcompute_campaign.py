@@ -148,6 +148,11 @@ def test_checked_agentic_artifact_is_self_consistent() -> None:
         "ignored_decode_events": 104_489,
     }
     assert campaign["source"]["gpu_global_aggregates"]["batch_b16"]["trial_measurements"] == 60
+    assert campaign["source"]["gpu_energy_contract"]["status"] == "archived_legacy_integration_requires_recapture"
+    assert all(
+        group["gpu"]["energy_status"] == "archived_legacy_integration_requires_recapture"
+        for group in campaign["groups"]
+    )
     assert set(campaign["weight_precision_contract"]) == {
         name for name, _precision, _description in WEIGHT_PRECISION_SCENARIOS
     }
@@ -177,7 +182,7 @@ def test_summary_marks_low_sample_p95_as_exploratory(monkeypatch: pytest.MonkeyP
         "gpu_itl_ms_median",
         "gpu_e2e_ms_median",
         "gpu_batch_throughput_tokens_s_median",
-        "gpu_batch_energy_joules_median",
+        "gpu_archived_batch_energy_joules_median",
         "A_original_cycles",
         "B_arlo_cycles",
         "C_fixed_cycles",

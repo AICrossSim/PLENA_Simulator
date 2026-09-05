@@ -17,6 +17,7 @@ for _path in (_REPO_ROOT, _COMPILER_ROOT):
         sys.path.insert(0, str(_path))
 
 from compiler.aten.plena.matrix_recurrence_lowering import (  # noqa: E402
+    KIMI_KDA,
     NEMOTRON_MAMBA,
     MatrixRecurrenceSpec,
     RecurrenceKind,
@@ -25,8 +26,15 @@ from compiler.aten.plena.matrix_recurrence_lowering import (  # noqa: E402
     build_recurrence_working_set,
 )
 from transactional_emulator.testbench.aten.matrix_lcompute_recurrence_test import (  # noqa: E402
+    RECURRENCE_RELATIVE_L2_LIMIT,
     _assert_close,
+    _bf16,
+    _kda_inputs,
+    _kda_reference,
+    _mamba_inputs,
     _mamba_packet_values,
+    _mamba_reference,
+    _state_seed,
 )
 
 
@@ -42,6 +50,51 @@ def test_numerical_guard_rejects_a_head_permutation() -> None:
     permuted = expected.roll(1, dims=0)
     with pytest.raises(AssertionError, match="values mismatch"):
         _assert_close("permuted heads", permuted, expected)
+
+
+@pytest.mark.parametrize(
+    ("spec", "inputs", "reference"),
+    [(NEMOTRON_MAMBA, _mamba_inputs, _mamba_reference), (KIMI_KDA, _kda_inputs, _kda_reference)],
+    ids=["nemotron", "kimi"],
+)
+def test_numerical_guard_rejects_ten_percent_loss_on_official_outputs(spec, inputs, reference) -> None:
+    # These low-magnitude outputs used to pass the 0.01 absolute tolerance
+    # even with a 10% gain error. Exercise the actual seeded four-token data.
+    previous_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        state = _state_seed(spec)
+        for token in range(4):
+            output, state = reference(state, inputs(token))
+            with pytest.raises(AssertionError, match="l2_budget"):
+                _assert_close(f"token {token} gain loss", _bf16(output * 0.9), output)
+            _assert_close(f"token {token} identity", output, output)
+    finally:
+        torch.set_num_threads(previous_threads)
+
+
+def test_numerical_guard_enforces_the_declared_norm_budget() -> None:
+    expected = torch.linspace(-0.03, 0.03, 256)
+    _assert_close("within BF16 budget", expected * (1 - 0.8 * RECURRENCE_RELATIVE_L2_LIMIT), expected)
+    with pytest.raises(AssertionError, match="l2_budget"):
+        _assert_close("outside BF16 budget", expected * (1 - 1.2 * RECURRENCE_RELATIVE_L2_LIMIT), expected)
+
+
+@pytest.mark.parametrize("reference_value", [0.0, 1e-9])
+def test_numerical_guard_uses_an_absolute_rms_floor_near_zero(reference_value: float) -> None:
+    expected = torch.full((256,), reference_value)
+    _assert_close("near zero roundoff", expected + 5e-8, expected)
+    with pytest.raises(AssertionError, match="l2_budget"):
+        _assert_close("near zero corruption", expected + 2e-7, expected)
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+def test_numerical_guard_rejects_non_finite_values(bad_value: float) -> None:
+    bad = torch.tensor([bad_value])
+    with pytest.raises(AssertionError, match="non-finite"):
+        _assert_close("bad result", bad, torch.zeros(1))
+    with pytest.raises(AssertionError, match="non-finite"):
+        _assert_close("bad reference", torch.zeros(1), bad)
 
 
 def test_partial_mamba_head_group_zero_pads_every_scalar_packet() -> None:

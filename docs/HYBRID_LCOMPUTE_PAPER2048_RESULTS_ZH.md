@@ -4,6 +4,11 @@
 > 不能与统一 BF16 的 Matrix-SRAM campaign 混用。当前唯一有效结果见
 > [MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md](MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)。
 
+> 2026-09-05：下文数字与 hash 保留为历史叙述，未升级为当前性能结论。共享
+> Vector MAC 计费和 Nemotron final RMSNorm 修复后，所链接的旧架构 artifact
+> 已重新生成，故不再与本文旧表逐项一致；修正后的历史控制数据、复现命令和
+> SHA256 见 [hybrid_lcompute_paper2048_v1/README.md](../artifacts/hybrid_lcompute_paper2048_v1/README.md)。
+
 ## 1. 测了什么
 
 本轮把 Compiler/Simulator 重新对齐到 PLENA 论文最终系统点：

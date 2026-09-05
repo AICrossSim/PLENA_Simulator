@@ -125,6 +125,11 @@ class HardwarePoint:
     clock_period_ps: int = 1000
     exp_latency: int = 2
     reduction_latency: int = 8
+    # Analytic fully packed Vector passes, matching the 1-cycle MUL/ADD
+    # assumption used by the Matrix L_TILE recurrence service model. These
+    # are configurable proxies, not a claim about a synthesized pipeline.
+    vector_mul_latency: int = 1
+    vector_add_latency: int = 1
     mamba_parallel_heads: int = 8
     kda_parallel_heads: int = 4
     explicit_state_resident_bytes: int = 0
@@ -577,15 +582,27 @@ def build_residency_plan(report: WorkloadReport, capacity_bytes: int, decode_tok
 
 
 def _generic_compute(stage: StageWork, hardware: HardwarePoint) -> tuple[int, int]:
-    matrix = math.ceil(stage.macs / hardware.matrix_macs_per_cycle) if stage.macs else 0
+    """Price work on its execution resource before rounding to lane groups.
+
+    Short convolution and recurrent state MACs execute as Vector MUL then
+    ADD, as do the L_TILE DOT_REDUCE/OUTER_UPDATE arithmetic phases. Their
+    aggregate fully packed pass estimate excludes additional dependencies,
+    SRAM service and issue overhead; it is not a transactional schedule.
+    Matrix-backed projections retain Matrix throughput even when their stage
+    also includes Vector postprocessing.
+    """
+
+    vector_macs = stage.resource in {"conv", "state", "exp"}
+    matrix = math.ceil(stage.macs / hardware.matrix_macs_per_cycle) if stage.macs and not vector_macs else 0
     vector = math.ceil(stage.elementwise_ops / hardware.vector_lanes) if stage.elementwise_ops else 0
     if stage.exp_ops:
         vector += math.ceil(stage.exp_ops / hardware.vector_lanes) * hardware.exp_latency
     if stage.scan_compositions:
         vector += math.ceil(stage.scan_compositions / hardware.vector_lanes)
-    if stage.resource in {"conv", "state", "exp"}:
-        vector += matrix
-        matrix = 0
+    if vector_macs and stage.macs:
+        vector += math.ceil(stage.macs / hardware.vector_lanes) * (
+            hardware.vector_mul_latency + hardware.vector_add_latency
+        )
     return matrix, vector
 
 
@@ -2076,6 +2093,11 @@ def build_campaign(
             "dimensions": "official pinned real shapes and full 52/93-layer schedules",
             "weights": "symbolic performance execution; not full-checkpoint numerical execution",
             "cycles": "Compiler/Simulator estimate at an assumed clock, not RTL timing",
+            "generic_vector_mac": (
+                "conv/state/exp MACs use fully packed VLEN-wide MUL then ADD passes "
+                "at the configured vector_mul_latency/vector_add_latency; the default "
+                "is one cycle per pass, with no extra SRAM/issue/dependency cost"
+            ),
             "state": "ordinary tensors with explicit transfers; no cache/hit/miss/replacement",
             "state_multirow_layout": (
                 "executable for Mamba/KDA decay and rank-update packets; prediction/readout "

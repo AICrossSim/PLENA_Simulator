@@ -4,6 +4,11 @@
 > 代表当前 Matrix-SRAM `L_TILE`、公平 D' 对照或统一 BF16 配置。当前唯一有效
 > 报告见 [MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md](MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)。
 
+> 2026-09-05：下文数字与 hash 保留为历史叙述，未升级为当前性能结论。共享
+> Vector MAC 计费和 Nemotron final RMSNorm 修复后，所链接的旧架构 artifact
+> 已重新生成，故不再与本文旧表逐项一致；修正后的历史控制数据、复现命令和
+> SHA256 见 [hybrid_lcompute_packet_v2/README.md](../artifacts/hybrid_lcompute_packet_v2/README.md)。
+
 ## 1. 先说结论
 
 这轮完成了可执行的多行 L-Compute 数据通路，而不再只是独立布局测试：

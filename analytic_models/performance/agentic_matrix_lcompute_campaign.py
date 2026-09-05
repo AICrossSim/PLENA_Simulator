@@ -18,7 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .agentic_campaign import AgenticBatchGroup, AgenticCampaign, load_agentic_campaign
+from .agentic_campaign import LEGACY_GPU_ENERGY_STATUS, AgenticBatchGroup, AgenticCampaign, load_agentic_campaign
 from .matrix_lcompute_campaign import (
     MatrixHardwarePoint,
     MatrixVariant,
@@ -224,7 +224,8 @@ def _flatten_group(row: dict[str, Any]) -> dict[str, Any]:
         "gpu_itl_ms_median": gpu["itl_ms_median"],
         "gpu_e2e_ms_median": gpu["e2e_ms_median"],
         "gpu_batch_throughput_tokens_s_median": gpu["batch_throughput_tokens_s_median"],
-        "gpu_batch_energy_joules_median": gpu["batch_energy_joules_median"],
+        "gpu_archived_batch_energy_joules_median": gpu["batch_energy_joules_median"],
+        "gpu_energy_status": gpu["energy_status"],
         "A_original_cycles": cycles[str(MatrixVariant.A_ORIGINAL)],
         "B_arlo_cycles": cycles[str(MatrixVariant.B_ARLO)],
         "C_fixed_cycles": cycles[str(MatrixVariant.C_FIXED)],
@@ -274,7 +275,7 @@ def _summary_rows(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "gpu_itl_ms_median",
         "gpu_e2e_ms_median",
         "gpu_batch_throughput_tokens_s_median",
-        "gpu_batch_energy_joules_median",
+        "gpu_archived_batch_energy_joules_median",
         "A_original_cycles",
         "B_arlo_cycles",
         "C_fixed_cycles",
@@ -308,6 +309,7 @@ def _summary_rows(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "batch_size": batch_size,
             "group_count": len(rows),
             "statistical_unit": "length-sorted disjoint workload group",
+            "gpu_energy_status": LEGACY_GPU_ENERGY_STATUS,
             "p95_status": ("descriptive_at_least_20_groups" if len(rows) >= 20 else "exploratory_low_n"),
         }
         for metric in metrics:
@@ -398,7 +400,7 @@ def build_agentic_matrix_lcompute_campaign(
             "p95_policy": "reported descriptively; rows with N < 20 are labelled exploratory_low_n",
         },
         "claim_boundary": {
-            "gpu": "real B200 NVFP4 timing and energy baseline",
+            "gpu": "real B200 NVFP4 timing; legacy archived energy requires recapture with corrected sampling",
             "routing": (
                 "real B1 eager traces combined according to measured length-sorted batch membership; "
                 "not direct batched routing capture"
@@ -445,7 +447,11 @@ campaign. `group_results.csv` preserves every length-sorted workload group;
 `summary.csv` reports N, medians and descriptive P95 values by benchmark and
 batch size. P95 rows with fewer than 20 groups are explicitly exploratory.
 
-GPU timing/energy columns are measurements. PLENA cycle/TPOT columns are
+GPU timing columns are measurements. Energy columns explicitly marked
+`archived` retain the original legacy integral, whose sample order and window
+were incorrect. See `../gpu_energy_reanalysis_v1/summary.json` for an approximate
+request-window reanalysis; a corrected batch-energy baseline requires a new
+capture with the maintained `gpu_timing_campaign` recorder. PLENA cycle/TPOT columns are
 pre-RTL Compiler/Simulator estimates with symbolic weights. They are shown
 side by side but must not be presented as a measured GPU speedup. Routing uses
 the eager run's self-consistent token trace; the optimized timing run remains

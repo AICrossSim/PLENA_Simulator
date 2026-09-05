@@ -14,7 +14,7 @@ use crate::runtime_config::{
     VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
-use crate::vector_machine::{ScalarOperand, VectorBinaryOp, VectorOperandViews};
+use crate::vector_machine::{ScalarOperand, TileScaleLayout, VectorBinaryOp, VectorOperandViews};
 use crate::{cycle, dma, op, timing};
 use runtime::{Executor, Instant};
 use sram::matrix::MatrixPacketService;
@@ -263,6 +263,11 @@ impl Accelerator {
                     {
                         let tile_count =
                             tiles_per_packet.min(destination.shape.tile_count - first_tile);
+                        let scale_layout = if scales.shape.tile_count == 1 {
+                            TileScaleLayout::Compact { first_tile }
+                        } else {
+                            TileScaleLayout::Expanded
+                        };
                         let destination_lines = (first_tile..first_tile + tile_count)
                             .map(|tile| (tile, row))
                             .collect::<Vec<_>>();
@@ -320,7 +325,7 @@ impl Accelerator {
                                         scale_packet,
                                         destination.shape.cols,
                                         scale_line_width,
-                                        first_tile,
+                                        scale_layout,
                                     )
                                     .await
                             }
@@ -332,7 +337,7 @@ impl Accelerator {
                                         scale_packet,
                                         destination.shape.cols,
                                         scale_line_width,
-                                        first_tile,
+                                        scale_layout,
                                     )
                                     .await
                             }
@@ -365,6 +370,11 @@ impl Accelerator {
                 let tiles_per_packet = (self.v_machine.tile_size() / source_line_width).max(1);
                 for first_tile in (0..source.shape.tile_count).step_by(tiles_per_packet as usize) {
                     let tile_count = tiles_per_packet.min(source.shape.tile_count - first_tile);
+                    let scale_layout = if scales.shape.tile_count == 1 {
+                        TileScaleLayout::Compact { first_tile }
+                    } else {
+                        TileScaleLayout::Expanded
+                    };
                     let destination_lines = (first_tile..first_tile + tile_count)
                         .map(|tile| (tile, 0))
                         .collect::<Vec<_>>();
@@ -403,7 +413,7 @@ impl Accelerator {
                                 scale_packet,
                                 source_line_width,
                                 scale_line_width,
-                                first_tile,
+                                scale_layout,
                             )
                             .await;
                     }

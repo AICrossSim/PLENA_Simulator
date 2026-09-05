@@ -5,8 +5,11 @@ from __future__ import annotations
 import csv
 import json
 import os
+from dataclasses import replace
 from functools import cache, lru_cache
 from pathlib import Path
+
+import pytest
 
 from .hybrid_lcompute_campaign import (
     HardwarePoint,
@@ -14,6 +17,7 @@ from .hybrid_lcompute_campaign import (
     Variant,
     _sha256_json,
     _gpu_summary,
+    _generic_compute,
     _model,
     _packet_recurrence_service,
     build_layout_evidence,
@@ -27,7 +31,8 @@ from .hybrid_lcompute_campaign import (
 )
 from .gpu_evidence import build_report as build_gpu_report
 from .hybrid_routing import load_pinned_nemotron_profile
-from .nemotron3_workload import InferencePhase, Precision, WorkloadScenario
+from .matrix_lcompute_campaign import MatrixHardwarePoint
+from .nemotron3_workload import InferencePhase, Precision, StageWork, WorkloadScenario
 
 
 COMPILER_ROOT = Path(
@@ -56,6 +61,65 @@ def _paper_compiler() -> dict:
 
 def _records(result: dict) -> dict[str, dict]:
     return {str(record["variant"]): record for record in result["records"]}
+
+
+@pytest.mark.parametrize("hardware", [paper_2048_hardware_point(), MatrixHardwarePoint()])
+@pytest.mark.parametrize("resource", ["conv", "state", "exp"])
+def test_vector_mac_work_uses_vector_lanes_and_is_independent_of_matrix_blen(hardware, resource) -> None:
+    # 65,537 MACs need 33 Vector groups at 2,048 lanes. Each group costs a
+    # MUL pass and an ADD pass, even when the Matrix array grows wider.
+    stage = StageWork(0, "mamba", "vector_mac_probe", resource, macs=65_537)
+    assert {_generic_compute(stage, replace(hardware, blen=blen)) for blen in (4, 32, 64)} == {(0, 66)}
+    assert _generic_compute(stage, replace(hardware, vector_mul_latency=2, vector_add_latency=4)) == (0, 198)
+
+    matrix_stage = replace(stage, resource="matrix_vector", macs=65_536)
+    assert _generic_compute(matrix_stage, replace(hardware, blen=4)) == (8, 0)
+    assert _generic_compute(matrix_stage, replace(hardware, blen=32)) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    "phase,batch,sequence_length,include_lm_head",
+    [
+        (InferencePhase.DECODE, 1, 1, True),
+        (InferencePhase.DECODE, 16, 1, False),
+        (InferencePhase.PREFILL, 2, 128, True),
+    ],
+)
+def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+    phase, batch, sequence_length, include_lm_head
+) -> None:
+    model = _model(
+        "nemotron3",
+        COMPILER_ROOT,
+        activation_precision=Precision.BF16,
+        weight_precision=None,
+        state_precision=Precision.BF16,
+    )
+    report = model.build(
+        WorkloadScenario(
+            phase=phase,
+            batch_size=batch,
+            sequence_length=sequence_length,
+            include_lm_head=include_lm_head,
+        )
+    )
+    norms = [stage for stage in report.stages if stage.name == "final_rms_norm"]
+    assert len(norms) == 1
+    norm = norms[0]
+    expected_index = -2 if include_lm_head else -1
+    assert report.stages[expected_index] == norm
+    assert report.stages[expected_index - 1].name == "block_residual"
+    assert report.stages[expected_index - 1].layer_id == 51
+    if include_lm_head:
+        assert report.stages[-1].name == "lm_head"
+    elements = batch * sequence_length * model.arch.hidden_size
+    assert (norm.layer_id, norm.layer_type, norm.resource) == (-1, "output", "vector")
+    assert norm.elementwise_ops == 5 * elements
+    assert norm.traffic.activation_read_bytes == norm.traffic.activation_write_bytes == 2 * elements
+    assert norm.traffic.weight_read_bytes == 2 * model.arch.hidden_size
+    assert report.weight_precision == Precision.NVFP4
+    assert report.weight_precision_policy.precision_for(-1, "final_rms_norm") == Precision.BF16
+    assert sum(stage.name == "block_rms_norm" for stage in report.stages) == 52
 
 
 def test_base_geometry_preserves_regular_vector_rows() -> None:

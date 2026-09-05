@@ -188,8 +188,15 @@ test-matrix-lcompute-python compiler_root="PLENA_Compiler":
         analytic_models/performance/test_matrix_state_residency.py \
         analytic_models/performance/test_agentic_campaign.py \
         analytic_models/performance/test_agentic_matrix_lcompute_campaign.py \
+        analytic_models/performance/test_gpu_energy.py \
         analytic_models/performance/test_matrix_lcompute_campaign.py \
         transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py
+
+# Preserve the raw archive and produce a separately labelled request-window
+# approximation. This does not recapture or certify exact legacy batch energy.
+gpu-energy-reanalysis campaign_root output="artifacts/gpu_energy_reanalysis_v1/summary.json":
+    python3 -m analytic_models.performance.gpu_energy \
+        --campaign-root {{campaign_root}} --output {{output}}
 
 # Compiler encoding, dominance, packet extraction, physical writeback and
 # official-shape workload guards used by the Matrix L-Compute campaign.

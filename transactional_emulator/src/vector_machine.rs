@@ -69,6 +69,38 @@ pub(crate) enum VectorBinaryOp {
     Mul,
 }
 
+/// Coefficient representation selected by the Matrix-view descriptor.
+/// A one-tile packet has the same length in either representation, so packet
+/// length cannot identify whether coefficients are global or packet-local.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum TileScaleLayout {
+    Compact { first_tile: u32 },
+    Expanded,
+}
+
+impl TileScaleLayout {
+    fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+        assert!(width as usize >= per_tile);
+        match self {
+            Self::Compact { first_tile } => {
+                assert_eq!(values, width as usize);
+                assert!(
+                    per_tile * (first_tile as usize + tiles) <= values,
+                    "compact L_TILE coefficients must cover every addressed tile"
+                );
+            }
+            Self::Expanded => assert_eq!(values, tiles * width as usize),
+        }
+    }
+
+    fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+        match self {
+            Self::Compact { first_tile } => per_tile * (first_tile as usize + tile),
+            Self::Expanded => tile * width as usize,
+        }
+    }
+}
+
 impl From<f32> for ScalarOperand {
     fn from(value: f32) -> Self {
         Self::Broadcast(value)
@@ -612,7 +644,7 @@ impl VectorMachine {
         scales: QuantTensor,
         row_width: u32,
         scale_width: u32,
-        scale_tile_offset: u32,
+        scale_layout: TileScaleLayout,
     ) -> QuantTensor {
         let dst = tensor_to_f32_vec(destination.as_tensor());
         let src = tensor_to_f32_vec(source.as_tensor());
@@ -620,24 +652,11 @@ impl VectorMachine {
         let rows = dst.len() / row_width as usize;
         assert_eq!(dst.len(), rows * row_width as usize);
         assert!(src.len() == row_width as usize || src.len() == dst.len());
-        let expanded = coeff.len() == rows * scale_width as usize;
-        if expanded {
-            assert!(scale_width >= 2, "SCALE_ACCUM needs [a,b] per row");
-        } else {
-            assert_eq!(coeff.len(), scale_width as usize);
-            assert!(
-                2 * (scale_tile_offset as usize + rows) <= coeff.len(),
-                "compact SCALE_ACCUM packet needs one [a,b] pair per destination tile"
-            );
-        }
+        scale_layout.validate(coeff.len(), rows, scale_width, 2);
 
         let mut result = vec![0_f32; dst.len()];
         for row in 0..rows {
-            let coefficient = if expanded {
-                row * scale_width as usize
-            } else {
-                2 * (scale_tile_offset as usize + row)
-            };
+            let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
             let a = coeff[coefficient];
             let b = coeff[coefficient + 1];
             for col in 0..row_width as usize {
@@ -667,7 +686,7 @@ impl VectorMachine {
         scales: QuantTensor,
         row_width: u32,
         scale_width: u32,
-        scale_tile_offset: u32,
+        scale_layout: TileScaleLayout,
     ) {
         let values = tensor_to_f32_vec(rows.as_tensor());
         let coeff = tensor_to_f32_vec(scales.as_tensor());
@@ -675,22 +694,10 @@ impl VectorMachine {
         assert!(values.len().is_multiple_of(row_width as usize));
         let row_count = values.len() / row_width as usize;
         assert_eq!(accumulator.len(), values.len());
-        let expanded = coeff.len() == row_count * scale_width as usize;
-        if !expanded {
-            assert_eq!(coeff.len(), scale_width as usize);
-            assert!(
-                scale_tile_offset as usize + row_count <= coeff.len(),
-                "compact DOT_REDUCE packet needs one scalar per source tile"
-            );
-        }
-        assert!(scale_width > 0);
+        scale_layout.validate(coeff.len(), row_count, scale_width, 1);
 
         for row in 0..row_count {
-            let scale = coeff[if expanded {
-                row * scale_width as usize
-            } else {
-                scale_tile_offset as usize + row
-            }];
+            let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
             for lane in 0..row_width as usize {
                 let index = row * row_width as usize + lane;
                 accumulator[index] += values[index] * scale;
@@ -707,7 +714,7 @@ impl VectorMachine {
         scales: QuantTensor,
         row_width: u32,
         scale_width: u32,
-        scale_tile_offset: u32,
+        scale_layout: TileScaleLayout,
     ) -> QuantTensor {
         let dst = tensor_to_f32_vec(destination.as_tensor());
         let source = tensor_to_f32_vec(vector.as_tensor());
@@ -717,21 +724,10 @@ impl VectorMachine {
             source.len() == row_width as usize || source.len() == dst.len(),
             "OUTER_UPDATE source must be shared by every tile or provide one row per tile"
         );
-        let expanded = coeff.len() == rows * scale_width as usize;
-        if !expanded {
-            assert_eq!(coeff.len(), scale_width as usize);
-            assert!(
-                scale_tile_offset as usize + rows <= coeff.len(),
-                "compact OUTER_UPDATE packet needs one scalar per destination tile"
-            );
-        }
+        scale_layout.validate(coeff.len(), rows, scale_width, 1);
         let mut result = dst;
         for row in 0..rows {
-            let scale = coeff[if expanded {
-                row * scale_width as usize
-            } else {
-                scale_tile_offset as usize + row
-            }];
+            let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
             for col in 0..row_width as usize {
                 let index = row * row_width as usize + col;
                 let source_index = if source.len() == row_width as usize {

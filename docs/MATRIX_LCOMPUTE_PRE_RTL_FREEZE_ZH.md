@@ -3,6 +3,10 @@
 本文是 Compiler/Simulator 阶段的唯一交接说明。它只冻结已经由代码和测试
 支持的行为；不包含 RTL、综合、频率、面积、功耗或 Token/J 结论。
 
+2026-09-05 修订：修复 view allocation、projection 输出覆盖、compact coefficient
+索引、batch wrapper、Vector 计费、batch 工作量和 final RMSNorm；GPU 能耗单独
+保留原档并生成近似重分析。当前结果以本次重生成的 JSON/CSV 为准。
+
 ## 1. 最终架构边界
 
 ```text
@@ -132,8 +136,9 @@ bank = (base_bank
       + word) mod bank_count
 ```
 
-读写使用同一公式，读出后做循环 lane 恢复。Compiler 在生成程序时拒绝
-alias、越界和超容量 view。
+读写使用同一公式，读出后做循环 lane 恢复。descriptor/lowering 校验 alias、
+越界和容量；高层 direct projection 还校验持久 reservation 的所有权与实际
+physical footprint。裸 emitter 的跨调用 lifetime 仍由调用者负责。
 
 PLENA 原有固定对角 row term 保持不变。任意可编程 `row_skew` 已删除：公平
 对照 D′ 证明固定对角接线加合法的 per-tile base phase，能在 Nemotron 和 Kimi
@@ -144,16 +149,30 @@ PLENA 原有固定对角 row term 保持不变。任意可编程 `row_skew` 已�
 
 ## 4. Compiler 策略
 
-Arlo 的逐行静态 lowering 保留为功能 fallback 和 B baseline。它与 L-Compute
-不是同一 tensor 上的前后两次搬运；Compiler 对每个 recurrent region 二选一：
+Arlo 的逐行静态 lowering 保留为功能 fallback 和 B baseline。调用者选择每个
+recurrent region 的 lowering；通用 Compiler 的自动识别和 fallback selector
+尚未完整接通：
 
 ```text
-不支持、小尺寸或尾块 -> Arlo 逐行 Vector lowering
+不支持的高层输入    -> 明确拒绝，调用者可选择 Arlo 逐行 Vector lowering
 规则的大型 view      -> L_TILE 多行 lowering
 ```
 
 官方 schedule 中，23 个 Nemotron Mamba layer 和 69 个 Kimi KDA layer 都发出
 合法 `L_TILE`。Attention、MLA、MoE 继续走 PLENA 原有路径，不伪装成 L-Tile。
+
+当前高层 direct projection 只支持一个输出 packet，其完整物理 footprint 必须
+落在一个已保留的 `MLEN²` tile 内。显式 base 必须对齐并有 reservation；权重容量
+按全部活跃保留区之后的尾部检查。多输出块明确拒绝，避免后块覆盖前块。
+官方宽 projection 的 packet 报告仅发出第一个 `[0,2048)` 输出 packet，保留完整
+权重 shape，显式记录 `full_projection_emitted=false`，不代表整 projection 执行。
+该 report 使用 legacy emitter 的两个 `MLEN²` slot 作为结构夹具，不能据此声称
+完整 projection 已能装入 1 MiB 点；BLEN×MLEN panel allocation 仍需后续接通。
+
+Mamba/KDA 高层 L-Tile wrapper 仅接受 B1 和 `MLEN=2048/BLEN=32` 的冻结机器点，
+并检查可用 SRAM 容量。B2–B16 是解析时间线；尚无逐请求私有地址的 Rust batch
+wrapper。Rust 三个原语从 descriptor 显式接收 compact/expanded 系数格式，
+compact 在多个单 tile packet 和尾 packet 中均使用正确的全局 tile 索引。
 
 ## 5. 当前证据
 
@@ -176,18 +195,26 @@ Arlo 的逐行静态 lowering 保留为功能 fallback 和 B baseline。它与 L
 - D′ 与 D 的纯 bank-service 比值为 `1.00x`，因此没有把不可证明的
   programmable-skew 收益写进结论。
 
+连续四 token 对拍包含每 token output 和最终 state；不包含每 token 的完整 state
+快照。数值门禁同时要求逐元素 `atol=rtol=0.01` 和 relative-L2 ≤ 1%；近零参考
+采用绝对 RMS ≤ 1e-7 的边界。已加入约 10% 输出幅度损失的负向注入测试。
+
+普通 Vector MAC 按 VLEN 上独立 MUL、ADD 两个 pass 计费，默认各 1 cycle/pass；
+该值是显式解析参数，不是 RTL 实测延迟。Nemotron 时间线包括最后一个 block
+之后、LM head 之前的 final RMSNorm。A/B/C/D/E 的 state/math 计数使用相同 batch。
+
 公式时间线在 `MLEN=2048`、`BLEN=32`、64 banks、1 MiB BF16 Matrix SRAM、
 1560 HBM B/cycle 下给出如下 B1 decode 敏感性：
 
 | 模型 | 权重密度 | 端点 | A | B | C | D | D/A | D/B | D/C |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| Nemotron 3 | mixed NVFP4 | 严格串行 | 4,055,091 | 3,110,067 | 2,192,850 | 2,014,094 | 2.0134x | 1.5442x | 1.0888x |
-| Nemotron 3 | mixed NVFP4 | 理想重叠 | 2,127,686 | 1,876,583 | 1,876,583 | 1,876,583 | 1.1338x | 1.0000x | 1.0000x |
-| Nemotron 3 | uniform BF16 | 严格串行 | 6,360,486 | 5,415,462 | 4,498,245 | 4,319,489 | 1.4725x | 1.2537x | 1.0414x |
-| Nemotron 3 | uniform BF16 | 理想重叠 | 4,181,978 | 4,181,978 | 4,181,978 | 4,181,978 | 1.0000x | 1.0000x | 1.0000x |
-| Kimi K3 | mixed NVFP4 | 严格串行 | 103,816,704 | 97,013,856 | 93,124,740 | 91,173,903 | 1.1387x | 1.0641x | 1.0214x |
-| Kimi K3 | mixed NVFP4 | 理想重叠 | 88,142,659 | 88,142,659 | 88,420,867 | 88,142,590 | 1.0000x | 1.0000x | 1.0032x |
-| Kimi K3 | uniform BF16 | 严格串行 | 149,593,151 | 142,790,303 | 138,901,187 | 136,950,350 | 1.0923x | 1.0426x | 1.0142x |
+| Nemotron 3 | mixed NVFP4 | 严格串行 | 4,055,638 | 3,110,614 | 2,193,397 | 2,014,641 | 2.0131x | 1.5440x | 1.0887x |
+| Nemotron 3 | mixed NVFP4 | 理想重叠 | 2,128,222 | 1,876,594 | 1,876,594 | 1,876,594 | 1.1341x | 1.0000x | 1.0000x |
+| Nemotron 3 | uniform BF16 | 严格串行 | 6,361,033 | 5,416,009 | 4,498,792 | 4,320,036 | 1.4724x | 1.2537x | 1.0414x |
+| Nemotron 3 | uniform BF16 | 理想重叠 | 4,181,989 | 4,181,989 | 4,181,989 | 4,181,989 | 1.0000x | 1.0000x | 1.0000x |
+| Kimi K3 | mixed MXFP4 | 严格串行 | 103,826,433 | 97,023,585 | 93,134,469 | 91,183,632 | 1.1387x | 1.0640x | 1.0214x |
+| Kimi K3 | mixed MXFP4 | 理想重叠 | 88,142,659 | 88,142,659 | 88,420,867 | 88,142,590 | 1.0000x | 1.0000x | 1.0032x |
+| Kimi K3 | uniform BF16 | 严格串行 | 149,602,880 | 142,800,032 | 138,910,916 | 136,960,079 | 1.0923x | 1.0426x | 1.0142x |
 | Kimi K3 | uniform BF16 | 理想重叠 | 133,919,106 | 133,919,106 | 134,197,314 | 133,919,037 | 1.0000x | 1.0000x | 1.0021x |
 
 严格串行端点等于 `HBM + Matrix + Vector + L-Compute`，是当前依赖安全的
@@ -215,19 +242,19 @@ decode step，并严格重放实测 Nemotron eager-routing 专家并集；`N` �
 
 | B | N | D/A 理想 | D/C 理想 | D/B 理想 | D/C 串行 | D/B 串行 |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 48 | 1.1361x | 1.0000x | 1.0000x | 1.0890x | 1.5456x |
-| 2 | 24 | 1.8423x | 1.0000x | 1.0239x | 1.1385x | 1.8490x |
-| 4 | 12 | 2.8151x | 1.0000x | 1.5642x | 1.2003x | 2.2282x |
-| 8 | 6 | 4.0843x | 1.0000x | 2.2699x | 1.2717x | 2.6661x |
-| 16 | 3 | 5.8904x | 1.0000x | 3.2743x | 1.3579x | 3.1943x |
+| 1 | 48 | 1.1364x | 1.0000x | 1.0000x | 1.0890x | 1.5455x |
+| 2 | 24 | 1.8428x | 1.0000x | 1.0244x | 1.1384x | 1.8487x |
+| 4 | 12 | 2.8158x | 1.0000x | 1.5650x | 1.2002x | 2.2275x |
+| 8 | 6 | 4.0853x | 1.0000x | 2.2709x | 1.2715x | 2.6647x |
+| 16 | 3 | 5.8918x | 1.0000x | 3.2758x | 1.3575x | 3.1918x |
 
 | B | N | mixed NVFP4 D/B 串行 / 理想 | MXFP8 D/B 串行 / 理想 | BF16 D/B 串行 / 理想 |
 |---:|---:|---:|---:|---:|
-| 1 | 48 | 1.546 / 1.000 | 1.485 / 1.000 | 1.254 / 1.000 |
-| 2 | 24 | 1.849 / 1.024 | 1.697 / 1.000 | 1.371 / 1.000 |
-| 4 | 12 | 2.228 / 1.564 | 1.945 / 1.154 | 1.515 / 1.000 |
-| 8 | 6 | 2.666 / 2.270 | 2.236 / 1.576 | 1.692 / 1.000 |
-| 16 | 3 | 3.194 / 3.274 | 2.628 / 2.211 | 1.950 / 1.165 |
+| 1 | 48 | 1.545 / 1.000 | 1.485 / 1.000 | 1.254 / 1.000 |
+| 2 | 24 | 1.849 / 1.024 | 1.696 / 1.000 | 1.371 / 1.000 |
+| 4 | 12 | 2.227 / 1.565 | 1.945 / 1.155 | 1.514 / 1.000 |
+| 8 | 6 | 2.665 / 2.271 | 2.235 / 1.577 | 1.692 / 1.000 |
+| 16 | 3 | 3.192 / 3.276 | 2.626 / 2.212 | 1.950 / 1.165 |
 
 Agentic 中 D/C 理想端点恒为 1.0000x 是 Nemotron 结论：routing 会改变 MoE
 时间线，但不改变递推 state packet 的 bank 坐标。它不能推广到有固定布局 spill
@@ -247,11 +274,18 @@ Agentic 中 D/C 理想端点恒为 1.0000x 是 Nemotron 结论：routing 会改�
 - tile phase：每个活动 view 一个 6-bit accumulator，4 slot 上界 24 bits
 - cyclic lane restore：64 个 512-bit bank word、6 级循环 mux
 
+Rust DOT_REDUCE 跨行保留每 lane 一个 FP32 accumulator；VLEN=2048 时为
+65,536 bit / 8 KiB 算术状态。RTL 必须明确寄存器复用、反馈 mux、舍入点和吞吐。
+“0 SRAM payload 增量”不代表这些累加寄存器和反馈路径已完成资源证明。
+
 没有 RTL 综合前，不得把这些代理改写成面积、频率、功耗或 PPA 数字。
 
 ## 7. 明确未完成
 
 - Nemotron/Kimi 真实完整 checkpoint 的全算子 Rust 执行；
+- 真实 B2–B16 Rust 请求隔离、通用 Matrix-view result 所有权和自动 fallback；
+- 修正采样方法后的真实 GPU 能耗重采；旧 186.6949 J 仅为有方法缺陷的归档值，
+  request-window 近似重积分约 180.7950 J 不可替代准确的 batch 能耗测量；
 - 完整 transactional prefill 的 A/B 加速与整模 TTFT；
 - 精确 scoreboard bank-word overlap；当前 E 不获得虚构 overlap 收益；
 - RTL、PPA、Token/J 或相对 B200/5090 的硬件加速；
@@ -261,10 +295,10 @@ Agentic 中 D/C 理想端点恒为 1.0000x 是 Nemotron 结论：routing 会改�
 - 超出当前流量公式的权重与反量化行为：mixed NVFP4 按约 0.5625 byte/元素
   计数（每 16 个值一个 FP8 block scale），不含反量化计算、tensor-global
   scale 和物理 padding；Matrix SRAM 元素仍为 BF16。Agentic B16 中，权重从
-  mixed NVFP4 改成 uniform BF16 后，D/B 从 3.194/3.274（串行/理想）降为
+  mixed NVFP4 改成 uniform BF16 后，D/B 从 3.192/3.276（串行/理想）降为
   1.950/1.165。
 
-这些不影响 ISA/Compiler/Simulator 的 pre-RTL 冻结，但在论文中必须明确区分。
+上述限制是本次软件契约的边界；RTL 签核前还需完成真实单层闭环和累加数据通路证明。
 
 ## 8. 交接门禁
 
@@ -273,27 +307,32 @@ nix develop --no-write-lock-file --command \
   just test-matrix-lcompute /absolute/path/to/PLENA_Compiler
 ```
 
-只有该命令退出码为 0，且官方 schedule 不含 `L_CFG`、所有数值对拍和 D′ 公平
-检查通过，才允许进入 RTL 阶段。交接材料还必须附带
+该命令退出码为 0，且官方 schedule 不含 `L_CFG`、所有数值对拍和 D′ 公平
+检查通过，是进入 RTL 阶段的必要软件门禁；不替代上一节的剩余验收。CI 已接入
+同一命令并使用实际 `PLENA_Compiler` submodule pin。交接材料还必须附带
 `git diff main..HEAD -- doc/operation.svh` 的完整输出。
 
 本次冻结的 Simulator gitlink 使用 Compiler tip
-`330e93da425eee107a0f3299f5f039fad1d74cd4`；其中机制实现 commit 是
+`e050dcd7176b4d2a3e502f9432c95238a16dcf3d`；历史核心机制起点是
 `c2e7d03e14b4c43350fd3d232cb2ee6058a494c4`。门禁退出码为 0：
 
-- Simulator Python：108 passed；
-- Compiler：188 passed；
-- Rust workspace：298 passed（13 个 test binary 合计；其中
-  `transactional_emulator` 单体 180）；
+- Simulator Python：143 passed；
+- Compiler：211 passed；
+- Rust workspace：301 passed（7 个 unit-test executable 与 6 个空 doctest suite；
+  `transactional_emulator` 单体 183）；
 - Matrix projection：65,664 个 BF16 值逐项一致，0 bank stall；
 - official-geometry recurrence：Nemotron/Kimi fixed/phased 四组全部通过。
+
+GPU 重分析见 `artifacts/gpu_energy_reanalysis_v1/README.md`，原始归档未修改。
 
 关键机器可读证据的 SHA256：
 
 ```text
 01a8965c58c9203c05272edab50459b64fe66fb5f4340166d57218c6d5b180c6  artifacts/matrix_lcompute_connected_bf16/summary.json
-cfd26f07ce7c81b36f11532c31bd6435f8e8d24a138029fba7ab467bd60dd6c1  artifacts/matrix_lcompute_e2e_v5/campaign.json
-2ee3fa0d15f65e276f71b6763c5b55de078efef816be81ddc7f143242f135aed  artifacts/matrix_lcompute_e2e_v5/headline.csv
-3f0f015c2dc420b3ee13c827a61b086ec78904a5005efa72e6a303864af7534b  artifacts/matrix_lcompute_agentic_v1/campaign.json
-11c549ad31da440fe8973af98eca5e2234b4d99bdb4a061cd27a019e5bab41c5  artifacts/matrix_lcompute_agentic_v1/summary.csv
+db6fdd8e164dafa4d7e8739b218bf00bb6cfaf71dabdb74cadec19a6b70662d6  artifacts/matrix_lcompute_e2e_v5/campaign.json
+e3d6344bd5b0ed943220cc11f6cd8feb3bc767abe036a15860b4af9eec52cca2  artifacts/matrix_lcompute_e2e_v5/headline.csv
+a0a7c6e3eb144dce1fbf5fc07a2ae5a5537c6f9c550021f61e593ad715bfbb2a  artifacts/matrix_lcompute_agentic_v1/campaign.json
+10f7ec4c87a146b982c3a09339284f823363d01a4a93c4d30559ad6717d4c83f  artifacts/matrix_lcompute_agentic_v1/summary.csv
 ```
+
+近似能耗修订 SHA256：`bbde0946cb47870fe164ed7393643e467cf104cde98ec2db456754db307a2ac5`。

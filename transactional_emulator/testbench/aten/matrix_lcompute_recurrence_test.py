@@ -329,16 +329,35 @@ def _setting_override(path: Path) -> Iterator[None]:
             os.environ["PLENA_SETTINGS_TOML"] = previous
 
 
+# BF16 recurrence acceptance policy: keep the existing per-element outlier
+# bound and additionally cap aggregate relative L2 error at 1%. Fixed/chunked
+# reductions round at different boundaries; this is an explicit error budget,
+# not a claim that their observed error is the ISA's mathematical tolerance.
+# For effectively zero tensors, permit at most 1e-7 RMS absolute error so the
+# norm test does not divide by zero or reject harmless sub-signal roundoff.
+RECURRENCE_RELATIVE_L2_LIMIT = 1e-2
+RECURRENCE_ZERO_RMS_LIMIT = 1e-7
+
+
 def _assert_close(name: str, actual: torch.Tensor, expected: torch.Tensor) -> dict[str, float]:
     if actual.shape != expected.shape:
         raise AssertionError(f"{name}: shape {tuple(actual.shape)} != {tuple(expected.shape)}")
+    if not torch.isfinite(actual).all() or not torch.isfinite(expected).all():
+        raise AssertionError(f"{name}: non-finite actual or reference values")
     error = (actual - expected).abs()
     max_abs = float(error.max()) if error.numel() else 0.0
-    relative_l2 = float(torch.linalg.vector_norm(error) / torch.linalg.vector_norm(expected).clamp_min(1e-12))
-    if not torch.allclose(actual, expected, atol=1e-2, rtol=1e-2):
-        mismatch = int((error > (1e-2 + 1e-2 * expected.abs())).sum())
+    error_norm = torch.linalg.vector_norm(error)
+    expected_norm = torch.linalg.vector_norm(expected)
+    relative_l2 = float(error_norm / expected_norm.clamp_min(1e-12))
+    norm_budget = max(
+        RECURRENCE_RELATIVE_L2_LIMIT * float(expected_norm),
+        RECURRENCE_ZERO_RMS_LIMIT * error.numel() ** 0.5,
+    )
+    mismatch = int((error > (1e-2 + 1e-2 * expected.abs())).sum())
+    if mismatch or float(error_norm) > norm_budget:
         raise AssertionError(
-            f"{name}: {mismatch}/{actual.numel()} values mismatch; max_abs={max_abs}, relative_l2={relative_l2}"
+            f"{name}: {mismatch}/{actual.numel()} values mismatch; max_abs={max_abs}, "
+            f"relative_l2={relative_l2}, error_l2={float(error_norm)}, l2_budget={norm_budget}"
         )
     return {"max_abs": max_abs, "relative_l2": relative_l2}
 

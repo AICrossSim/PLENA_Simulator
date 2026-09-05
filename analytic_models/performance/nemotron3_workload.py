@@ -121,6 +121,7 @@ def formal_nemotron_nvfp4_weight_policy(
         global_stage_precisions=(
             ("embedding_lookup", Precision.BF16),
             ("block_rms_norm", Precision.BF16),
+            ("final_rms_norm", Precision.BF16),
             ("mamba_conv1d", Precision.BF16),
             ("mamba_gate_group_rms_norm", Precision.BF16),
             ("lm_head", Precision.BF16),
@@ -358,7 +359,7 @@ class Nemotron3WorkloadModel:
             stages.append(self._embedding(scenario))
 
         for layer_id, layer_type in enumerate(self.arch.layer_types):
-            stages.append(self._block_norm(layer_id, layer_type, scenario))
+            stages.append(self._rms_norm(layer_id, layer_type, "block_rms_norm", scenario))
             if layer_type == "mamba":
                 stages.extend(self._mamba(layer_id, scenario))
             elif layer_type == "attention":
@@ -369,6 +370,7 @@ class Nemotron3WorkloadModel:
                 stages.extend(self._mlp(layer_id, scenario))
             stages.append(self._residual(layer_id, layer_type, scenario))
 
+        stages.append(self._rms_norm(-1, "output", "final_rms_norm", scenario))
         if scenario.include_lm_head:
             stages.append(self._lm_head(scenario))
         return WorkloadReport(
@@ -407,9 +409,14 @@ class Nemotron3WorkloadModel:
             working_set_bytes=self._a_bytes(elements),
         )
 
-    def _block_norm(self, layer_id: int, layer_type: str, scenario: WorkloadScenario) -> StageWork:
+    def _rms_norm(
+        self,
+        layer_id: int,
+        layer_type: str,
+        stage_name: str,
+        scenario: WorkloadScenario,
+    ) -> StageWork:
         elements = scenario.tokens * self.arch.hidden_size
-        stage_name = "block_rms_norm"
         return StageWork(
             layer_id,
             layer_type,

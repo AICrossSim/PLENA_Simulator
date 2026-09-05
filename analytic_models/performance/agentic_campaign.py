@@ -22,6 +22,7 @@ from .hybrid_routing import RoutingFormatError, RoutingProfile, RoutingStep
 
 NEMOTRON_AGENTIC_MODEL_ID = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 NEMOTRON_AGENTIC_REVISION = "ce1b118ae66ec705d02c241525192832eb045fd3"
+LEGACY_GPU_ENERGY_STATUS = "archived_legacy_integration_requires_recapture"
 NEMOTRON_MOE_LAYER_IDS = (
     1,
     3,
@@ -164,8 +165,8 @@ class AgenticGpuBatchAggregate:
     batch_joules_p95: float
     peak_memory_bytes: int
 
-    def to_dict(self) -> dict[str, int | float]:
-        return asdict(self)
+    def to_dict(self) -> dict[str, int | float | str]:
+        return {**asdict(self), "energy_status": LEGACY_GPU_ENERGY_STATUS, "e2e_scope": "request"}
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,7 @@ class AgenticBatchGroup:
                 "batch_e2e_ms_median": self.gpu_batch_e2e_ms_median,
                 "batch_throughput_tokens_s_median": self.gpu_batch_throughput_tokens_s_median,
                 "batch_energy_joules_median": self.gpu_batch_energy_joules_median,
+                "energy_status": LEGACY_GPU_ENERGY_STATUS,
             },
         }
 
@@ -336,6 +338,12 @@ class AgenticCampaign:
                 self.timing_and_routing_replay_window_identical_samples
             ),
             "gpu_global_aggregate_scope": "campaign_summary.timing.aggregate.all",
+            "gpu_energy_contract": {
+                "status": LEGACY_GPU_ENERGY_STATUS,
+                "reason": "legacy sampler used unsorted samples and did not clip to recorded batch boundaries",
+                "revision": "artifacts/gpu_energy_reanalysis_v1/summary.json",
+                "revision_scope": "approximate observed-request-window reanalysis, not a new GPU capture",
+            },
             "gpu_global_aggregates": {
                 f"batch_b{aggregate.batch_size}": aggregate.to_dict() for aggregate in self.gpu_global_aggregates
             },

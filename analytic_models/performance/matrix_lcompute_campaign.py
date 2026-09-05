@@ -68,8 +68,7 @@ def _timeline_endpoints(record: dict[str, Any]) -> dict[str, Any]:
     resources = {
         "hbm": int(record["hbm_cycles"]),
         "matrix": int(record["matrix_cycles"]),
-        "vector_plus_lcompute": int(record["vector_cycles"])
-        + int(record["lcompute_cycles"]),
+        "vector_plus_lcompute": int(record["vector_cycles"]) + int(record["lcompute_cycles"]),
     }
     serial = sum(resources.values())
     if serial != int(record["cycles"]):
@@ -93,6 +92,9 @@ class MatrixHardwarePoint:
     vector_lanes: int = 2048
     exp_latency: int = 2
     reduction_latency: int = 8
+    # Analytic fully packed Vector MUL/ADD pass latencies, not measured RTL.
+    vector_mul_latency: int = 1
+    vector_add_latency: int = 1
     # Preserve the paper's approximately 1 MiB bit budget. Uniform BF16 gives
     # 256 MLEN-wide rows, matching the Compiler's MatrixSramPoint.
     matrix_sram_rows: int = 256
@@ -109,6 +111,8 @@ class MatrixHardwarePoint:
             raise ValueError("Matrix bank count must be a power of two")
         if min(self.blen, self.hbm_bytes_per_cycle, self.hbm_burst_bytes) <= 0:
             raise ValueError("hardware dimensions and bandwidth must be positive")
+        if min(self.vector_lanes, self.vector_mul_latency, self.vector_add_latency) <= 0:
+            raise ValueError("Vector lanes and arithmetic latencies must be positive")
         if (
             min(
                 self.matrix_bank_port_bits_per_cycle,
@@ -239,9 +243,7 @@ class MatrixHardwarePoint:
                 "architectural_variant": packet_path,
                 "configuration_register_bits": (self.view_slots * 64 if packet_path else 0),
                 "additional_programmable_skew_address_adders_upper_bound": 0,
-                "tile_phase_accumulator_count_upper_bound": (
-                    self.view_slots if programmable_phase else 0
-                ),
+                "tile_phase_accumulator_count_upper_bound": (self.view_slots if programmable_phase else 0),
                 "tile_phase_accumulator_width_bits": skew_bits,
                 # The fixed diagonal mapper is PLENA prior work and exists in
                 # every ablation row. It must not appear as an incremental
@@ -397,9 +399,7 @@ def load_connected_recurrence_evidence(
         if int(record.get("schema_version", 0)) != 2:
             raise ValueError("connected recurrence result does not use schema v2")
         if int(record.get("matrix_view_contract_version", 0)) != expected_contract_version:
-            raise ValueError(
-                "connected recurrence Matrix-view contract differs from the active Compiler"
-            )
+            raise ValueError("connected recurrence Matrix-view contract differs from the active Compiler")
         if record.get("precision") != "bf16_uniform_matrix_recurrence":
             raise ValueError("connected recurrence result is not uniform BF16")
         if int(record.get("tokens", 0)) != 4:
@@ -514,12 +514,7 @@ def _physical_word(
     words_per_row = spec.elements_per_head // hardware.bank_width
     row_groups = math.ceil(words_per_row / hardware.banks)
     bank_row = base_bank_row + tile * tile_pitch_rows + row * row_groups + word // hardware.banks
-    bank = (
-        alpha * bank_row
-        + tile_phase_stride * tile
-        + gamma * (bank_row // hardware.banks)
-        + word
-    ) % hardware.banks
+    bank = (alpha * bank_row + tile_phase_stride * tile + gamma * (bank_row // hardware.banks) + word) % hardware.banks
     return bank, bank_row
 
 
@@ -1166,9 +1161,7 @@ def measure_real_service_groups(
         if phased_mapping:
             alpha = fixed_alpha
             if int(operand["view_alpha"]) != fixed_alpha:
-                raise AssertionError(
-                    f"{spec.model}: executable view changed fixed diagonal alpha"
-                )
+                raise AssertionError(f"{spec.model}: executable view changed fixed diagonal alpha")
             tile_phase_stride = int(operand["view_tile_phase_stride"])
         else:
             # C is the executable single-base fixed descriptor. Base phase,
@@ -1177,11 +1170,7 @@ def measure_real_service_groups(
             alpha = fixed_alpha
             tile_phase_stride = 0
         bank = (
-            base_bank
-            + alpha * bank_row
-            + tile_phase_stride * tile
-            + fixed_gamma * (bank_row // hardware.banks)
-            + word
+            base_bank + alpha * bank_row + tile_phase_stride * tile + fixed_gamma * (bank_row // hardware.banks) + word
         ) % hardware.banks
         return bank, bank_row
 
@@ -1273,9 +1262,9 @@ def measure_real_service_groups(
         if group["axis"] == "l_tile_source_read":
             primitive = operands[0]["l_tile_primitive"]
             latency = {
-                "SCALE_ACCUM": 3,
-                "DOT_REDUCE": 2,
-                "OUTER_UPDATE": 2,
+                "SCALE_ACCUM": 2 * hardware.vector_mul_latency + hardware.vector_add_latency,
+                "DOT_REDUCE": hardware.vector_mul_latency + hardware.vector_add_latency,
+                "OUTER_UPDATE": hardware.vector_mul_latency + hardware.vector_add_latency,
             }.get(primitive)
             if latency is None:
                 raise AssertionError(f"unknown L_TILE primitive {primitive}")
@@ -1374,6 +1363,8 @@ def recurrent_core_metrics(
     physical: dict[str, Any],
     batch_size: int,
 ) -> dict[str, int]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
     counts = _issue_counts(compiler, spec)
     state_values = spec.heads * spec.recurrence_rows * spec.elements_per_head
     # Layout and chunking may change issue/service traffic, but never the
@@ -1400,10 +1391,14 @@ def recurrent_core_metrics(
             "service": 0,
             "ideal": 0,
             "stall": 0,
-            "logical_state_values": state_values,
-            "arithmetic_element_ops": arithmetic_element_ops,
-            "explicit_state_hbm_read_bytes": state_values * physical["hardware"]["matrix_element_bits"] // 8,
-            "explicit_state_hbm_write_bytes": state_values * physical["hardware"]["matrix_element_bits"] // 8,
+            "logical_state_values": state_values * batch_size,
+            "arithmetic_element_ops": arithmetic_element_ops * batch_size,
+            "explicit_state_hbm_read_bytes": (
+                state_values * physical["hardware"]["matrix_element_bits"] // 8 * batch_size
+            ),
+            "explicit_state_hbm_write_bytes": (
+                state_values * physical["hardware"]["matrix_element_bits"] // 8 * batch_size
+            ),
         }
     if variant == MatrixVariant.B_ARLO:
         return {
@@ -1417,10 +1412,14 @@ def recurrent_core_metrics(
             "service": 0,
             "ideal": 0,
             "stall": 0,
-            "logical_state_values": state_values,
-            "arithmetic_element_ops": arithmetic_element_ops,
-            "explicit_state_hbm_read_bytes": state_values * physical["hardware"]["matrix_element_bits"] // 8,
-            "explicit_state_hbm_write_bytes": state_values * physical["hardware"]["matrix_element_bits"] // 8,
+            "logical_state_values": state_values * batch_size,
+            "arithmetic_element_ops": arithmetic_element_ops * batch_size,
+            "explicit_state_hbm_read_bytes": (
+                state_values * physical["hardware"]["matrix_element_bits"] // 8 * batch_size
+            ),
+            "explicit_state_hbm_write_bytes": (
+                state_values * physical["hardware"]["matrix_element_bits"] // 8 * batch_size
+            ),
         }
 
     exact = physical[spec.model]["real_lowering_service"][state_mode][variant]
@@ -1992,9 +1991,7 @@ def _dse_packet(
         "supported": True,
         "C_fixed": fixed,
         "D_compact_phased": phased,
-        "compact_phase_speedup_over_fixed": (
-            fixed["service_cycles"] / phased["service_cycles"]
-        ),
+        "compact_phase_speedup_over_fixed": (fixed["service_cycles"] / phased["service_cycles"]),
         "values_checked_per_variant": packet_width,
     }
 
@@ -2099,9 +2096,7 @@ def build_layout_dse(
         for model in ("nemotron3", "kimi_k3")
     }
     return {
-        "candidate_mapping": (
-            "fixed diagonal alpha=1 plus compact tile_phase_stride; no programmable row coefficient"
-        ),
+        "candidate_mapping": ("fixed diagonal alpha=1 plus compact tile_phase_stride; no programmable row coefficient"),
         "method": (
             "Each C/D point writes numbered logical values, reads them through the "
             "selected physical map, restores lane order, and checks exact equality. "
@@ -2369,7 +2364,7 @@ def build_campaign(
     weight_precision_sensitivity = {
         "scope": (
             "formula timeline sensitivity only; the default experiments retain the "
-            "checkpoint mixed NVFP4/BF16 storage policy"
+            "checkpoint mixed NVFP4/BF16 policy for Nemotron and mixed MXFP4/BF16 policy for Kimi"
         ),
         "uniform_bf16": {
             "weight_precision": Precision.BF16,
@@ -2505,6 +2500,12 @@ def build_campaign(
             ),
             "weights": "official shapes and checkpoint storage policy; symbolic PLENA weights",
             "performance": "cycle model calibrated by Compiler and GPU evidence, not silicon",
+            "generic_vector_mac": (
+                "conv/state/exp MACs use fully packed VLEN-wide MUL then ADD passes "
+                "at the configured vector_mul_latency/vector_add_latency; the default "
+                "is one cycle per pass, matching the L_TILE arithmetic proxy. Generic "
+                "passes exclude additional SRAM/issue/dependency overhead"
+            ),
             "energy": "not reported because no validated power model exists",
             "ppa": "not reported because no RTL was synthesized",
         },
@@ -2533,6 +2534,8 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                             "phase": case["phase"],
                             "batch": case["batch_size"],
                             "tokens": case["tokens"],
+                            "weight_precision": case["weight_precision"],
+                            "weight_precision_policy": case["weight_precision_policy"]["name"],
                             "variant": record["variant"],
                             "cycles": record["cycles"],
                             "latency_us_proxy": record["latency_us_proxy"],
@@ -2571,13 +2574,12 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
         for model in ("nemotron3", "kimi_k3"):
             for batch in (1, 2, 4, 8, 16, 32, 64):
                 case = f"decode_b{batch}_t1"
+                default_case = campaign["experiments"][mode][model][case]
                 records = {
                     variant: _record(campaign, str(mode), model, case, str(variant)) for variant in MatrixVariant
                 }
                 bf16_case = campaign["weight_precision_sensitivity"]["uniform_bf16"]["models"][model][case]
-                bf16_records = {
-                    MatrixVariant(record["variant"]): record for record in bf16_case["records"]
-                }
+                bf16_records = {MatrixVariant(record["variant"]): record for record in bf16_case["records"]}
                 fixed_phased = campaign["physical_packet_evidence"]["fixed_phased_bank_control"][model]
                 a = records[MatrixVariant.A_ORIGINAL]
                 b = records[MatrixVariant.B_ARLO]
@@ -2592,6 +2594,8 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                         "state_mode": mode,
                         "model": model,
                         "batch": batch,
+                        "weight_precision": default_case["weight_precision"],
+                        "weight_precision_policy": default_case["weight_precision_policy"]["name"],
                         "A_original_cycles": a["cycles"],
                         "B_arlo_cycles": b["cycles"],
                         "C_fixed_l_tile_cycles": c["cycles"],
@@ -2625,18 +2629,10 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                         "uniform_bf16_B_cycles": bf16_b["cycles"],
                         "uniform_bf16_C_cycles": bf16_c["cycles"],
                         "uniform_bf16_D_cycles": bf16_d["cycles"],
-                        "uniform_bf16_A_ideal_overlap_cycles": bf16_a[
-                            "ideal_resource_overlap_lower_bound_cycles"
-                        ],
-                        "uniform_bf16_B_ideal_overlap_cycles": bf16_b[
-                            "ideal_resource_overlap_lower_bound_cycles"
-                        ],
-                        "uniform_bf16_C_ideal_overlap_cycles": bf16_c[
-                            "ideal_resource_overlap_lower_bound_cycles"
-                        ],
-                        "uniform_bf16_D_ideal_overlap_cycles": bf16_d[
-                            "ideal_resource_overlap_lower_bound_cycles"
-                        ],
+                        "uniform_bf16_A_ideal_overlap_cycles": bf16_a["ideal_resource_overlap_lower_bound_cycles"],
+                        "uniform_bf16_B_ideal_overlap_cycles": bf16_b["ideal_resource_overlap_lower_bound_cycles"],
+                        "uniform_bf16_C_ideal_overlap_cycles": bf16_c["ideal_resource_overlap_lower_bound_cycles"],
+                        "uniform_bf16_D_ideal_overlap_cycles": bf16_d["ideal_resource_overlap_lower_bound_cycles"],
                         "uniform_bf16_D_speedup_vs_A_serial": bf16_a["cycles"] / bf16_d["cycles"],
                         "uniform_bf16_D_speedup_vs_B_serial": bf16_b["cycles"] / bf16_d["cycles"],
                         "uniform_bf16_D_speedup_vs_C_serial": bf16_c["cycles"] / bf16_d["cycles"],
@@ -2652,14 +2648,10 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                             bf16_c["ideal_resource_overlap_lower_bound_cycles"]
                             / bf16_d["ideal_resource_overlap_lower_bound_cycles"]
                         ),
-                        "uniform_bf16_D_logical_weight_read_bytes": bf16_d[
-                            "logical_weight_read_bytes"
-                        ],
+                        "uniform_bf16_D_logical_weight_read_bytes": bf16_d["logical_weight_read_bytes"],
                         "D_prime_fixed_phased_bank_service_cycles": fixed_phased["service_cycles"],
                         "D_prime_fixed_phased_bank_stall": fixed_phased["bank_stall_cycles"],
-                        "D_vs_D_prime_pure_bank_speedup": fixed_phased[
-                            "compact_phase_vs_explicit_bases_bank_speedup"
-                        ],
+                        "D_vs_D_prime_pure_bank_speedup": fixed_phased["compact_phase_vs_explicit_bases_bank_speedup"],
                         "E_speedup_vs_D": records[MatrixVariant.E_AFFINE_OVERLAP]["speedup_vs_D_phased"],
                         "C_bank_stall": records[MatrixVariant.C_FIXED]["bank_stall_cycles"],
                         "D_bank_stall": records[MatrixVariant.D_AFFINE]["bank_stall_cycles"],
@@ -2725,9 +2717,7 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                     "bank_only_speedup_over_C": fixed["cycles"] / bank_only_cycles,
                     "D_prime_fixed_phased_bank_service_cycles": fixed_phased["service_cycles"],
                     "D_prime_fixed_phased_bank_stall_cycles": fixed_phased["bank_stall_cycles"],
-                    "D_vs_D_prime_pure_bank_speedup": fixed_phased[
-                        "compact_phase_vs_explicit_bases_bank_speedup"
-                    ],
+                    "D_vs_D_prime_pure_bank_speedup": fixed_phased["compact_phase_vs_explicit_bases_bank_speedup"],
                     "interpretation": (
                         "C is a constrained single-base executable descriptor, not the fair "
                         "bank-only control. D' uses fixed diagonal wiring plus legal per-tile "

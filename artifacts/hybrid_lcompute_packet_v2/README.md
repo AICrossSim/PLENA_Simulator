@@ -1,35 +1,49 @@
 # Hybrid L-Compute packet campaign
 
-Generated from the checked-in Compiler submodule and Simulator with:
+Re-generated on 2026-09-05 from the corrected Compiler/Simulator sources.
+This remains a **historical architecture control**, not the current Matrix-SRAM
+`L_TILE` result. Current claims use
+[`MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md`](../../docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md).
+
+64-lane historical Vector/output-SRAM L_CFG experiment; S16/S128 prefill and 4/32-token decode.
+
+The shared workload/cycle fixes are included: generic convolution/state MACs
+cost VLEN-wide MUL then ADD passes (one cycle per pass by default), independent
+of Matrix BLEN; Nemotron includes the final RMSNorm after its 52 blocks.
+This is an analytic fully packed arithmetic proxy, not a measured RTL schedule.
+Nemotron uses mixed NVFP4/BF16 checkpoint weights, Kimi mixed MXFP4/BF16;
+activation/state precision remains that of this historical experiment and must
+not be equated with the current uniformly BF16 Matrix-SRAM path.
+
+Weights are symbolic and the official 52/93-layer schedules are analytical.
+These results do not establish full-checkpoint Rust execution, RTL/PPA,
+GPU-relative speedup or energy. Old narrative figures in historical reports
+predate this re-generation; use these machine-readable files for corrected
+values of this historical control.
+
+Reproduce from the Simulator root (the Compiler submodule must match the
+current source pin):
 
 ```bash
-PYTHONPATH="$PWD:$PWD/PLENA_Compiler" \
-  .venv/bin/python -m analytic_models.performance.hybrid_lcompute_campaign \
+nix develop --no-write-lock-file --command python -m analytic_models.performance.hybrid_lcompute_campaign \
   --compiler-root PLENA_Compiler \
+  --long \
   --json-out artifacts/hybrid_lcompute_packet_v2/campaign.json \
-  --csv-dir artifacts/hybrid_lcompute_packet_v2/tables \
-  --long
+  --csv-dir artifacts/hybrid_lcompute_packet_v2/tables
 ```
 
-Scope: official Nemotron 52-layer and Kimi 93-layer shapes, symbolic weights,
-S16/S128 prefill, 4/32-token decode, A-J ablation, DSE, precision traffic, and
-schedule validation. This is a Compiler/Simulator result, not RTL PPA or a
-full-checkpoint numerical execution. The ISA contract uses one general
-`L_CFG` opcode plus explicit three-slot consumer masks on existing Vector
-instructions; it contains no model-specific opcode or cache.
-
-The canonical hash embedded in `campaign.json` is:
+Canonical report hash embedded in `campaign.json`:
 
 ```text
-ee61d07b5c503a93711b1cdb6cd921a232e9ac5f474653ed4cb350945bb1ceb8
+7ea44bac902b7b7a68451c54c802dea4bb19c97d89f781407f6741364fb3b35b
 ```
 
 File SHA256 values:
 
 ```text
-3315ff116c6d6be094e49b307aef3121d03b39960fc9041a02fad49135b439b3  campaign.json
-f965c08a1bea1f4e9a96df0e319ff2cd6e7a1a9bdea92f3c64add6974facf44c  tables/ablation.csv
-3e5ec2ebe6d19e46dd3a35a2d260e73d427c5ca3079f68d4798d8d08cf70affe  tables/dse.csv
-f7b7d440ea2f1c9d704d4e7d798a358ab5501e78a8d8fbbf602610b04d2e2545  tables/precision.csv
-ff6e091807088ca1d2f0eda6cf34e430a2c6707ef8bdb87052ab5c64a7a6e5b4  tables/schedule_validation.csv
+661006a94ee0184dd13c38be9371f9d9797349add8f0ff2af1d08722c73c4cce  campaign.json
+7d5b94ff7bbe2fd554bb270fa260bc4e61209ac86af85c997135eaaa18c85207  tables/ablation.csv
+4a0a4b5af30fbd6f92b56717daa262ce9cf57dd6825ca91431a442a1401e77e1  tables/dse.csv
+fcd7fca8f8a09b896a219e5f74455334f03cf593f7b9228b6c6d112efb39f743  tables/precision.csv
+52e208612583704a383c65681e3912fa7a70f7c9931e164cf5d8ed367a23edde  tables/schedule_validation.csv
 ```

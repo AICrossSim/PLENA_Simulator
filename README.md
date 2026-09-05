@@ -47,8 +47,12 @@ bytes/cycle, the fresh formula-based B1 decode timeline is:
 
 | Model | Original A | Arlo B | Fixed single-base C | Phased D | D/A | D/B |
 |---|---:|---:|---:|---:|---:|---:|
-| Nemotron 3 | 4,055,091 | 3,110,067 | 2,192,850 | 2,014,094 | 2.0134x | 1.5442x |
-| Kimi K3 | 103,816,704 | 97,013,856 | 93,124,740 | 91,173,903 | 1.1387x | 1.0641x |
+| Nemotron 3 | 4,055,638 | 3,110,614 | 2,193,397 | 2,014,641 | 2.0131x | 1.5440x |
+| Kimi K3 | 103,826,433 | 97,023,585 | 93,134,469 | 91,183,632 | 1.1387x | 1.0640x |
+
+The 2026-09-05 revision charges ordinary Vector MACs as VLEN-wide MUL plus
+ADD passes and includes Nemotron's final RMSNorm. Weight storage is checkpoint
+mixed NVFP4/BF16 for Nemotron and mixed MXFP4/BF16 for Kimi.
 
 `A` and `B` are one-cycle-per-issued-instruction proxies, not transactional
 Rust timings. `C` and `D` include explicit Matrix service, arithmetic and HBM
@@ -75,6 +79,13 @@ decoder for four consecutive tokens at official recurrence geometry. The test
 compares 524,288 Nemotron and 1,572,864 Kimi state values plus every head-group
 output. Fixed and compact-phased cases all pass; the largest relative-L2 error is
 0.0071 under BF16. Every output group has a distinct HBM destination.
+
+The numerical gate now enforces both elementwise tolerance and a 1% relative-L2
+budget, with an absolute RMS floor for near-zero references. General compact
+coefficients are tested across multiple single-tile packets and tails. High-level
+direct projection accepts only one output packet in an owned scratch tile;
+unsupported wider output is rejected. Mamba/KDA L-Tile wrappers accept B1 at
+the frozen 2048/32 geometry; a Rust B16 private-state wrapper remains pending.
 
 The separate long-sequence storage study reports BF16 output relative-L2 error
 of 0.000312 for Nemotron at 32K tokens and 0.017061 for Kimi at 2K tokens versus
@@ -107,6 +118,8 @@ Nemotron state group and 28,736 bytes for Kimi. No RTL or synthesis means no
 PPA, frequency, power, Token/J or silicon claim. The timing scoreboard still
 uses conservative logical extents for Matrix views; physical `Cell::Pending`
 state enforces correctness, but exact bank-word overlap timing is not claimed.
+The FP32 per-lane accumulator feedback (8 KiB of arithmetic state at VLEN=2048)
+also needs an explicit register/datapath mapping before RTL resource signoff.
 
 See [the pre-RTL freeze](docs/MATRIX_LCOMPUTE_PRE_RTL_FREEZE_ZH.md),
 [the full result report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md), and
@@ -123,9 +136,9 @@ decode steps. Strict import validates all 140,921 routing events and uses exactl
 35,328 decode events; no route mismatch may fall back to an expert-count bound.
 The reconstructed route unions reduce the median active-expert count from the
 old maximum-distinct B16 bound of 96 to 49. Under the current strict-serial
-timeline, D (multi-row `L_TILE` plus compact compiler-phased views) is 1.545x
-at B1 and 3.191x at B16 over Arlo B. Under ideal resource overlap those endpoints
-are 1.000x and 3.274x, exposing where HBM hides the compute gain. Uniform MX8
+timeline, D (multi-row `L_TILE` plus compact compiler-phased views) is 1.5455x
+at B1 and 3.1918x at B16 over Arlo B. Under ideal resource overlap those endpoints
+are 1.0000x and 3.2758x, exposing where HBM hides the compute gain. Uniform MX8
 and BF16 weight-traffic sensitivities are reported separately. The strongest
 fixed D' bank control still matches the compact phased mapping at 1.00x, so the supported
 contribution is multi-row Matrix-SRAM recurrence, not an independent skew
@@ -133,6 +146,13 @@ speedup. These are pre-RTL formula-timeline results with symbolic weights, not
 a PLENA silicon comparison with B200. See
 [the Agentic report](docs/MATRIX_LCOMPUTE_AGENTIC_RESULTS_ZH.md) and
 `artifacts/matrix_lcompute_agentic_v1/`.
+
+Legacy GPU energy is explicitly labelled as an archived integral requiring
+recapture because the old sampler used unsorted samples and an inconsistent
+window. The immutable raw capture is preserved; the separately versioned
+[energy reanalysis](artifacts/gpu_energy_reanalysis_v1/README.md) is approximate.
+The maintained recorder and mock tests implement explicit batch windows and
+single-thread NVML sampling; no new GPU measurement was performed in this fix.
 
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 
