@@ -1,4 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use futures::{
+    FutureExt,
+    future::{BoxFuture, Shared as SharedFuture},
+};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -8,6 +12,7 @@ use quantize::{DataType, FpType};
 use runtime::{Duration, Executor, Instant};
 use tokio::sync::{Semaphore, oneshot};
 
+use super::dma_credits::CreditPool;
 use super::read_cache::{ENTRY_BYTES, ReadCache};
 use super::types::*;
 
@@ -359,6 +364,20 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
     {
         return Err("global DMA staging must provide 64 bytes per credit".into());
     }
+    if let Some(dma) = &a.dma {
+        if dma.fair_credits && a.global_dma_credits < 8 {
+            return Err("fair DMA credits require at least 8 credits".into());
+        }
+        if a.global_dma_credits > 128 {
+            return Err("DMA V1 supports at most 128 line/waiter credits".into());
+        }
+        if a.cores.iter().any(|c| c.read_cache_bytes != 0) {
+            return Err("DMA V1 uses element bypass; legacy read cache must be disabled".into());
+        }
+        if frontend_bytes(a)? > dma.frontend_sram_bytes {
+            return Err("DMA frontend metadata/response storage exceeds capacity".into());
+        }
+    }
     let mut ids = BTreeSet::new();
     for c in &a.cores {
         if c.read_cache_bytes > 0 && c.read_cache_bytes < ENTRY_BYTES {
@@ -389,12 +408,15 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         if a.mac_pipeline_cycles > u32::MAX as u64 {
             return Err("mac_pipeline_cycles exceeds supported range".into());
         }
+        if !(2..=4).contains(&c.weight_slots) {
+            return Err("weight_slots must be 2, 3 or 4".into());
+        }
         let need = weight_slot_bytes(c)?
-            .checked_mul(2)
+            .checked_mul(c.weight_slots)
             .ok_or("weight SRAM overflow")?;
         if need > c.weight_sram_bytes {
             return Err(format!(
-                "core {} needs {need} bytes for two MX/BF16 weight slots, capacity {}",
+                "core {} needs {need} bytes for configured MX/BF16 weight slots, capacity {}",
                 c.id, c.weight_sram_bytes
             ));
         }
@@ -503,7 +525,7 @@ impl SlotReservation {
         let slots = core.slots.fetch_add(1, Ordering::SeqCst) + 1;
         let occupied = core.weight_bytes.fetch_add(bytes, Ordering::SeqCst) + bytes;
         assert!(
-            slots <= 2 && occupied <= core.config.weight_sram_bytes,
+            slots <= core.config.weight_slots && occupied <= core.config.weight_sram_bytes,
             "weight slot ownership violated"
         );
         core.slots_peak.fetch_max(slots, Ordering::SeqCst);
@@ -524,9 +546,151 @@ impl Drop for SlotReservation {
 struct Dma {
     hbm: Arc<dyn ErasedMemoryModel>,
     credits: Semaphore,
+    fair_pool: Option<Arc<CreditPool>>,
+    core_indices: BTreeMap<String, usize>,
     inflight: AtomicUsize,
     peak: AtomicUsize,
     bytes: AtomicU64,
+    config: Option<DmaConfig>,
+    clock: u64,
+    lookup: Vec<Semaphore>,
+    copy: Vec<Semaphore>,
+    lines: Mutex<BTreeMap<u64, PendingLine>>,
+    report: Mutex<DmaReport>,
+}
+
+// Conservative physical reservation, independent of host future/Vec sizes.
+// Per line: 64B response + 32B MSHR + 24B waiter. Native pool: 256 * 16B.
+// Tile copy fragments cost 24B each; 128B state per resident tile. 4KiB
+// covers queue heads, lookup/copy pipelines, and bounded arbitration state.
+fn frontend_bytes(a: &Architecture) -> Result<usize, String> {
+    let mut bytes = checked(&[a.global_dma_credits, 120], "DMA line metadata")?
+        .checked_add(8192)
+        .ok_or("DMA control storage overflow")?;
+    for c in &a.cores {
+        let fragments = c
+            .mlen
+            .div_ceil(64)
+            .checked_add(c.mlen.div_ceil(BLOCK).div_ceil(64))
+            .and_then(|v| v.checked_add(2))
+            .ok_or("DMA fragment count overflow")?;
+        let tile = checked(&[c.blen, fragments, 24], "DMA fragment descriptors")?
+            .checked_add(128)
+            .ok_or("DMA tile state overflow")?;
+        bytes = bytes
+            .checked_add(checked(
+                &[c.weight_slots, tile],
+                "DMA resident descriptors",
+            )?)
+            .ok_or("DMA frontend storage overflow")?;
+    }
+    Ok(bytes)
+}
+
+type SectorFuture = SharedFuture<BoxFuture<'static, [u8; 32]>>;
+struct PendingLine {
+    users: usize,
+    sectors: [Option<SectorFuture>; 2],
+}
+
+impl Dma {
+    fn sector(self: &Arc<Self>, address: u64, sector: usize, core: Arc<CoreState>) -> SectorFuture {
+        let dma = self.clone();
+        async move {
+            let data = dma.hbm.box_read_mask(address, 1 << sector).await;
+            dma.bytes.fetch_add(32, Ordering::SeqCst);
+            core.report.lock().unwrap().hbm_read_bytes += 32;
+            let mut bytes = [0; 32];
+            bytes.copy_from_slice(&data[sector * 32..sector * 32 + 32]);
+            bytes
+        }
+        .boxed()
+        .shared()
+    }
+
+    async fn read(
+        self: &Arc<Self>,
+        address: u64,
+        requested: u8,
+        useful: usize,
+        core: Arc<CoreState>,
+    ) -> [u8; 64] {
+        let config = self.config.as_ref().unwrap();
+        let mask = if config.sector_reads { requested } else { 3 };
+        let ex = Executor::current();
+        {
+            // Four banks, conservative 2-cycle occupied lookup, common to all
+            // DMA V1 policies including global-FIFO and coalescing-off controls.
+            let _port = self.lookup[(address as usize / 64) % 4]
+                .acquire()
+                .await
+                .unwrap();
+            ex.resolve_at(Duration::from_picos(2 * self.clock)).await;
+            let mut r = self.report.lock().unwrap();
+            r.lookup_busy_ps += 2 * self.clock;
+            r.line_requests += 1;
+            r.sector_requests += u64::from(mask.count_ones());
+            r.useful_copy_bytes += useful as u64;
+        }
+        let sectors = if config.coalesce {
+            let mut lines = self.lines.lock().unwrap();
+            let entry = lines.entry(address).or_insert_with(|| PendingLine {
+                users: 0,
+                sectors: [None, None],
+            });
+            entry.users += 1;
+            let mut needed = Vec::new();
+            for sector in 0..2 {
+                if mask & (1 << sector) == 0 {
+                    continue;
+                }
+                if entry.sectors[sector].is_some() {
+                    self.report.lock().unwrap().merged_sectors += 1;
+                } else {
+                    entry.sectors[sector] = Some(self.sector(address, sector, core.clone()));
+                }
+                needed.push((sector, entry.sectors[sector].as_ref().unwrap().clone()));
+            }
+            let mut report = self.report.lock().unwrap();
+            report.mshr_peak = report.mshr_peak.max(lines.len());
+            needed
+        } else {
+            (0..2)
+                .filter(|s| mask & (1 << s) != 0)
+                .map(|s| (s, self.sector(address, s, core.clone())))
+                .collect()
+        };
+        let responses = futures::future::join_all(
+            sectors
+                .into_iter()
+                .map(|(index, future)| async move { (index, future.await) }),
+        )
+        .await;
+        let mut bytes = [0; 64];
+        for (index, data) in responses {
+            bytes[index * 32..index * 32 + 32].copy_from_slice(&data);
+        }
+        {
+            // Eight return/copy banks, 32 B per cycle each. Duplicate consumers
+            // each pay copy service; multicast and SRAM writes are not free.
+            let _port = self.copy[(address as usize / 64) % 8]
+                .acquire()
+                .await
+                .unwrap();
+            let duration = useful.div_ceil(32) as u64 * self.clock;
+            ex.resolve_at(Duration::from_picos(duration)).await;
+            self.report.lock().unwrap().copy_busy_ps += duration;
+        }
+        if config.coalesce {
+            let mut lines = self.lines.lock().unwrap();
+            let entry = lines.get_mut(&address).unwrap();
+            entry.users -= 1;
+            if entry.users == 0 {
+                lines.remove(&address);
+            }
+        }
+        bytes
+    }
 }
 
 struct VectorUnit {
@@ -649,10 +813,31 @@ async fn load_tile(
         let (tx, rx) = oneshot::channel();
         pending.push(rx);
         Executor::current().spawn(async move {
-            let _credit = dma.credits.acquire().await.unwrap();
+            let (credit, fair_credit) = if let Some(pool) = &dma.fair_pool {
+                let begin = Executor::current().now().as_picos();
+                let credit = pool.acquire(dma.core_indices[&core.config.id]).await;
+                dma.report.lock().unwrap().fair_credit_wait_ps +=
+                    Executor::current().now().as_picos() - begin;
+                (None, Some(credit))
+            } else {
+                (Some(dma.credits.acquire().await.unwrap()), None)
+            };
             let current = dma.inflight.fetch_add(1, Ordering::SeqCst) + 1;
             dma.peak.fetch_max(current, Ordering::SeqCst);
-            let bytes = if let Some(bytes) = core.cache.lookup(address).await {
+            let bytes = if dma.config.is_some() {
+                let mut mask = 0u8;
+                for span in &spans {
+                    mask |= 1 << (span.src / 32);
+                    mask |= 1 << ((span.src + span.len - 1) / 32);
+                }
+                dma.read(
+                    address,
+                    mask,
+                    spans.iter().map(|s| s.len).sum(),
+                    core.clone(),
+                )
+                .await
+            } else if let Some(bytes) = core.cache.lookup(address).await {
                 bytes
             } else {
                 let bytes = dma.hbm.box_read(address).await;
@@ -669,7 +854,8 @@ async fn load_tile(
             }
             dma.inflight.fetch_sub(1, Ordering::SeqCst);
             // Credit covers both the HBM request and its 64-byte staging data.
-            drop(_credit);
+            drop(credit);
+            drop(fair_credit);
             let _ = tx.send(());
         });
     }
@@ -739,30 +925,27 @@ async fn gemm(
             specs.push(TileSpec { n: n0, k: k0 });
         }
     }
-    let mut pending = Some(spawn_load(
-        core.clone(),
-        shared.clone(),
-        region.clone(),
-        specs[0],
-    ));
-    for (index, spec) in specs.iter().copied().enumerate() {
+    let mut pending = VecDeque::new();
+    let mut issued = 0;
+    // Initial window reserves every slot before DMA. At each retirement exactly
+    // one slot becomes reusable; READY tiles keep their ownership meanwhile.
+    for spec in specs.iter().take(c.weight_slots) {
+        pending.push_back(spawn_load(
+            core.clone(),
+            shared.clone(),
+            region.clone(),
+            *spec,
+        ));
+        issued += 1;
+    }
+    for spec in specs.iter().copied() {
         let wait_start = ex.now().as_picos();
         let tile = pending
-            .take()
+            .pop_front()
             .unwrap()
             .await
             .map_err(|_| "weight loader task failed")??;
         core.report.lock().unwrap().weight_ready_wait_ps += ex.now().as_picos() - wait_start;
-        // Exactly one current slot and one prefetched slot. A slot remains
-        // occupied while its BF16 values feed every M tile in this group.
-        if index + 1 < specs.len() {
-            pending = Some(spawn_load(
-                core.clone(),
-                shared.clone(),
-                region.clone(),
-                specs[index + 1],
-            ));
-        }
         for m0 in (0..m).step_by(c.blen) {
             let block_index = (spec.n / c.blen) * mb + m0 / c.blen;
             if ready[block_index] > ex.now() {
@@ -796,6 +979,15 @@ async fn gemm(
             ex.resolve_at(Duration::from_picos(service)).await;
         }
         drop(tile);
+        if issued < specs.len() {
+            pending.push_back(spawn_load(
+                core.clone(),
+                shared.clone(),
+                region.clone(),
+                specs[issued],
+            ));
+            issued += 1;
+        }
     }
     let last = ready.into_iter().max().unwrap();
     if last > ex.now() {
@@ -962,6 +1154,11 @@ pub async fn execute(
     hbm_len: u64,
 ) -> Result<RunReport, String> {
     validate(&w, &a, hbm_len)?;
+    if a.dma.is_some() && !hbm.supports_sector_reads() {
+        return Err(
+            "DMA sector/coalescing mode requires an explicitly capable memory backend".into(),
+        );
+    }
     let plan = plan(&w, &a)?;
     let ex = Executor::current();
     let begin = ex.now().as_picos();
@@ -979,9 +1176,38 @@ pub async fn execute(
         dma: Arc::new(Dma {
             hbm,
             credits: Semaphore::new(a.global_dma_credits),
+            fair_pool: a
+                .dma
+                .as_ref()
+                .filter(|d| d.fair_credits)
+                .map(|_| Arc::new(CreditPool::new(a.global_dma_credits, a.cores.len()))),
+            core_indices: a
+                .cores
+                .iter()
+                .enumerate()
+                .map(|(i, c)| (c.id.clone(), i))
+                .collect(),
             inflight: AtomicUsize::new(0),
             peak: AtomicUsize::new(0),
             bytes: AtomicU64::new(0),
+            config: a.dma.clone(),
+            clock: a.clock_period_ps,
+            lookup: (0..4).map(|_| Semaphore::new(1)).collect(),
+            copy: (0..8).map(|_| Semaphore::new(1)).collect(),
+            lines: Mutex::new(BTreeMap::new()),
+            report: Mutex::new(DmaReport {
+                fair_credit_reserve_per_core: if a.dma.as_ref().is_some_and(|d| d.fair_credits) {
+                    a.global_dma_credits / 8
+                } else {
+                    0
+                },
+                reserved_bytes: if a.dma.is_some() {
+                    frontend_bytes(&a)?
+                } else {
+                    0
+                },
+                ..Default::default()
+            }),
         }),
         vector: Arc::new(VectorUnit {
             permit: Semaphore::new(1),
@@ -1095,6 +1321,7 @@ pub async fn execute(
         global_dma_inflight_peak: inflight_peak, global_dma_staging_peak_bytes: inflight_peak * 64,
         combine_sram_peak_bytes: plan.global_storage, shared_vector_busy_ps: shared.vector.busy_ps.load(Ordering::SeqCst),
         dispatch_queue_peak_bytes: queue_peak, dispatcher_busy_ps: shared.dispatcher_busy.load(Ordering::SeqCst),
+        dma_frontend: a.dma.as_ref().map(|_| shared.dma.report.lock().unwrap().clone()),
         cores: reports, job_completions: completions, output_bf16, output_f32, pre_round_output_f32: sums,
     })
 }
@@ -1117,4 +1344,83 @@ pub async fn run(
     rx.try_recv().map_err(|_| {
         "simulation stopped before completion (deadlock or task failure)".to_string()
     })?
+}
+
+#[cfg(test)]
+mod dma_lifetime_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn late_join_fetches_missing_sector_and_completed_entries_are_released() {
+        let mut a = super::super::tests::architecture();
+        a.dma = Some(DmaConfig {
+            issue_policy: ramulator::model::IssuePolicy::PerChannel,
+            sector_reads: true,
+            coalesce: true,
+            fair_credits: false,
+            frontend_sram_bytes: 45056,
+        });
+        let backing = memory::MemoryBacked::with_capacity(64);
+        backing.with_data(|bytes| {
+            for (i, b) in bytes.iter_mut().enumerate() {
+                *b = i as u8;
+            }
+        });
+        let native = ramulator::Ramulator::hbm2_preset(8).unwrap();
+        let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
+            native, backing,
+        )));
+        let dma = Arc::new(Dma {
+            hbm: hbm.clone(),
+            credits: Semaphore::new(2),
+            fair_pool: None,
+            core_indices: BTreeMap::new(),
+            inflight: AtomicUsize::new(0),
+            peak: AtomicUsize::new(0),
+            bytes: AtomicU64::new(0),
+            config: a.dma.clone(),
+            clock: 1000,
+            lookup: (0..4).map(|_| Semaphore::new(1)).collect(),
+            copy: (0..8).map(|_| Semaphore::new(1)).collect(),
+            lines: Mutex::new(BTreeMap::new()),
+            report: Mutex::new(DmaReport::default()),
+        });
+        let core = Arc::new(CoreState::new(&a.cores[0], &a));
+        let ex = Executor::new();
+        let d = dma.clone();
+        ex.spawn(async move {
+            let first = d.read(0, 1, 32, core.clone());
+            let late = async {
+                Executor::current()
+                    .resolve_at(Duration::from_picos(3000))
+                    .await;
+                d.read(0, 3, 64, core.clone()).await
+            };
+            let (a, b) = futures::join!(first, late);
+            assert_eq!(&a[..32], &(0..32u8).collect::<Vec<_>>());
+            assert!(
+                a[32..].iter().all(|b| *b == 0),
+                "unrequested sector leaked into result"
+            );
+            assert_eq!(b, std::array::from_fn(|i| i as u8));
+            assert!(
+                d.lines.lock().unwrap().is_empty(),
+                "MSHR retained after final copy"
+            );
+            d.read(0, 1, 32, core).await;
+        });
+        ex.enter(Instant::ETERNITY).await;
+        let r = dma.report.lock().unwrap();
+        assert_eq!(
+            (
+                r.line_requests,
+                r.sector_requests,
+                r.merged_sectors,
+                r.mshr_peak
+            ),
+            (3, 4, 1, 1)
+        );
+        assert_eq!(hbm.statistics().total_bytes_read, 96);
+        assert_eq!(dma.bytes.load(Ordering::SeqCst), 96);
+    }
 }

@@ -73,6 +73,8 @@ pub struct CoreConfig {
     /// FIFO read cache: each entry reserves 64 data + 16 tag/control bytes.
     #[serde(default)]
     pub read_cache_bytes: usize,
+    #[serde(default = "default_weight_slots")]
+    pub weight_slots: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -90,6 +92,22 @@ pub enum MatrixTiming {
     Pipelined,
     /// Legacy MatrixMachine-like per-instruction K + overhead serialization.
     LegacySerialized,
+}
+
+fn default_weight_slots() -> usize {
+    2
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmaConfig {
+    pub issue_policy: ramulator::model::IssuePolicy,
+    pub sector_reads: bool,
+    pub coalesce: bool,
+    #[serde(default)]
+    pub fair_credits: bool,
+    /// Includes response data, MSHRs, waiters, native trackers, and tile descriptors.
+    pub frontend_sram_bytes: usize,
 }
 
 fn default_queue_bytes() -> usize {
@@ -128,6 +146,8 @@ pub struct Architecture {
     pub dispatch_cycles: u64,
     #[serde(default)]
     pub matrix_timing: MatrixTiming,
+    #[serde(default)]
+    pub dma: Option<DmaConfig>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -190,10 +210,25 @@ pub struct RunReport {
     pub shared_vector_busy_ps: u64,
     pub dispatch_queue_peak_bytes: usize,
     pub dispatcher_busy_ps: u64,
+    pub dma_frontend: Option<DmaReport>,
     pub cores: Vec<CoreReport>,
     /// Completion order, which may differ from deterministic reduction order.
     pub job_completions: Vec<JobCompletion>,
     pub output_bf16: Vec<Vec<u16>>,
     pub output_f32: Vec<Vec<f32>>,
     pub pre_round_output_f32: Vec<Vec<f32>>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct DmaReport {
+    pub reserved_bytes: usize,
+    pub line_requests: u64,
+    pub sector_requests: u64,
+    pub merged_sectors: u64,
+    pub useful_copy_bytes: u64,
+    pub lookup_busy_ps: u64,
+    pub copy_busy_ps: u64,
+    pub mshr_peak: usize,
+    pub fair_credit_reserve_per_core: usize,
+    pub fair_credit_wait_ps: u64,
 }

@@ -104,16 +104,30 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
     drop(image);
     // Match the existing runner's native-model lifetime: the process owns this
     // one HBM model until exit, after the executor drains all memory requests.
-    let hbm: Arc<dyn memory::ErasedMemoryModel> =
-        Arc::new(memory::WithStats::new(memory::WithTiming::new(
-            ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(
-                opts.hbm_channels as usize,
-            )?),
-            backing,
-        )));
+    let native = ramulator::Ramulator::hbm2_preset(opts.hbm_channels as usize)?.with_issue_policy(
+        architecture
+            .dma
+            .as_ref()
+            .map(|d| d.issue_policy)
+            .unwrap_or_default(),
+        runtime::Duration::from_picos(architecture.clock_period_ps),
+    );
+    let native_observer = native.clone();
+    let library_path = PathBuf::from(ramulator::raw::Ramulator::library_path()).canonicalize()?;
+    let library_sha256 = sha256_file(&library_path)?;
+    let hbm: Arc<dyn memory::ErasedMemoryModel> = Arc::new(memory::WithStats::new(
+        memory::WithTiming::new(ManuallyDrop::new(native), backing),
+    ));
     let report = moe_normal::run(workload, architecture, hbm, image_len)
         .await
         .map_err(std::io::Error::other)?;
+    let native_telemetry = native_observer.telemetry();
+    if native_telemetry["native_pending"] != 0 {
+        return Err("native requests not drained".into());
+    }
+    if sha256_file(&library_path)? != library_sha256 {
+        return Err("native library changed during execution".into());
+    }
     let envelope = json!({
         "schema_version": 1,
         "evidence_level": "fixed_route_numerical_moe_with_ramulator_and_analytical_core_timing",
@@ -125,9 +139,11 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
             "hbm_path": image_path,
             "hbm_sha256": image_sha256,
             "hbm_image_bytes": image_len,
+            "native_library_path": library_path,
+            "native_library_sha256": library_sha256,
             "executable_sha256": sha256_file(&std::env::current_exe()?)?,
         },
-        "memory_model": {"name": "Ramulator HBM2 preset", "channels": opts.hbm_channels, "upper_burst_bytes": 64},
+        "memory_model": {"name": "Ramulator HBM2 preset", "channels": opts.hbm_channels, "upper_burst_bytes": 64, "calibration": native_telemetry},
         "workload_manifest": workload_json,
         "architecture_manifest": architecture_json,
         "result": report,

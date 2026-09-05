@@ -151,7 +151,7 @@ fn fixture() -> (Workload, Vec<u8>, Vec<DenseExpert>) {
     )
 }
 
-fn architecture() -> Architecture {
+pub(super) fn architecture() -> Architecture {
     Architecture {
         schema_version: 1,
         name: "dual_normal".into(),
@@ -164,6 +164,7 @@ fn architecture() -> Architecture {
                 accumulator_bytes: 4096,
                 weight_sram_bytes: 4096,
                 read_cache_bytes: 0,
+                weight_slots: 2,
             },
             CoreConfig {
                 id: "small".into(),
@@ -173,6 +174,7 @@ fn architecture() -> Architecture {
                 accumulator_bytes: 4096,
                 weight_sram_bytes: 4096,
                 read_cache_bytes: 0,
+                weight_slots: 2,
             },
         ],
         dispatch_threshold: 4,
@@ -188,6 +190,7 @@ fn architecture() -> Architecture {
         dispatch_queue_bytes: 262144,
         dispatch_cycles: 1,
         matrix_timing: MatrixTiming::Pipelined,
+        dma: None,
     }
 }
 
@@ -565,5 +568,117 @@ fn extreme_clock_and_invalid_square_mapping_fail_before_timers() {
         validate(&w, &a, bytes.len() as u64)
             .unwrap_err()
             .contains("divisible by BLEN")
+    );
+}
+
+async fn simulate_native(w: Workload, a: Architecture, bytes: &[u8]) -> RunReport {
+    let backing = memory::MemoryBacked::with_capacity(bytes.len());
+    backing.with_data(|data| data.copy_from_slice(bytes));
+    let native = ramulator::Ramulator::hbm2_preset(8)
+        .unwrap()
+        .with_issue_policy(
+            a.dma.as_ref().unwrap().issue_policy,
+            Duration::from_picos(a.clock_period_ps),
+        );
+    let observer = native.clone();
+    let memory = Arc::new(memory::WithStats::new(memory::WithTiming::new(
+        native, backing,
+    )));
+    let result = run(w, a, memory.clone(), bytes.len() as u64).await.unwrap();
+    assert_eq!(result.hbm_read_bytes, memory.statistics().total_bytes_read);
+    let stats = observer.telemetry();
+    let controllers = stats["native_stats"]["memory_system"]["controller"]
+        .as_array()
+        .unwrap();
+    let served: u64 = controllers
+        .iter()
+        .map(|c| c["num_read_reqs_served"].as_u64().unwrap())
+        .sum();
+    assert_eq!(served * 32, result.hbm_read_bytes);
+    assert_eq!(stats["native_pending"], 0);
+    result
+}
+
+#[tokio::test]
+async fn native_dma_variants_preserve_moe_and_shared_expert_with_tail_masks() {
+    let (mut w, bytes, dense) = fixture();
+    w.shared_expert = Some(SharedExpert {
+        expert: 0,
+        weight: 0.5,
+    });
+    let expected = reference(&w, &dense);
+    for slots in [2, 3, 4] {
+        for (policy, sector, coalesce, fair) in [
+            (
+                ramulator::model::IssuePolicy::GlobalFifo,
+                false,
+                false,
+                false,
+            ),
+            (
+                ramulator::model::IssuePolicy::PerChannel,
+                true,
+                false,
+                false,
+            ),
+            (ramulator::model::IssuePolicy::PerChannel, true, true, false),
+            (ramulator::model::IssuePolicy::PerChannel, true, true, true),
+        ] {
+            let mut a = architecture();
+            a.global_dma_credits = 16;
+            a.global_dma_staging_bytes = 1024;
+            for core in &mut a.cores {
+                core.weight_slots = slots;
+            }
+            a.dma = Some(DmaConfig {
+                issue_policy: policy,
+                sector_reads: sector,
+                coalesce,
+                fair_credits: fair,
+                frontend_sram_bytes: 45056,
+            });
+            let result = simulate_native(w.clone(), a, &bytes).await;
+            assert_eq!(result.output_bf16, expected);
+            let dma = result.dma_frontend.unwrap();
+            assert_eq!(
+                (dma.sector_requests - dma.merged_sectors) * 32,
+                result.hbm_read_bytes
+            );
+            assert!(dma.mshr_peak <= result.global_dma_inflight_peak);
+            assert!(result.cores.iter().all(|c| c.weight_slots_peak <= slots));
+        }
+    }
+}
+
+#[test]
+fn dma_metadata_and_prefetch_slots_fail_closed() {
+    let (w, bytes, _) = fixture();
+    let mut a = architecture();
+    a.dma = Some(DmaConfig {
+        issue_policy: ramulator::model::IssuePolicy::PerChannel,
+        sector_reads: true,
+        coalesce: true,
+        fair_credits: false,
+        frontend_sram_bytes: 1,
+    });
+    assert!(
+        validate(&w, &a, bytes.len() as u64)
+            .unwrap_err()
+            .contains("metadata")
+    );
+    a.dma.as_mut().unwrap().frontend_sram_bytes = 45056;
+    a.cores[0].weight_slots = 4;
+    a.cores[0].weight_sram_bytes = 600;
+    assert!(
+        validate(&w, &a, bytes.len() as u64)
+            .unwrap_err()
+            .contains("weight slots")
+    );
+    a.cores[0].weight_sram_bytes = 4096;
+    a.cores[0].weight_slots = 5;
+    assert!(
+        validate(&w, &a, bytes.len() as u64)
+            .unwrap_err()
+            .contains("weight_slots")
     );
 }

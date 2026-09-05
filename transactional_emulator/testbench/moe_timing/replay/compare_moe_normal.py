@@ -68,6 +68,44 @@ def validate_output_shape(values, tokens, width):
             "output width differs from workload")
 
 
+def validate_native(envelope, architecture, channels):
+    cal = envelope["memory_model"]["calibration"]
+    result = envelope["result"]
+    require(cal["capi_version"] == 2 and cal["native_transaction_bytes"] == 32
+            and cal["mapper"] == "CacheLineInterleave" and cal["channel_shift"] == 5
+            and cal["channels"] == channels, "native geometry is not calibrated HBM2")
+    require(cal["issue_policy"] == architecture.get("dma", {}).get("issue_policy", "global_fifo")
+            and cal["issue_period_ps"] == architecture["clock_period_ps"], "native injection configuration differs")
+    require(cal["native_pending"] == 0 and 0 <= cal["native_inflight_peak"] <= 256
+            and cal["submission_entries"] == 256, "native requests not drained or finite tracker bound exceeded")
+    for key in ("accepted_per_channel", "rejected_per_channel"):
+        require(len(cal[key]) == channels and all(type(v) is int and v >= 0 for v in cal[key]), "invalid native channel counter")
+    native = cal["native_stats"]["memory_system"]
+    controllers = native["controller"]
+    require(len(controllers) == channels, "native controller count differs")
+    for port, controller in enumerate(controllers):
+        require(controller["id"] == "Channel " + str(port), "native channel identity mismatch")
+        require(controller["num_read_reqs"] == controller["num_read_reqs_served"]
+                == cal["accepted_per_channel"][port], "accepted/read-command counts differ")
+        require(controller["num_read_reqs_forwarded"] == controller["num_write_reqs"] == 0,
+                "unexpected forwarding or writes in read-only weight experiment")
+    require(sum(cal["accepted_per_channel"]) == native["total_num_read_requests"]
+            and native["total_num_read_requests"] * 32 == result["hbm_read_bytes"], "native byte accounting mismatch")
+    identity = envelope["provenance"]
+    require(digest(identity["native_library_path"]) == identity["native_library_sha256"], "native library hash differs")
+    if architecture.get("dma"):
+        dma = result["dma_frontend"]
+        require(all(type(v) is int and v >= 0 for v in dma.values()), "invalid DMA metric")
+        require(dma["reserved_bytes"] <= architecture["dma"]["frontend_sram_bytes"], "DMA metadata SRAM exceeded")
+        require(dma["mshr_peak"] <= result["global_dma_inflight_peak"], "MSHR entries exceed admitted waiters")
+        require(dma["sector_requests"] >= dma["merged_sectors"]
+                and (dma["sector_requests"] - dma["merged_sectors"]) * 32 == result["hbm_read_bytes"], "MSHR sectors do not reconcile")
+        require(dma["lookup_busy_ps"] == 2 * dma["line_requests"] * architecture["clock_period_ps"], "lookup service unaccounted")
+        require(dma["copy_busy_ps"] * 32 >= dma["useful_copy_bytes"] * architecture["clock_period_ps"], "copy bandwidth exceeded")
+        require(dma["lookup_busy_ps"] <= 4 * result["total_ps"]
+                and dma["copy_busy_ps"] <= 8 * result["total_ps"], "DMA port occupancy exceeds elapsed time")
+
+
 def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_channels=8):
     result = envelope["result"]
     require(envelope["memory_model"]["channels"] == hbm_channels
@@ -112,8 +150,8 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
                                ("accumulator_peak_bytes", "accumulator_bytes"),
                                ("weight_sram_peak_bytes", "weight_sram_bytes")):
             require(observed[peak] <= core[capacity], core["id"] + " exceeded " + capacity)
-        require(observed["weight_slots_peak"] <= 2, "more than two weight slots")
-        if "read_cache_bytes" in core:
+        require(observed["weight_slots_peak"] <= core.get("weight_slots", 2), "weight slot count exceeded")
+        if "read_cache_bytes" in core and not architecture.get("dma"):
             for metric in ("cache_requests", "cache_hits", "cache_port_busy_ps", "cache_peak_bytes"):
                 require(type(observed[metric]) is int and observed[metric] >= 0, "invalid cache metric: " + metric)
             require(observed["cache_requests"] == observed["cache_hits"] + observed["hbm_read_bytes"] // 64,
@@ -166,7 +204,7 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
         require(core["useful_macs"] == rows_per_core[core["id"]] * 3
                 * workload["input_dim"] * workload["expert_hidden_dim"],
                 "per-core useful MACs differ from completed jobs")
-    require(result["hbm_read_bytes"] % 64 == 0, "physical HBM reads must be 64-byte bursts")
+    require(result["hbm_read_bytes"] % (32 if architecture.get("dma") else 64) == 0, "HBM request bytes must match transfer granularity")
     require(result["hbm_write_bytes"] == 0, "unexpected HBM output/intermediate write")
     require(result["shared_vector_busy_ps"] <= result["total_ps"], "vector busy time exceeds run")
     for source in (result, golden):
@@ -174,6 +212,8 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
             validate_output_shape(source[field], token_count, workload["input_dim"])
     validate_output_pair(result["output_bf16"], result["output_f32"])
     validate_output_pair(golden["output_bf16"], golden["output_f32"])
+    if architecture.get("dma") or "calibration" in envelope["memory_model"]:
+        validate_native(envelope, architecture, hbm_channels)
     reference = golden["output_f32"]
     error = numerical_gate(result["output_f32"], reference, atol, rtol)
     return {"passed": True, "max_absolute_error": error,
@@ -223,6 +263,10 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
         for field in ("vector_sram_bytes", "accumulator_bytes", "weight_sram_bytes", "read_cache_bytes"):
             require(len({sum(c[field] for c in a["cores"]) for a in architectures}) == 1,
                     "full-shape comparison requires equal total configured SRAM: " + field)
+    dma_configs = [a.get("dma") for a in architectures]
+    require(all(d is None for d in dma_configs) or all(d is not None for d in dma_configs), "DMA configuration must be explicit for all architectures")
+    if all(d is not None for d in dma_configs):
+        require(len({json.dumps(d, sort_keys=True) for d in dma_configs}) == 1, "comparison requires identical DMA policy and budget")
     hbm_path = workload_path.parent / workload["hbm_file"]
     expected_hashes = {"workload_sha256": hashlib.sha256(workload_bytes).hexdigest(),
                        "hbm_sha256": digest(hbm_path), "executable_sha256": digest(binary)}
@@ -232,7 +276,7 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
     run_dir.mkdir()
     def execute_architecture(index):
         path, architecture = architecture_paths[index], architectures[index]
-        repeat_results, gates = [], []
+        repeat_results, gates, native_repeats, library_hashes = [], [], [], []
         architecture_hash = architecture_hashes[index]
         for repeat in range(repeats):
             report_path = run_dir / "arch{:02d}_repeat{:02d}.json".format(index, repeat)
@@ -248,11 +292,15 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
                 require(envelope["provenance"][field] == value, "input/binary identity changed: " + field)
             gates.append(validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_channels))
             repeat_results.append(envelope["result"])
+            native_repeats.append(envelope["memory_model"].get("calibration"))
+            library_hashes.append(envelope["provenance"].get("native_library_sha256"))
         require(all(result == repeat_results[0] for result in repeat_results[1:]),
                 "repeat mismatch for " + architecture["name"])
+        require(all(n == native_repeats[0] for n in native_repeats), "native counters changed between repeats")
+        require(len(set(library_hashes)) == 1, "native library changed between repeats")
         result = repeat_results[0]
         require(result["total_ps"] > 0, "nonempty comparison must advance time")
-        return {"architecture": architecture, "result": result, "gates": gates}
+        return {"architecture": architecture, "result": result, "gates": gates, "native": native_repeats[0], "native_library_sha256": library_hashes[0]}
     # Each process owns an independent Ramulator/executor. Preserve manifest
     # order and propagate every exception before publishing any speedup.
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -265,6 +313,7 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
         require(digest(path) == expected, label + " changed during comparison")
     for path, expected in zip(architecture_paths, architecture_hashes):
         require(digest(path) == expected, "architecture changed during comparison")
+    require(len({r["native_library_sha256"] for r in results}) == 1, "architectures used different native libraries")
     baseline_ps = results[0]["result"]["total_ps"]
     for row in results:
         row["speedup_vs_baseline"] = baseline_ps / row["result"]["total_ps"]
