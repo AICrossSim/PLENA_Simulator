@@ -14,6 +14,7 @@ fix that rejects L_TILE execution wider than the configured Vector width.
 | Rust `cargo fmt --all -- --check` | Passed |
 | Rust `cargo test --workspace --release -- --test-threads=1` | 308 passed, 0 failed, 0 ignored |
 | Rust `cargo clippy --workspace --all-targets --release -- -D warnings` | Passed |
+| Python `ruff format --check .` and `ruff check .` (0.15.1) | Passed after formatting two Python files; both ASTs unchanged |
 | Compiler-generated Matrix-view projection executed by Rust | Passed; zero output error |
 | Official-shape Mamba/KDA, fixed and affine, four-token Rust recurrence | All four pass their declared layout-specific gates |
 | Mamba prepared A/B/D, B1, two tokens | All three exact against their own rounding references; all pass the common budget |
@@ -102,6 +103,12 @@ Running host Python outside that injected library environment and using
 `PLENA_USE_NIX_BUILD=1` for the Rust build resolved it. The subsequent projection
 and all recurrence/control invocations completed. The failed environment log
 is retained with the local review evidence, not counted as a numerical run.
+
+The first GitHub CI run flagged formatting in the execution comparison and
+its helper tests. A formatting-only follow-up fixes both. Parsed Python ASTs
+are identical before/after; local repository-wide Ruff formatting and lint
+then pass. The numerical runs above were on snapshot `cf8d864d`; the manifest
+preserves executed-source hashes and separately records formatted-source hashes.
 
 No GPU collection, full real Nemotron/Kimi checkpoint inference, new batch
 sweep, RTL synthesis or PPA run was performed for this review.

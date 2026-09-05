@@ -82,5 +82,16 @@
       "kda_controls": 0
     },
     "kda_AB_common_numeric_budget_passed": false
+  },
+  "executed_simulator_snapshot_commit": "cf8d864d66ccd42a6dada151ce65cdbee5b6f1f4",
+  "post_run_formatting": {
+    "tool": "ruff 0.15.1",
+    "python_asts_unchanged": true,
+    "files_sha256": {
+      "transactional_emulator/testbench/aten/matrix_lcompute_execution_compare.py": "8d21d31a8f5d7daac8b3b3792056559cf2529ac01aae0719a4194e29a78d6976",
+      "transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py": "c8abcbf6d92a8ea85e67fbb3f2e7f6ab78d2333c5a5cc0d32b895a620dc47a0f"
+    },
+    "ruff_format_check_passed": true,
+    "ruff_lint_passed": true
   }
 }

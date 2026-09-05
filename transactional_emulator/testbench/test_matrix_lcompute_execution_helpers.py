@@ -82,35 +82,38 @@ def test_snapshot_timing_and_mixed_contracts_never_publish_a_ratio(tmp_path):
     import json
     from pathlib import Path
     from transactional_emulator.testbench.aten.matrix_lcompute_execution_compare import write_execution_tables
-    source = Path(__file__).resolve().parents[2] / 'artifacts/matrix_lcompute_execution_v1/summary.json'
-    results = [r for r in json.loads(source.read_text()) if r['batch'] == 1]
+
+    source = Path(__file__).resolve().parents[2] / "artifacts/matrix_lcompute_execution_v1/summary.json"
+    results = [r for r in json.loads(source.read_text()) if r["batch"] == 1]
     snapshots = copy.deepcopy(results)
     for r in snapshots:
-        r['diagnostic_state_snapshots'] = True
+        r["diagnostic_state_snapshots"] = True
     write_execution_tables(snapshots, tmp_path)
-    row = next(csv.DictReader((tmp_path/'qualified_comparison.csv').open()))
-    assert row['common_numeric_budget_passed'] == 'True'
-    assert row['D_speedup_vs_B_qualified'] == ''
+    row = next(csv.DictReader((tmp_path / "qualified_comparison.csv").open()))
+    assert row["common_numeric_budget_passed"] == "True"
+    assert row["D_speedup_vs_B_qualified"] == ""
     other = tmp_path  # Reusing an output directory must clear a stale ratio table.
-    results[0]['experimental_fp32_dot'] = True
+    results[0]["experimental_fp32_dot"] = True
     write_execution_tables(results, other)
-    assert not (other/'qualified_comparison.csv').exists()
+    assert not (other / "qualified_comparison.csv").exists()
 
 
 def test_pairwise_control_rejects_hardware_extensions_before_execution(tmp_path):
     from transactional_emulator.testbench.aten.matrix_lcompute_execution_compare import run_variant, KIMI_KDA
+
     with pytest.raises(ValueError, match="no experimental FP32 or L_TILE"):
-        run_variant(KIMI_KDA, 'D', 1, 1, tmp_path, pairwise_bf16_dot=True)
+        run_variant(KIMI_KDA, "D", 1, 1, tmp_path, pairwise_bf16_dot=True)
     with pytest.raises(ValueError, match="no experimental FP32 or L_TILE"):
-        run_variant(KIMI_KDA, 'B', 1, 1, tmp_path, pairwise_bf16_dot=True, experimental_fp32_dot=True)
+        run_variant(KIMI_KDA, "B", 1, 1, tmp_path, pairwise_bf16_dot=True, experimental_fp32_dot=True)
     assert not list(tmp_path.iterdir())
 
 
 def test_pairwise_oracle_observes_each_bf16_rounding_boundary():
     from transactional_emulator.testbench.aten.matrix_lcompute_execution_compare import pairwise_bf16_reference
+
     # BF16 sequential sum loses +1 after256; the explicit tree preserves it here.
     values = torch.zeros(1, 128, 1)
-    values[0, :4, 0] = torch.tensor([256., 1., 1., -256.])
-    assert pairwise_bf16_reference(values).item() == 1.
-    values[0, :4, 0] = torch.tensor([256., 1., -256., 0.])
-    assert pairwise_bf16_reference(values).item() == 0.  # Pairwise is not magic FP32.
+    values[0, :4, 0] = torch.tensor([256.0, 1.0, 1.0, -256.0])
+    assert pairwise_bf16_reference(values).item() == 1.0
+    values[0, :4, 0] = torch.tensor([256.0, 1.0, -256.0, 0.0])
+    assert pairwise_bf16_reference(values).item() == 0.0  # Pairwise is not magic FP32.
