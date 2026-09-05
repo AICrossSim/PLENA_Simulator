@@ -67,3 +67,17 @@ The existing standalone Rust experiment remains the entry point for this goal;
 legacy ISA integration is tracked separately and must not be claimed complete.
 Transpose, many-small-core configurations, sharing, attention and RTL/PPA are
 follow-up work after this normal-buffer benefit question is measured.
+
+## Completed first measurement, 2026-09-05
+
+Nine comparison groups / 126 valid Rust runs passed numerical, capacity,
+identity and deterministic-repeat checks. With cache policy optimized per
+architecture, the tested 3072+1024 pair lost to the strongest tested single in
+all four windows, and also lost to the tested homogeneous pair. Do not freeze
+this split or cite the cache-constrained primary speedup as proof of benefit.
+This does not reject all heterogeneous designs. Calibrate issue/SRAM-port timing
+before broader geometry search and legacy ISA integration.
+
+See [Chinese result snapshot](moe_full_shape_result_20260905.md). Raw reports,
+binary, route identities and reproduction files are archived under
+`/scratch/shared/mcl123/plena/outputs/moe_full_shape_benefit_20260905/`.
