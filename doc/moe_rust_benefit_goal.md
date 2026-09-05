@@ -70,6 +70,12 @@ follow-up work after this normal-buffer benefit question is measured.
 
 ## Completed first measurement, 2026-09-05
 
+Subsequent DMA audit found a 16B Rust wrapper / 32B pinned backend-source
+transaction-granularity mismatch. The measurements below remain old-model
+observations, not calibrated hardware conclusions. Numerical validation stands;
+runtime capabilities and command counts require P0 calibration, then every
+architecture must be remeasured. See [DMA architecture audit](moe_hbm_dma_architecture_v1_zh.md).
+
 Nine comparison groups / 126 valid Rust runs passed numerical, capacity,
 identity and deterministic-repeat checks. With cache policy optimized per
 architecture, the tested 3072+1024 pair lost to the strongest tested single in
