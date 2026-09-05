@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'plena_settings.toml'
+      - 'justfile'
+      - '.github/workflows/transactional_emulator.yml'
       - 'PLENA_Tools/**'
       # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
       # stage-attribution guard below.
@@ -18,6 +21,9 @@ on:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'plena_settings.toml'
+      - 'justfile'
+      - '.github/workflows/transactional_emulator.yml'
       - 'PLENA_Tools/**'
       - 'PLENA_Compiler'
       - 'flake.nix'
@@ -34,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # Pinned: with `-D warnings`, a rolling channel reds unrelated PRs.
       - name: Install Rust toolchain
@@ -118,7 +126,7 @@ jobs:
 
       - name: Run Rust tests
         run: |
-          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release"
+          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release -- --test-threads=1"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -147,3 +155,7 @@ jobs:
       - name: Run emulator timing gates
         run: |
           nix develop --command bash -c "just test-timing-gates"
+
+      - name: Run Matrix SRAM Compiler-to-Rust integration
+        run: |
+          nix develop --no-write-lock-file --command just test-matrix-lcompute

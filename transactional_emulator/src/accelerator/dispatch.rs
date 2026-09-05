@@ -4,21 +4,24 @@
 //! match and dispatch-only helpers.
 
 use half::bf16;
-use quantize::MxDataType;
+use quantize::{MxDataType, QuantTensor};
 
 use crate::runtime_config::PERIOD;
 use crate::runtime_config::{
     HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
-    SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
+    SCALAR_INT_BASIC_CYCLES, STATE_TYPE, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE,
+    VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
+use crate::vector_machine::VectorBinaryOp;
 use crate::{cycle, dma, op, timing};
 use runtime::{Executor, Instant};
 
 use super::Accelerator;
 use super::access::{self, OpAccess};
 use super::loop_state::LoopDecision;
+use super::matrix_view::{LTileExecArgs, MatrixViewBinaryArgs};
 use super::scoreboard::{DmaKind, Scoreboard};
 
 /// How `do_ops` charges time.
@@ -95,11 +98,17 @@ impl Accelerator {
                 // - H_PREFETCH_*: all outstanding stores (HBM RAW) plus
                 //   prefetches overlapping its SRAM destination (WAW).
                 // - Everything else: SRAM overlaps only.
-                let pending = if access.barrier || matches!(op, op::Opcode::H_STORE_V { .. }) {
+                let pending = if access.barrier
+                    || matches!(
+                        op,
+                        op::Opcode::H_STORE_V { .. } | op::Opcode::H_STORE_V_MV { .. }
+                    ) {
                     scoreboard.take_all_dma()
                 } else if matches!(
                     op,
-                    op::Opcode::H_PREFETCH_M { .. } | op::Opcode::H_PREFETCH_V { .. }
+                    op::Opcode::H_PREFETCH_M { .. }
+                        | op::Opcode::H_PREFETCH_V { .. }
+                        | op::Opcode::H_PREFETCH_V_MV { .. }
                 ) {
                     scoreboard.take_dma_for_prefetch(&access)
                 } else {
@@ -178,41 +187,73 @@ impl Accelerator {
                     panic!("invalid opcode at pc {pc}");
                 }
 
-                op::Opcode::M_MM { rs1, rs2 } => {
+                op::Opcode::M_MM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .mm(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .mm_with_view(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_MM_WO { rd, rstride, imm } => {
+                op::Opcode::M_MM_WO {
+                    rd,
+                    rstride,
+                    imm,
+                    view,
+                } => {
                     let stride_len = if *rstride == 0 {
                         1
                     } else {
                         self.reg_file.read_gp(*rstride)
                     };
+                    if let Some(view) = self.resolve_matrix_view(*view, pc) {
+                        let logical_offset = if *rstride == 0 {
+                            *imm
+                        } else {
+                            self.reg_file.read_gp(*rstride).wrapping_add(*imm)
+                        };
+                        let service = self
+                            .m_machine
+                            .mview_wo(self.reg_file.read_gp(*rd), logical_offset, view)
+                            .await;
+                        timing::charge_bank_cycles(service.service_cycles.max(1)).await;
+                    } else {
+                        self.m_machine
+                            .mm_wo(self.reg_file.read_gp(*rd) + *imm, stride_len)
+                            .await;
+                    }
+                }
+                op::Opcode::M_TMM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .mm_wo(self.reg_file.read_gp(*rd) + *imm, stride_len)
+                        .tmm(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_TMM { rs1, rs2 } => {
-                    self.m_machine
-                        .tmm(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
-                        .await;
-                }
-                op::Opcode::M_BMM { rs1, rs2 } => {
+                op::Opcode::M_BMM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .bmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
-                op::Opcode::M_BTMM { rs1, rs2 } => {
+                op::Opcode::M_BTMM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .btmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
@@ -221,31 +262,45 @@ impl Accelerator {
                         .bmm_wo(self.reg_file.read_gp(*rd) + *imm)
                         .await;
                 }
-                op::Opcode::M_MV { rs1, rs2 } => {
+                op::Opcode::M_MV { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .mv(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .mv(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_TMV { rs1, rs2 } => {
+                op::Opcode::M_TMV { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .tmv(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .tmv(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_BMV { rs1, rs2, rd } => {
+                op::Opcode::M_BMV { rs1, rs2, rd, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .bmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
-                op::Opcode::M_BTMV { rs1, rs2, rd } => {
+                op::Opcode::M_BTMV { rs1, rs2, rd, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .btmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
@@ -265,17 +320,32 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    view_mask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .add(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_gp(*rs2),
-                            *rmask,
+                    if Self::matrix_view_operand_mask(*view_mask).is_some() {
+                        self.vector_binary_with_matrix_views(MatrixViewBinaryArgs {
+                            operation: VectorBinaryOp::Add,
+                            rd: *rd,
+                            rs1: *rs1,
+                            rs2: *rs2,
+                            rmask: *rmask,
+                            view_mask: *view_mask,
                             mask,
-                        )
+                            pc,
+                        })
                         .await;
+                    } else {
+                        self.v_machine
+                            .add(
+                                self.reg_file.read_gp(*rd),
+                                self.reg_file.read_gp(*rs1),
+                                self.reg_file.read_gp(*rs2),
+                                *rmask,
+                                mask,
+                            )
+                            .await;
+                    }
                 }
                 op::Opcode::V_ADD_VF {
                     rd,
@@ -299,17 +369,32 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    view_mask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .sub(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_gp(*rs2),
-                            *rmask,
+                    if Self::matrix_view_operand_mask(*view_mask).is_some() {
+                        self.vector_binary_with_matrix_views(MatrixViewBinaryArgs {
+                            operation: VectorBinaryOp::Sub,
+                            rd: *rd,
+                            rs1: *rs1,
+                            rs2: *rs2,
+                            rmask: *rmask,
+                            view_mask: *view_mask,
                             mask,
-                        )
+                            pc,
+                        })
                         .await;
+                    } else {
+                        self.v_machine
+                            .sub(
+                                self.reg_file.read_gp(*rd),
+                                self.reg_file.read_gp(*rs1),
+                                self.reg_file.read_gp(*rs2),
+                                *rmask,
+                                mask,
+                            )
+                            .await;
+                    }
                 }
                 op::Opcode::V_SUB_VF {
                     rd,
@@ -335,17 +420,32 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    view_mask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .mul(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_gp(*rs2),
-                            *rmask,
+                    if Self::matrix_view_operand_mask(*view_mask).is_some() {
+                        self.vector_binary_with_matrix_views(MatrixViewBinaryArgs {
+                            operation: VectorBinaryOp::Mul,
+                            rd: *rd,
+                            rs1: *rs1,
+                            rs2: *rs2,
+                            rmask: *rmask,
+                            view_mask: *view_mask,
                             mask,
-                        )
+                            pc,
+                        })
                         .await;
+                    } else {
+                        self.v_machine
+                            .mul(
+                                self.reg_file.read_gp(*rd),
+                                self.reg_file.read_gp(*rs1),
+                                self.reg_file.read_gp(*rs2),
+                                *rmask,
+                                mask,
+                            )
+                            .await;
+                    }
                 }
                 op::Opcode::V_MUL_VF {
                     rd,
@@ -650,6 +750,7 @@ impl Accelerator {
                     let dtype = match precision {
                         op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
                     };
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
@@ -667,6 +768,58 @@ impl Accelerator {
                         .vram
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
                         .await;
+                    // SRAM bank write service follows completed DMA; it cannot overlap the fill.
+                }
+                op::Opcode::H_PREFETCH_V_MV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride,
+                    precision,
+                    view,
+                } => {
+                    let descriptor = self.resolve_matrix_view(Some(*view), pc).unwrap();
+                    let values = descriptor.values();
+                    let dtype = match precision {
+                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
+                    };
+                    let region = self.mx_region(
+                        dtype,
+                        self.reg_file.read_hbm(*rs2),
+                        self.reg_file.read_gp(*rs1),
+                        *rstride,
+                    );
+                    let xfer = dma::transfer_mx_from_hbm(
+                        &self.hbm,
+                        region,
+                        self.m_machine.mram.ty(),
+                        *VLEN,
+                        values.div_ceil(*VLEN),
+                        1,
+                    );
+                    let tensor = xfer.await.unwrap_or_else(|error| {
+                        panic!("Matrix-view DMA receiver dropped: {error}")
+                    });
+                    let tensor = if tensor.as_tensor().numel() == values as usize {
+                        tensor
+                    } else {
+                        QuantTensor::quantize(
+                            tensor.as_tensor().narrow(0, 0, i64::from(values)),
+                            self.m_machine.mram.ty(),
+                        )
+                    };
+                    let service = self
+                        .m_machine
+                        .mram
+                        .write_layout_packet(
+                            self.reg_file.read_gp(*rd),
+                            descriptor.layout(),
+                            tensor,
+                        )
+                        .await;
+                    timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                 }
                 op::Opcode::H_STORE_V {
                     rd,
@@ -681,6 +834,7 @@ impl Accelerator {
                     let dtype = match precision {
                         op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
                     };
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
@@ -694,6 +848,35 @@ impl Accelerator {
                         *STORE_V_AMOUNT,
                     )
                     .await;
+                }
+                op::Opcode::H_STORE_V_MV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride,
+                    precision,
+                    view,
+                } => {
+                    let descriptor = self.resolve_matrix_view(Some(*view), pc).unwrap();
+                    let (packet, service) = self
+                        .m_machine
+                        .mram
+                        .read_layout_packet(self.reg_file.read_gp(*rd), descriptor.layout())
+                        .await;
+                    timing::charge_bank_cycles(service.service_cycles.max(1)).await;
+                    let rows = dma::split_packet_rows(&packet, *VLEN, self.m_machine.mram.ty());
+                    let dtype = match precision {
+                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                        op::VectorPrecision::State => *STATE_TYPE,
+                    };
+                    let region = self.mx_region(
+                        dtype,
+                        self.reg_file.read_hbm(*rs2),
+                        self.reg_file.read_gp(*rs1),
+                        *rstride,
+                    );
+                    dma::store_rows_to_hbm(&self.hbm, region, rows, *VLEN).await;
                 }
                 op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
                     let imm = ((self.reg_file.read_gp(*rs1) as u64) << 32)
@@ -716,6 +899,40 @@ impl Accelerator {
                 op::Opcode::C_SET_TOPK_REG { rd } => {
                     self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
                     cycle!(1);
+                }
+                op::Opcode::L_TILE_CFG {
+                    shape,
+                    mapping,
+                    slot,
+                } => {
+                    self.reg_file
+                        .configure_mview(*slot, *shape, *mapping)
+                        .unwrap_or_else(|error| {
+                            tracing::error!(pc, slot, %error, "invalid L_TILE_CFG");
+                            panic!("{error} at pc {pc}")
+                        });
+                    cycle!(1);
+                }
+                op::Opcode::L_TILE_EXEC {
+                    rd,
+                    rs1,
+                    rs2,
+                    primitive,
+                    source_axis,
+                    scale_axis,
+                } => {
+                    self.execute_l_tile(
+                        LTileExecArgs {
+                            destination_register: *rd,
+                            source_register: *rs1,
+                            scale_register: *rs2,
+                            primitive: *primitive,
+                            source_axis: *source_axis,
+                            scale_axis: *scale_axis,
+                        },
+                        pc,
+                    )
+                    .await;
                 }
                 op::Opcode::C_LOOP_START { rd, imm } => {
                     self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
@@ -754,6 +971,8 @@ impl Accelerator {
                         op::Opcode::H_PREFETCH_M { .. }
                             | op::Opcode::H_PREFETCH_V { .. }
                             | op::Opcode::H_STORE_V { .. }
+                            | op::Opcode::H_PREFETCH_V_MV { .. }
+                            | op::Opcode::H_STORE_V_MV { .. }
                     );
                     if after > issue && !is_dma_op {
                         tracing::warn!(
@@ -827,6 +1046,102 @@ impl Accelerator {
     }
 
     fn op_access_for_opcode(&self, op: &op::Opcode) -> OpAccess {
+        if let op::Opcode::H_PREFETCH_V_MV { view, .. } | op::Opcode::H_STORE_V_MV { view, .. } = op
+        {
+            let descriptor = self.reg_file.matrix_view(*view).unwrap_or_else(|error| {
+                panic!("{error} while building Matrix-view DMA scoreboard access")
+            });
+            let mut dma_access = access::op_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
+                self.reg_file.topk_policy()
+            });
+            for resource in dma_access
+                .reads
+                .iter_mut()
+                .chain(dma_access.writes.iter_mut())
+            {
+                if let access::Resource::Sram(range) = resource
+                    && range.space == access::SramSpace::Matrix
+                {
+                    range.len = descriptor.values();
+                }
+            }
+            return dma_access;
+        }
+
+        let matrix_vector = match op {
+            op::Opcode::V_ADD_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                view_mask,
+            }
+            | op::Opcode::V_SUB_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                view_mask,
+            }
+            | op::Opcode::V_MUL_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                view_mask,
+            } if Self::matrix_view_operand_mask(*view_mask).is_some() => {
+                Some((*rd, *rs1, *rs2, *rmask, *view_mask))
+            }
+            _ => None,
+        };
+        if let Some((rd, rs1, rs2, rmask, encoded_mask)) = matrix_vector {
+            use access::{Cfg, Resource, SramRange, SramSpace, Unit};
+
+            let view_mask = Self::matrix_view_operand_mask(encoded_mask).unwrap();
+            let mut reads = vec![
+                Resource::Gp(rd),
+                Resource::Gp(rs1),
+                Resource::Gp(rs2),
+                Resource::Cfg(Cfg::MatrixView),
+            ];
+            if rmask != 0 {
+                reads.push(Resource::Cfg(Cfg::VMask));
+            }
+            for (slot, register) in [(1_u8, rs1), (2_u8, rs2)] {
+                let (space, len) = if view_mask & (1 << slot) != 0 {
+                    let view = self.reg_file.matrix_view(slot).unwrap_or_else(|error| {
+                        panic!("{error} while building Matrix-view scoreboard access")
+                    });
+                    (SramSpace::Matrix, view.values())
+                } else {
+                    (SramSpace::Vector, *VLEN)
+                };
+                reads.push(Resource::Sram(SramRange::new(
+                    space,
+                    self.reg_file.read_gp(register),
+                    len,
+                )));
+            }
+            let (space, len) = if view_mask & 0b001 != 0 {
+                let view = self.reg_file.matrix_view(0).unwrap_or_else(|error| {
+                    panic!("{error} while building Matrix-view scoreboard access")
+                });
+                (SramSpace::Matrix, view.values())
+            } else {
+                (SramSpace::Vector, *VLEN)
+            };
+            return OpAccess {
+                unit: Unit::Vector,
+                barrier: false,
+                reads,
+                writes: vec![Resource::Sram(SramRange::new(
+                    space,
+                    self.reg_file.read_gp(rd),
+                    len,
+                ))],
+            };
+        }
+
         access::op_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
             self.reg_file.topk_policy()
         })
@@ -896,6 +1211,7 @@ impl Accelerator {
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                     op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
                 };
                 let region = self.mx_region(dtype, addr, offset, *rstride);
                 let xfer = dma::transfer_mx_from_hbm(
@@ -920,6 +1236,60 @@ impl Accelerator {
                 });
                 (DmaKind::Prefetch, done_rx)
             }
+            op::Opcode::H_PREFETCH_V_MV {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+                view,
+            } => {
+                let descriptor = self
+                    .reg_file
+                    .matrix_view(*view)
+                    .unwrap_or_else(|error| panic!("{error} while issuing Matrix-view prefetch"));
+                let values = descriptor.values();
+                let dtype = match precision {
+                    op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                    op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
+                };
+                let region = self.mx_region(
+                    dtype,
+                    self.reg_file.read_hbm(*rs2),
+                    self.reg_file.read_gp(*rs1),
+                    *rstride,
+                );
+                let xfer = dma::transfer_mx_from_hbm(
+                    &self.hbm,
+                    region,
+                    self.m_machine.mram.ty(),
+                    *VLEN,
+                    values.div_ceil(*VLEN),
+                    1,
+                );
+                let dest = self.reg_file.read_gp(*rd);
+                let (pending, service) = self
+                    .m_machine
+                    .mram
+                    .mark_pending_layout_packet(dest, descriptor.layout())
+                    .await;
+                let mram = self.m_machine.mram.clone();
+                let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                Executor::current().spawn(async move {
+                    let tensor = xfer.await.unwrap_or_else(|error| {
+                        panic!("Matrix-view DMA receiver dropped: {error}")
+                    });
+                    Executor::current()
+                        .resolve_at(PERIOD * service.service_cycles.max(1))
+                        .await;
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+                    let _ = tx.send(tensor);
+                    mram.fill_pending(pending, rx).await;
+                    let _ = done_tx.send(Executor::current().now());
+                });
+                (DmaKind::Prefetch, done_rx)
+            }
             op::Opcode::H_STORE_V {
                 rd,
                 rs1,
@@ -933,6 +1303,7 @@ impl Accelerator {
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                     op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
                 };
                 let region = self.mx_region(dtype, addr, offset, *rstride);
                 // Snapshot the source rows at issue: later instructions may
@@ -943,6 +1314,46 @@ impl Accelerator {
                 let hbm = self.hbm.clone();
                 let (done_tx, done_rx) = tokio::sync::oneshot::channel();
                 Executor::current().spawn(async move {
+                    dma::store_rows_to_hbm(&hbm, region, rows, *VLEN).await;
+                    let _ = done_tx.send(Executor::current().now());
+                });
+                (DmaKind::Store, done_rx)
+            }
+            op::Opcode::H_STORE_V_MV {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+                view,
+            } => {
+                let descriptor = self
+                    .reg_file
+                    .matrix_view(*view)
+                    .unwrap_or_else(|error| panic!("{error} while issuing Matrix-view store"));
+                let (packet, service) = self
+                    .m_machine
+                    .mram
+                    .read_layout_packet(self.reg_file.read_gp(*rd), descriptor.layout())
+                    .await;
+                let rows = dma::split_packet_rows(&packet, *VLEN, self.m_machine.mram.ty());
+                let dtype = match precision {
+                    op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                    op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    op::VectorPrecision::State => *STATE_TYPE,
+                };
+                let region = self.mx_region(
+                    dtype,
+                    self.reg_file.read_hbm(*rs2),
+                    self.reg_file.read_gp(*rs1),
+                    *rstride,
+                );
+                let hbm = self.hbm.clone();
+                let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                Executor::current().spawn(async move {
+                    Executor::current()
+                        .resolve_at(PERIOD * service.service_cycles.max(1))
+                        .await;
                     dma::store_rows_to_hbm(&hbm, region, rows, *VLEN).await;
                     let _ = done_tx.send(Executor::current().now());
                 });
@@ -978,7 +1389,8 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::M_MV_WO { .. }
         | op::Opcode::M_BMV_WO { .. } => ResourceKind::Matrix,
 
-        op::Opcode::V_ADD_VV { .. }
+        op::Opcode::L_TILE_EXEC { .. }
+        | op::Opcode::V_ADD_VV { .. }
         | op::Opcode::V_ADD_VF { .. }
         | op::Opcode::V_SUB_VV { .. }
         | op::Opcode::V_SUB_VF { .. }
@@ -1015,13 +1427,16 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_STRIDE_REG { .. }
         | op::Opcode::C_SET_V_MASK_REG { .. }
         | op::Opcode::C_SET_TOPK_REG { .. }
+        | op::Opcode::L_TILE_CFG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
 
         op::Opcode::H_PREFETCH_M { .. }
         | op::Opcode::H_PREFETCH_V { .. }
-        | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
+        | op::Opcode::H_STORE_V { .. }
+        | op::Opcode::H_PREFETCH_V_MV { .. }
+        | op::Opcode::H_STORE_V_MV { .. } => ResourceKind::Dma,
 
         op::Opcode::Invalid => ResourceKind::Other,
     }

@@ -256,3 +256,6 @@ multilayer-decoder-profile model="smolvlm2":
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
 
+# Matrix SRAM views and prepared BF16 recurrence through Compiler -> Rust.
+test-matrix-lcompute *args:
+    python3 transactional_emulator/testbench/aten/matrix_lcompute_test.py {{args}}
