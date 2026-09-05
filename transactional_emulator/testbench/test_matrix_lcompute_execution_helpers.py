@@ -95,3 +95,22 @@ def test_snapshot_timing_and_mixed_contracts_never_publish_a_ratio(tmp_path):
     results[0]['experimental_fp32_dot'] = True
     write_execution_tables(results, other)
     assert not (other/'qualified_comparison.csv').exists()
+
+
+def test_pairwise_control_rejects_hardware_extensions_before_execution(tmp_path):
+    from transactional_emulator.testbench.aten.matrix_lcompute_execution_compare import run_variant, KIMI_KDA
+    with pytest.raises(ValueError, match="no experimental FP32 or L_TILE"):
+        run_variant(KIMI_KDA, 'D', 1, 1, tmp_path, pairwise_bf16_dot=True)
+    with pytest.raises(ValueError, match="no experimental FP32 or L_TILE"):
+        run_variant(KIMI_KDA, 'B', 1, 1, tmp_path, pairwise_bf16_dot=True, experimental_fp32_dot=True)
+    assert not list(tmp_path.iterdir())
+
+
+def test_pairwise_oracle_observes_each_bf16_rounding_boundary():
+    from transactional_emulator.testbench.aten.matrix_lcompute_execution_compare import pairwise_bf16_reference
+    # BF16 sequential sum loses +1 after256; the explicit tree preserves it here.
+    values = torch.zeros(1, 128, 1)
+    values[0, :4, 0] = torch.tensor([256., 1., 1., -256.])
+    assert pairwise_bf16_reference(values).item() == 1.
+    values[0, :4, 0] = torch.tensor([256., 1., -256., 0.])
+    assert pairwise_bf16_reference(values).item() == 0.  # Pairwise is not magic FP32.

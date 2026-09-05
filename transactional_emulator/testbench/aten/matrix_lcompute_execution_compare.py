@@ -92,7 +92,17 @@ class Arena:
             raise AssertionError(f"write escaped state/output arenas at byte {first}")
 
 
-def ordinary_reference(state, operands, kind, *, experimental_fp32_dot=False):
+def pairwise_bf16_reference(values):
+    """Independent full-tree oracle; every product and tree edge is BF16."""
+    values = _bf16(values)
+    if values.shape[1] != 128:
+        raise ValueError("pairwise BF16 oracle requires 128 terms")
+    while values.shape[1] > 1:
+        values = _bf16(values[:, 0::2] + values[:, 1::2])
+    return values[:, 0].contiguous()
+
+
+def ordinary_reference(state, operands, kind, *, experimental_fp32_dot=False, pairwise_bf16_dot=False):
     """Independent reference for the BF16 boundary after each ordinary VV op."""
     if kind is RecurrenceKind.MAMBA:
         scratch = _bf16(operands["dt"][:, None] * operands["x"])
@@ -103,16 +113,22 @@ def ordinary_reference(state, operands, kind, *, experimental_fp32_dot=False):
         return _bf16(output + _bf16(operands["d"][:, None] * operands["x"])), state
     state = _bf16(operands["decay"][:, :, None] * state)
     prediction = torch.zeros_like(operands["value"])
-    for row in range(state.shape[1]):
-        product = state[:, row] * operands["key"][:, row, None]
-        prediction = prediction + product if experimental_fp32_dot else _bf16(prediction + _bf16(product))
+    if pairwise_bf16_dot:
+        prediction = pairwise_bf16_reference(state * operands["key"][:, :, None])
+    else:
+        for row in range(state.shape[1]):
+            product = state[:, row] * operands["key"][:, row, None]
+            prediction = prediction + product if experimental_fp32_dot else _bf16(prediction + _bf16(product))
     prediction = _bf16(prediction)
     error = _bf16(operands["beta"][:, None] * _bf16(operands["value"] - prediction))
     state = _bf16(state + _bf16(operands["key"][:, :, None] * error[:, None, :]))
     output = torch.zeros_like(error)
-    for row in range(state.shape[1]):
-        product = state[:, row] * operands["query"][:, row, None]
-        output = output + product if experimental_fp32_dot else _bf16(output + _bf16(product))
+    if pairwise_bf16_dot:
+        output = pairwise_bf16_reference(state * operands["query"][:, :, None])
+    else:
+        for row in range(state.shape[1]):
+            product = state[:, row] * operands["query"][:, row, None]
+            output = output + product if experimental_fp32_dot else _bf16(output + _bf16(product))
     return _bf16(output), state
 
 
@@ -170,7 +186,9 @@ def unified_timing(experimental_fp32_dot=False):
             os.environ["PLENA_UNIFIED_SERIAL_TIMING"] = previous
 
 
-def run_variant(spec, variant, batch, tokens, output_dir, *, keep_build=False, experimental_fp32_dot=False, seed=SEED, snapshot_states=False):
+def run_variant(spec, variant, batch, tokens, output_dir, *, keep_build=False, experimental_fp32_dot=False, seed=SEED, snapshot_states=False, pairwise_bf16_dot=False):
+    if pairwise_bf16_dot and (experimental_fp32_dot or spec.kind is not RecurrenceKind.KDA or variant == "D"):
+        raise ValueError("pairwise BF16 requires KDA A/B, with no experimental FP32 or L_TILE")
     if experimental_fp32_dot and spec.kind is not RecurrenceKind.KDA:
         raise ValueError("experimental FP32 dot requires KDA")
     point = MatrixSramPoint()
@@ -234,10 +252,11 @@ def run_variant(spec, variant, batch, tokens, output_dir, *, keep_build=False, e
                         mlen=point.mlen,
                         static_address_reuse=variant == "B",
                         experimental_fp32_dot=experimental_fp32_dot,
+                        pairwise_bf16_dot=pairwise_bf16_dot,
                     )
                 )
                 output_offsets = [(g.fields["output"], point.mlen) for g in groups]
-                expected, states[request] = ordinary_reference(states[request], operands, spec.kind, experimental_fp32_dot=experimental_fp32_dot)
+                expected, states[request] = ordinary_reference(states[request], operands, spec.kind, experimental_fp32_dot=experimental_fp32_dot, pairwise_bf16_dot=pairwise_bf16_dot)
             records.append((token, request, output_offsets, expected, common_output))
             if snapshot_states:
                 snapshot = arena.reserve(spec.state_bytes_per_layer, writable=True)
@@ -248,6 +267,10 @@ def run_variant(spec, variant, batch, tokens, output_dir, *, keep_build=False, e
                 assemblies.append("; @stage=diagnostic_state_snapshot\n" + "\n".join(copier.lines))
                 snapshots.append((token, request, snapshot, states[request].clone(), common_states[request].clone()))
     program = "\n".join(assemblies)
+    if pairwise_bf16_dot:
+        allowed = {"S_LUI_INT", "S_ADDI_INT", "H_PREFETCH_V", "H_STORE_V", "V_MUL_VV", "V_ADD_VV", "V_SUB_VV"}
+        emitted = {line.split()[0] for line in program.splitlines() if line.strip() and not line.startswith(";")}
+        assert emitted <= allowed, f"new hardware opcode escaped compiler-only control: {emitted - allowed}"
     case = f"{spec.name}_{variant}_b{batch}_t{tokens}"
     build = output_dir / case
     build.mkdir(parents=True, exist_ok=True)
@@ -330,6 +353,11 @@ def run_variant(spec, variant, batch, tokens, output_dir, *, keep_build=False, e
         "diagnostic_state_snapshots": snapshot_states,
         "intermediate_state_errors": intermediate_errors,
         "experimental_fp32_dot": experimental_fp32_dot,
+        "pairwise_bf16_dot": pairwise_bf16_dot,
+        "l_tile_fp32_live_state_bytes_unmapped": 4 * point.mlen if variant == "D" else 0,
+        "reserved_vector_sram_rows": 15 if pairwise_bf16_dot else (8 if variant != "D" else None),
+        "reserved_vector_sram_bytes": 15 * point.mlen * 2 if pairwise_bf16_dot else None,
+        "hardware_scope": "existing BF16 Vector ISA; additional hardware capacity 0; existing SRAM reservation counted" if pairwise_bf16_dot else "see variant-specific arithmetic/resource assumptions",
         "additional_accumulator_bytes": 4 * point.mlen if experimental_fp32_dot else 0,
         "dot_instruction_count": program.count("V_DOT_"),
         "experimental_timing_assumptions": (
@@ -343,7 +371,7 @@ def run_variant(spec, variant, batch, tokens, output_dir, *, keep_build=False, e
         "tokens": tokens,
         "baseline_scope": "new controlled packed VV A/B; not historical analytic original/Arlo replay",
         "precision": "BF16 state and prepared coefficients; no weights in this recurrence kernel",
-        "rounding": "local FP32 reduction then BF16" if variant == "D" else ("FP32 dots then BF16; remaining VV boundaries BF16" if experimental_fp32_dot else "BF16 after every VV operation"),
+        "rounding": "local FP32 reduction then BF16" if variant == "D" else ("FP32 dots then BF16; remaining VV boundaries BF16" if experimental_fp32_dot else ("BF16 products and 7-level BF16 tree; remaining VV boundaries BF16" if pairwise_bf16_dot else "BF16 after every VV operation")),
         "coefficient_storage": "compact descriptor fields" if variant == "D" else "explicit lane expansion in HBM",
         "initial_state_sha256_by_request": input_state_hashes,
         "operand_sha256": operand_hashes,
@@ -385,6 +413,7 @@ def write_execution_tables(results, output_dir):
         row = {
             "model": result["model"],
             "experimental_fp32_dot": result.get("experimental_fp32_dot", False),
+            "pairwise_bf16_dot": result.get("pairwise_bf16_dot", False),
             "diagnostic_state_snapshots": result.get("diagnostic_state_snapshots", False),
             "variant": result["variant"],
             "batch": result["batch"],
@@ -415,7 +444,7 @@ def write_execution_tables(results, output_dir):
     comparisons = []
     def comparison_key(r):
         return (r["model"], r["batch"], r["tokens"], r.get("seed", SEED),
-                r.get("experimental_fp32_dot", False), r.get("diagnostic_state_snapshots", False))
+                r.get("experimental_fp32_dot", False), r.get("diagnostic_state_snapshots", False), r.get("pairwise_bf16_dot", False))
     for key in sorted({comparison_key(r) for r in results}):
         peers = [r for r in results if comparison_key(r) == key]
         variants = {r["variant"]: r for r in peers}
@@ -494,6 +523,19 @@ rejects opcodes outside the implemented recurrence subset.
     if any(r.get("diagnostic_state_snapshots", False) for r in results):
         readme = output_dir / "README.md"
         readme.write_text("Every intermediate state is checked. Diagnostic DMA is included in timing; speedup cells are suppressed.\n\n" + readme.read_text())
+    if any(r.get("pairwise_bf16_dot", False) for r in results):
+        readme = output_dir / "README.md"
+        readme.write_text("# Compiler-only BF16 pairwise KDA control\n\n"
+            "A/B use only existing ordinary BF16 Vector and DMA/address instructions. "
+            "Seven partial rows are reserved inside existing Vector SRAM; 15 total rows = 60 KiB at VLEN=2048. "
+            "No V_DOT, L_TILE, Matrix-view instruction, or cross-instruction FP32 state is used. "
+            "Every dot has 128 BF16 products and 127 BF16 additions in a balanced tree. "
+            "No D speedup is inferred; the previous D requires unresolved resource mappings.\n\n" + readme.read_text())
+    if any(r.get("variant") == "D" for r in results):
+        readme = output_dir / "README.md"
+        readme.write_text("D retains FP32 lane state in the functional model (up to 8 KiB at VLEN=2048). "
+            "Its mapping to existing physical storage and BF16/FP32 datapaths is unresolved. "
+            "Any qualified ratio here means numerical qualification of the assumed model, not proof of zero added hardware.\n\n" + readme.read_text())
 
 
 def main():
@@ -505,9 +547,12 @@ def main():
     parser.add_argument("--variants", nargs="+", choices=["A", "B", "D"], default=["A", "B", "D"])
     parser.add_argument("--keep-build", action="store_true")
     parser.add_argument("--experimental-fp32-dot", action="store_true")
+    parser.add_argument("--pairwise-bf16-dot", action="store_true")
     parser.add_argument("--snapshot-states", action="store_true", help="check every intermediate state; includes diagnostic DMA, no speedup published")
     parser.add_argument("--seed", type=int, default=SEED)
     args = parser.parse_args()
+    if args.pairwise_bf16_dot and (args.experimental_fp32_dot or args.model != "kda" or "D" in args.variants):
+        parser.error("--pairwise-bf16-dot requires --model kda --variants A B, without --experimental-fp32-dot")
     if args.tokens < 1 or any(batch not in (1, 2, 4, 8, 16) for batch in args.batches):
         parser.error("tokens must be positive; supported batches: 1,2,4,8,16")
     torch.set_num_threads(1)
@@ -517,7 +562,7 @@ def main():
     spec = NEMOTRON_MAMBA if args.model == "mamba" else KIMI_KDA
     for batch in args.batches:
         for variant in args.variants:
-            result = run_variant(spec, variant, batch, args.tokens, args.output_dir, keep_build=args.keep_build, experimental_fp32_dot=args.experimental_fp32_dot, seed=args.seed, snapshot_states=args.snapshot_states)
+            result = run_variant(spec, variant, batch, args.tokens, args.output_dir, keep_build=args.keep_build, experimental_fp32_dot=args.experimental_fp32_dot, seed=args.seed, snapshot_states=args.snapshot_states, pairwise_bf16_dot=args.pairwise_bf16_dot)
             peers = [r for r in results if r["batch"] == batch]
             for peer in peers:
                 assert peer["initial_state_sha256_by_request"] == result["initial_state_sha256_by_request"]
