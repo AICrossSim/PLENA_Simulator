@@ -232,6 +232,10 @@ class ComparisonEvidenceTests(unittest.TestCase):
         ]
         self.arch_paths = [self.root / "single.json", self.root / "dual.json"]
         for path, arch in zip(self.arch_paths, self.architectures):
+            for core in arch["cores"]:
+                core["activation_elements_per_cycle"] = 24 // len(arch["cores"])
+                for field in ("vector_sram_bytes", "accumulator_bytes", "weight_sram_bytes"):
+                    core[field] //= len(arch["cores"])
             self.write(path, arch)
         self.reports = {arch["name"]: envelope(arch) for arch in self.architectures}
         self.write(self.root / "reports.json", self.reports)
@@ -279,6 +283,32 @@ class ComparisonEvidenceTests(unittest.TestCase):
     def test_wrong_numeric_result_is_rejected(self):
         self.mutate(["result", "output_f32", 0, 0], 7.0)
         self.rejected()
+
+    def test_exact_mode_accepts_identical_bf16_bits(self):
+        result = self.run_comparison(atol=0, rtol=0)
+        self.assertTrue(result["all_gates_passed"])
+        self.assertTrue(all(gate["output_bit_exact"] for row in result["comparisons"] for gate in row["gates"]))
+
+    def use_opposite_signed_zeros(self):
+        self.golden["output_f32"][0][0] = 0.0
+        self.golden["output_bf16"][0][0] = 0
+        self.write(self.golden_path, self.golden)
+        for report in self.reports.values():
+            report["result"]["output_f32"][0][0] = -0.0
+            report["result"]["output_bf16"][0][0] = 32768
+        self.write(self.root / "reports.json", self.reports)
+
+    def test_exact_mode_rejects_opposite_signed_zero_bits(self):
+        self.use_opposite_signed_zeros()
+        with self.assertRaisesRegex(ValueError, "identical BF16 bits"):
+            self.run_comparison(atol=0, rtol=0)
+        self.assertFalse(compare.read_json(self.output / "comparison.json")["all_gates_passed"])
+
+    def test_nonzero_tolerance_keeps_bit_difference_informational(self):
+        self.use_opposite_signed_zeros()
+        result = self.run_comparison(atol=1e-5, rtol=0)
+        self.assertTrue(result["all_gates_passed"])
+        self.assertTrue(all(not gate["output_bit_exact"] for row in result["comparisons"] for gate in row["gates"]))
 
     def test_parallel_architectures_keep_order_and_repeat_gates(self):
         result = self.run_comparison(workers=2)
@@ -357,6 +387,30 @@ class ComparisonEvidenceTests(unittest.TestCase):
         self.write(self.arch_paths[0], self.architectures[0])
         self.rejected()
         self.assertFalse((self.root / "calls.json").exists())
+
+    def test_unequal_activation_supply_fails_before_execution(self):
+        self.architectures[1]["cores"][0]["activation_elements_per_cycle"] += 1
+        self.write(self.arch_paths[1], self.architectures[1])
+        with self.assertRaisesRegex(ValueError, "equal total activation supply"):
+            self.run_comparison()
+        self.assertFalse((self.root / "calls.json").exists())
+
+    def test_missing_and_null_activation_supply_use_mlen_default(self):
+        del self.architectures[1]["cores"][0]["activation_elements_per_cycle"]
+        self.architectures[1]["cores"][1]["activation_elements_per_cycle"] = None
+        self.write(self.arch_paths[1], self.architectures[1])
+        self.assertTrue(self.run_comparison()["all_gates_passed"])
+
+    def test_unequal_sram_fails_even_when_all_cache_fields_are_absent(self):
+        original = copy.deepcopy(self.architectures[1])
+        for field in ("vector_sram_bytes", "accumulator_bytes", "weight_sram_bytes"):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(original)
+                changed["cores"][0][field] += 1
+                self.write(self.arch_paths[1], changed)
+                with self.assertRaisesRegex(ValueError, "equal total configured SRAM: " + field):
+                    self.run_comparison()
+                self.assertFalse((self.root / "calls.json").exists())
 
     def test_nonfinite_output_is_rejected(self):
         for value in (float("nan"), float("inf"), -float("inf")):

@@ -303,10 +303,13 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
         validate_native(envelope, architecture, hbm_channels)
     reference = golden["output_f32"]
     error = numerical_gate(result["output_f32"], reference, atol, rtol)
+    bit_exact = result["output_bf16"] == golden["output_bf16"]
+    if atol == 0 and rtol == 0:
+        require(bit_exact, "exact comparison requires identical BF16 bits")
     return {
         "passed": True,
         "max_absolute_error": error,
-        "output_bit_exact": result["output_bf16"] == golden["output_bf16"],
+        "output_bit_exact": bit_exact,
     }
 
 
@@ -351,6 +354,15 @@ def _run_comparison(
     require(len(names) == len(set(names)), "architecture names must be unique")
     total_pes = [sum(c["blen"] * c["mlen"] for c in a["cores"]) for a in architectures]
     require(len(set(total_pes)) == 1, "comparison requires equal multiplier totals")
+    # Match Rust's Option<usize>: missing/null activation supply defaults to MLEN.
+    activation_totals = [
+        sum(
+            c["mlen"] if c.get("activation_elements_per_cycle") is None else c["activation_elements_per_cycle"]
+            for c in a["cores"]
+        )
+        for a in architectures
+    ]
+    require(len(set(activation_totals)) == 1, "comparison requires equal total activation supply")
     for field in (
         "clock_period_ps",
         "mac_pipeline_cycles",
@@ -365,14 +377,15 @@ def _run_comparison(
             len({a.get(field, default) for a in architectures}) == 1,
             "comparison requires same shared resource/timing: " + field,
         )
-    cache_fields = ["read_cache_bytes" in c for a in architectures for c in a["cores"]]
-    require(not any(cache_fields) or all(cache_fields), "cache budgets must be explicit for every core")
-    if all(cache_fields):
-        for field in ("vector_sram_bytes", "accumulator_bytes", "weight_sram_bytes", "read_cache_bytes"):
-            require(
-                len({sum(c[field] for c in a["cores"]) for a in architectures}) == 1,
-                "full-shape comparison requires equal total configured SRAM: " + field,
-            )
+    for field in ("vector_sram_bytes", "accumulator_bytes", "weight_sram_bytes"):
+        require(
+            len({sum(c[field] for c in a["cores"]) for a in architectures}) == 1,
+            "comparison requires equal total configured SRAM: " + field,
+        )
+    require(
+        len({sum(c.get("read_cache_bytes", 0) for c in a["cores"]) for a in architectures}) == 1,
+        "comparison requires equal total configured SRAM: read_cache_bytes",
+    )
     dma_configs = [a.get("dma") for a in architectures]
     require(
         all(d is None for d in dma_configs) or all(d is not None for d in dma_configs),

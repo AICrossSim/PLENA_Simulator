@@ -37,6 +37,7 @@ multiplier count is BLEN×MLEN, not M×K×N. Whole-model D/F dimensions are sepa
 | Weight slots | 4 | 4 | 4 |
 | Activation/intermediate SRAM | 4 MiB | 2 MiB | 2 MiB |
 | Accumulator storage | 1 MiB | 512 KiB | 512 KiB |
+| BF16 activation elements per cycle | 1024 | 768 | 256 |
 
 Both systems share the same 8-channel HBM2 preset, clock, total activation supply,
 DMA budget and vector unit. The calibrated native transfer is 32 bytes; the
@@ -44,6 +45,12 @@ previous Rust wrapper's 16-byte assumption was corrected, not used as a speedup.
 The DRAM command scheduler and HBM timing preset are retained. Logical DMA credits
 are capped at 128, native trackers at 256; DMA frontend SRAM is 44 KiB including
 staging. The two cores do not receive two independent HBM bandwidth budgets.
+
+The activation split is fixed, not dynamically borrowed. Under
+`service_cycles=max(BLEN,ceil(BLEN*MLEN/activation_supply))`, the small core
+needs 4 service cycles per tile rather than the 2 cycles possible with sufficient
+operand supply. This is a constraint of the current on-chip port allocation,
+not a DRAM delay. The search did not vary this split independently of core size.
 
 HBM weights are output-major `[N,K]` rows with separate element/scale ranges.
 The local E4M3/E8M0 codec uses 8 elements per scale. An aligned MLEN-long row
@@ -60,6 +67,10 @@ packed ingress and decoded BF16 data. Both buffers are normal buffers in this PR
   elapsed time, not the wall-clock duration of the Rust process. Same-output K
   accumulation dependencies are retained; cross-core waits cannot be summed as
   total latency. Those dependency/port assumptions remain subjects for review.
+  The kernel visits N tiles, then K tiles, then token blocks; it does not yet
+  interleave independent N tiles to hide same-output accumulation waits. A full
+  result-ready delay is used for the next K update, so these timings do not prove
+  that a better feedback path or instruction schedule would have the same result.
 - The independent Compiler oracle decodes actual exported weight bytes, performs
   ascending-K FP32 arithmetic and applies the same BF16 boundaries. The comparison
   checks exact BF16 outputs as well as HBM completed bytes, finite SRAM/queue
