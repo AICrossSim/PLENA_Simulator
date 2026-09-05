@@ -260,6 +260,9 @@ pub(crate) async fn run_from_cli() {
         assert!(elapsed.as_picos() >= charged_picos);
         let report = serde_json::json!({
             "contract": "controlled-recurrence-serial-v1",
+            "experimental_fp32_dot_enabled": std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref() == Ok("1"),
+            "additional_dot_accumulator_bytes": if std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref() == Ok("1") { 4 * *VLEN } else { 0 },
+            "experimental_dot_latency_assumption": "configured vector FP32 mul+add; reset and BF16 conversion one cycle each",
             "counters": counters,
             "period_picos": period,
             "total_picos": elapsed.as_picos(),

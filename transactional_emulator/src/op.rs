@@ -120,6 +120,15 @@ pub enum Opcode {
         rd: u8,
         imm: u32,
     },
+    /// Experimental, opt-in FP32 vector accumulator; not the frozen ISA.
+    V_DOT_RESET,
+    V_DOT_ACC {
+        rs1: u8,
+        rs2: u8,
+    },
+    V_DOT_WRITE {
+        rd: u8,
+    },
     V_ADD_VV {
         rd: u8,
         rs1: u8,
@@ -627,6 +636,10 @@ impl Opcode {
             0x0B => Self::M_MV_WO { rd, imm: imm2 },
             0x0C => Self::M_BMV_WO { rd, imm: imm2 },
 
+            // Canonical experimental encodings occupy otherwise reserved funct1=8.
+            0x0D if funct1 == 8 && rd == 0 && rs1 == 0 && rs2 == 0 && rs3 == 0 => Self::V_DOT_RESET,
+            0x11 if funct1 == 8 && rd == 0 && rs3 == 0 => Self::V_DOT_ACC { rs1, rs2 },
+            0x0F if funct1 == 8 && rs1 == 0 && rs2 == 0 && rs3 == 0 => Self::V_DOT_WRITE { rd },
             // Vector Operations
             0x0D if funct1 <= LSTREAM_CONSUMER_MASK
                 || (funct1 & VECTOR_ACCUMULATE_MODE != 0
@@ -1550,10 +1563,27 @@ mod tests {
     }
 
     #[test]
-    fn matrix_view_marker_requires_at_least_one_explicit_operand() {
+    fn experimental_dot_encodings_and_matrix_view_marker() {
+        assert!(matches!(
+            Opcode::decode(rform(0x11, 0, 2, 3, 0, 8)),
+            Opcode::V_DOT_ACC { rs1: 2, rs2: 3 }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x0F, 1, 0, 0, 0, 8)),
+            Opcode::V_DOT_WRITE { rd: 1 }
+        ));
+        for word in [
+            rform(0x0D, 1, 0, 0, 0, 8),
+            rform(0x11, 1, 2, 3, 0, 8),
+            rform(0x0F, 1, 1, 0, 0, 8),
+            rform(0x11, 0, 2, 3, 1, 8),
+        ] {
+            assert!(matches!(Opcode::decode(word), Opcode::Invalid));
+        }
+
         assert!(matches!(
             Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0x8)),
-            Opcode::Invalid
+            Opcode::V_DOT_RESET
         ));
         assert!(matches!(
             Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0x9)),

@@ -208,6 +208,7 @@ test-matrix-lcompute-compiler compiler_root="PLENA_Compiler":
       PYTHONPATH={{compiler_root}} \
       uv run --directory {{compiler_root}} python -m pytest -q \
         assembler/tests/test_l_mview.py \
+        assembler/tests/test_experimental_fp32_dot.py \
         aten/tests/test_affine_layout.py \
         aten/tests/test_hybrid_compile_report.py \
         aten/tests/test_hybrid_l_tile_schedule.py \

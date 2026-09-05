@@ -114,12 +114,14 @@ pub(crate) enum AccumKind {
     Hm,
     /// `hv_accum` (M_BMV / M_BTMV / M_BMV_WO).
     Hv,
+    /// Experimental VLEN-wide FP32 dot accumulator.
+    VectorDot,
     /// `v_accum` (M_MV / M_TMV / M_MV_WO).
     V,
 }
 
 impl AccumKind {
-    pub(crate) const COUNT: usize = 4;
+    pub(crate) const COUNT: usize = 5;
 
     pub(crate) fn index(self) -> usize {
         match self {
@@ -127,6 +129,7 @@ impl AccumKind {
             AccumKind::Hm => 1,
             AccumKind::Hv => 2,
             AccumKind::V => 3,
+            AccumKind::VectorDot => 4,
         }
     }
 }
@@ -366,6 +369,25 @@ pub(crate) fn op_access(
             )
         }
 
+        op::Opcode::V_DOT_RESET => {
+            OpAccess::new(Unit::Vector, vec![], vec![Accum(AccumKind::VectorDot)])
+        }
+        op::Opcode::V_DOT_ACC { rs1, rs2 } => OpAccess::new(
+            Unit::Vector,
+            vec![
+                Gp(rs1),
+                Gp(rs2),
+                vector(gp(rs1), vector_tile),
+                vector(gp(rs2), vector_tile),
+                Accum(AccumKind::VectorDot),
+            ],
+            vec![Accum(AccumKind::VectorDot)],
+        ),
+        op::Opcode::V_DOT_WRITE { rd } => OpAccess::new(
+            Unit::Vector,
+            vec![Gp(rd), Accum(AccumKind::VectorDot)],
+            vec![vector(gp(rd), vector_tile), Accum(AccumKind::VectorDot)],
+        ),
         // === Vector ops: two vram sources ===
         op::Opcode::V_ADD_VV {
             rd,

@@ -74,3 +74,24 @@ def test_every_executed_batch_has_private_state_and_identical_logical_inputs():
             assert all(a["end"] < b["begin"] for a, b in pairwise(ranges))
         assert variants["A"]["output_sha256"] == variants["B"]["output_sha256"]
         assert variants["A"]["state_sha256"] == variants["B"]["state_sha256"]
+
+
+def test_snapshot_timing_and_mixed_contracts_never_publish_a_ratio(tmp_path):
+    import copy
+    import csv
+    import json
+    from pathlib import Path
+    from transactional_emulator.testbench.aten.matrix_lcompute_execution_compare import write_execution_tables
+    source = Path(__file__).resolve().parents[2] / 'artifacts/matrix_lcompute_execution_v1/summary.json'
+    results = [r for r in json.loads(source.read_text()) if r['batch'] == 1]
+    snapshots = copy.deepcopy(results)
+    for r in snapshots:
+        r['diagnostic_state_snapshots'] = True
+    write_execution_tables(snapshots, tmp_path)
+    row = next(csv.DictReader((tmp_path/'qualified_comparison.csv').open()))
+    assert row['common_numeric_budget_passed'] == 'True'
+    assert row['D_speedup_vs_B_qualified'] == ''
+    other = tmp_path  # Reusing an output directory must clear a stale ratio table.
+    results[0]['experimental_fp32_dot'] = True
+    write_execution_tables(results, other)
+    assert not (other/'qualified_comparison.csv').exists()

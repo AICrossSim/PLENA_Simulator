@@ -32,6 +32,7 @@ pub(crate) struct VectorMachine {
     tile_size: u32,
     mask_unit: u32,
     packet_counters: PacketCounters,
+    dot_accumulator: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Default)]
@@ -152,7 +153,42 @@ impl VectorMachine {
             tile_size,
             mask_unit,
             packet_counters: PacketCounters::default(),
+            dot_accumulator: None,
         }
+    }
+
+    /// Explicit experimental storage: 4*VLEN bytes plus valid state. No SRAM
+    /// capacity/port credit; FP32 mul/add throughput is a modeling assumption.
+    pub(crate) async fn dot_reset(&mut self) {
+        self.dot_accumulator = Some(vec![0.0; self.tile_size as usize]);
+        crate::timing::charge_arithmetic_cycles(1).await;
+    }
+
+    pub(crate) async fn dot_acc(&mut self, source1: u32, source2: u32) {
+        assert!(self.dot_accumulator.is_some(), "V_DOT_ACC requires RESET");
+        let (a, b) = tokio::join!(self.vram.read(source1), self.vram.read(source2));
+        crate::timing::charge_ordinary_bank_cycles(2).await;
+        let a = tensor_to_f32_vec(a.as_tensor());
+        let b = tensor_to_f32_vec(b.as_tensor());
+        let accumulator = self.dot_accumulator.as_mut().unwrap();
+        assert_eq!(a.len(), accumulator.len());
+        assert_eq!(b.len(), accumulator.len());
+        for ((sum, x), y) in accumulator.iter_mut().zip(a).zip(b) {
+            *sum += x * y;
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+    }
+
+    pub(crate) async fn dot_write(&mut self, destination: u32) {
+        let accumulator = self
+            .dot_accumulator
+            .take()
+            .expect("V_DOT_WRITE requires RESET");
+        let value = QuantTensor::quantize(tensor_from_f32_slice(&accumulator), self.vram.ty());
+        // Charge the ordinary single-port write service and conversion.
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        crate::timing::charge_arithmetic_cycles(1).await;
+        self.vram.write(destination, value).await;
     }
 
     pub(crate) fn tile_size(&self) -> u32 {
@@ -1467,6 +1503,48 @@ mod tests {
         let counters = crate::timing::execution_counters();
         assert_eq!(counters.bank_service_cycles, 3);
         assert_eq!(counters.charged_cycles, 3 + *VECTOR_ADD_CYCLES as u64);
+        crate::timing::reset_execution_counters(false);
+    }
+
+    #[tokio::test]
+    async fn experimental_dot_preserves_cancellation_and_reset_isolation() {
+        crate::timing::set_timing_mode(crate::timing::TimingMode::Serial);
+        crate::timing::reset_execution_counters(true);
+        let executor = Executor::new();
+        executor.spawn(async {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let ty = MxDataType::Plain(fp_type);
+            let mut machine = VectorMachine::new(vram.clone(), 4, 2);
+            vram.write(
+                4,
+                QuantTensor::quantize(tensor_from_f32_slice(&[1.0; 4]), ty),
+            )
+            .await;
+            machine.dot_reset().await;
+            for value in [256.0, 1.0, -256.0] {
+                vram.write(
+                    0,
+                    QuantTensor::quantize(tensor_from_f32_slice(&[value; 4]), ty),
+                )
+                .await;
+                machine.dot_acc(0, 4).await;
+            }
+            machine.dot_write(8).await;
+            assert_eq!(tensor_values(vram.read(8).await.as_tensor()), vec![1.0; 4]);
+            assert!(machine.dot_accumulator.is_none());
+            machine.dot_reset().await;
+            machine.dot_write(8).await;
+            assert_eq!(tensor_values(vram.read(8).await.as_tensor()), vec![0.0; 4]);
+            let counts = crate::timing::execution_counters();
+            assert_eq!(
+                counts.arithmetic_cycles,
+                (4 + 3 * (*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES)) as u64
+            );
+            // Dot instructions: six source reads and two destination writes.
+            assert_eq!(counts.bank_service_cycles, 8);
+        });
+        executor.enter(Instant::ETERNITY).await;
         crate::timing::reset_execution_counters(false);
     }
 

@@ -468,6 +468,9 @@ impl Accelerator {
                         op,
                         op::Opcode::S_LUI_INT { .. }
                             | op::Opcode::S_ADDI_INT { .. }
+                            | op::Opcode::V_DOT_RESET
+                            | op::Opcode::V_DOT_ACC { .. }
+                            | op::Opcode::V_DOT_WRITE { .. }
                             | op::Opcode::L_TILE_CFG { .. }
                             | op::Opcode::L_TILE_EXEC { .. }
                             | op::Opcode::H_PREFETCH_V { .. }
@@ -743,6 +746,22 @@ impl Accelerator {
                         .await;
                 }
 
+                op::Opcode::V_DOT_RESET => {
+                    assert_eq!(
+                        std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref(),
+                        Ok("1"),
+                        "V_DOT requires explicit PLENA_EXPERIMENTAL_FP32_DOT=1; adds FP32 storage"
+                    );
+                    self.v_machine.dot_reset().await;
+                }
+                op::Opcode::V_DOT_ACC { rs1, rs2 } => {
+                    self.v_machine
+                        .dot_acc(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .await;
+                }
+                op::Opcode::V_DOT_WRITE { rd } => {
+                    self.v_machine.dot_write(self.reg_file.read_gp(*rd)).await;
+                }
                 op::Opcode::V_ADD_VV {
                     rd,
                     rs1,
@@ -2075,7 +2094,10 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::M_MV_WO { .. }
         | op::Opcode::M_BMV_WO { .. } => ResourceKind::Matrix,
 
-        op::Opcode::V_ADD_VV { .. }
+        op::Opcode::V_DOT_RESET
+        | op::Opcode::V_DOT_ACC { .. }
+        | op::Opcode::V_DOT_WRITE { .. }
+        | op::Opcode::V_ADD_VV { .. }
         | op::Opcode::V_ADD_VF { .. }
         | op::Opcode::V_SUB_VV { .. }
         | op::Opcode::V_SUB_VF { .. }
