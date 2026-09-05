@@ -123,6 +123,17 @@ def report(root):
             lines.append('| {}/{} | {:.3f} | {:.2f} | {:.3f} | {} |'.format(f,LABELS[c],r['hbm_read_bytes']/1e6,
                 r['hbm_read_bytes']*1000/r['total_ps'],r['useful_macs']/r['issued_macs'],
                 ', '.join('{:.1%}'.format(core['compute_busy_fraction']) for core in r['cores'])))
+    lines+=['','## 核心等待分解（ms）','',
+        '各核可并行，下面的时间不能跨核心相加当成总延迟。weight-ready 等待包括整个取数/解码路径，并不等于纯 HBM Controller 排队时间。', '',
+        '| 输入/类别/核心 | 计算忙碌 | 等权重就绪 | 等累加依赖 | 流水排空 |', '|---|---:|---:|---:|---:|']
+    for c in ORDER:
+        p=ranking['winners'][c]['point']
+        for f in FIXTURES:
+            r=load_report(root/'runs'/p['id']/f/'report.json.gz')['result']
+            for core in r['cores']:
+                values=[core[k]/1e9 for k in ['compute_busy_ps','weight_ready_wait_ps','accumulator_dependency_stall_ps','pipeline_drain_ps']]
+                lines.append('| {}/{}/{} | {} |'.format(f,LABELS[c],core['id'],' | '.join('{:.6f}'.format(v) for v in values)))
+    lines+=['','本轮内核固定按 N tile → K tile → M block 遍历，没有搜索跨 N tile 交错发射。较短 K 的核可能更多次等待同一 accumulator；这一调度限制也应纳入后续分析，不能将其直接归为物理核心的固有限制。','']
     lines+=['','## 适用边界与证据索引','',
         '- HBM 相同，4096 PE 和各存储总容量相同。端口实现、布线、功耗和面积未由 RTL/PPA 校准，不能从 PE 相同推导面积相同。',
         '- 输入为 Qwen D=2048/F=512 与 DeepSeek D=2048/F=1408 的真实归档 decode 路由重组，B8/B32；权重和激活是非零合成值，经过实际本地 MX codec；不是实际完整模型推理、prefill 或 agent trajectory。',
