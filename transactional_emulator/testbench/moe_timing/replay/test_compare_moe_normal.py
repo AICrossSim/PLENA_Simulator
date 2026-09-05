@@ -14,6 +14,7 @@ SPEC.loader.exec_module(compare)
 
 FAKE_RUNNER = r'''
 import argparse
+import fcntl
 import hashlib
 import json
 from pathlib import Path
@@ -28,10 +29,13 @@ workload = json.loads(Path(args.workload).read_text())
 architecture = json.loads(Path(args.architecture).read_text())
 name = architecture["name"]
 state_path = root / "calls.json"
+state_lock = (root / "calls.lock").open('w')
+fcntl.flock(state_lock, fcntl.LOCK_EX)
 state = json.loads(state_path.read_text()) if state_path.exists() else {}
 repeat = state.get(name, 0)
 state[name] = repeat + 1
 state_path.write_text(json.dumps(state))
+state_lock.close()
 if scenario.get("exit_code"):
     sys.exit(scenario["exit_code"])
 if scenario.get("skip_write"):
@@ -200,6 +204,71 @@ class ComparisonEvidenceTests(unittest.TestCase):
     def test_wrong_numeric_result_is_rejected(self):
         self.mutate(["result", "output_f32", 0, 0], 7.0)
         self.rejected()
+
+    def test_parallel_architectures_keep_order_and_repeat_gates(self):
+        result = self.run_comparison(workers=2)
+        self.assertEqual([r['architecture']['name'] for r in result['comparisons']], ['single','dual'])
+        self.assertEqual(compare.read_json(self.root/'calls.json'),{'single':2,'dual':2})
+        self.mutate(['result','total_ps'],801,architecture='dual',repeat=3)
+        self.rejected(workers=2)
+
+    def test_invalid_parallelism_is_rejected(self):
+        for workers in [0,9,True,1.5]:
+            with self.subTest(workers=workers): self.rejected(workers=workers)
+
+    def enable_full_shape_resources(self):
+        for path, arch in zip(self.arch_paths, self.architectures):
+            arch.update(dispatch_queue_bytes=256, dispatch_cycles=1)
+            parts = len(arch['cores'])
+            for core in arch['cores']:
+                core.update(read_cache_bytes=160 // parts, vector_sram_bytes=4096 // parts,
+                            accumulator_bytes=1024 // parts, weight_sram_bytes=2048 // parts)
+            report = self.reports[arch['name']]['result']
+            report.update(dispatch_queue_peak_bytes=192, dispatcher_busy_ps=30)
+            for core in report['cores']:
+                misses = core['hbm_read_bytes'] // 64
+                core.update(cache_requests=misses+2, cache_hits=2,
+                            cache_port_busy_ps=(2*misses+2)*10, cache_peak_bytes=80)
+            self.write(path, arch)
+        self.write(self.root / 'reports.json', self.reports)
+
+    def test_full_shape_resource_accounting_passes(self):
+        self.enable_full_shape_resources()
+        self.assertTrue(self.run_comparison()['all_gates_passed'])
+
+    def test_cache_capacity_traffic_and_port_undercharging_are_rejected(self):
+        self.enable_full_shape_resources()
+        for metric,value in [('cache_peak_bytes',240),('cache_requests',0),
+                             ('cache_port_busy_ps',0),('cache_hits',-1)]:
+            with self.subTest(metric=metric):
+                self.scenario = {}
+                self.mutate(['result','cores',0,metric],value)
+                self.rejected()
+
+    def test_dispatch_capacity_and_service_are_required(self):
+        self.enable_full_shape_resources()
+        for metric,value in [('dispatch_queue_peak_bytes',0),('dispatcher_busy_ps',0)]:
+            with self.subTest(metric=metric):
+                self.scenario = {}
+                self.mutate(['result',metric],value)
+                self.rejected()
+
+    def test_unequal_or_partly_missing_cache_budgets_fail_before_execution(self):
+        self.enable_full_shape_resources()
+        self.architectures[0]['cores'][0]['read_cache_bytes'] += 80
+        self.write(self.arch_paths[0],self.architectures[0])
+        self.rejected()
+        self.assertFalse((self.root/'calls.json').exists())
+        del self.architectures[0]['cores'][0]['read_cache_bytes']
+        self.write(self.arch_paths[0],self.architectures[0])
+        self.rejected()
+        self.assertFalse((self.root/'calls.json').exists())
+
+    def test_unequal_timing_modes_fail_before_execution(self):
+        self.architectures[0]['matrix_timing'] = 'legacy_serialized'
+        self.write(self.arch_paths[0],self.architectures[0])
+        self.rejected()
+        self.assertFalse((self.root/'calls.json').exists())
 
     def test_nonfinite_output_is_rejected(self):
         for value in (float("nan"), float("inf"), -float("inf")):

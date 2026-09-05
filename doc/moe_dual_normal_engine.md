@@ -1,4 +1,4 @@
-# Normal-buffer MoE V0 engine contract
+# Normal-buffer MoE engine contract
 
 Implementation: `transactional_emulator/src/moe_normal/`; entry point:
 `transactional_emulator/src/bin/moe_dual_normal.rs`. This is a dedicated numerical
@@ -24,7 +24,13 @@ Inputs and routes are ready at time zero. Runtime code rebuilds expert groups
 from the route list; it does not trust supplied grouped-route annotations. It
 sorts routes by `(token, slot)`, groups them by expert, and assigns an entire group
 to `large_core` when `M >= dispatch_threshold`, otherwise to `small_core`.
-Within each core the groups run in ascending expert-id order. An optional shared
+This is the default `threshold` policy. With `work_conserving`, each free core
+claims a fitting job from a shared ready list: its own M class first, then any
+other fitting group, with ascending job id breaking ties. A running group is
+not migrated or split. The shared dispatcher has one permit and charges
+`dispatch_cycles` per successful claim. Each ready-job descriptor reserves 64
+bytes against `dispatch_queue_bytes`; initialization/group construction is
+outside measured time. An optional shared
 expert adds one all-token job after the routed jobs. Repeated `(token, expert)`
 routes with different slots are supported as distinct rows; repeated
 `(token, slot)` is an error. No expert is permanently bound to a physical core.
@@ -71,7 +77,9 @@ B the core's BLEN, Kt its MLEN, and P the configured pipeline overhead plus
 | Core accumulator/result pipeline | `4 * M * max(D,E) + 4 * B * P` bytes | One FP32 projection result plus fixed in-flight result registers |
 | One weight slot | `B * Kt * 2 + B * Kt + B * Kt / 8` bytes | Decoded BF16 plus packed elements/scales |
 | Core weight SRAM | Two complete weight slots | Current values remain owned until all M blocks have consumed them |
-| Global DMA staging | `64 * global_dma_credits` bytes | Credit held until each returned burst is copied into its tile |
+| Global DMA staging | `64 * global_dma_credits` bytes | Loader transaction credit held through cache lookup or HBM miss, insertion and tile copy |
+| Per-core read cache | `80 * floor(read_cache_bytes / 80)` bytes | Each resident FIFO entry holds 64 data bytes and 16 tag/control bytes |
+| Shared dispatcher descriptors | `64 * job_count` bytes | Reserved for all expert groups before launch |
 | Shared input/combine SRAM | `8 * T * D + 2 * R * D` bytes | Ready input BF16, output FP32 sum, final BF16, all R BF16 route results |
 
 Here T is token count and R includes T additional rows when a shared expert is
@@ -87,23 +95,34 @@ it is not a second unbounded collection of results. Core buffers are freed only
 after their output has been copied into shared reorder storage. Reordering can
 therefore absorb out-of-order completions without hidden unlimited output memory.
 
-Pending DMA request descriptors and job/scoreboard metadata are host control
+Pending DMA request descriptors and route/scoreboard metadata are host control
 structures. They hold no uncharged tensor payload. Their finite descriptor count
 depends on the current tiles/workload; control-SRAM area and RTL descriptor queue
-sizing are not modeled and must be added before an area claim.
+sizing beyond the explicitly charged job descriptors are not modeled and must
+be added before an area claim. The one-cycle ready selection is an analytical
+priority-selection assumption, not a synthesized scheduler.
 
 ## Double buffering, HBM competition and vector work
 
 Each core owns at most two weight-slot reservations: one consumed tile and one
 loading/ready tile. The loader may prefetch the next N/K tile while the current
-tile is being consumed across all M blocks. There is no cross-job weight cache.
+tile is being consumed across all M blocks. An optional finite per-core FIFO
+line cache retains read-only weight bursts across tiles/jobs. Zero bytes disables
+it; a nonzero capacity below one 80-byte entry fails validation. Entries are
+evicted in insertion order, not access order. Duplicate concurrent misses are
+not coalesced; all actual duplicate HBM requests are charged.
 The tile releases its slot only after its last operand has entered computation.
 
 Element and scale reads are coalesced by 64-byte address within a tile, including
 unaligned subranges. All cores share one DMA semaphore. A permit covers the real
-HBM read and copying its 64-byte response into the finite packed tile. A permit
+cache lookup, HBM read on a miss, cache insertion, and copying the 64-byte response
+into the finite packed tile. Each cache has one serialized port, charging one
+cycle per lookup and per insertion, shared by both weight slots. A permit
 is not released early into an unbounded response queue. Request/byte counters are
 updated on actual reads, and tests compare them with `memory::WithStats`.
+`global_dma_inflight_peak` is the peak number of loader transaction credits,
+including cache hits; it is an upper bound, not the exact number of HBM misses
+outstanding. Cache requests equal hits plus actual HBM bytes divided by 64.
 
 One shared vector actor provides configured `vector_elements_per_cycle` service
 for input gather, weight decode/BF16 placement, SwiGLU, result copy, weighted
@@ -122,13 +141,20 @@ column-offset decode and slice in `mm`). The V0 local loops could support other
 ratios, but admitting those would require a separately stated mapping extension.
 Non-power-of-two MLEN is accepted; reduction latency uses ceiling log2.
 
-Each issued macro tile consumes BLEN cycles at the multiplier resource. Its
+In the default `pipelined` mode each issued macro tile consumes BLEN cycles at the multiplier resource. Its
 result becomes ready after a further `ceil(log2(MLEN)) + mac_pipeline_cycles`.
 A timestamp per M/N output block prevents the next K contribution from reading
 that accumulator before its previous contribution is complete. Independent
 output blocks can issue while earlier results remain in flight; their complete
 FP32 output storage is already reserved. The projection waits for the final
 result to drain before publishing BF16 output.
+
+The `legacy_serialized` sensitivity instead charges `MLEN + mac_pipeline_cycles`
+per macro tile and no additional pipeline delay/storage. It follows the old
+MatrixMachine's instruction-service formula, but does not reproduce that
+machine's SRAM operations, ISA or exact configured overhead. Comparisons must
+use the same timing mode and overhead for every architecture. See
+[timing audit](moe_full_shape_timing_audit.md).
 
 Thus service interval and completion latency are separate. The engine neither
 charges every tile an unconditional full pipeline drain nor assumes infinitely

@@ -8,6 +8,7 @@ use quantize::{DataType, FpType};
 use runtime::{Duration, Executor, Instant};
 use tokio::sync::{Semaphore, oneshot};
 
+use super::read_cache::{ENTRY_BYTES, ReadCache};
 use super::types::*;
 
 const BLOCK: usize = 8;
@@ -20,7 +21,17 @@ fn checked(values: &[usize], what: &str) -> Result<usize, String> {
 }
 
 fn extra_cycles(a: &Architecture, c: &CoreConfig) -> u64 {
+    if a.matrix_timing == MatrixTiming::LegacySerialized {
+        return 0;
+    }
     (usize::BITS - (c.mlen - 1).leading_zeros()) as u64 + a.mac_pipeline_cycles
+}
+
+fn service_cycles(a: &Architecture, c: &CoreConfig) -> u64 {
+    match a.matrix_timing {
+        MatrixTiming::Pipelined => c.blen as u64,
+        MatrixTiming::LegacySerialized => c.mlen as u64 + a.mac_pipeline_cycles,
+    }
 }
 
 fn pipeline_bytes(a: &Architecture, c: &CoreConfig) -> Result<usize, String> {
@@ -110,6 +121,11 @@ struct Plan {
     global_storage: usize,
 }
 
+fn job_fits(w: &Workload, a: &Architecture, c: &CoreConfig, job: &Job) -> bool {
+    vector_bytes(w, job.rows.len()).is_ok_and(|v| v <= c.vector_sram_bytes)
+        && accumulator_bytes(w, job.rows.len(), a, c).is_ok_and(|v| v <= c.accumulator_bytes)
+}
+
 fn plan(w: &Workload, a: &Architecture) -> Result<Plan, String> {
     let mut routes = w.routes.clone();
     routes.sort_by_key(|r| (r.token, r.slot));
@@ -169,13 +185,25 @@ fn plan(w: &Workload, a: &Architecture) -> Result<Plan, String> {
             a.combine_sram_bytes
         ));
     }
+    if checked(&[jobs.len(), 64], "ready-job descriptors")? > a.dispatch_queue_bytes {
+        return Err("ready-job descriptors exceed dispatch_queue_bytes".into());
+    }
     let mut queues = vec![Vec::new(); a.cores.len()];
     for job in jobs {
-        let target = if job.rows.len() >= a.dispatch_threshold {
+        let mut target = if job.rows.len() >= a.dispatch_threshold {
             a.large_core
         } else {
             a.small_core
         };
+        if a.dispatch_policy == DispatchPolicy::WorkConserving
+            && !job_fits(w, a, &a.cores[target], &job)
+        {
+            target = a
+                .cores
+                .iter()
+                .position(|c| job_fits(w, a, c, &job))
+                .ok_or("expert group does not fit any core; group spilling is not enabled")?;
+        }
         let c = &a.cores[target];
         let v = vector_bytes(w, job.rows.len())?;
         let acc = accumulator_bytes(w, job.rows.len(), a, c)?;
@@ -222,9 +250,21 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
     for (c, queue) in a.cores.iter().zip(&p.queues) {
         multipliers += checked(&[c.blen, c.mlen], "multipliers")? as u128;
         let per_tile_macs = checked(&[c.blen, c.blen, c.mlen], "tile MACs")? as u128;
-        let tile_latency = c.blen as u128 + extra_cycles(a, c) as u128;
+        let tile_latency = service_cycles(a, c) as u128 + extra_cycles(a, c) as u128;
         let decode_cycles = checked(&[c.blen, c.mlen], "decode elements")?.div_ceil(lanes) as u128;
-        for job in queue {
+        let candidates: Vec<&Job> = if a.dispatch_policy == DispatchPolicy::WorkConserving {
+            p.queues
+                .iter()
+                .flatten()
+                .filter(|j| job_fits(w, a, c, j))
+                .collect()
+        } else {
+            queue.iter().collect()
+        };
+        for job in candidates {
+            cycles = cycles
+                .checked_add(a.dispatch_cycles as u128)
+                .ok_or("dispatch timing overflow")?;
             let m = job.rows.len();
             cycles +=
                 2 * checked(&[m, w.input_dim], "gather/copy elements")?.div_ceil(lanes) as u128;
@@ -258,6 +298,17 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
                     })
                     .ok_or("timing bound overflow")?;
                 cycles = cycles.checked_add(upper).ok_or("timing bound overflow")?;
+                // Conservative: at most one line request per payload byte,
+                // one lookup and one fill cycle per request.
+                if c.read_cache_bytes > 0 {
+                    let cache_cycles = weight_tiles
+                        .checked_mul(per_tile_macs)
+                        .and_then(|v| v.checked_mul(4))
+                        .ok_or("cache timing overflow")?;
+                    cycles = cycles
+                        .checked_add(cache_cycles)
+                        .ok_or("cache timing overflow")?;
+                }
             }
         }
     }
@@ -310,6 +361,9 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
     }
     let mut ids = BTreeSet::new();
     for c in &a.cores {
+        if c.read_cache_bytes > 0 && c.read_cache_bytes < ENTRY_BYTES {
+            return Err("read cache needs at least one 80-byte data/tag entry".into());
+        }
         if c.id.is_empty()
             || !ids.insert(c.id.clone())
             || c.blen == 0
@@ -344,7 +398,7 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
                 c.id, c.weight_sram_bytes
             ));
         }
-        let cycles = (c.blen as u64)
+        let cycles = service_cycles(a, c)
             .checked_add(extra_cycles(a, c))
             .ok_or("tile timing overflow")?;
         cycles
@@ -390,6 +444,7 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
 }
 
 struct CoreState {
+    cache: ReadCache,
     config: CoreConfig,
     report: Mutex<CoreReport>,
     slots: AtomicUsize,
@@ -401,6 +456,7 @@ struct CoreState {
 impl CoreState {
     fn new(c: &CoreConfig, a: &Architecture) -> Self {
         Self {
+            cache: ReadCache::new(c.read_cache_bytes, a.clock_period_ps),
             config: c.clone(),
             report: Mutex::new(CoreReport {
                 id: c.id.clone(),
@@ -423,6 +479,10 @@ impl CoreState {
                 hbm_read_bytes: 0,
                 compute_busy_fraction: 0.0,
                 mac_utilization: 0.0,
+                cache_requests: 0,
+                cache_hits: 0,
+                cache_port_busy_ps: 0,
+                cache_peak_bytes: 0,
             }),
             slots: AtomicUsize::new(0),
             slots_peak: AtomicUsize::new(0),
@@ -493,6 +553,9 @@ impl VectorUnit {
 }
 
 struct Shared {
+    ready: Mutex<Vec<Job>>,
+    dispatcher: Semaphore,
+    dispatcher_busy: AtomicU64,
     dma: Arc<Dma>,
     vector: Arc<VectorUnit>,
     reorder: Mutex<Vec<bf16>>,
@@ -589,15 +652,21 @@ async fn load_tile(
             let _credit = dma.credits.acquire().await.unwrap();
             let current = dma.inflight.fetch_add(1, Ordering::SeqCst) + 1;
             dma.peak.fetch_max(current, Ordering::SeqCst);
-            let bytes = dma.hbm.box_read(address).await;
+            let bytes = if let Some(bytes) = core.cache.lookup(address).await {
+                bytes
+            } else {
+                let bytes = dma.hbm.box_read(address).await;
+                dma.bytes.fetch_add(64, Ordering::SeqCst);
+                core.report.lock().unwrap().hbm_read_bytes += 64;
+                core.cache.insert(address, bytes).await;
+                bytes
+            };
             {
                 let mut buffer = packed.lock().unwrap();
                 for s in spans {
                     buffer[s.dst..s.dst + s.len].copy_from_slice(&bytes[s.src..s.src + s.len]);
                 }
             }
-            dma.bytes.fetch_add(64, Ordering::SeqCst);
-            core.report.lock().unwrap().hbm_read_bytes += 64;
             dma.inflight.fetch_sub(1, Ordering::SeqCst);
             // Credit covers both the HBM request and its 64-byte staging data.
             drop(_credit);
@@ -715,7 +784,7 @@ async fn gemm(
                     }
                 }
             }
-            let service = c.blen as u64 * a.clock_period_ps;
+            let service = service_cycles(a, c) * a.clock_period_ps;
             ready[block_index] =
                 ex.now() + Duration::from_picos(service + extra_cycles(a, c) * a.clock_period_ps);
             {
@@ -749,7 +818,44 @@ async fn run_core(
     a: Arc<Architecture>,
     shared: Arc<Shared>,
 ) -> Result<(), String> {
-    for job in queue {
+    let mut private = queue.into_iter();
+    loop {
+        let job = {
+            let _dispatch = shared.dispatcher.acquire().await.unwrap();
+            let selected = if a.dispatch_policy == DispatchPolicy::Threshold {
+                private.next()
+            } else {
+                let mut ready = shared.ready.lock().unwrap();
+                // Prefer the core's own M class, then take any fitting group.
+                // A free large core can drain remaining small jobs (and vice versa).
+                let core_index = a.cores.iter().position(|c| c.id == core.config.id).unwrap();
+                let index = ready
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, j)| job_fits(&w, &a, &core.config, j))
+                    .min_by_key(|(_, j)| {
+                        let preferred = if j.rows.len() >= a.dispatch_threshold {
+                            a.large_core
+                        } else {
+                            a.small_core
+                        };
+                        (preferred != core_index, j.id)
+                    })
+                    .map(|(index, _)| index);
+                index.map(|index| ready.remove(index))
+            };
+            if selected.is_some() {
+                let duration = a.dispatch_cycles * a.clock_period_ps;
+                shared.dispatcher_busy.fetch_add(duration, Ordering::SeqCst);
+                Executor::current()
+                    .resolve_at(Duration::from_picos(duration))
+                    .await;
+            }
+            selected
+        };
+        let Some(job) = job else {
+            break;
+        };
         let start_ps = Executor::current().now().as_picos();
         let m = job.rows.len();
         let d = w.input_dim;
@@ -861,7 +967,15 @@ pub async fn execute(
     let begin = ex.now().as_picos();
     let w = Arc::new(w);
     let a = Arc::new(a);
+    let queue_peak = plan.queues.iter().map(Vec::len).sum::<usize>() * 64;
     let shared = Arc::new(Shared {
+        ready: Mutex::new(if a.dispatch_policy == DispatchPolicy::WorkConserving {
+            plan.queues.iter().flatten().cloned().collect()
+        } else {
+            Vec::new()
+        }),
+        dispatcher: Semaphore::new(1),
+        dispatcher_busy: AtomicU64::new(0),
         dma: Arc::new(Dma {
             hbm,
             credits: Semaphore::new(a.global_dma_credits),
@@ -951,6 +1065,10 @@ pub async fn execute(
             let mut r = c.report.lock().unwrap().clone();
             r.weight_slots_peak = c.slots_peak.load(Ordering::SeqCst);
             r.weight_sram_peak_bytes = c.weight_peak.load(Ordering::SeqCst);
+            r.cache_requests = c.cache.requests.load(Ordering::SeqCst);
+            r.cache_hits = c.cache.hits.load(Ordering::SeqCst);
+            r.cache_port_busy_ps = c.cache.busy.load(Ordering::SeqCst);
+            r.cache_peak_bytes = c.cache.peak.load(Ordering::SeqCst);
             if total_ps > 0 {
                 r.compute_busy_fraction = r.compute_busy_ps as f64 / total_ps as f64;
                 r.mac_utilization = r.useful_macs as f64 * a.clock_period_ps as f64
@@ -968,7 +1086,7 @@ pub async fn execute(
     }
     Ok(RunReport {
         schema_version: 1, workload: w.name.clone(), architecture: a.name.clone(),
-        timing_model: "analytical BLEN service II; log2(MLEN)+configured pipeline latency; per-output-block accumulator readiness; shared ErasedMemoryModel timing; not RTL calibrated".into(),
+        timing_model: format!("{:?}: pipelined BLEN service with log2(MLEN)+pipeline readiness, or legacy serialized MLEN+overhead per instruction; shared ErasedMemoryModel; not RTL calibrated", a.matrix_timing),
         timing_boundary: "ready BF16 inputs/routes and resident MX weights -> core gathers, weight reads/decode, three numerical GEMMs, SwiGLU, route reorder, deterministic weighted combine -> ready BF16 output; excludes router, initial input/weight placement, output HBM store".into(),
         weight_format: "PLENA local E4M3/E8M0 block8, output-major [N,K], separate element/scale streams, decoded BF16 normal SRAM; not an OCP MX conformance claim".into(),
         total_ps, multipliers: reports.iter().map(|r| r.multipliers).sum(),
@@ -976,6 +1094,7 @@ pub async fn execute(
         hbm_read_bytes: shared.dma.bytes.load(Ordering::SeqCst), hbm_write_bytes: 0,
         global_dma_inflight_peak: inflight_peak, global_dma_staging_peak_bytes: inflight_peak * 64,
         combine_sram_peak_bytes: plan.global_storage, shared_vector_busy_ps: shared.vector.busy_ps.load(Ordering::SeqCst),
+        dispatch_queue_peak_bytes: queue_peak, dispatcher_busy_ps: shared.dispatcher_busy.load(Ordering::SeqCst),
         cores: reports, job_completions: completions, output_bf16, output_f32, pre_round_output_f32: sums,
     })
 }

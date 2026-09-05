@@ -15,6 +15,7 @@ import subprocess
 import struct
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 
 def read_json(path):
@@ -112,10 +113,27 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
                                ("weight_sram_peak_bytes", "weight_sram_bytes")):
             require(observed[peak] <= core[capacity], core["id"] + " exceeded " + capacity)
         require(observed["weight_slots_peak"] <= 2, "more than two weight slots")
+        if "read_cache_bytes" in core:
+            for metric in ("cache_requests", "cache_hits", "cache_port_busy_ps", "cache_peak_bytes"):
+                require(type(observed[metric]) is int and observed[metric] >= 0, "invalid cache metric: " + metric)
+            require(observed["cache_requests"] == observed["cache_hits"] + observed["hbm_read_bytes"] // 64,
+                    "cache requests do not reconcile with real HBM reads")
+            require(observed["cache_peak_bytes"] <= core["read_cache_bytes"]
+                    and observed["cache_peak_bytes"] % 80 == 0, "cache data/tag capacity exceeded")
+            expected_cache_cycles = (observed["cache_requests"] + observed["hbm_read_bytes"] // 64) if core["read_cache_bytes"] else 0
+            require(observed["cache_port_busy_ps"] == expected_cache_cycles * architecture["clock_period_ps"],
+                    "cache port service is not accounted")
+            require(observed["cache_port_busy_ps"] <= result["total_ps"], "cache port busy time exceeds run")
         for metric in ("compute_busy_fraction", "mac_utilization"):
             require(math.isfinite(observed[metric]) and 0 <= observed[metric] <= 1.000000001,
                     "invalid " + metric)
     jobs = result["job_completions"]
+    if "dispatch_queue_bytes" in architecture:
+        require(result["dispatch_queue_peak_bytes"] == len(jobs) * 64
+                and result["dispatch_queue_peak_bytes"] <= architecture["dispatch_queue_bytes"],
+                "ready-job descriptor capacity mismatch")
+        require(result["dispatcher_busy_ps"] == len(jobs) * architecture["dispatch_cycles"] * architecture["clock_period_ps"]
+                and result["dispatcher_busy_ps"] <= result["total_ps"], "dispatcher service mismatch")
     identities = [(job["expert"], job["shared"]) for job in jobs]
     expected_rows = {}
     for route in workload["routes"]:
@@ -163,7 +181,8 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
 
 
 def _run_comparison(binary, workload_path, golden_path, architecture_paths, output_dir,
-                    repeats=2, hbm_channels=8, atol=1e-5, rtol=0.01, timeout=180):
+                    repeats=2, hbm_channels=8, atol=1e-5, rtol=0.01, timeout=180, workers=1):
+    require(type(workers) is int and 1 <= workers <= 8, "workers must be an integer between 1 and 8")
     require(type(repeats) is int and repeats >= 2, "at least two integer repeats are required")
     require(type(hbm_channels) is int and 1 <= hbm_channels <= 32
             and hbm_channels & (hbm_channels - 1) == 0,
@@ -194,6 +213,16 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
                   "global_dma_credits", "global_dma_staging_bytes", "combine_sram_bytes"):
         require(len({a[field] for a in architectures}) == 1,
                 "comparison requires same shared resource: " + field)
+    for field, default in (("dispatch_cycles", 1), ("dispatch_queue_bytes", 262144),
+                           ("matrix_timing", "pipelined")):
+        require(len({a.get(field, default) for a in architectures}) == 1,
+                "comparison requires same shared resource/timing: " + field)
+    cache_fields = ["read_cache_bytes" in c for a in architectures for c in a["cores"]]
+    require(not any(cache_fields) or all(cache_fields), "cache budgets must be explicit for every core")
+    if all(cache_fields):
+        for field in ("vector_sram_bytes", "accumulator_bytes", "weight_sram_bytes", "read_cache_bytes"):
+            require(len({sum(c[field] for c in a["cores"]) for a in architectures}) == 1,
+                    "full-shape comparison requires equal total configured SRAM: " + field)
     hbm_path = workload_path.parent / workload["hbm_file"]
     expected_hashes = {"workload_sha256": hashlib.sha256(workload_bytes).hexdigest(),
                        "hbm_sha256": digest(hbm_path), "executable_sha256": digest(binary)}
@@ -201,8 +230,8 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
         require(golden[field] == expected_hashes[field], "golden identity mismatch: " + field)
     run_dir = output_dir / ("run_" + uuid.uuid4().hex)
     run_dir.mkdir()
-    results = []
-    for index, (path, architecture) in enumerate(zip(architecture_paths, architectures)):
+    def execute_architecture(index):
+        path, architecture = architecture_paths[index], architectures[index]
         repeat_results, gates = [], []
         architecture_hash = architecture_hashes[index]
         for repeat in range(repeats):
@@ -223,7 +252,11 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
                 "repeat mismatch for " + architecture["name"])
         result = repeat_results[0]
         require(result["total_ps"] > 0, "nonempty comparison must advance time")
-        results.append({"architecture": architecture, "result": result, "gates": gates})
+        return {"architecture": architecture, "result": result, "gates": gates}
+    # Each process owns an independent Ramulator/executor. Preserve manifest
+    # order and propagate every exception before publishing any speedup.
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(execute_architecture, range(len(architectures))))
     for path, expected, label in (
             (workload_path, expected_hashes["workload_sha256"], "workload"),
             (golden_path, golden_hash, "golden"),
@@ -254,7 +287,7 @@ def _run_comparison(binary, workload_path, golden_path, architecture_paths, outp
 
 
 def run_comparison(binary, workload_path, golden_path, architecture_paths, output_dir,
-                   repeats=2, hbm_channels=8, atol=1e-5, rtol=0.01, timeout=180):
+                   repeats=2, hbm_channels=8, atol=1e-5, rtol=0.01, timeout=180, workers=1):
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_path = output_dir / "comparison.json"
@@ -262,7 +295,7 @@ def run_comparison(binary, workload_path, golden_path, architecture_paths, outpu
                                         "all_gates_passed": False}) + "\n", encoding="utf-8")
     try:
         return _run_comparison(binary, workload_path, golden_path, architecture_paths,
-                               output_dir, repeats, hbm_channels, atol, rtol, timeout)
+                               output_dir, repeats, hbm_channels, atol, rtol, timeout, workers)
     except Exception as error:
         summary_path.write_text(json.dumps({"schema_version": 1, "status": "failed",
                                             "all_gates_passed": False, "error": str(error)}) + "\n",
@@ -283,11 +316,12 @@ def main():
     parser.add_argument("--atol", type=float, default=1e-5)
     parser.add_argument("--rtol", type=float, default=0.01)
     parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--workers", type=int, default=1)
     args = parser.parse_args()
     try:
         summary = run_comparison(args.binary, args.workload, args.golden, args.architecture,
                                  args.output_dir, args.repeats, args.hbm_channels,
-                                 args.atol, args.rtol, args.timeout)
+                                 args.atol, args.rtol, args.timeout, args.workers)
     except (ValueError, OSError, KeyError, subprocess.SubprocessError) as error:
         parser.error(str(error))
     for row in summary["comparisons"]:

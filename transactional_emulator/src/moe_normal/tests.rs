@@ -163,6 +163,7 @@ fn architecture() -> Architecture {
                 vector_sram_bytes: 4096,
                 accumulator_bytes: 4096,
                 weight_sram_bytes: 4096,
+                read_cache_bytes: 0,
             },
             CoreConfig {
                 id: "small".into(),
@@ -171,6 +172,7 @@ fn architecture() -> Architecture {
                 vector_sram_bytes: 4096,
                 accumulator_bytes: 4096,
                 weight_sram_bytes: 4096,
+                read_cache_bytes: 0,
             },
         ],
         dispatch_threshold: 4,
@@ -182,7 +184,97 @@ fn architecture() -> Architecture {
         clock_period_ps: 1000,
         mac_pipeline_cycles: 2,
         vector_elements_per_cycle: 16,
+        dispatch_policy: DispatchPolicy::Threshold,
+        dispatch_queue_bytes: 262144,
+        dispatch_cycles: 1,
+        matrix_timing: MatrixTiming::Pipelined,
     }
+}
+
+#[tokio::test]
+async fn serialized_instruction_sensitivity_preserves_values_and_counts() {
+    let (w, bytes, _) = fixture();
+    let a = architecture();
+    let pipeline = simulate(w.clone(), a.clone(), &bytes).await;
+    let mut serial = a.clone();
+    serial.matrix_timing = MatrixTiming::LegacySerialized;
+    let report = simulate(w, serial, &bytes).await;
+    assert_eq!(report.output_bf16, pipeline.output_bf16);
+    assert_eq!(report.useful_macs, pipeline.useful_macs);
+    for (c, config) in report.cores.iter().zip(&a.cores) {
+        let tile_macs = (config.blen * config.blen * config.mlen) as u64;
+        assert_eq!(
+            c.compute_busy_ps,
+            c.issued_macs / tile_macs
+                * (config.mlen as u64 + a.mac_pipeline_cycles)
+                * a.clock_period_ps
+        );
+        assert_eq!(c.pipeline_drain_ps, 0);
+    }
+}
+
+#[tokio::test]
+async fn finite_cache_reuses_real_bytes_and_charges_one_serial_port() {
+    let (w, bytes, _) = fixture();
+    let a = architecture();
+    let baseline = simulate(w.clone(), a.clone(), &bytes).await;
+    for capacity in [80, 4096] {
+        let mut cached = a.clone();
+        for core in &mut cached.cores {
+            core.read_cache_bytes = capacity;
+        }
+        let r = simulate(w.clone(), cached, &bytes).await;
+        assert_eq!(r.output_bf16, baseline.output_bf16);
+        assert!(r.hbm_read_bytes <= baseline.hbm_read_bytes);
+        for c in &r.cores {
+            assert!(c.cache_peak_bytes <= capacity);
+            assert_eq!(c.cache_requests, c.cache_hits + c.hbm_read_bytes / 64);
+            assert_eq!(
+                c.cache_port_busy_ps,
+                (c.cache_requests + c.hbm_read_bytes / 64) * a.clock_period_ps
+            );
+            assert!(c.cache_port_busy_ps <= r.total_ps);
+        }
+        if capacity == 4096 {
+            assert!(r.hbm_read_bytes < baseline.hbm_read_bytes);
+            assert!(r.cores.iter().any(|c| c.cache_hits > 0));
+        }
+    }
+}
+
+#[tokio::test]
+async fn ready_dispatch_steals_small_jobs_and_preserves_numerics() {
+    let (mut w, bytes, _) = fixture();
+    for id in 10..30 {
+        let mut expert = w.experts[1].clone();
+        expert.id = id;
+        w.experts.push(expert);
+        w.routes.push(Route {
+            token: 0,
+            slot: id,
+            expert: id,
+            weight: 0.03125,
+        });
+    }
+    let fixed = simulate(w.clone(), architecture(), &bytes).await;
+    let mut a = architecture();
+    a.dispatch_policy = DispatchPolicy::WorkConserving;
+    let ready = simulate(w.clone(), a.clone(), &bytes).await;
+    assert_eq!(ready.output_bf16, fixed.output_bf16);
+    assert!(
+        ready
+            .job_completions
+            .iter()
+            .any(|j| j.rows < a.dispatch_threshold && j.core == "large")
+    );
+    assert_eq!(ready.job_completions.len(), fixed.job_completions.len());
+    assert_eq!(
+        ready.dispatcher_busy_ps,
+        ready.job_completions.len() as u64 * a.dispatch_cycles * a.clock_period_ps
+    );
+    assert!(ready.dispatch_queue_peak_bytes <= a.dispatch_queue_bytes);
+    a.dispatch_queue_bytes = 64;
+    assert!(validate(&w, &a, bytes.len() as u64).is_err());
 }
 
 async fn simulate(w: Workload, a: Architecture, bytes: &[u8]) -> RunReport {

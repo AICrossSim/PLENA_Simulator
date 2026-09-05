@@ -70,6 +70,33 @@ pub struct CoreConfig {
     pub accumulator_bytes: usize,
     /// Two slots, each holding both packed MX ingress and decoded BF16 tile.
     pub weight_sram_bytes: usize,
+    /// FIFO read cache: each entry reserves 64 data + 16 tag/control bytes.
+    #[serde(default)]
+    pub read_cache_bytes: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DispatchPolicy {
+    #[default]
+    Threshold,
+    WorkConserving,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MatrixTiming {
+    #[default]
+    Pipelined,
+    /// Legacy MatrixMachine-like per-instruction K + overhead serialization.
+    LegacySerialized,
+}
+
+fn default_queue_bytes() -> usize {
+    262144
+}
+fn default_dispatch_cycles() -> u64 {
+    1
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -92,6 +119,15 @@ pub struct Architecture {
     pub mac_pipeline_cycles: u64,
     /// One shared vector actor serves gathers, SwiGLU, result copies/combine.
     pub vector_elements_per_cycle: usize,
+    #[serde(default)]
+    pub dispatch_policy: DispatchPolicy,
+    /// Fixed 64-byte descriptor per ready expert job.
+    #[serde(default = "default_queue_bytes")]
+    pub dispatch_queue_bytes: usize,
+    #[serde(default = "default_dispatch_cycles")]
+    pub dispatch_cycles: u64,
+    #[serde(default)]
+    pub matrix_timing: MatrixTiming,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -116,6 +152,10 @@ pub struct CoreReport {
     pub hbm_read_bytes: u64,
     pub compute_busy_fraction: f64,
     pub mac_utilization: f64,
+    pub cache_requests: u64,
+    pub cache_hits: u64,
+    pub cache_port_busy_ps: u64,
+    pub cache_peak_bytes: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -148,6 +188,8 @@ pub struct RunReport {
     pub global_dma_staging_peak_bytes: usize,
     pub combine_sram_peak_bytes: usize,
     pub shared_vector_busy_ps: u64,
+    pub dispatch_queue_peak_bytes: usize,
+    pub dispatcher_busy_ps: u64,
     pub cores: Vec<CoreReport>,
     /// Completion order, which may differ from deterministic reduction order.
     pub job_completions: Vec<JobCompletion>,
