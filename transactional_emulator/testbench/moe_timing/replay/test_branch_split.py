@@ -40,7 +40,39 @@ PLUMBING_STAGES = (
 #: lm_head or the next sublayer. It is listed separately rather than folded into
 #: PLUMBING_STAGES because plumbing is MoE cost that both branches share, and this
 #: is not MoE cost.
-NON_MOE_STAGES = ("non_moe",)
+NON_MOE_STAGES = (
+    "non_moe",
+    # The state-engine stages: Mamba-2's selective SSM and KDA's gated delta
+    # rule. They are in this bucket rather than in a branch because
+    # `_branch_split` measures shared-versus-routed *MoE* cost, and a recurrent
+    # mixer is not MoE cost at all -- it is what sits where attention would in a
+    # hybrid layer. Putting them in PLUMBING_STAGES would fold them into the
+    # per-layer MoE overhead both branches share, which is a different claim and
+    # a wrong one.
+    "mamba_in_proj",
+    "mamba_conv1d",
+    "mamba_dt",
+    "mamba_chunk_cumsum",
+    "mamba_decay_mask",
+    "mamba_intra_chunk",
+    "mamba_state_update",
+    "mamba_inter_chunk",
+    "mamba_skip",
+    "mamba_gated_norm",
+    "mamba_out_proj",
+    "mamba_state_load",
+    "mamba_state_store",
+    "kda_qkv_proj",
+    "kda_conv1d",
+    "kda_normalize",
+    "kda_decay",
+    "kda_state_update",
+    "kda_readout",
+    "kda_gated_norm",
+    "kda_out_proj",
+    "kda_state_load",
+    "kda_state_store",
+)
 
 
 def _emulator_stage_names() -> list[str]:

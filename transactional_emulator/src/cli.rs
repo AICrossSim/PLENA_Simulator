@@ -165,6 +165,11 @@ pub(crate) struct Opts {
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,
 
+    #[arg(long, help_heading = "Diagnostics")]
+    /// Optional path for the post-run HBM image. Unlike DEBUG logging this is
+    /// explicit and therefore suitable for numerical integration tests.
+    pub(crate) hbm_dump: Option<PathBuf>,
+
     #[arg(long)]
     /// Optional generated ASM source used to derive PC-to-stage labels for a
     /// runtime stage profile. This is diagnostic only; normal runs omit it.

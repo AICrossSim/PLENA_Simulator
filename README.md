@@ -6,6 +6,9 @@
 
 This repository contains the multi-level simulator system for **PLENA (Programmable Long-context Efficient Neural Accelerator)**.
 
+For Mamba/KDA execution with banked Matrix SRAM, see
+[Matrix SRAM recurrence execution](docs/matrix_lcompute.md).
+
 ## Overview
 
 The PLENA Simulator provides three main components:

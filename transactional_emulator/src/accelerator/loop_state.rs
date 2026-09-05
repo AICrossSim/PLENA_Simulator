@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn loop_state_tracks_iterations_and_jump_targets() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(16);
         let mut loops = LoopState::new();
 
         loops.start(4, 2, 3, &mut regs);
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn loop_state_breaks_innermost_loop() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(16);
         let mut loops = LoopState::new();
 
         loops.start(10, 1, 2, &mut regs);

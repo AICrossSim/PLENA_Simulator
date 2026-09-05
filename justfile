@@ -256,3 +256,114 @@ multilayer-decoder-profile model="smolvlm2":
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
 
+# ==================== Matrix-SRAM recurrence checks ====================
+
+test-matrix-lcompute-python compiler_root="PLENA_Compiler":
+    PLENA_COMPILER_ROOT={{compiler_root}} python3 -m pytest -q \
+        transactional_emulator/testbench/test_emulator_runner_metrics.py \
+        transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py \
+        transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py
+
+test-perf-model:
+    python3 -m pytest -q analytic_models/test_perf_model_bandwidth.py \
+        analytic_models/test_kda_stage_calibration.py
+
+test-matrix-lcompute-compiler compiler_root="PLENA_Compiler":
+    env -u LD_LIBRARY_PATH -u LIBRARY_PATH -u NIX_LDFLAGS -u PYTHONPATH \
+      PLENA_SETTINGS_TOML="$PWD/plena_settings.toml" PYTHONPATH={{compiler_root}} \
+      uv run --directory {{compiler_root}} python -m pytest -q \
+        assembler/tests/test_l_mview.py \
+        assembler/tests/test_experimental_fp32_dot.py \
+        aten/tests/test_mview_contract.py \
+        aten/tests/test_matrix_recurrence_lowering.py \
+        aten/tests/test_prepared_vector_recurrence.py \
+        aten/tests/test_projection_affine_writeback.py \
+        aten/tests/test_python_310_enum_compat.py \
+        aten/tests/test_compiler_configuration.py
+
+test-matrix-view-projection compiler_root="PLENA_Compiler":
+    PLENA_SETTINGS_TOML="$PWD/plena_settings.toml" PLENA_COMPILER_ROOT={{compiler_root}} \
+      python3 transactional_emulator/testbench/aten/matrix_view_projection_test.py
+
+test-matrix-lcompute-recurrence compiler_root="PLENA_Compiler":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    check_dir="$(mktemp -d)"
+    trap 'rm -rf "$check_dir"' EXIT
+    PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      -m transactional_emulator.testbench.aten.matrix_lcompute_recurrence_test \
+      --output-dir "$check_dir"
+
+# KDA A/B can fail the common budget while matching their own BF16 oracle;
+# the diagnostic succeeds and suppresses its unqualified speedup cell.
+test-matrix-lcompute-execution compiler_root="PLENA_Compiler":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    check_dir="$(mktemp -d)"
+    trap 'rm -rf "$check_dir"' EXIT
+    for model in mamba kda; do
+        PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+          -m transactional_emulator.testbench.aten.matrix_lcompute_execution_compare \
+          --model "$model" --batches 1 --tokens 2 --output-dir "$check_dir/$model"
+    done
+
+# Compiler machine code executes in Rust using deterministic synthetic inputs.
+test-matrix-lcompute-integration compiler_root="PLENA_Compiler":
+    just test-matrix-lcompute-python {{compiler_root}}
+    just test-matrix-lcompute-compiler {{compiler_root}}
+    just test-matrix-view-projection {{compiler_root}}
+    just test-matrix-lcompute-recurrence {{compiler_root}}
+    just test-matrix-lcompute-execution {{compiler_root}}
+
+# Run inside nix develop so Rust and Python use the configured native libraries.
+test-matrix-lcompute compiler_root="PLENA_Compiler":
+    cd transactional_emulator && cargo test --workspace --release -- --test-threads=1
+    just test-matrix-lcompute-integration {{compiler_root}}
+    just test-perf-model
+
+# ==================== Mamba-2 / KDA stages ====================
+
+test-mamba2-stage case="dt" *args:
+    python3 transactional_emulator/testbench/mamba2/mamba2_stage_test.py --case {{case}} {{args}}
+
+test-mamba2-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for case in dt cumsum decay conv1d decode_batch; do
+        echo "=== Mamba-2 stage: $case ==="
+        just test-mamba2-stage "$case"
+    done
+
+test-mamba2-reference:
+    python3 -m unittest compiler.aten.tests.test_mamba2_reference compiler.aten.tests.test_mamba_stage_contract -v
+
+
+test-kda-stage case="cumprod" *args:
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py --case {{case}} {{args}}
+
+test-kda-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    build_root=transactional_emulator/testbench/kda/build
+    cleanup() {
+        if [[ -d "$build_root" ]]; then
+            find "$build_root" -depth -delete
+        fi
+        find transactional_emulator -maxdepth 1 -type f \
+            \( -name 'vram_dump.bin' -o -name 'mram_dump.bin' \
+               -o -name 'fpsram_dump.bin' -o -name 'intsram_dump.bin' \) \
+            -delete
+    }
+    trap cleanup EXIT
+    for case in cumprod ut prefill_out prefill_state prefill_chain_out \
+        prefill_chain_state state_transpose layer layer_chain recurrent_batch; do
+        python3 transactional_emulator/testbench/kda/kda_stage_test.py --case "$case"
+    done
+    for case in prefill_out prefill_state prefill_chain_out \
+        prefill_chain_state state_transpose layer layer_chain; do
+        python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+            --case "$case" --key-dim 128 --value-dim 128
+    done
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+        --case official_layer --mlen 8 --blen 2 --num-heads 2 \
+        --key-dim 8 --value-dim 8

@@ -27,7 +27,8 @@
         overlays = [ rust-overlay.overlays.default ];
       };
       rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = [ "rust-src" "rust-analyzer" ];
+        # Include the formatting and lint tools used by CI.
+        extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
       };
       rustPlatform = pkgs.makeRustPlatform {
         cargo = rustToolchain;
@@ -166,6 +167,7 @@
             python312Packages.pyyaml
             python312Packages.numpy
             python312Packages.pydantic
+            python312Packages.pytest
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas
