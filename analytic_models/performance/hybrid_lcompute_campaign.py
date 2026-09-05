@@ -38,6 +38,7 @@ from .nemotron3_workload import (
     InferencePhase,
     Nemotron3WorkloadModel,
     Precision,
+    PrecisionContract,
     ScanStrategy,
     StageWork,
     WorkloadReport,
@@ -935,6 +936,7 @@ def _model(
     activation_precision: Precision,
     weight_precision: Precision | None,
     state_precision: Precision,
+    precision_contract: PrecisionContract | None = None,
 ):
     if model_name == "nemotron3":
         arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
@@ -950,6 +952,7 @@ def _model(
             weight_precision=weight_precision or Precision.NVFP4,
             state_precision=state_precision,
             weight_precision_policy=policy,
+            precision_contract=precision_contract,
         )
     if model_name == "kimi_k3":
         policy = None
@@ -963,6 +966,7 @@ def _model(
             state_precision=state_precision,
             conv_state_precision=Precision.BF16,
             weight_precision_policy=policy,
+            precision_contract=precision_contract,
         )
     raise ValueError(f"unknown model {model_name}")
 

@@ -94,8 +94,8 @@ def _write_packet(
     image[begin:end] = payload
 
 
-def _mamba_inputs(token: int) -> dict[str, torch.Tensor]:
-    generator = torch.Generator().manual_seed(SEED + 101 * token)
+def _mamba_inputs(token: int, seed: int = SEED) -> dict[str, torch.Tensor]:
+    generator = torch.Generator().manual_seed(seed + 101 * token)
     heads, rows, width = (
         NEMOTRON_MAMBA.heads,
         NEMOTRON_MAMBA.recurrence_rows,
@@ -168,8 +168,8 @@ def _mamba_packet_values(
     raise KeyError(packet.field)
 
 
-def _kda_inputs(token: int) -> dict[str, torch.Tensor]:
-    generator = torch.Generator().manual_seed(SEED + 1009 + 101 * token)
+def _kda_inputs(token: int, seed: int = SEED) -> dict[str, torch.Tensor]:
+    generator = torch.Generator().manual_seed(seed + 1009 + 101 * token)
     heads, keys, values = KIMI_KDA.heads, KIMI_KDA.recurrence_rows, KIMI_KDA.row_elements
     return {
         "decay": _bf16(0.84 + torch.rand(heads, keys, generator=generator) * 0.12),
@@ -229,8 +229,8 @@ def _kda_packet_values(
     raise KeyError(packet.field)
 
 
-def _state_seed(spec: MatrixRecurrenceSpec) -> torch.Tensor:
-    generator = torch.Generator().manual_seed(SEED + (0 if spec.kind is RecurrenceKind.MAMBA else 5003))
+def _state_seed(spec: MatrixRecurrenceSpec, seed: int = SEED) -> torch.Tensor:
+    generator = torch.Generator().manual_seed(seed + (0 if spec.kind is RecurrenceKind.MAMBA else 5003))
     return _bf16(
         torch.randn(
             spec.heads,
@@ -339,11 +339,13 @@ RECURRENCE_RELATIVE_L2_LIMIT = 1e-2
 RECURRENCE_ZERO_RMS_LIMIT = 1e-7
 
 
-def _assert_close(name: str, actual: torch.Tensor, expected: torch.Tensor) -> dict[str, float]:
+def _assert_close(name: str, actual: torch.Tensor, expected: torch.Tensor, *, exact: bool = False) -> dict[str, float]:
     if actual.shape != expected.shape:
         raise AssertionError(f"{name}: shape {tuple(actual.shape)} != {tuple(expected.shape)}")
     if not torch.isfinite(actual).all() or not torch.isfinite(expected).all():
         raise AssertionError(f"{name}: non-finite actual or reference values")
+    if exact and not torch.equal(actual.view(torch.int32), expected.view(torch.int32)):
+        raise AssertionError(f"{name}: exact BF16 comparison failed")
     error = (actual - expected).abs()
     max_abs = float(error.max()) if error.numel() else 0.0
     error_norm = torch.linalg.vector_norm(error)
@@ -369,6 +371,7 @@ class ConnectedRecurrenceExecution:
     report: dict[str, object]
     outputs: tuple[torch.Tensor, ...]
     state: torch.Tensor
+    intermediate_states: tuple[torch.Tensor, ...] = ()
 
 
 def run_prepared_case(
@@ -381,6 +384,8 @@ def run_prepared_case(
     point: MatrixSramPoint | None = None,
     case_name: str | None = None,
     keep_build: bool = False,
+    exact: bool = False,
+    check_intermediate: bool = False,
 ) -> ConnectedRecurrenceExecution:
     """Execute prepared BF16 operands through Compiler assembly and Rust."""
 
@@ -395,6 +400,8 @@ def run_prepared_case(
     state = _bf16(initial_state)
     expected_state = state.clone()
     expected_outputs: list[torch.Tensor] = []
+    expected_states: list[torch.Tensor] = []
+    snapshot_bases: list[int] = []
     manifests: list[RecurrenceFieldManifest] = []
     assemblies: list[str] = []
     field_base = _round_up(spec.state_bytes_per_layer, 64)
@@ -404,11 +411,13 @@ def run_prepared_case(
             working_set,
             field_hbm_base=field_base,
         )
+        snapshot_base = _round_up(manifest.end, 64) if check_intermediate else None
         assembly = lower_matrix_recurrence(
             spec,
             layout=layout,
             point=point,
             state_hbm_base=0,
+            snapshot_hbm_base=snapshot_base,
             field_hbm_base=field_base,
         )
         validate_recurrence_output_stores(
@@ -423,6 +432,10 @@ def run_prepared_case(
         manifests.append(manifest)
         assemblies.append(assembly)
         field_base = _round_up(manifest.end, 64)
+        if snapshot_base is not None:
+            snapshot_bases.append(snapshot_base)
+            expected_states.append(expected_state.clone())
+            field_base = snapshot_base + spec.state_bytes_per_layer
 
     program = "\n".join(assemblies)
     validate_matrix_view_dominance(program)
@@ -471,8 +484,16 @@ def run_prepared_case(
 
     post = (build_dir / "hbm_dump.bin").read_bytes()
     actual_state = _unpack_state_hbm(post, working_set)
-    state_error = _assert_close("final recurrent state", actual_state, expected_state)
+    state_error = _assert_close("final recurrent state", actual_state, expected_state, exact=exact)
+    intermediate_states = tuple(
+        _unpack_state_hbm(post[base : base + spec.state_bytes_per_layer], working_set) for base in snapshot_bases
+    )
+    intermediate_errors = [
+        _assert_close(f"token {token} state", actual, expected, exact=exact)
+        for token, (actual, expected) in enumerate(zip(intermediate_states, expected_states, strict=True))
+    ]
     output_errors = []
+    output_hashes = []
     for token, (manifest, expected) in enumerate(zip(manifests, expected_outputs, strict=True)):
         actual_groups = []
         for group in range(working_set.groups):
@@ -480,11 +501,13 @@ def run_prepared_case(
             values = _read_bf16(post, packet.hbm_byte_offset, packet.logical_values)
             actual_groups.append(values.reshape(working_set.group_heads, spec.row_elements))
         actual = torch.cat(actual_groups, dim=0)
-        output_errors.append(_assert_close(f"token {token} output", actual, expected))
+        output_errors.append(_assert_close(f"token {token} output", actual, expected, exact=exact))
+
+        output_hashes.append(hashlib.sha256(_bf16_bytes(actual)).hexdigest())
 
     counters = metrics.get("matrix_view_packet_counters", {})
     result: dict[str, object] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "matrix_view_contract_version": L_MVIEW_CONTRACT_VERSION,
         "model": spec.name,
         "layout": str(layout),
@@ -503,6 +526,18 @@ def run_prepared_case(
         "state_values_compared": state.numel(),
         "output_values_compared": sum(output.numel() for output in expected_outputs),
         "state_error": state_error,
+        "acceptance_policy": {
+            "exact": exact,
+            "relative_l2_limit": 0 if exact else RECURRENCE_RELATIVE_L2_LIMIT,
+            "element_atol": 0 if exact else 1e-2,
+            "element_rtol": 0 if exact else 1e-2,
+            "zero_rms_floor": 0 if exact else RECURRENCE_ZERO_RMS_LIMIT,
+        },
+        "state_sha256": hashlib.sha256(_bf16_bytes(actual_state)).hexdigest(),
+        "output_sha256_by_token": output_hashes,
+        "intermediate_state_errors": intermediate_errors,
+        "intermediate_state_sha256": [hashlib.sha256(_bf16_bytes(value)).hexdigest() for value in intermediate_states],
+        "snapshot_dma_in_timing": check_intermediate,
         "output_error": {
             "max_abs": max(error["max_abs"] for error in output_errors),
             "relative_l2": max(error["relative_l2"] for error in output_errors),
@@ -541,6 +576,7 @@ def run_prepared_case(
             for manifest in manifests
         ),
         state=actual_state,
+        intermediate_states=intermediate_states,
     )
 
 
@@ -559,6 +595,7 @@ def run_case(
         layout,
         output_root,
         initial_state=_state_seed(spec),
+        exact=layout is RecurrenceLayout.AFFINE,
         operands_by_token=operands,
         keep_build=keep_build,
     )

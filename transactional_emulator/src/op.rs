@@ -494,20 +494,21 @@ impl Opcode {
 
     #[inline]
     fn legacy_vector_precision_from(funct1: u8) -> VectorPrecision {
-        // Preserve the pre-extension ISA exactly: zero selected activation and
-        // every non-zero funct value selected KV.  Old machine words must not
-        // silently acquire the new State meaning.
-        if funct1 == 0 {
-            VectorPrecision::Activation
-        } else {
-            VectorPrecision::KeyValue
+        // Match the Compiler's independent state selector in ordinary as well
+        // as viewed DMA. Selector 2 previously aliased KV here, corrupting BF16
+        // recurrent state whenever KV remained MX8. Canonical KV selector 1
+        // and the remaining historical non-zero aliases are unchanged.
+        match funct1 {
+            0 => VectorPrecision::Activation,
+            2 => VectorPrecision::State,
+            _ => VectorPrecision::KeyValue,
         }
     }
 
     #[inline]
     fn matrix_view_vector_precision_from(funct1: u8) -> Option<VectorPrecision> {
         // The bit-31 Matrix-view form is a new encoding and can therefore use
-        // a canonical three-way selector without changing legacy binaries.
+        // the same canonical three-way precision selector as ordinary DMA.
         match funct1 {
             0 => Some(VectorPrecision::Activation),
             1 => Some(VectorPrecision::KeyValue),
@@ -1148,11 +1149,28 @@ mod tests {
                 ..
             }
         ));
-        for legacy_nonzero in 2..=15 {
+        for legacy_nonzero in 3..=15 {
             assert!(matches!(
                 Opcode::decode(rform(0x29, 0, 0, 0, 0, legacy_nonzero)),
                 Opcode::H_PREFETCH_V {
                     precision: VectorPrecision::KeyValue,
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn ordinary_state_dma_does_not_inherit_kv_precision() {
+        for opcode in [0x29, 0x2A] {
+            let decoded = Opcode::decode(rform(opcode, 1, 2, 3, 0, 2));
+            assert!(matches!(
+                decoded,
+                Opcode::H_PREFETCH_V {
+                    precision: VectorPrecision::State,
+                    ..
+                } | Opcode::H_STORE_V {
+                    precision: VectorPrecision::State,
                     ..
                 }
             ));
@@ -1171,7 +1189,7 @@ mod tests {
             } => assert_eq!((rd, rs1, rs2, rstride), (1, 2, 3, 4)),
             other => panic!("expected H_STORE_V KeyValue, got {other:?}"),
         }
-        for legacy_nonzero in 2..=15 {
+        for legacy_nonzero in 3..=15 {
             assert!(matches!(
                 Opcode::decode(rform(0x2A, 1, 2, 3, 4, legacy_nonzero)),
                 Opcode::H_STORE_V {

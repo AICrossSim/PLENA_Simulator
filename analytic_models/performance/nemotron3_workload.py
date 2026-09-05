@@ -29,6 +29,94 @@ class Precision(StrEnum):
     NVFP4 = "nvfp4"
 
 
+@dataclass(frozen=True)
+class StorageFormat:
+    """Logical payload contract; DMA burst rounding is accounted separately.
+
+    Padding is explicit and optional. Tensor-global scales are excluded because
+    this workload counts stage tensors, not individual checkpoint allocations.
+    """
+
+    precision: Precision
+    block: int = 0
+    pad_to_block: bool = False
+    alignment_bytes: int = 1
+
+    def __post_init__(self) -> None:
+        quantized = self.precision in {Precision.MX8, Precision.MXFP4, Precision.NVFP4}
+        if (quantized and self.block <= 0) or (not quantized and self.block != 0):
+            raise ValueError("quantized formats require a block; plain formats use block=0")
+        if self.precision == Precision.NVFP4 and self.block != 16:
+            raise ValueError("NVFP4 requires block16")
+        if self.precision == Precision.MXFP4 and self.block != 32:
+            raise ValueError("MXFP4 requires block32")
+        if self.alignment_bytes <= 0:
+            raise ValueError("alignment_bytes must be positive")
+
+    @classmethod
+    def for_precision(cls, precision: Precision, *, mx8_block: int = 128) -> StorageFormat:
+        return cls(precision, {Precision.MX8: mx8_block, Precision.MXFP4: 32, Precision.NVFP4: 16}.get(precision, 0))
+
+    @property
+    def element_bits(self) -> int:
+        return {
+            Precision.FP32: 32,
+            Precision.BF16: 16,
+            Precision.FP16: 16,
+            Precision.MX8: 8,
+            Precision.MXFP4: 4,
+            Precision.NVFP4: 4,
+        }[self.precision]
+
+    def storage_bytes(self, elements: int) -> int:
+        if elements < 0:
+            raise ValueError("elements must be non-negative")
+        blocks = (elements + self.block - 1) // self.block if self.block else 0
+        stored_elements = blocks * self.block if self.pad_to_block and self.block else elements
+        payload = (stored_elements * self.element_bits + 7) // 8 + blocks
+        return ((payload + self.alignment_bytes - 1) // self.alignment_bytes) * self.alignment_bytes
+
+    def to_dict(self) -> dict:
+        return {
+            "precision": self.precision,
+            "element_format": {
+                Precision.FP32: "E8M23",
+                Precision.BF16: "E8M7",
+                Precision.FP16: "E5M10",
+                Precision.MX8: "E4M3",
+                Precision.MXFP4: "E2M1",
+                Precision.NVFP4: "E2M1",
+            }[self.precision],
+            "element_bits": self.element_bits,
+            "block_elements": self.block or None,
+            "scale_format": ("E4M3" if self.precision == Precision.NVFP4 else "E8M0") if self.block else None,
+            "scale_bits": 8 if self.block else 0,
+            "padding": {"pad_to_block": self.pad_to_block, "alignment_bytes": self.alignment_bytes},
+            "tensor_global_scale_bytes_included": 0,
+            "physical_dma_burst_rounding": "separate hardware traffic model",
+        }
+
+
+@dataclass(frozen=True)
+class PrecisionContract:
+    weight: StorageFormat
+    activation: StorageFormat
+    kv: StorageFormat
+    state: StorageFormat
+
+    def to_dict(self) -> dict:
+        return {name: getattr(self, name).to_dict() for name in ("weight", "activation", "kv", "state")}
+
+    def weight_format(self, precision: Precision) -> StorageFormat:
+        # Checkpoint exclusions remain plain BF16; they never inherit MX/NV blocks.
+        return self.weight if precision == self.weight.precision else StorageFormat.for_precision(precision)
+
+    @classmethod
+    def bf16_recurrence(cls, weight: Precision) -> PrecisionContract:
+        bf16 = StorageFormat.for_precision(Precision.BF16)
+        return cls(StorageFormat.for_precision(weight, mx8_block=8), bf16, bf16, bf16)
+
+
 class ScanStrategy(StrEnum):
     SEQUENTIAL = "sequential"
     CHUNKED_AFFINE = "chunked_affine"
@@ -278,6 +366,7 @@ class WorkloadReport:
     state_precision: Precision
     stages: tuple[StageWork, ...]
     weight_precision_policy: WeightPrecisionPolicy | None = None
+    precision_contract: PrecisionContract | None = None
 
     @property
     def total_macs(self) -> int:
@@ -309,6 +398,7 @@ class WorkloadReport:
             "weight_precision_policy": (
                 self.weight_precision_policy.to_dict() if self.weight_precision_policy is not None else None
             ),
+            "precision_contract": self.precision_contract.to_dict() if self.precision_contract else None,
             "layer_counts": {name: len(layer_ids) for name, layer_ids in layer_counts.items()},
             "totals": {
                 "macs": self.total_macs,
@@ -342,6 +432,7 @@ class Nemotron3WorkloadModel:
         weight_precision: Precision = Precision.BF16,
         state_precision: Precision = Precision.FP32,
         weight_precision_policy: WeightPrecisionPolicy | None = None,
+        precision_contract: PrecisionContract | None = None,
     ) -> None:
         if arch.layer_pattern is None or arch.mamba is None or arch.moe is None:
             raise ValueError("Nemotron 3 workload requires hybrid, Mamba, and MoE configuration")
@@ -352,6 +443,17 @@ class Nemotron3WorkloadModel:
             weight_precision_policy.default_precision if weight_precision_policy is not None else weight_precision
         )
         self.state_precision = state_precision
+        self.precision_contract = precision_contract or PrecisionContract(
+            StorageFormat.for_precision(self.weight_precision),
+            StorageFormat.for_precision(activation_precision),
+            StorageFormat.for_precision(activation_precision),
+            StorageFormat.for_precision(state_precision),
+        )
+        self.activation_precision = self.precision_contract.activation.precision
+        self.weight_precision = self.precision_contract.weight.precision
+        self.state_precision = self.precision_contract.state.precision
+        if weight_precision_policy and self.weight_precision != weight_precision_policy.default_precision:
+            raise ValueError("weight contract conflicts with checkpoint policy")
 
     def build(self, scenario: WorkloadScenario) -> WorkloadReport:
         stages: list[StageWork] = []
@@ -380,19 +482,23 @@ class Nemotron3WorkloadModel:
             state_precision=self.state_precision,
             stages=tuple(stages),
             weight_precision_policy=self.weight_precision_policy,
+            precision_contract=self.precision_contract,
         )
 
     def _a_bytes(self, elements: int) -> int:
-        return storage_bytes(elements, self.activation_precision)
+        return self.precision_contract.activation.storage_bytes(elements)
 
     def _w_bytes(self, elements: int, layer_id: int, stage_name: str) -> int:
         precision = self.weight_precision
         if self.weight_precision_policy is not None:
             precision = self.weight_precision_policy.precision_for(layer_id, stage_name)
-        return storage_bytes(elements, precision)
+        return self.precision_contract.weight_format(precision).storage_bytes(elements)
+
+    def _kv_bytes(self, elements: int) -> int:
+        return self.precision_contract.kv.storage_bytes(elements)
 
     def _s_bytes(self, elements: int) -> int:
-        return storage_bytes(elements, self.state_precision)
+        return self.precision_contract.state.storage_bytes(elements)
 
     def _embedding(self, scenario: WorkloadScenario) -> StageWork:
         elements = scenario.tokens * self.arch.hidden_size
@@ -706,7 +812,7 @@ class Nemotron3WorkloadModel:
                     ),
                     activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     on_chip_write_bytes=self._a_bytes(tokens * projection_width),
-                    kv_write_bytes=self._a_bytes(kv_write_elements),
+                    kv_write_bytes=self._kv_bytes(kv_write_elements),
                 ),
                 working_set_bytes=self._a_bytes(tokens * projection_width),
             ),
@@ -719,7 +825,7 @@ class Nemotron3WorkloadModel:
                 elementwise_ops=3 * score_values,
                 exp_ops=score_values,
                 traffic=Traffic(
-                    kv_read_bytes=self._a_bytes(kv_read_elements),
+                    kv_read_bytes=self._kv_bytes(kv_read_elements),
                     on_chip_read_bytes=self._a_bytes(tokens * q_dim),
                     on_chip_write_bytes=self._a_bytes(tokens * q_dim),
                 ),

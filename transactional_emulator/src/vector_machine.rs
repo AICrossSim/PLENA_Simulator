@@ -344,7 +344,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor() + (f as f64), a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             // mask is a bitmask; each bit controls whether to apply 'f' to corresponding mask_unit-section
@@ -363,7 +363,7 @@ impl VectorMachine {
                 // else leave unchanged
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -381,11 +381,11 @@ impl VectorMachine {
         if rmask == 0 {
             if matches!(rorder, op::VectorOrder::Normal) {
                 let c = QuantTensor::quantize(a.as_tensor() - (f as f64), a.data_type());
-                cycle!(*VECTOR_ADD_CYCLES);
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
                 self.vram.write(vd, c).await;
             } else {
                 let c = QuantTensor::quantize((f as f64) - a.as_tensor(), a.data_type());
-                cycle!(*VECTOR_ADD_CYCLES);
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
                 self.vram.write(vd, c).await;
             }
         } else {
@@ -409,7 +409,7 @@ impl VectorMachine {
                 // else leave unchanged
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -427,7 +427,7 @@ impl VectorMachine {
         if rmask == 0 {
             let scalar = f.tensor(self.tile_size);
             let c = QuantTensor::quantize(a.as_tensor() * scalar, a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
             self.write_view(vd, views.destination, c).await;
         } else {
             let f = f.require_broadcast();
@@ -443,7 +443,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
             self.write_view(vd, views.destination, c).await;
         }
     }
@@ -468,7 +468,7 @@ impl VectorMachine {
         if rmask == 0 {
             let scalar = f.tensor(self.tile_size);
             let c = QuantTensor::quantize(d.as_tensor() + a.as_tensor() * scalar, d.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
             self.write_view(vd, views.destination, c).await;
         } else {
             let f = f.require_broadcast();
@@ -488,7 +488,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, d.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
             self.write_view(vd, views.destination, c).await;
         }
     }
@@ -497,7 +497,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().clamp_min(f as f64), a.data_type());
-            cycle!(*VECTOR_MAX_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -512,7 +512,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MAX_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -521,7 +521,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().clamp_max(f as f64), a.data_type());
-            cycle!(*VECTOR_MIN_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MIN_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -536,7 +536,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MIN_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MIN_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -562,31 +562,37 @@ impl VectorMachine {
             Tensor::cat(&[zeros, shifted_part], 0)
         };
         let c = QuantTensor::quantize(result, a.data_type());
-        cycle!(*VECTOR_MUL_CYCLES);
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
         self.vram.write(vd, c).await;
     }
 
     pub(crate) async fn add(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         let result = self
             .binary_packet(VectorBinaryOp::Add, a, b, rmask, mask)
             .await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         self.vram.write(vd, result).await;
     }
 
     pub(crate) async fn sub(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         let result = self
             .binary_packet(VectorBinaryOp::Sub, a, b, rmask, mask)
             .await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         self.vram.write(vd, result).await;
     }
 
     pub(crate) async fn mul(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         let result = self
             .binary_packet(VectorBinaryOp::Mul, a, b, rmask, mask)
             .await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         self.vram.write(vd, result).await;
     }
 
@@ -627,10 +633,10 @@ impl VectorMachine {
         };
         match op {
             VectorBinaryOp::Add | VectorBinaryOp::Sub => {
-                cycle!(*VECTOR_ADD_CYCLES);
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             }
             VectorBinaryOp::Mul => {
-                cycle!(*VECTOR_MUL_CYCLES);
+                crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
             }
         }
         QuantTensor::quantize(result, a.data_type())
@@ -669,7 +675,7 @@ impl VectorMachine {
                 result[index] = a * dst[index] + b * src[source_index];
             }
         }
-        cycle!(2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES);
+        crate::timing::charge_arithmetic_cycles(2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
         QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
     }
 
@@ -703,7 +709,7 @@ impl VectorMachine {
                 accumulator[index] += values[index] * scale;
             }
         }
-        cycle!(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES);
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
     }
 
     /// Generic row-wise outer/rank-1 update used by linear recurrences.
@@ -738,7 +744,7 @@ impl VectorMachine {
                 result[index] += source[source_index] * scale;
             }
         }
-        cycle!(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES);
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
         QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
     }
 
@@ -749,7 +755,7 @@ impl VectorMachine {
         let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
             let c = QuantTensor::quantize(clamped.exp(), a.data_type());
-            cycle!(*VECTOR_EXP_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_EXP_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = clamped.shallow_clone();
@@ -764,7 +770,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_EXP_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_EXP_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -784,7 +790,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(Self::softplus_tensor(a.as_tensor()), a.data_type());
-            cycle!(*VECTOR_SOFTPLUS_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_SOFTPLUS_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -799,7 +805,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_SOFTPLUS_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_SOFTPLUS_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -820,7 +826,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().reciprocal(), a.data_type());
-            cycle!(*VECTOR_RECI_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_RECI_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -835,7 +841,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_RECI_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_RECI_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -865,7 +871,7 @@ impl VectorMachine {
         vs1_view: Option<AffineView>,
     ) -> f32 {
         let a = self.read_view(vs1, vs1_view).await;
-        cycle!(*VECTOR_SUM_CYCLES);
+        crate::timing::charge_arithmetic_cycles(*VECTOR_SUM_CYCLES).await;
         if rmask == 0 {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
             f + val
@@ -888,7 +894,7 @@ impl VectorMachine {
 
     pub(crate) async fn reduce_max(&self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
         let a = self.vram.read(vs1).await;
-        cycle!(*VECTOR_MAX_CYCLES);
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
         if rmask == 0 {
             let val: f32 = a.as_tensor().max().try_into().unwrap();
             f32::max(val, f)
@@ -970,7 +976,10 @@ impl VectorMachine {
             .collect();
         let indices: Vec<u32> = selected.iter().map(|(idx, _)| *idx as u32).collect();
 
-        cycle!((*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32));
+        crate::timing::charge_arithmetic_cycles(
+            (*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32),
+        )
+        .await;
         (indices, weights)
     }
 }
@@ -1418,6 +1427,47 @@ mod tests {
             "banking must not slow ordinary wide-row ops"
         );
         assert_eq!(counters, vec![PacketCounterSnapshot::default(); 3]);
+    }
+
+    #[tokio::test]
+    async fn ordinary_bank_service_waits_for_source_data() {
+        crate::timing::set_timing_mode(crate::timing::TimingMode::Serial);
+        crate::timing::reset_execution_counters(true);
+        let executor = Executor::new();
+        executor.spawn(async {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let ty = MxDataType::Plain(fp_type);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let (sender, receiver) = tokio::sync::oneshot::channel();
+            vram.write_delayed(0, receiver).await;
+            Executor::current().spawn(async move {
+                Executor::current()
+                    .resolve_at(*crate::runtime_config::PERIOD * 5u32)
+                    .await;
+                assert!(
+                    sender
+                        .send(QuantTensor::quantize(Tensor::from_slice(&[1.0f32; 4]), ty))
+                        .is_ok()
+                );
+            });
+            vram.write(
+                4,
+                QuantTensor::quantize(Tensor::from_slice(&[2.0f32; 4]), ty),
+            )
+            .await;
+            machine.add(8, 0, 4, 0, u32::MAX).await;
+            assert_eq!(tensor_values(vram.read(8).await.as_tensor()), vec![3.0; 4]);
+        });
+        executor.enter(Instant::ETERNITY).await;
+        assert_eq!(
+            executor.now(),
+            Instant::INIT + *crate::runtime_config::PERIOD * (5 + 3 + *VECTOR_ADD_CYCLES)
+        );
+        let counters = crate::timing::execution_counters();
+        assert_eq!(counters.bank_service_cycles, 3);
+        assert_eq!(counters.charged_cycles, 3 + *VECTOR_ADD_CYCLES as u64);
+        crate::timing::reset_execution_counters(false);
     }
 
     #[tokio::test]

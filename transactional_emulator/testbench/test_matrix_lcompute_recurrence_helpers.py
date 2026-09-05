@@ -136,3 +136,20 @@ def test_partial_mamba_head_group_zero_pads_every_scalar_packet() -> None:
             assert torch.count_nonzero(shaped[:, 48:]) == 0
         else:
             assert torch.count_nonzero(shaped[:, 24:]) == 0
+
+
+def test_phased_exact_guard_rejects_one_bf16_ulp_and_signed_zero():
+    expected = torch.tensor([1.0, 0.0])
+    changed = torch.tensor([1.0078125, 0.0])
+    with pytest.raises(AssertionError, match="exact BF16"):
+        _assert_close("one ULP", changed, expected, exact=True)
+    with pytest.raises(AssertionError, match="exact BF16"):
+        _assert_close("signed zero", torch.tensor([1.0, -0.0]), expected, exact=True)
+    _assert_close("identity", expected.clone(), expected, exact=True)
+
+
+def test_recurrence_seed_controls_state_and_prepared_coefficients():
+    for spec, inputs in ((NEMOTRON_MAMBA, _mamba_inputs), (KIMI_KDA, _kda_inputs)):
+        assert not torch.equal(_state_seed(spec, 17), _state_seed(spec, 65537))
+        for name, value in inputs(0, 17).items():
+            assert not torch.equal(value, inputs(0, 65537)[name])

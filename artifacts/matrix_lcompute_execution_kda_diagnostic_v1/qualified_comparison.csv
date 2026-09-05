@@ -1,0 +1,2 @@
+model,batch,tokens,common_numeric_budget_passed,D_speedup_vs_B_qualified,scope
+kimi_k3_kda,1,2,False,,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay

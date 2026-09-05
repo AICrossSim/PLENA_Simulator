@@ -39,7 +39,7 @@ COMPILER_ROOT = Path(
         Path(__file__).resolve().parents[2] / "PLENA_Compiler",
     )
 ).resolve()
-ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "artifacts/matrix_lcompute_e2e_v5"
+ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "artifacts/matrix_lcompute_e2e_v6"
 
 
 @functools.lru_cache(maxsize=1)

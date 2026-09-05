@@ -41,7 +41,7 @@ WEIGHT_PRECISION_SCENARIOS: tuple[tuple[str, Precision | None, str], ...] = (
     (
         "uniform_mxfp8",
         Precision.MX8,
-        "PLENA MX8/MXFP8 logical storage: one byte per value plus one scale per 128 values",
+        "PLENA MX8/MXFP8 logical storage: one byte per value plus one E8M0 scale per 8 E4M3 values; no logical block padding",
     ),
     ("uniform_bf16", Precision.BF16, "uniform two-byte BF16 weight storage"),
 )
@@ -88,6 +88,7 @@ def _precision_result(result: dict[str, Any], description: str) -> dict[str, Any
     return {
         "description": description,
         "weight_precision": str(result["weight_precision"]),
+        "precision_contract": result["precision_contract"],
         "weight_precision_policy": result["weight_precision_policy"],
         "B_timeline": baseline_timeline,
         "D_timeline": phased_timeline,
@@ -363,7 +364,8 @@ def build_agentic_matrix_lcompute_campaign(
     ]
     return {
         "status": "complete",
-        "contract": "nemotron-agentic-matrix-lcompute-dse-v2",
+        "contract": "nemotron-agentic-matrix-lcompute-dse-v3",
+        "precision_revision": "independent_w_a_kv_state_mx8_weight_block8",
         "source": campaign.to_summary(),
         "hardware": asdict(hardware),
         "decode_steps": decode_steps,
@@ -461,7 +463,7 @@ samples; the {campaign["decode_steps"]}-step replay window matches for
 events enter DSE and {ignored_events} later fully validated events are excluded.
 
 Every group includes strict-serial and ideal-resource-overlap endpoints plus
-checkpoint-mixed-NVFP4, uniform-MX8/MXFP8 and uniform-BF16 weight-traffic
+checkpoint-mixed-NVFP4, uniform-MX8/MXFP8 block8 and uniform-BF16 weight-traffic
 sensitivity. D' is materialized only as the fair packet-level bank control; no
 whole-model D' timing is claimed. The source archive contains prompt token IDs
 and is intentionally not part of this directory.

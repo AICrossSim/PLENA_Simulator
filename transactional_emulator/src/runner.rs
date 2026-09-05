@@ -245,10 +245,35 @@ pub(crate) async fn run_from_cli() {
         Some(scoreboard) => TimingDriver::Scoreboard { scoreboard },
         None => TimingDriver::Serial,
     };
+    let unified_serial = std::env::var("PLENA_UNIFIED_SERIAL_TIMING").as_deref() == Ok("1");
+    crate::timing::reset_execution_counters(unified_serial);
+    let execution_start = Executor::current().now();
     accelerator
         .do_ops(&decoded_ops, stage_profiler.as_mut(), timing_driver)
         .await;
 
+    if unified_serial {
+        let elapsed = Executor::current().now() - execution_start;
+        let counters = crate::timing::execution_counters();
+        let period = crate::runtime_config::PERIOD.as_picos();
+        let charged_picos = counters.charged_cycles * period;
+        assert!(elapsed.as_picos() >= charged_picos);
+        let report = serde_json::json!({
+            "contract": "controlled-recurrence-serial-v1",
+            "counters": counters,
+            "period_picos": period,
+            "total_picos": elapsed.as_picos(),
+            "dma_and_memory_wait_picos": elapsed.as_picos() - charged_picos,
+            "scalar_and_control_cycles": counters.charged_cycles - counters.issue_cycles
+                - counters.bank_service_cycles - counters.arithmetic_cycles,
+            "ordinary_bank_policy": "one single-ported all-bank VLEN row per cycle; binary two reads plus one write",
+            "scope": "serial issue + bank + arithmetic + scalar/control + DMA/memory waits; no overlap credit",
+        });
+        dump_to_file(
+            "execution_timing.json",
+            &serde_json::to_vec_pretty(&report).unwrap(),
+        );
+    }
     let packet = accelerator.lstream_packet_counters();
     tracing::info!(
         packet_reads = packet.read_packets,

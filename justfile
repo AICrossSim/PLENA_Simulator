@@ -189,8 +189,10 @@ test-matrix-lcompute-python compiler_root="PLENA_Compiler":
         analytic_models/performance/test_agentic_campaign.py \
         analytic_models/performance/test_agentic_matrix_lcompute_campaign.py \
         analytic_models/performance/test_gpu_energy.py \
+        analytic_models/performance/test_precision_contract.py \
         analytic_models/performance/test_matrix_lcompute_campaign.py \
-        transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py
+        transactional_emulator/testbench/test_matrix_lcompute_recurrence_helpers.py \
+        transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py
 
 # Preserve the raw archive and produce a separately labelled request-window
 # approximation. This does not recapture or certify exact legacy batch energy.
@@ -220,6 +222,7 @@ test-matrix-lcompute-compiler compiler_root="PLENA_Compiler":
         aten/tests/test_matrix_packet_report.py \
         aten/tests/test_matrix_prefill_handoff.py \
         aten/tests/test_matrix_recurrence_lowering.py \
+        aten/tests/test_prepared_vector_recurrence.py \
         aten/tests/test_mview_contract.py \
         aten/tests/test_projection_affine_writeback.py
 
@@ -254,12 +257,13 @@ test-matrix-lcompute compiler_root="PLENA_Compiler":
     just _test-matrix-lcompute-rust-in-dev-shell
     just test-matrix-view-projection {{compiler_root}}
     just test-matrix-lcompute-recurrence {{compiler_root}}
+    just test-matrix-lcompute-execution {{compiler_root}}
 
 # Write A/B/C/D/E tables plus state capacity, precision and overlap contracts.
 matrix-lcompute-campaign compiler_root="PLENA_Compiler":
     python3 -m analytic_models.performance.matrix_lcompute_campaign \
         --compiler-root {{compiler_root}} \
-        --output-dir artifacts/matrix_lcompute_e2e_v5
+        --output-dir artifacts/matrix_lcompute_e2e_v6
 
 # Import the externally archived real-checkpoint Nemotron Agentic campaign and
 # replay its length-sorted B1/B2/B4/B8/B16 route groups in the 52-layer DSE.
@@ -267,7 +271,7 @@ matrix-lcompute-agentic campaign_root compiler_root="PLENA_Compiler":
     python3 -m analytic_models.performance.agentic_matrix_lcompute_campaign \
         --campaign-root {{campaign_root}} \
         --compiler-root {{compiler_root}} \
-        --output-dir artifacts/matrix_lcompute_agentic_v1
+        --output-dir artifacts/matrix_lcompute_agentic_v2
 
 # ISA/layout unit tests plus reproducibility checks for both checked campaigns.
 test-hybrid-lcompute:
@@ -537,3 +541,17 @@ multilayer-decoder-profile model="smolvlm2":
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+
+# Controlled executable baseline gate; this is not the historical Arlo census.
+# The report separately exposes common-reference budget failures.
+test-matrix-lcompute-execution compiler_root="PLENA_Compiler":
+    tmp_dir="$(mktemp -d)"; trap 'rm -rf "$tmp_dir"' EXIT; \
+      PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      -m transactional_emulator.testbench.aten.matrix_lcompute_execution_compare \
+      --output-dir "$tmp_dir" --batches 1 --tokens 2
+
+# Full seed/state diagnostic sweep (snapshot DMA is excluded from performance claims).
+matrix-lcompute-numeric-sweep compiler_root="PLENA_Compiler":
+    PLENA_COMPILER_ROOT={{compiler_root}} python3 \
+      -m transactional_emulator.testbench.aten.matrix_lcompute_numeric_sweep \
+      --output-dir artifacts/matrix_lcompute_numeric_v2

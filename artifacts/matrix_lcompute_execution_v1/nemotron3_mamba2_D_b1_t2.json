@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "model": "nemotron3_mamba2",
+  "variant": "D",
+  "batch": 1,
+  "tokens": 2,
+  "baseline_scope": "new controlled packed VV A/B; not historical analytic original/Arlo replay",
+  "precision": "BF16 state and prepared coefficients; no weights in this recurrence kernel",
+  "rounding": "local FP32 reduction then BF16",
+  "coefficient_storage": "compact descriptor fields",
+  "initial_state_sha256_by_request": [
+    "62b07c01cb7243869bf7a72ba4b80778c9f045764e115fc294948a1c844b82d4"
+  ],
+  "operand_sha256": [
+    {
+      "x": "d2cad73f9ee16bb7819b00ef861d8ff933fc4e128489e9de6b1292bbc1fda9cf",
+      "dt": "820f2a2985628c56fdc62e496c9c442a0c653cef4daf70b24dce810fa614101b",
+      "a": "af4c2236b28636dbf00c2476e054b17ba330886723a4c4bdc6d17b78e856263b",
+      "b": "125063bc6d2387f1322f17bcee6c7d664397e3148a7a6836cd4d8cd6ac5cef21",
+      "c": "13329885929f23cf79cc0626893e416902c68553806c983173e9081655634f56",
+      "d": "2eca761971a6cc7c5cfd302e35aa2ceb6c0db6108b6ca47f0abb37c89e858a7b"
+    },
+    {
+      "x": "8eebb56d1103a2f95be50b0f524a4f02ad236df832b37d5d3834a9da889a828e",
+      "dt": "dce4326b4c544e98ae489ad66721027f0d0b3c5d7c487f729e905a316d464a43",
+      "a": "cd79b6daafbeeb38373edf0d7f6a40ca88d6249cb5c30ccd838a7c00ddf6dc62",
+      "b": "7c0d4b2538f6878461dcf5d788af672953c11fbb292c26d0f6f449e350bf1ad9",
+      "c": "985f3b4d0185dd869e5df1788b9b334ef712faf11601720f95389b629ebcbe5b",
+      "d": "071e3574d66615744ad5c11cdd06b763a7b74e75da367677c7e35d16bbc2721f"
+    }
+  ],
+  "assembly_sha256": "9199417e3a594ecc49f46d775ce171cbf18f1b3824ec2c12c7e11e91a4d85f10",
+  "machine_code_sha256": "755fb302bb14f7d4f1f108a6771f8374a10a2b451138218dcd2cb1317e585cd6",
+  "input_hbm_sha256": "390641b707d9f7839e0ad8b876cc2e90c71d4084e71dac6616bff5f822b61870",
+  "input_hbm_bytes": 1278144,
+  "output_sha256": [
+    "4c7e79add60953a47ad9380c68dccfbe3d28c7bdbfadf2b3e0ca5b0d36063b7f",
+    "0b6a91035e69bcab6189b8c01cb8dfc2fe0a732c01e21b8ecbb98edbcf45fdd2"
+  ],
+  "state_sha256": [
+    "b38e15261066222177692d8e545fb3c383dc590dc7c4acf3f2f360143337b093"
+  ],
+  "state_arenas": [
+    {
+      "request": 0,
+      "begin": 64,
+      "end": 1048640
+    }
+  ],
+  "private_state_and_immutable_guards_passed": true,
+  "own_rounding_reference_exact": true,
+  "common_relative_l2_limit": 0.01,
+  "common_budget_passed": true,
+  "common_output_errors": [
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    }
+  ],
+  "common_state_errors": [
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    }
+  ],
+  "common_budget_failures": [],
+  "timing": {
+    "contract": "controlled-recurrence-serial-v1",
+    "counters": {
+      "arithmetic_cycles": 2584,
+      "bank_service_cycles": 4192,
+      "charged_cycles": 7912,
+      "enabled": true,
+      "issue_cycles": 596,
+      "issued_instructions": 596
+    },
+    "dma_and_memory_wait_picos": 1146047000,
+    "ordinary_bank_policy": "one single-ported all-bank VLEN row per cycle; binary two reads plus one write",
+    "period_picos": 1000,
+    "scalar_and_control_cycles": 540,
+    "scope": "serial issue + bank + arithmetic + scalar/control + DMA/memory waits; no overlap credit",
+    "total_picos": 1153959000
+  },
+  "physical_hbm_bytes_read": 4423680,
+  "physical_hbm_bytes_written": 2113536,
+  "matrix_view_packet_counters": {
+    "packets": 3152,
+    "values": 6521856,
+    "bank_words": 203808,
+    "service_cycles": 4192,
+    "ideal_cycles": 4192,
+    "bank_stall_cycles": 0
+  },
+  "l_tile_exec_count": 16
+}

@@ -1,5 +1,10 @@
 # Matrix SRAM L-Compute：Pre-RTL 冻结版本
 
+> 2026-09-05 精度/执行增量见 [新版本报告](MATRIX_LCOMPUTE_PRECISION_EXECUTION_V2_ZH.md)。
+> 当前整模产物为 `matrix_lcompute_e2e_v6`，agentic 为 `matrix_lcompute_agentic_v2`；
+> 本文旧表和旧哈希保留作历史记录。旧 MX8 block128 一栏已由新版本 block8 表取代。
+> 新 Rust 对照是独立的 packed VV 控制实验，不能直接套用本文的历史 Arlo 标签。
+
 本文是 Compiler/Simulator 阶段的唯一交接说明。它只冻结已经由代码和测试
 支持的行为；不包含 RTL、综合、频率、面积、功耗或 Token/J 结论。
 

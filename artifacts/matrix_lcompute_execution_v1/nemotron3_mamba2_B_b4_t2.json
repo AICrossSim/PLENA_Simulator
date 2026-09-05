@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "model": "nemotron3_mamba2",
+  "variant": "B",
+  "batch": 4,
+  "tokens": 2,
+  "baseline_scope": "new controlled packed VV A/B; not historical analytic original/Arlo replay",
+  "precision": "BF16 state and prepared coefficients; no weights in this recurrence kernel",
+  "rounding": "BF16 after every VV operation",
+  "coefficient_storage": "explicit lane expansion in HBM",
+  "initial_state_sha256_by_request": [
+    "62b07c01cb7243869bf7a72ba4b80778c9f045764e115fc294948a1c844b82d4",
+    "443b876c207fab6594f83d91c4bbfeff6fa00e24fb647eef767075a5f896d1aa",
+    "5d912df7fa7969046b57fa0c72dd8d8e80c531f56c8c5035556d057d5de14143",
+    "4773be131d864759753514607d5620a1554817edb4c547504141a884776a1bbb"
+  ],
+  "operand_sha256": [
+    {
+      "x": "d2cad73f9ee16bb7819b00ef861d8ff933fc4e128489e9de6b1292bbc1fda9cf",
+      "dt": "820f2a2985628c56fdc62e496c9c442a0c653cef4daf70b24dce810fa614101b",
+      "a": "af4c2236b28636dbf00c2476e054b17ba330886723a4c4bdc6d17b78e856263b",
+      "b": "125063bc6d2387f1322f17bcee6c7d664397e3148a7a6836cd4d8cd6ac5cef21",
+      "c": "13329885929f23cf79cc0626893e416902c68553806c983173e9081655634f56",
+      "d": "2eca761971a6cc7c5cfd302e35aa2ceb6c0db6108b6ca47f0abb37c89e858a7b"
+    },
+    {
+      "x": "a78552b65a1efc239f60854613b3a664bc022b4cb99528da725f535f0ab44c50",
+      "dt": "b04df0c9618e6189ec294e4f6ed27a03755c875c50a38032be84d3d7feb78661",
+      "a": "3807f6eac4aaf1035290856582ede1b11342141901412a7d7ea87f10e73be5b4",
+      "b": "60bd972a1ea5d322f7e50837f794b061bc632b2a0f868c7954bb73d458be231e",
+      "c": "9d46ebee20c277559c3d8d08f0a4d27edb547ee456e10c676853a9b88cb27a1e",
+      "d": "155b24ae9e1b068f0ad74fd7a11fea1e9ae561df87e3a37d8f18b19230edf160"
+    },
+    {
+      "x": "9a2a249de24ecfcb668843457cdfdb8d14677ada80720b21fcb1d6287507d14a",
+      "dt": "d15c5c38d4653b7ddb02024535d7be9883ea283420947400833388ba9c70817e",
+      "a": "4a22a1bf2aac6f9184cc8184cb5727d564dca14def10359b605a090f187249c4",
+      "b": "2512188ec40cf4158cf70ce58af47843cba22c655a453faff558ffecffe31343",
+      "c": "9d16f1b4e09589209ca8410abe4643c1aea88c6e16d5faeb53e3210ddebae0ea",
+      "d": "ecf5d0fb9cd40d3dc9ba467ef6acd7043e0f01ea0ee4baea18c71178afa98088"
+    },
+    {
+      "x": "6a9fa4a84a06811ada26f3add0d4623467fe035510e014fa770e417ef9281cc9",
+      "dt": "67710ac615d32b2d57f628210cf5f50ab4e33847a457b0f7b5348e640d8486ab",
+      "a": "c2fb8435ccb3c1d67a28c74c7575070f043ac644c44220378fd7ba32f9dee494",
+      "b": "d43a52db2fb29141a7cade6483ba5198f0edb940f8bedb62f816d59c0f46f5f4",
+      "c": "a292533dae11ac081038b3b7471389c2a932beb44bbb94b0a40b7a897026cd7f",
+      "d": "1fbde03dd3fd858092764f1fccf00781ae1e865c418e90872be403bf623185de"
+    },
+    {
+      "x": "8eebb56d1103a2f95be50b0f524a4f02ad236df832b37d5d3834a9da889a828e",
+      "dt": "dce4326b4c544e98ae489ad66721027f0d0b3c5d7c487f729e905a316d464a43",
+      "a": "cd79b6daafbeeb38373edf0d7f6a40ca88d6249cb5c30ccd838a7c00ddf6dc62",
+      "b": "7c0d4b2538f6878461dcf5d788af672953c11fbb292c26d0f6f449e350bf1ad9",
+      "c": "985f3b4d0185dd869e5df1788b9b334ef712faf11601720f95389b629ebcbe5b",
+      "d": "071e3574d66615744ad5c11cdd06b763a7b74e75da367677c7e35d16bbc2721f"
+    },
+    {
+      "x": "885cfe1e6dc2cb721e794347f21a031035ab11d9884179ca07ca65100d7cedf4",
+      "dt": "61dd62c8470484878be31fbb870e418c38f3a2f02efd63dd5c26691cdb847d99",
+      "a": "b8e2013f8a1f040e60108cb7c1b87cf3073cac523cdf93d15e68dc2b24ab50ed",
+      "b": "e70645468bafa8aa0cb63f88707ae613731a3fb36570a86c7db0c3752ea0429f",
+      "c": "1bbefa8c61e4c26aff8c26c735d64da3ab55af1cc6d748ceae87a839997b9405",
+      "d": "44b48377d32f90c3bb106978cf15f3e2c6f8e15209c8035780d222e972107940"
+    },
+    {
+      "x": "e0bbb35629f6a9d5e76af16e2548dc51036d301039a3c57cc0e67847dda742c2",
+      "dt": "cc89c6671811aeb6c0d4e0ac3b46ee9e0e1588be24afff3ded5c0e871812e5f2",
+      "a": "13f93ee132615198030f6a902d160c21d8eb76c93002a573cd5a96d138bba3bd",
+      "b": "5ec1e6ce822e32639afab31020c2d5bc9dfa8c148ed200c4c42412d097f20b23",
+      "c": "0576c4f46ad0377aad2f158bf5a3a02f790f1c8d80fa76f5bf80abd72e0f278f",
+      "d": "8f609de80198e1f66ad47ee8aaf4fc1ddb319ed1f5c0a1ce4a7f1499171f22a4"
+    },
+    {
+      "x": "881d4eec9c9c2a9ffe4acad81a8aa5d69869dd9ed593c6c523697596d76e5429",
+      "dt": "ccf2e7820b4c234e32c9195e71de56e67d3104134416534d18c738199bf3750c",
+      "a": "16bb71ca08de40145c57ea479365632beed7aba1481ef48aeed29ccb165415e7",
+      "b": "63a91935371fe38295d213faf8ad858e4eed83377cfd5a74c7dff71cd9bfc148",
+      "c": "be426d759ba3cfda18b61440d711373d44fec54106a054a83986ce32b91fc91a",
+      "d": "bba5510fdd4bcd221af221c7c6be78c8721dd513d50b5023624caa2d809ccccc"
+    }
+  ],
+  "assembly_sha256": "14597a0f879706d17be908d63f599875873f4165f16591d23a903282c61b5162",
+  "machine_code_sha256": "073c6060e061d4fdae4832d90474e73068559e9d41b0b1bb933e9ea92a66d804",
+  "input_hbm_sha256": "560d397caf0c0d36dee0c0736c67927e3a0ba88ac5df7a6b6fbff79d6a113218",
+  "input_hbm_bytes": 29696256,
+  "output_sha256": [
+    "28358b7b33ff3176b1367de9d8cf19a94cd3eeb89f1111343758834f7ebd6318",
+    "9829dac67f67d8d4a9572372b6a2864f0b7b470a6ade41fa9bc33055c91ddff3",
+    "a01a30733c5c31bc0a7c563d9e79739fc4ed06ec75e5c973ed89f314c8a91873",
+    "85b7902404d6526322f74f329b65a6416444a778fb59fffe52c9ad203df65a23",
+    "0c08fab912b76fc521f25a544223ac97cf35553e8d3639e246cf08f75a06d6ed",
+    "be06226d699d64efa4c484f502ccae20a2ac58b1771edc6ab99562df3ece0911",
+    "5699894485f0a18f134a132a10ef983e27e51d602dfb81d4049134ac6b3890e8",
+    "371c9948c399b6d810d6d7dac61b0c3295634f7ef9a990d7881fde1c91a70747"
+  ],
+  "state_sha256": [
+    "f30f1ad57688f369dba8ee650526247f0106bf44c0a9b84f539fbc23fd52de3a",
+    "38b230dc578a7a4ada7678775fec89889d73e64269ed311e888f1e9ff0132c38",
+    "b2dec4510c20eca6fba1dea19972f343aa1fe6ac3a46e223fdea4af72dd7e636",
+    "9f8d896fb77ce3f29713d0a8575a8ea424986bb6932be8df4f374cdc69e0a28d"
+  ],
+  "state_arenas": [
+    {
+      "request": 0,
+      "begin": 64,
+      "end": 1048640
+    },
+    {
+      "request": 1,
+      "begin": 1048704,
+      "end": 2097280
+    },
+    {
+      "request": 2,
+      "begin": 2097344,
+      "end": 3145920
+    },
+    {
+      "request": 3,
+      "begin": 3145984,
+      "end": 4194560
+    }
+  ],
+  "private_state_and_immutable_guards_passed": true,
+  "own_rounding_reference_exact": true,
+  "common_relative_l2_limit": 0.01,
+  "common_budget_passed": true,
+  "common_output_errors": [
+    {
+      "max_abs": 0.001220703125,
+      "relative_l2": 0.0077334437519311905
+    },
+    {
+      "max_abs": 0.001220703125,
+      "relative_l2": 0.0079678725451231
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.007960588671267033
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.008047159761190414
+    },
+    {
+      "max_abs": 0.0010986328125,
+      "relative_l2": 0.0073924316093325615
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.008052772842347622
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.007446916773915291
+    },
+    {
+      "max_abs": 0.001220703125,
+      "relative_l2": 0.007612486835569143
+    }
+  ],
+  "common_state_errors": [
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.0036841193214058876
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.003678738372400403
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.003707363735884428
+    },
+    {
+      "max_abs": 0.0009765625,
+      "relative_l2": 0.0036825574934482574
+    }
+  ],
+  "common_budget_failures": [],
+  "timing": {
+    "contract": "controlled-recurrence-serial-v1",
+    "counters": {
+      "arithmetic_cycles": 10304,
+      "bank_service_cycles": 41232,
+      "charged_cycles": 186656,
+      "enabled": true,
+      "issue_cycles": 77872,
+      "issued_instructions": 77872
+    },
+    "dma_and_memory_wait_picos": 5017058000,
+    "ordinary_bank_policy": "one single-ported all-bank VLEN row per cycle; binary two reads plus one write",
+    "period_picos": 1000,
+    "scalar_and_control_cycles": 57248,
+    "scope": "serial issue + bank + arithmetic + scalar/control + DMA/memory waits; no overlap credit",
+    "total_picos": 5203714000
+  },
+  "physical_hbm_bytes_read": 42270720,
+  "physical_hbm_bytes_written": 8454144,
+  "matrix_view_packet_counters": {
+    "packets": 0,
+    "values": 0,
+    "bank_words": 0,
+    "service_cycles": 0,
+    "ideal_cycles": 0,
+    "bank_stall_cycles": 0
+  },
+  "l_tile_exec_count": 0
+}

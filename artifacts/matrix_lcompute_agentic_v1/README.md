@@ -1,3 +1,8 @@
+> Historical precision revision: `uniform_mxfp8` here uses block128
+> (1.0078125 B/value), not block8. Keep these data for provenance; use
+> `../matrix_lcompute_agentic_v2/` for corrected MX8 weight results (1.125 B/value).
+> NVFP4 and BF16 headline values are not changed by this precision correction.
+
 # Nemotron Agentic Matrix L-Compute DSE
 
 This directory is derived from the externally archived real-checkpoint B200

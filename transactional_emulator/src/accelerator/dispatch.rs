@@ -157,7 +157,7 @@ impl Accelerator {
             Vec::new()
         } else {
             let (packets, service) = self.m_machine.mram.read_layout_packets(&requests).await;
-            cycle!(service.service_cycles.max(1));
+            timing::charge_bank_cycles(service.service_cycles.max(1)).await;
             packets
         };
         let mut matrix_packets = matrix_packets.into_iter();
@@ -187,7 +187,7 @@ impl Accelerator {
                 .mram
                 .write_layout_packet(self.reg_file.read_gp(rd), view.layout(), result)
                 .await;
-            cycle!(service.service_cycles.max(1));
+            timing::charge_bank_cycles(service.service_cycles.max(1)).await;
         } else {
             self.v_machine
                 .vram
@@ -304,17 +304,17 @@ impl Accelerator {
                             .mram
                             .read_layout_indexed_rows(dst_base, dst_layout, &destination_lines)
                             .await;
-                        cycle!(dst_service.service_cycles.max(1));
+                        timing::charge_bank_cycles(dst_service.service_cycles.max(1)).await;
                         let (src_packet, src_service) = self
                             .read_l_tile_lines(src_base, source, source_axis, &source_lines)
                             .await;
-                        cycle!(src_service.service_cycles.max(1));
+                        timing::charge_bank_cycles(src_service.service_cycles.max(1)).await;
                         let (scale_packet, scale_service) = self
                             .read_l_tile_lines(scale_base, scales, scale_axis, &scale_lines)
                             .await;
                         // Scalar bank words are deliberately charged separately:
                         // a full state packet already consumes every bank word.
-                        cycle!(scale_service.service_cycles.max(1));
+                        timing::charge_bank_cycles(scale_service.service_cycles.max(1)).await;
 
                         let result = match primitive {
                             op::LTilePrimitive::ScaleAccum => {
@@ -353,7 +353,7 @@ impl Accelerator {
                                 result,
                             )
                             .await;
-                        cycle!(service.service_cycles.max(1));
+                        timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                     }
                 }
             }
@@ -383,7 +383,7 @@ impl Accelerator {
                         .mram
                         .read_layout_indexed_rows(dst_base, dst_layout, &destination_lines)
                         .await;
-                    cycle!(destination_service.service_cycles.max(1));
+                    timing::charge_bank_cycles(destination_service.service_cycles.max(1)).await;
                     let mut accumulator = tensor_to_f32_vec(destination_packet.as_tensor());
                     assert_eq!(accumulator.len(), (tile_count * source_line_width) as usize);
                     for row in 0..source_line_count {
@@ -401,11 +401,11 @@ impl Accelerator {
                         let (source_packet, source_service) = self
                             .read_l_tile_lines(src_base, source, source_axis, &source_lines)
                             .await;
-                        cycle!(source_service.service_cycles.max(1));
+                        timing::charge_bank_cycles(source_service.service_cycles.max(1)).await;
                         let (scale_packet, scale_service) = self
                             .read_l_tile_lines(scale_base, scales, scale_axis, &scale_lines)
                             .await;
-                        cycle!(scale_service.service_cycles.max(1));
+                        timing::charge_bank_cycles(scale_service.service_cycles.max(1)).await;
                         self.v_machine
                             .tile_dot_accumulate(
                                 &mut accumulator,
@@ -426,7 +426,7 @@ impl Accelerator {
                         .mram
                         .write_layout_indexed_rows(dst_base, dst_layout, &destination_lines, result)
                         .await;
-                    cycle!(service.service_cycles.max(1));
+                    timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                 }
             }
         }
@@ -459,8 +459,40 @@ impl Accelerator {
         let mut pc: usize = 0; // Program counter
 
         while pc < ops.len() {
+            timing::charge_issue().await;
             let executed_pc = pc;
             let op = &ops[pc];
+            if timing::execution_counters().enabled {
+                assert!(
+                    matches!(
+                        op,
+                        op::Opcode::S_LUI_INT { .. }
+                            | op::Opcode::S_ADDI_INT { .. }
+                            | op::Opcode::L_TILE_CFG { .. }
+                            | op::Opcode::L_TILE_EXEC { .. }
+                            | op::Opcode::H_PREFETCH_V { .. }
+                            | op::Opcode::H_STORE_V { .. }
+                            | op::Opcode::H_PREFETCH_V_MV { .. }
+                            | op::Opcode::H_STORE_V_MV { .. }
+                            | op::Opcode::V_ADD_VV {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::V_SUB_VV {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::V_MUL_VV {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                    ),
+                    "opcode outside controlled recurrence timing contract: {op:?}"
+                );
+            }
 
             self.loop_state.record_instruction();
             tracing::debug!(pc, ?op, "execute op");
@@ -610,7 +642,7 @@ impl Accelerator {
                             .m_machine
                             .mview_wo(self.reg_file.read_gp(*rd), logical_offset, view)
                             .await;
-                        cycle!(service.service_cycles.max(1));
+                        timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                     } else {
                         self.m_machine
                             .mm_wo(
@@ -1248,6 +1280,8 @@ impl Accelerator {
                         .vram
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
                         .await;
+                    // SRAM bank write service follows completed DMA; it cannot overlap the fill.
+                    timing::charge_ordinary_bank_cycles(*PREFETCH_V_AMOUNT).await;
                 }
                 op::Opcode::H_PREFETCH_V_MV {
                     rd,
@@ -1298,7 +1332,7 @@ impl Accelerator {
                             tensor,
                         )
                         .await;
-                    cycle!(service.service_cycles.max(1));
+                    timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                 }
                 op::Opcode::H_STORE_V {
                     rd,
@@ -1307,6 +1341,7 @@ impl Accelerator {
                     rstride,
                     precision,
                 } => {
+                    timing::charge_ordinary_bank_cycles(*STORE_V_AMOUNT).await;
                     let src_addr = self.reg_file.read_gp(*rd);
                     let offset = self.reg_file.read_gp(*rs1);
                     let addr = self.reg_file.read_hbm(*rs2);
@@ -1342,7 +1377,7 @@ impl Accelerator {
                         .mram
                         .read_layout_packet(self.reg_file.read_gp(*rd), descriptor.layout())
                         .await;
-                    cycle!(service.service_cycles.max(1));
+                    timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                     let rows = dma::split_packet_rows(&packet, *VLEN, self.m_machine.mram.ty());
                     let dtype = match precision {
                         op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,

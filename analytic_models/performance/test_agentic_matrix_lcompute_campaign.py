@@ -16,7 +16,7 @@ from .matrix_lcompute_campaign import _routing_for_scenario
 from .nemotron3_workload import InferencePhase
 
 
-ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "artifacts/matrix_lcompute_agentic_v1"
+ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "artifacts/matrix_lcompute_agentic_v2"
 
 
 def test_timeline_endpoints_separate_serial_execution_from_optimistic_overlap() -> None:
@@ -132,7 +132,7 @@ def test_d_prime_remains_a_bank_only_control() -> None:
 
 def test_checked_agentic_artifact_is_self_consistent() -> None:
     campaign = json.loads((ARTIFACT_ROOT / "campaign.json").read_text())
-    assert campaign["contract"] == "nemotron-agentic-matrix-lcompute-dse-v2"
+    assert campaign["contract"] == "nemotron-agentic-matrix-lcompute-dse-v3"
     assert campaign["routing_contract"]["fallback_allowed"] is False
     assert campaign["group_count"] == len(campaign["groups"]) == 93
     assert campaign["summary"] == _summary_rows(campaign["groups"])

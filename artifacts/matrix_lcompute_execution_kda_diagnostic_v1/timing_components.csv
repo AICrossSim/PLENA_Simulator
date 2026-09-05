@@ -1,0 +1,4 @@
+model,variant,batch,tokens,issued_instructions,issue_cycles,bank_service_cycles,arithmetic_cycles,scalar_control_cycles,dma_memory_wait_cycles,total_cycles,physical_hbm_bytes_read,physical_hbm_bytes_written,common_budget_passed,max_output_relative_l2
+kimi_k3_kda,A,1,2,92031,92031,44736,10800,68895,7182793.0,7399255.0,50528256,12632064,False,0.013485169969499111
+kimi_k3_kda,B,1,2,87411,87411,44736,10800,64275,7184241.0,7391463.0,50528256,12632064,False,0.013485169969499111
+kimi_k3_kda,D,1,2,2048,2048,21708,13860,1868,3434854.0,3474338.0,13025280,6340608,True,0.0

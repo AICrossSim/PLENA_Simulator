@@ -123,7 +123,7 @@ also needs an explicit register/datapath mapping before RTL resource signoff.
 
 See [the pre-RTL freeze](docs/MATRIX_LCOMPUTE_PRE_RTL_FREEZE_ZH.md),
 [the full result report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md), and
-`artifacts/matrix_lcompute_e2e_v5/`. Run:
+`artifacts/matrix_lcompute_e2e_v6/`. Run:
 
 ```bash
 nix develop --no-write-lock-file --command \
@@ -145,7 +145,23 @@ contribution is multi-row Matrix-SRAM recurrence, not an independent skew
 speedup. These are pre-RTL formula-timeline results with symbolic weights, not
 a PLENA silicon comparison with B200. See
 [the Agentic report](docs/MATRIX_LCOMPUTE_AGENTIC_RESULTS_ZH.md) and
-`artifacts/matrix_lcompute_agentic_v1/`.
+`artifacts/matrix_lcompute_agentic_v2/`.
+
+The current experiment uses the Nemotron checkpoint's NVFP4/BF16 weight policy;
+BF16 recurrence storage and prepared coefficients are separate from W/A/KV
+storage contracts. MX8 weight sensitivity now uses block8; block128 remains in
+the historical agentic v1 artifact. The B16 corrected MX8 endpoints are 2.5001x
+serial and 1.9996x ideal overlap. The NVFP4 and BF16 formula headline CSV is
+unchanged by that correction.
+
+[The precision and execution revision](docs/MATRIX_LCOMPUTE_PRECISION_EXECUTION_V2_ZH.md)
+adds exact phased checks, seeded state snapshots, and new packed ordinary-VV
+A/B execution controls against D in Rust. These are not the historical Arlo
+instruction census. The new controls include measured serial issue, DMA/memory
+wait, bank service and arithmetic, and require a shared numeric error budget
+before a comparison is qualified. Ordinary DMA selector 2 now correctly uses
+BF16 State rather than KV; old binaries using 2 as a KV alias must be
+reassembled with selector 1. The global precision defaults remain unchanged.
 
 Legacy GPU energy is explicitly labelled as an archived integral requiring
 recapture because the old sampler used unsorted samples and an inconsistent

@@ -1,5 +1,10 @@
 # Matrix SRAM L-Compute：修复后的结果与边界
 
+> 2026-09-05 精度/执行增量见 [新版本报告](MATRIX_LCOMPUTE_PRECISION_EXECUTION_V2_ZH.md)。
+> 当前整模产物为 `matrix_lcompute_e2e_v6`，agentic 为 `matrix_lcompute_agentic_v2`；
+> 本文旧表和旧哈希保留作历史记录。旧 MX8 block128 一栏已由新版本 block8 表取代。
+> 新 Rust 对照是独立的 packed VV 控制实验，不能直接套用本文的历史 Arlo 标签。
+
 2026-09-05 更新：本页的解析周期使用修复后的 Vector MAC 计费、batch 工作量和
 Nemotron final RMSNorm；数值以重新生成的 `matrix_lcompute_e2e_v5` 为准。
 

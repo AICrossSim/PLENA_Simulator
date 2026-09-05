@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from .nemotron3_workload import (
     InferencePhase,
     Precision,
+    PrecisionContract,
+    StorageFormat,
     StageWork,
     Traffic,
     WeightPrecisionPolicy,
@@ -182,6 +184,7 @@ class KimiK3KdaWorkloadModel:
         state_precision: Precision = Precision.FP32,
         conv_state_precision: Precision = Precision.BF16,
         weight_precision_policy: WeightPrecisionPolicy | None = None,
+        precision_contract: PrecisionContract | None = None,
     ) -> None:
         self.arch = arch or KimiK3Architecture()
         self.activation_precision = activation_precision
@@ -191,18 +194,32 @@ class KimiK3KdaWorkloadModel:
         )
         self.state_precision = state_precision
         self.conv_state_precision = conv_state_precision
+        self.precision_contract = precision_contract or PrecisionContract(
+            StorageFormat.for_precision(self.weight_precision),
+            StorageFormat.for_precision(activation_precision),
+            StorageFormat.for_precision(activation_precision),
+            StorageFormat.for_precision(state_precision),
+        )
+        self.activation_precision = self.precision_contract.activation.precision
+        self.weight_precision = self.precision_contract.weight.precision
+        self.state_precision = self.precision_contract.state.precision
+        if weight_precision_policy and self.weight_precision != weight_precision_policy.default_precision:
+            raise ValueError("weight contract conflicts with checkpoint policy")
 
     def _a_bytes(self, elements: int) -> int:
-        return storage_bytes(elements, self.activation_precision)
+        return self.precision_contract.activation.storage_bytes(elements)
 
     def _w_bytes(self, elements: int, layer_id: int, stage_name: str) -> int:
         precision = self.weight_precision
         if self.weight_precision_policy is not None:
             precision = self.weight_precision_policy.precision_for(layer_id, stage_name)
-        return storage_bytes(elements, precision)
+        return self.precision_contract.weight_format(precision).storage_bytes(elements)
+
+    def _kv_bytes(self, elements: int) -> int:
+        return self.precision_contract.kv.storage_bytes(elements)
 
     def _s_bytes(self, elements: int) -> int:
-        return storage_bytes(elements, self.state_precision)
+        return self.precision_contract.state.storage_bytes(elements)
 
     def _cs_bytes(self, elements: int) -> int:
         return storage_bytes(elements, self.conv_state_precision)
@@ -218,6 +235,7 @@ class KimiK3KdaWorkloadModel:
             state_precision=self.state_precision,
             stages=tuple(stages),
             weight_precision_policy=self.weight_precision_policy,
+            precision_contract=self.precision_contract,
         )
 
     def _kda_layer(self, layer_id: int, scenario: WorkloadScenario) -> list[StageWork]:
@@ -415,6 +433,7 @@ class KimiK3HybridWorkloadModel(KimiK3KdaWorkloadModel):
             state_precision=self.state_precision,
             stages=tuple(stages),
             weight_precision_policy=self.weight_precision_policy,
+            precision_contract=self.precision_contract,
         )
 
     def _embedding(self, scenario: WorkloadScenario) -> StageWork:
@@ -566,7 +585,7 @@ class KimiK3HybridWorkloadModel(KimiK3KdaWorkloadModel):
                 traffic=Traffic(
                     weight_read_bytes=self._w_bytes(kv_weights, layer_id, "mla_kv_latent_projection"),
                     on_chip_read_bytes=self._a_bytes(tokens * arch.hidden_size),
-                    kv_write_bytes=self._a_bytes(cache_write_elements),
+                    kv_write_bytes=self._kv_bytes(cache_write_elements),
                 ),
                 working_set_bytes=self._a_bytes(cache_write_elements),
             ),
@@ -579,7 +598,7 @@ class KimiK3HybridWorkloadModel(KimiK3KdaWorkloadModel):
                 exp_ops=pairs * heads,
                 traffic=Traffic(
                     weight_read_bytes=self._w_bytes(transform_weights, layer_id, "mla_compressed_kv_attention"),
-                    kv_read_bytes=self._a_bytes(cache_read_elements),
+                    kv_read_bytes=self._kv_bytes(cache_read_elements),
                     on_chip_read_bytes=self._a_bytes(tokens * q_width),
                     on_chip_write_bytes=self._a_bytes(tokens * projection),
                 ),

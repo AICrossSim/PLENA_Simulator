@@ -1,0 +1,247 @@
+{
+  "schema_version": 3,
+  "matrix_view_contract_version": 3,
+  "model": "nemotron3_mamba2",
+  "layout": "fixed",
+  "precision": "bf16_uniform_matrix_recurrence",
+  "tokens": 32,
+  "official_shape": {
+    "heads": 64,
+    "state_rows": 128,
+    "row_elements": 64
+  },
+  "compiler_generated_machine_words": 249984,
+  "assembly_sha256": "4d4246f586a5121eca6f4a6a9732f9a09dbe65defd6ac575bc46c9b63c538ebb",
+  "machine_code_sha256": "7919579046dd03d1ff1fa161d5e7a8c7d11691c15159355d84fd0f659c94e5bd",
+  "input_hbm_sha256": "5bd83a3cd09d8514906d54bf97648ed72096675baef6eba9c69b49e4c661bd6b",
+  "l_tile_exec_count": 8320,
+  "state_values_compared": 524288,
+  "output_values_compared": 131072,
+  "state_error": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "acceptance_policy": {
+    "exact": false,
+    "relative_l2_limit": 0.01,
+    "element_atol": 0.01,
+    "element_rtol": 0.01,
+    "zero_rms_floor": 1e-07
+  },
+  "state_sha256": "e9e970c10c44a57c22e9172aaf614307d28e939eebd082cebdd111c6a74357d0",
+  "output_sha256_by_token": [
+    "0b74a1bc43d328569986f49e66a3e1a9968386953b17dcc226bd14dedb1a4bd2",
+    "5d4c710a4c4508f08e63b8b1946a2b89943f74c070e896d1546a02b59c90428a",
+    "044e0f3e872e8be7ca9422658dced5d95d21e0f1d5a32a0d962c2a526ca70959",
+    "eda03cde165e4599e696705e1edce28d263fee1a64564c4a3b2d7d9e71d49b45",
+    "81fdb86d56e6f667ea83835e73809cd8e190fa42479e9a4494cfa3f99185af4b",
+    "1fc26970709e06085a78f29950e0914f305f577732e70521bc542b1035e418f0",
+    "2be896678d1fc0cb4f3c36196df5c76e76d071f67845a33344a2db47e52a9664",
+    "4508cc2f1227c0b399b063d36fc59d04138a2d339fb8a603c6f64d0beea24806",
+    "c42a7b7963dfe84e05162ed06cce77fe5445c07e30bf8e5efbedf4c07090807f",
+    "c6d3115c349c73e5f33dfd1d4f045fea1a9f1c5e356ebdf501341fca86fd2365",
+    "8b7957c83d3255bdd8dfedb8871df230e24630515259dfd4a34b6f335fda2cb1",
+    "f5d0780921ff2b68b4e442011accd5b4b3d0a780aedf107656896ed3300e76f6",
+    "f8dfbeac1a07a316114d137344c7f49d77b100cb29fa612c113ba9a11cc71679",
+    "62ba14e0ab4554e912a97ce48fc5b86c0256c2643f66c749aa24a3021a37395c",
+    "9faebfc8a8c7c642f525c49c65bfb2a534e0b90a605afef8970064688040b762",
+    "b8f008818c4c75609ace8465204b963bd79d05e90fee538114dcbc72c0877f5e",
+    "8666ebec29a0c260f6ee7c30fa65d99c4e4439b50c20436566000c6c92b93595",
+    "52535aa5b1a9ee15fc904ce743a5c9935ed16bf47898b5dc2ba2bf5246658472",
+    "be5904cca16ce74888f9ef2b7ac2dc0034e7580250bcd233790304ee0c4f8149",
+    "1e5ede8f8809f679f317a7f3602045ba8d0b535b46f7d7807a32c116bc16f7ff",
+    "6b6d3cc62924e659aaffc7a3bec59dc7de612cfc3a224c6d3a402402344f2f18",
+    "2b8a8351dfe1d0f2457fa435515b128de04d5def45021e2feb72641c45546fa2",
+    "de6e123fb90933f81da1bf4d0bf1a7948452eac5ba6b4c061810c9fc91f58712",
+    "2bba20916dbfd5bba01306f811e96150b4cea0583c70654e556fb5d9f9fa0d3a",
+    "4d7f36cff385a7946a9530235ef33a9d2d64aafc203be982756a555b3d7a270b",
+    "f912046de930484d1866c88af72b370df4ca2e5c60e3a20f7811ada28e4ca3dc",
+    "f42300d14c50dc572a70a1e2f33074947c5586832bf5ef1e6c25f8b0b3946910",
+    "cfa9675f27d2e30b63a49af6bbb7fcf1a3dc4424d36e50b9d3dc0800c714e196",
+    "300e3427beda869754de412c93dec9b362c9cf68e1b6dc7935301a86b3bc1299",
+    "ebdfa2d94b8c3c330c20572cb1035779f43baec5eb1e27bc5936da7dbfc4af17",
+    "32c0b33ce50e4324eeca256cf9411326a97fa5f85b93d66b962631e80aab31a6",
+    "1dea4b244b1b2483efeb03f72796ab22a158b6893bac9c21acbced5ea96bbfbb"
+  ],
+  "intermediate_state_errors": [
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    }
+  ],
+  "intermediate_state_sha256": [
+    "f1f004f6b77c1a66eca8c81dad53fe62c866ca8e9693a99fdda908b938bdf74c",
+    "0c62e2ff42585e55765b62462681a3c4d0ac6efce3c4d851b35370c963922443",
+    "d61bf61cb438bf1341ebb90967a695ab02d50a4f0fb723d4eb25566a477f58be",
+    "bc9e8573fb5e5810b3c4ee0bf92c9564490ea43010c0d0419467c9b946e1ad61",
+    "de3f561ebc99411abe2ff8f711b8186833a732a886deb3eb70c05e5c40883e98",
+    "9428f61d72b60710b8d4734be72b23e1de53d920a2d9cf169ba4a09fb278ebc7",
+    "69817420025b7ae3e072e1d7ab61eb19dbff845850b469bb94c8a4c1d4a14e9a",
+    "0d291279fe39645bdcac15f8c9efa9657a38d8e691e89a43f574f5d18b472359",
+    "dbc55dfb13ec1c428b4138161f46c320a5a187db9e460abed0dfc91cd3ddceef",
+    "21d2b9701643bdf67ff8a17d3ce2278e69573c198e2e06615fd964b6211b0cf6",
+    "672152e16d87256467d5ac84bac76efaf7ca77a2391bf276a7efc2803c1f356c",
+    "0deddd055d02571698af67a17af8e28e07e9cf217a8aaef5fec60a9355b08458",
+    "f26116cefb57fb0c739921b182cdd299564975af391ddd97254d80c873b0df29",
+    "d732a6a70ed3b7f58893a7fb361886018c247016487aea60cc25a5febfd3d346",
+    "4ad76d5d9e681aba837bb8cb314ea76170fa5bdc67c326bf078c1cef5902c1cb",
+    "df1942f611a06c50064f04ac878fa9ae33d03a8a7fbd1c36f2381f8a38a3b362",
+    "8ef25122f0cdf7457bc27279599c4e21982dd858db42abcb3d28a3ac6cc148af",
+    "2d5bbcf4819cb30f567600689f9f71ff867c5aa30e1692e43daf5acdf01aad33",
+    "72966fbb7e8f02e13f3e762b6ace284b95dfa738ce4926304ef1c614519211e0",
+    "5aaab4e569565c5dc4fab07dfd715e633c02d664861dce40bcb97693719557eb",
+    "55a2f81775fdacc1f3a1685544dc7881f0cf0d06c4f1c901dea557e977475dfc",
+    "12bfd9ff2ecc10bf9f5cdbaf955387938f150553055db86edfbccad055afdcc6",
+    "1be12274e62b4c4bbf456e01a4f19521cacf0ff7d75502fb0cf550d0375fbeb9",
+    "e13d820b4e4ce50b4908e3abac9b5a58c7928a00475a680524653a2491988b7f",
+    "faa6874588113bdb865c05ccec9e155bc44aaf786f91dc8bd7f76e92a03b0562",
+    "0cba26f7aa3e7705a1b0ffab1095b8e91cabb68d982818e800dc5a2c71b38319",
+    "40b0534498ce19575e85e93b77773e8d1b1938cc934bded876990a2c1118500b",
+    "0ff9c1e93332dbf7f1aece97d6b772e11832084a6c08e1dfdcef9efbea4bdcb9",
+    "8770d634314249dc6b976380ddc50e2ad493a5365d9de5edde6da8759165f1a1",
+    "026641f52bd411a6ccf0053e08e17a45bd1860be9b5c4b7350c2061db38b9d47",
+    "e2b87c26a320c8cbc5ad540185b06a490e9a19b5b64e180ccd71573c1f151455",
+    "e9e970c10c44a57c22e9172aaf614307d28e939eebd082cebdd111c6a74357d0"
+  ],
+  "snapshot_dma_in_timing": true,
+  "output_error": {
+    "max_abs": 0.0009765625,
+    "relative_l2": 0.005487510468810797
+  },
+  "rust_simulation_cycles": 36911784,
+  "matrix_view_packet_counters": {
+    "packets": 78720,
+    "values": 137641984,
+    "bank_words": 4301312,
+    "service_cycles": 99200,
+    "ideal_cycles": 91008,
+    "bank_stall_cycles": 8192
+  },
+  "evidence": "Compiler assembly -> Compiler assembler -> Rust opcode decoder -> BF16 banked Matrix SRAM -> explicit HBM state/output readback",
+  "temporary_build_retained": false,
+  "seed": 17
+}

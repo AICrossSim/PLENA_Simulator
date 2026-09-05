@@ -37,6 +37,7 @@ from typing import Any
 from .hybrid_lcompute_campaign import _cached_gpu_report, _generic_compute, _model, _scenario
 from .hybrid_routing import RoutingProfile, load_pinned_nemotron_profile
 from .matrix_state_residency import build_report as build_state_residency_report
+from .nemotron3_workload import PrecisionContract
 from .nemotron3_workload import InferencePhase, Precision, StageWork, WorkloadReport
 
 
@@ -1718,6 +1719,9 @@ def build_reports(
         activation_precision=Precision.BF16,
         weight_precision=weight_precision,
         state_precision=state_precision,
+        precision_contract=PrecisionContract.bf16_recurrence(
+            weight_precision or (Precision.NVFP4 if model == "nemotron3" else Precision.MXFP4)
+        ),
     )
     reports = []
     repetitions = 1 if phase == InferencePhase.PREFILL else tokens
@@ -1895,6 +1899,7 @@ def run_ablation(
         "context_length": context_length,
         "state_mode": state_mode,
         "weight_precision": reports[0].weight_precision,
+        "precision_contract": reports[0].precision_contract.to_dict(),
         "weight_precision_policy": (
             reports[0].weight_precision_policy.to_dict()
             if reports[0].weight_precision_policy is not None
