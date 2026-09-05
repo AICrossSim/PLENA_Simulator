@@ -1,5 +1,7 @@
 # MoE Rust benefit validation goal
 
+> 2026-09-05 更新：HBM 原生 32B 事务校准与 DMA V1 Rust 实现已完成本轮验证，396 次运行全部通过。当前大小核在四组窗口中仍比最佳单核慢 33.6%～39.3%；不能冻结为已证明有益的大小核架构。完整计费路径的主要改善来自更深的预取；对乐观 4-slot 直接路径，复杂 DMA 的额外收益尚不稳健。最新证据见 [DMA 重测报告](./moe_dma_result_20260905.md)，实现范围与未完成项见 [DMA 实现说明](./moe_dma_implementation_v1_zh.md)。下方旧报告/设计中的历史数字或待办不能覆盖本次更新。
+
 ## Question and completion criterion
 
 Under the same total 4096 matrix multipliers and one shared HBM configuration,

@@ -85,7 +85,7 @@ def build(root):
         '|---|---:|---:|---:|---|']
     for label,s in zip(LABELS,summaries):
         lines.append('| %s | %.4f | %.4f | %.1f%% | %s |'%(label,s['best_single']['ps']/1e9,s['best_heterogeneous']['ps']/1e9,s['heterogeneous_time_overhead_percent'],s['best_heterogeneous']['stage']))
-    lines+=['','最佳单核形状及配置：']
+    lines+=['','最佳单核形状及配置：','']
     lines+=['- %s：`%s` / `%s`。'%(label,s['best_single']['architecture'],s['best_single']['stage']) for label,s in zip(LABELS,summaries)]
     lines+=['','## 搬运本身是否有益','','同一个大小核，逐步改善 DMA 后与三种对照比较；倍数大于 1 表示改进更快。direct2/direct4 不计查询和返回复制端口服务，故是有利于对照的乐观边界，不是完整硬件计时。', '',
         '| 窗口 | 对完整计费 2-slot 对照 | 对乐观 direct2 | 对乐观 direct4 | 保留额度开关的耗时变化 |',
@@ -98,7 +98,7 @@ def build(root):
     for stage in ['direct2','reference','port_only','sector','coalesce','credits128','slots3','candidate','scale_layout','reserved','direct4']:
         lines.append('| %s | %.4f | %.4f | %.4f | %.3f |'%(stage,time_of(f,stage,'single_b8_k512')/1e9,time_of(f,stage,HOMO)/1e9,time_of(f,stage,HET)/1e9,groups[(f,stage)][HET]['result']['hbm_read_bytes']/1e6))
     lines+=['','阶段说明：reference=64 credits/2 slots/完整行/全局队列；port_only 仅分通道；sector 仅请求需要的 32B 半行；coalesce 再加在途合并；credits128 扩大在途窗口；slots3=3 个预取槽；candidate=4 槽；scale_layout 再旋转 scale 行通道；reserved 是原布局 candidate 加可借用的每核最低额度。所有完整 DMA 计费配置总预算均为 44KiB，staging 包含在其中。', '',
-        '## 为何大小核仍可能更慢','','HBM 峰值没有增加。以 Qwen B8 的原布局 candidate 为例：']
+        '## 为何大小核仍可能更慢','','HBM 峰值没有增加。以 Qwen B8 的原布局 candidate 为例：','']
     for arch in ['single_b8_k512',HET]:
         r=groups[(FIXTURES[0],'candidate')][arch]['result']
         lines.append('- `%s`：读取 %.3f MB，平均 %.2f GB/s，耗时 %.4f ms。'%(arch,r['hbm_read_bytes']/1e6,r['hbm_read_bytes']*1000/r['total_ps'],r['total_ps']/1e9))
@@ -110,8 +110,9 @@ def build(root):
         '## 证据边界与复现','','- Qwen：D=2048、F=512；DeepSeek：D=2048、F=1408。B8/B32 使用归档 decode 路由重组，原记录为 batch16；不是完整 batch32 实际 forward 或 prefill。',
         '- 权重和输入为确定性非零合成值，使用仓库实际 E4M3/E8M0 block8 codec、Rust 三个 GEMM/SwiGLU/加权 combine。没有执行训练权重的完整模型。',
         '- 端到端边界为输入/路由已经 ready、权重驻留 HBM，至 BF16 输出 ready；不含 router、初始装载和输出写回。核心时序仍为分析模型。',
+        '- 查询 bank 本轮保守地占用 2 个周期，尚未建模原设计的 2-cycle latency / 1-cycle initiation interval；需要 SRAM 端口与流水线校准，不能把本轮代价当成物理实现定值。',
         '- 与旧 16B wrapper 报告不直接计算加速比；旧数据保留。',
-        '- `all_points.csv`：198 个独立配置点；`summary.json`：完整覆盖验收和报告输入哈希；`comparisons/`、`fairness/`、`bypass/`：原始两次重复。',
+        '- `all_points.csv`：198 个配置条目（含关闭开关的复现对照）；`summary.json`：完整覆盖验收和报告输入哈希；`comparisons/`、`fairness/`、`bypass/`：原始两次重复。',
         '- `repro/`：实际两个 Rust 二进制与同一原生库、构建环境、源码证据和测试日志；`doc/moe_dma_implementation_v1_zh.md`：接口/资源与未实现项。','']
     (root/'RESULT_ZH.md').write_text('\n'.join(lines))
     print('Published',root/'RESULT_ZH.md', 'runs=',runs,'heterogeneous_wins=',wins)
