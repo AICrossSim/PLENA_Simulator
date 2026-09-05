@@ -75,6 +75,10 @@ pub struct CoreConfig {
     pub read_cache_bytes: usize,
     #[serde(default = "default_weight_slots")]
     pub weight_slots: usize,
+    /// Explicit BF16 activation supply per cycle. None retains the legacy
+    /// full-width analytical assumption; this is not a physical area estimate.
+    #[serde(default)]
+    pub activation_elements_per_cycle: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -106,6 +110,9 @@ pub struct DmaConfig {
     pub coalesce: bool,
     #[serde(default)]
     pub fair_credits: bool,
+    /// Lookup latency is two cycles; initiation interval is independently 1/2.
+    #[serde(default = "default_weight_slots")]
+    pub lookup_ii_cycles: usize,
     /// Includes response data, MSHRs, waiters, native trackers, and tile descriptors.
     pub frontend_sram_bytes: usize,
 }

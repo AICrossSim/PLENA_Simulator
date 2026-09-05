@@ -165,6 +165,7 @@ pub(super) fn architecture() -> Architecture {
                 weight_sram_bytes: 4096,
                 read_cache_bytes: 0,
                 weight_slots: 2,
+                activation_elements_per_cycle: None,
             },
             CoreConfig {
                 id: "small".into(),
@@ -175,6 +176,7 @@ pub(super) fn architecture() -> Architecture {
                 weight_sram_bytes: 4096,
                 read_cache_bytes: 0,
                 weight_slots: 2,
+                activation_elements_per_cycle: None,
             },
         ],
         dispatch_threshold: 4,
@@ -635,6 +637,7 @@ async fn native_dma_variants_preserve_moe_and_shared_expert_with_tail_masks() {
                 sector_reads: sector,
                 coalesce,
                 fair_credits: fair,
+                lookup_ii_cycles: 2,
                 frontend_sram_bytes: 45056,
             });
             let result = simulate_native(w.clone(), a, &bytes).await;
@@ -659,6 +662,7 @@ fn dma_metadata_and_prefetch_slots_fail_closed() {
         sector_reads: true,
         coalesce: true,
         fair_credits: false,
+        lookup_ii_cycles: 2,
         frontend_sram_bytes: 1,
     });
     assert!(
@@ -681,4 +685,57 @@ fn dma_metadata_and_prefetch_slots_fail_closed() {
             .unwrap_err()
             .contains("weight_slots")
     );
+}
+
+#[tokio::test]
+async fn activation_supply_bounds_compute_without_changing_values_or_work() {
+    let (w, bytes, _) = fixture();
+    let mut a = architecture();
+    let reference = simulate(w.clone(), a.clone(), &bytes).await;
+    for c in &mut a.cores {
+        c.activation_elements_per_cycle = Some(c.mlen / 2);
+    }
+    let limited = simulate(w.clone(), a.clone(), &bytes).await;
+    assert_eq!(reference.output_bf16, limited.output_bf16);
+    assert_eq!(reference.useful_macs, limited.useful_macs);
+    assert_eq!(reference.issued_macs, limited.issued_macs);
+    for (before, after) in reference.cores.iter().zip(&limited.cores) {
+        assert_eq!(after.compute_busy_ps, 2 * before.compute_busy_ps);
+    }
+    a.cores[0].activation_elements_per_cycle = Some(0);
+    assert!(
+        validate(&w, &a, bytes.len() as u64)
+            .unwrap_err()
+            .contains("activation supply")
+    );
+}
+
+#[tokio::test]
+async fn pipelined_dma_lookup_accounts_port_occupancy_and_preserves_numerics() {
+    let (w, bytes, dense) = fixture();
+    for ii in [1, 2] {
+        let mut a = architecture();
+        a.dma = Some(DmaConfig {
+            issue_policy: ramulator::model::IssuePolicy::PerChannel,
+            sector_reads: true,
+            coalesce: true,
+            fair_credits: false,
+            lookup_ii_cycles: ii,
+            frontend_sram_bytes: 45056,
+        });
+        let result = simulate_native(w.clone(), a.clone(), &bytes).await;
+        assert_eq!(result.output_bf16, reference(&w, &dense));
+        let d = result.dma_frontend.unwrap();
+        assert_eq!(
+            d.lookup_busy_ps,
+            ii as u64 * d.line_requests * a.clock_period_ps
+        );
+        assert!(d.lookup_busy_ps <= 4 * result.total_ps);
+        a.dma.as_mut().unwrap().lookup_ii_cycles = 0;
+        assert!(
+            validate(&w, &a, bytes.len() as u64)
+                .unwrap_err()
+                .contains("lookup_ii_cycles")
+        );
+    }
 }

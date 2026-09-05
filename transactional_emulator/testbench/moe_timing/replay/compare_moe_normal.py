@@ -100,7 +100,7 @@ def validate_native(envelope, architecture, channels):
         require(dma["mshr_peak"] <= result["global_dma_inflight_peak"], "MSHR entries exceed admitted waiters")
         require(dma["sector_requests"] >= dma["merged_sectors"]
                 and (dma["sector_requests"] - dma["merged_sectors"]) * 32 == result["hbm_read_bytes"], "MSHR sectors do not reconcile")
-        require(dma["lookup_busy_ps"] == 2 * dma["line_requests"] * architecture["clock_period_ps"], "lookup service unaccounted")
+        require(dma["lookup_busy_ps"] == architecture["dma"].get("lookup_ii_cycles", 2) * dma["line_requests"] * architecture["clock_period_ps"], "lookup service unaccounted")
         require(dma["copy_busy_ps"] * 32 >= dma["useful_copy_bytes"] * architecture["clock_period_ps"], "copy bandwidth exceeded")
         require(dma["lookup_busy_ps"] <= 4 * result["total_ps"]
                 and dma["copy_busy_ps"] <= 8 * result["total_ps"], "DMA port occupancy exceeds elapsed time")
@@ -108,6 +108,8 @@ def validate_native(envelope, architecture, channels):
 
 def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_channels=8):
     result = envelope["result"]
+    require(result.get("numerical_execution", True) is True, "timing-only output is not numerical evidence")
+    require(envelope.get("evidence_level") != "fixed_route_timing_only_no_numerical_validation", "timing-only report rejected")
     require(envelope["memory_model"]["channels"] == hbm_channels
             and envelope["memory_model"]["upper_burst_bytes"] == 64
             and envelope["memory_model"]["name"] == "Ramulator HBM2 preset",

@@ -34,7 +34,10 @@ fn extra_cycles(a: &Architecture, c: &CoreConfig) -> u64 {
 
 fn service_cycles(a: &Architecture, c: &CoreConfig) -> u64 {
     match a.matrix_timing {
-        MatrixTiming::Pipelined => c.blen as u64,
+        MatrixTiming::Pipelined => {
+            let supply = c.activation_elements_per_cycle.unwrap_or(c.mlen);
+            (c.blen as u64).max((c.blen as u64 * c.mlen as u64).div_ceil(supply as u64))
+        }
         MatrixTiming::LegacySerialized => c.mlen as u64 + a.mac_pipeline_cycles,
     }
 }
@@ -365,6 +368,9 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         return Err("global DMA staging must provide 64 bytes per credit".into());
     }
     if let Some(dma) = &a.dma {
+        if !(1..=2).contains(&dma.lookup_ii_cycles) {
+            return Err("lookup_ii_cycles must be 1 or 2".into());
+        }
         if dma.fair_credits && a.global_dma_credits < 8 {
             return Err("fair DMA credits require at least 8 credits".into());
         }
@@ -380,6 +386,9 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
     }
     let mut ids = BTreeSet::new();
     for c in &a.cores {
+        if c.activation_elements_per_cycle == Some(0) {
+            return Err("activation supply must be positive".into());
+        }
         if c.read_cache_bytes > 0 && c.read_cache_bytes < ENTRY_BYTES {
             return Err("read cache needs at least one 80-byte data/tag entry".into());
         }
@@ -625,9 +634,17 @@ impl Dma {
                 .acquire()
                 .await
                 .unwrap();
-            ex.resolve_at(Duration::from_picos(2 * self.clock)).await;
+            // Two-cycle latency with an independently pipelined lookup port.
+            ex.resolve_at(Duration::from_picos(
+                config.lookup_ii_cycles as u64 * self.clock,
+            ))
+            .await;
+            drop(_port);
+            if config.lookup_ii_cycles == 1 {
+                ex.resolve_at(Duration::from_picos(self.clock)).await;
+            }
             let mut r = self.report.lock().unwrap();
-            r.lookup_busy_ps += 2 * self.clock;
+            r.lookup_busy_ps += config.lookup_ii_cycles as u64 * self.clock;
             r.line_requests += 1;
             r.sector_requests += u64::from(mask.count_ones());
             r.useful_copy_bytes += useful as u64;
@@ -1312,7 +1329,7 @@ pub async fn execute(
     }
     Ok(RunReport {
         schema_version: 1, workload: w.name.clone(), architecture: a.name.clone(),
-        timing_model: format!("{:?}: pipelined BLEN service with log2(MLEN)+pipeline readiness, or legacy serialized MLEN+overhead per instruction; shared ErasedMemoryModel; not RTL calibrated", a.matrix_timing),
+        timing_model: format!("{:?}: pipelined max(BLEN, ceil(BLEN*MLEN/activation_supply)) service with log2(MLEN)+pipeline readiness, or legacy serialized MLEN+overhead per instruction; shared ErasedMemoryModel; not RTL calibrated", a.matrix_timing),
         timing_boundary: "ready BF16 inputs/routes and resident MX weights -> core gathers, weight reads/decode, three numerical GEMMs, SwiGLU, route reorder, deterministic weighted combine -> ready BF16 output; excludes router, initial input/weight placement, output HBM store".into(),
         weight_format: "PLENA local E4M3/E8M0 block8, output-major [N,K], separate element/scale streams, decoded BF16 normal SRAM; not an OCP MX conformance claim".into(),
         total_ps, multipliers: reports.iter().map(|r| r.multipliers).sum(),
@@ -1358,6 +1375,7 @@ mod dma_lifetime_tests {
             sector_reads: true,
             coalesce: true,
             fair_credits: false,
+            lookup_ii_cycles: 2,
             frontend_sram_bytes: 45056,
         });
         let backing = memory::MemoryBacked::with_capacity(64);
