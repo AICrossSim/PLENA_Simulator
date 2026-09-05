@@ -1,7 +1,7 @@
 """Shared-expert MoE emulator test.
 
 Drives ``moe_shared_expert_v0`` and compares the emulator's VRAM output against a
-torch reference, **bit-exactly**. Two architectures:
+nonzero torch reference. Two architectures:
 
 ``--arch deepseek`` (default)
     ``y = shared(x)``, SwiGLU, no gate. Also covers Llama-4, GLM-4.5 and Kimi K2,
@@ -12,11 +12,11 @@ torch reference, **bit-exactly**. Two architectures:
 ``--arch qwen2``
     Adds Qwen2-MoE's ``sigmoid(x @ w_shared_gate)`` per-token scalar gate.
 
-Exactness comes from ``_exact_mxfp8_tensor``: its values are all representable in
-MXFP8, so the compiler's weight quantization is the identity and the only
-remaining rounding is the BF16 steps the reference mirrors explicitly. A
-tolerance-based comparison would pass just as happily with a transposed weight or
-a dropped activation step.
+``_exact_mxfp8_tensor`` keeps weight quantization from dominating the comparison:
+its values are representable in MXFP8, while the reference mirrors the expected
+BF16 boundaries. The standalone ablation runner applies a rel-RMS gate and also
+requires every layout/timing variant to produce the same VRAM hash; the legacy
+``run_and_assert`` helper retains its historical element-match criterion.
 
 Routed experts are out of scope here; ``--with-routed-accumulator`` covers only
 the combine, i.e. that the shared output lands in the routed accumulator
@@ -29,8 +29,14 @@ import argparse
 import json
 import math
 from pathlib import Path
+import sys
 
 import torch
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _dependency in (_REPO_ROOT, _REPO_ROOT / "PLENA_Compiler", _REPO_ROOT / "PLENA_Tools"):
+    if _dependency.exists() and str(_dependency) not in sys.path:
+        sys.path.insert(0, str(_dependency))
 
 from compiler.aten.plena import PlenaCompiler
 from compiler.aten.plena.program_moe_shared import fused_shared_intermediate
@@ -38,7 +44,7 @@ from transactional_emulator.testbench.aten.configurable import add_hw_args, reso
 from transactional_emulator.testbench.aten.golden import quantize_to_mxfp
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.gpt_oss_testkit import _exact_mxfp8_tensor
-from transactional_emulator.testbench.layout_utils import prestage_bf16_vram_matrix
+from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts, prestage_bf16_vram_matrix
 from transactional_emulator.testbench.routed_moe._shared_moe_reference import (
     combine_shared_and_routed_golden,
     deepseek_shared_expert_golden,
@@ -106,8 +112,8 @@ def build_and_run(args: argparse.Namespace) -> dict:
     # Scaled down so the gate logits land in roughly [-3, 3] and the sigmoid is
     # strictly interior. At full scale the logits reach +-16 and the gate saturates
     # to exactly 1.0 for most rows, which would let a completely unapplied gate
-    # still pass. GATE_WEIGHT_SCALE is a power of two, so the scaling is exact in
-    # BF16 and the comparison stays bit-exact.
+    # still pass. GATE_WEIGHT_SCALE is a power of two, so the scaling itself is
+    # exactly representable in BF16.
     w_shared_gate = _exact_mxfp8_tensor((1, hidden), stride=3, offset=1) * GATE_WEIGHT_SCALE
 
     if gated:
@@ -146,9 +152,21 @@ def build_and_run(args: argparse.Namespace) -> dict:
     input_tensors: dict[str, torch.Tensor] = {}
 
     x_input = prog.input("X", shape=(rows, hidden))
-    w_gate_input = prog.input("W_shared_gate_proj", shape=(hidden, intermediate))
-    w_up_input = prog.input("W_shared_up", shape=(hidden, intermediate))
-    w_down_input = prog.input("W_shared_down", shape=(intermediate, hidden))
+    w_gate_input = prog.input(
+        "W_shared_gate_proj",
+        shape=(hidden, intermediate),
+        hbm_storage_order=args.hbm_weight_layout,
+    )
+    w_up_input = prog.input(
+        "W_shared_up",
+        shape=(hidden, intermediate),
+        hbm_storage_order=args.hbm_weight_layout,
+    )
+    w_down_input = prog.input(
+        "W_shared_down",
+        shape=(intermediate, hidden),
+        hbm_storage_order=args.hbm_weight_layout,
+    )
     input_tensors.update(
         {
             "X": x,
@@ -241,6 +259,15 @@ def build_and_run(args: argparse.Namespace) -> dict:
     for idx in range(neg_one.size):
         fp_preload[neg_one.address + idx] = -1.0
 
+    tensor_layouts = infer_hbm_tensor_layouts(input_tensors)
+    for weight_name in ("W_shared_gate_proj", "W_shared_up", "W_shared_down"):
+        tensor_layouts[weight_name].update(
+            {
+                "storage_order": args.hbm_weight_layout,
+                "tile_size": mlen,
+            }
+        )
+
     create_sim_env(
         input_tensors,
         isa,
@@ -248,6 +275,7 @@ def build_and_run(args: argparse.Namespace) -> dict:
         fp_preload=fp_preload,
         build_dir=str(build_dir),
         vram_preload=vram_preload if gated else None,
+        tensor_layouts=tensor_layouts,
     )
 
     hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
@@ -259,23 +287,28 @@ def build_and_run(args: argparse.Namespace) -> dict:
         specified_data_order=sorted(input_tensors, key=lambda name: hbm_addrs[name]),
         build_path=build_dir,
         input_tensors=input_tensors,
+        tensor_layouts=tensor_layouts,
         hbm_addrs=hbm_addrs,
     )
 
     output_vram_addr = prog._compiler.get_vram_addr(output_var.name)
+    output_physical_rows, output_physical_cols = output_var.physical_shape
     comparison_params = {
         "start_row_idx": output_vram_addr // mlen,
-        "num_rows": (rows * hidden) // mlen,
+        "num_rows": output_physical_rows * math.ceil(output_physical_cols / mlen),
         "num_batches": rows,
         "elements_per_batch": hidden,
         "row_dim": mlen,
+        "physical_rows": output_physical_rows,
         "atol": 0.0,
         "rtol": 0.0,
+        "rel_rms_threshold": 0.01,
     }
     (build_dir / "comparison_params.json").write_text(json.dumps(comparison_params, indent=2))
     (build_dir / "generated_asm_code.asm").write_text(isa)
 
     print(f"Generated {len(isa.splitlines())} lines of ISA")
+    print(f"HBM weight layout: {args.hbm_weight_layout}")
     print(f"shared expert output VRAM row: {output_vram_addr // mlen}")
     if args.no_run:
         return {"build_dir": str(build_dir), "ran": False}
@@ -388,6 +421,12 @@ def main() -> None:
         help="DeepSeek n_shared_experts; fused into one MLP of n_shared x intermediate width.",
     )
     parser.add_argument("--with-routed-accumulator", action="store_true")
+    parser.add_argument(
+        "--hbm-weight-layout",
+        choices=("row_major", "tile_major"),
+        default="row_major",
+        help="Physical HBM layout for matrix weights; default preserves the existing ABI.",
+    )
     parser.add_argument(
         "--build-dir",
         type=Path,

@@ -90,6 +90,8 @@ def run_emulator(
     stage_profile_out: Path | None = None,
     run_label: str | None = None,
     timing_model: str | None = None,
+    scoreboard_serialize: bool = False,
+    coalesce_hbm_bursts: bool = False,
     dump_cwd: Path | None = None,
 ) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
@@ -119,6 +121,10 @@ def run_emulator(
                       only reported cycles change). When None, the
                       PLENA_EMULATOR_TIMING_MODEL environment variable controls
                       it, defaulting to serial.
+        scoreboard_serialize: force scoreboard issue order to reproduce serial
+                              timing. Used only as an overlap validation gate.
+        coalesce_hbm_bursts: issue one read for duplicate aligned 64B addresses
+                             within a matrix DMA gather.
         dump_cwd: optional working directory for emulator dump files. Defaults to
                   the historical emulator directory. Parallel replay can set this
                   to build_dir so vram_dump.bin/fpsram_dump.bin are not shared
@@ -135,6 +141,8 @@ def run_emulator(
         timing_model = os.environ.get("PLENA_EMULATOR_TIMING_MODEL", "serial")
     if timing_model not in ("serial", "scoreboard"):
         raise ValueError(f"timing_model must be 'serial' or 'scoreboard', got {timing_model!r}")
+    if scoreboard_serialize and timing_model != "scoreboard":
+        raise ValueError("scoreboard_serialize requires timing_model='scoreboard'")
 
     # Always rebuild before running. `cargo build --release` is a fast no-op when
     # current, and this prevents false failures from new ASM hitting a stale
@@ -210,6 +218,10 @@ def run_emulator(
         ]
     if timing_model != "serial":
         cmd += ["--timing-model", timing_model]
+    if scoreboard_serialize:
+        cmd.append("--scoreboard-serialize")
+    if coalesce_hbm_bursts:
+        cmd.append("--coalesce-hbm-bursts")
 
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.
@@ -254,6 +266,8 @@ def run_emulator(
         "log_path": str(log_path),
         "stage_profile_requested": bool(stage_profile),
         "timing_model": timing_model,
+        "scoreboard_serialize": scoreboard_serialize,
+        "coalesce_hbm_bursts": coalesce_hbm_bursts,
     }
     if run_label:
         metrics["run_label"] = run_label
@@ -347,6 +361,8 @@ def run_emulator_repeat_gate(
     threads: int | None = None,
     stage_profile: bool | None = None,
     timing_model: str | None = None,
+    scoreboard_serialize: bool = False,
+    coalesce_hbm_bursts: bool = False,
     dump_cwd: Path | None = None,
 ) -> dict:
     """Run the same emulator artifact repeatedly and require identical cycles.
@@ -375,6 +391,8 @@ def run_emulator_repeat_gate(
                 stage_profile=stage_profile,
                 run_label=label,
                 timing_model=timing_model,
+                scoreboard_serialize=scoreboard_serialize,
+                coalesce_hbm_bursts=coalesce_hbm_bursts,
                 dump_cwd=dump_cwd,
             )
         )

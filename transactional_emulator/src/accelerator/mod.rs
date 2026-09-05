@@ -36,6 +36,7 @@ pub(crate) struct Accelerator {
     reg_file: AcceleratorRegFile,
     scalar_sram: ScalarSram,
     loop_state: LoopState,
+    coalesce_hbm_bursts: bool,
 }
 
 impl Accelerator {
@@ -51,7 +52,12 @@ impl Accelerator {
             reg_file: AcceleratorRegFile::new(),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
+            coalesce_hbm_bursts: false,
         }
+    }
+
+    pub(crate) fn set_coalesce_hbm_bursts(&mut self, enabled: bool) {
+        self.coalesce_hbm_bursts = enabled;
     }
 
     pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {

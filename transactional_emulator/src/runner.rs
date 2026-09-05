@@ -151,6 +151,11 @@ pub(crate) async fn run_from_cli() {
     )));
 
     let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
+    accelerator.set_coalesce_hbm_bursts(opts.coalesce_hbm_bursts);
+    tracing::info!(
+        coalesce_hbm_bursts = opts.coalesce_hbm_bursts,
+        "Experimental HBM request policy"
+    );
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack

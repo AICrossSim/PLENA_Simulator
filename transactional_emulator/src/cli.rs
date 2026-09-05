@@ -198,6 +198,12 @@ pub(crate) struct Opts {
     /// Optional JSONL output path tracing every op's modeled issue/finish
     /// instants under `--timing-model scoreboard`.
     pub(crate) scoreboard_trace: Option<PathBuf>,
+
+    #[arg(long, help_heading = "Experimental Timing")]
+    /// Coalesce logical reads that hit the same aligned 64-byte HBM burst.
+    /// This is off by default and models a DMA request coalescer, primarily
+    /// removing repeated reads of one shared MX scale line.
+    pub(crate) coalesce_hbm_bursts: bool,
 }
 
 /// Value for `--timing-model`.

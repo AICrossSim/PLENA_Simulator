@@ -128,6 +128,10 @@ jobs:
           uv python install 3.12
           uv sync
 
+      - name: Run HBM tile-major layout guard
+        run: |
+          uv run python -m pytest transactional_emulator/testbench/test_hbm_tile_major_layout.py -v
+
       - name: Run ATen linear integration test
         run: |
           nix develop --command bash -c "just test-aten-linear"

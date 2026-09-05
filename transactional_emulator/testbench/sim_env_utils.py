@@ -128,6 +128,82 @@ def _map_mx_byte_aligned(
         # so dropping this pad is a no-op.
 
 
+def _map_mx_tile_major_byte_aligned(
+    *,
+    blocks,
+    element_width,
+    bias,
+    bias_width,
+    output_file,
+    mode,
+    block_width,
+    tile_size,
+    source_rows,
+    storage_rows,
+    source_row_elements,
+    storage_row_elements,
+):
+    """Write MX elements and scales in contiguous square-tile order.
+
+    The element and scale regions remain separate, as required by the ISA.  A
+    tile at ``(tile_row, tile_col)`` occupies the same ordinal position in both
+    regions, so the existing ``element_offset / element_scale_ratio`` scale
+    addressing remains valid.
+    """
+    if element_width % 8 != 0 or bias_width % 8 != 0:
+        raise ValueError("tile_major MX layout currently requires byte-aligned element and scale types")
+    if tile_size <= 0 or tile_size % block_width != 0:
+        raise ValueError(f"tile_size ({tile_size}) must be a positive multiple of block_width ({block_width})")
+    if storage_rows % tile_size != 0 or storage_row_elements % tile_size != 0:
+        raise ValueError(
+            "tile_major storage dimensions must be exact tile multiples: "
+            f"storage=({storage_rows}, {storage_row_elements}), tile_size={tile_size}"
+        )
+
+    blocks_array = np.asarray(blocks)
+    if blocks_array.ndim == 1:
+        blocks_array = blocks_array.reshape(-1, block_width)
+    block_values = blocks_array.reshape(-1, block_width)
+    source_blocks_per_row = (source_row_elements + block_width - 1) // block_width
+    expected_blocks = source_rows * source_blocks_per_row
+    if block_values.shape[0] < expected_blocks:
+        raise ValueError(
+            f"MX elements provide {block_values.shape[0]} blocks, expected at least {expected_blocks}"
+        )
+
+    elements = np.zeros((storage_rows, storage_row_elements), dtype=block_values.dtype)
+    source_elements = block_values[:expected_blocks].reshape(source_rows, -1)
+    elements[:source_rows, :source_row_elements] = source_elements[:, :source_row_elements]
+
+    bias_array = np.asarray(bias).reshape(-1)
+    if bias_array.size < expected_blocks:
+        raise ValueError(f"MX scales provide {bias_array.size} values, expected at least {expected_blocks}")
+    storage_blocks_per_row = storage_row_elements // block_width
+    scales = np.zeros((storage_rows, storage_blocks_per_row), dtype=bias_array.dtype)
+    scales[:source_rows, :source_blocks_per_row] = bias_array[:expected_blocks].reshape(
+        source_rows, source_blocks_per_row
+    )
+
+    scales_per_tile_row = tile_size // block_width
+    with open(output_file, mode) as f:
+        for row_start in range(0, storage_rows, tile_size):
+            for col_start in range(0, storage_row_elements, tile_size):
+                tile = elements[
+                    row_start : row_start + tile_size,
+                    col_start : col_start + tile_size,
+                ]
+                f.write(_pack_byte_aligned_values_to_bytes(tile.reshape(-1), element_width))
+
+        for row_start in range(0, storage_rows, tile_size):
+            for col_start in range(0, storage_row_elements, tile_size):
+                scale_col = col_start // block_width
+                scale_tile = scales[
+                    row_start : row_start + tile_size,
+                    scale_col : scale_col + scales_per_tile_row,
+                ]
+                f.write(_pack_byte_aligned_values_to_bytes(scale_tile.reshape(-1), bias_width))
+
+
 def map_mx_data_to_hbm_for_behave_sim(
     blocks,
     element_width,
@@ -142,6 +218,8 @@ def map_mx_data_to_hbm_for_behave_sim(
     logical_rows=None,
     source_rows=None,
     hbm_addr: int | None = None,
+    storage_order: str = "row_major",
+    tile_size: int | None = None,
 ):
     os.makedirs(directory, exist_ok=True)
     output_file = os.path.join(directory, "hbm_for_behave_sim.bin")
@@ -191,6 +269,25 @@ def map_mx_data_to_hbm_for_behave_sim(
 
     scale_row_bits = blocks_per_logical_row * bias_width
     scale_row_bytes = (scale_row_bits + 7) // 8
+
+    if storage_order == "tile_major":
+        _map_mx_tile_major_byte_aligned(
+            blocks=blocks,
+            element_width=element_width,
+            bias=bias,
+            bias_width=bias_width,
+            output_file=output_file,
+            mode=mode,
+            block_width=block_width,
+            tile_size=tile_size or block_width,
+            source_rows=source_rows,
+            storage_rows=logical_rows,
+            source_row_elements=source_row_elements,
+            storage_row_elements=logical_row_elements,
+        )
+        return
+    if storage_order != "row_major":
+        raise ValueError(f"Unsupported MX HBM storage order: {storage_order!r}")
 
     if element_width % 8 == 0 and bias_width % 8 == 0:
         _map_mx_byte_aligned(
@@ -284,6 +381,8 @@ class MemoryDataManager:
         source_row_elements=None,
         storage_row_elements=None,
         hbm_addr: int | None = None,
+        storage_order: str = "row_major",
+        tile_size: int | None = None,
     ) -> None:
         self.mx_entries.append(
             self._stamp_entry(
@@ -298,6 +397,8 @@ class MemoryDataManager:
                     "source_row_elements": source_row_elements,
                     "storage_row_elements": storage_row_elements,
                     "hbm_addr": hbm_addr,
+                    "storage_order": storage_order,
+                    "tile_size": tile_size,
                 }
             )
         )
@@ -609,6 +710,8 @@ def create_mem_for_sim(
                         source_row_elements=layout.get("source_row_elements"),
                         storage_row_elements=layout.get("storage_row_elements"),
                         hbm_addr=hbm_addrs.get(name) if hbm_addrs else None,
+                        storage_order=layout.get("storage_order", "row_major"),
+                        tile_size=layout.get("tile_size"),
                     )
         elif specified_data_order is not None:
             pt_files = [target_dir / f"{name}.pt" for name in specified_data_order]
@@ -655,6 +758,8 @@ def create_mem_for_sim(
                     storage_rows=layout.get("storage_rows"),
                     source_row_elements=layout.get("source_row_elements"),
                     storage_row_elements=layout.get("storage_row_elements"),
+                    storage_order=layout.get("storage_order", "row_major"),
+                    tile_size=layout.get("tile_size"),
                 )
 
     env_setup(
@@ -729,7 +834,7 @@ def _layout_for_tensor(tensor_layouts: dict, tensor_name: Path | str, tensor) ->
             storage_rows = int(storage_shape[0])
 
     out = {}
-    for key in ("precision", "precision_key"):
+    for key in ("precision", "precision_key", "storage_order", "tile_size"):
         if key in layout:
             out[key] = layout[key]
     if source_rows is not None:
@@ -774,6 +879,8 @@ def env_setup(
                 logical_rows=entry.get("storage_rows"),
                 source_rows=entry.get("source_rows"),
                 hbm_addr=entry.get("hbm_addr"),
+                storage_order=entry.get("storage_order", "row_major"),
+                tile_size=entry.get("tile_size"),
             )
         elif entry["type"] == "plain":
             map_plain_data_to_hbm_for_behave_sim(

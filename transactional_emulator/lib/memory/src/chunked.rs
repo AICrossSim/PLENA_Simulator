@@ -9,6 +9,7 @@
 //! unaligned ranges fetch the containing aligned block and slice; writes to
 //! unaligned ranges read-modify-write the containing blocks.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures_util::future::join_all;
@@ -57,6 +58,50 @@ pub async fn gather(
     });
     for (offset, data, n) in join_all(futures).await {
         out[offset..offset + n].copy_from_slice(&data[..n]);
+    }
+    out
+}
+
+/// Like [`gather`], but issue at most one physical 64-byte read for each
+/// aligned HBM address in the batch.
+///
+/// MX scale metadata is smaller than a burst. Several logical scale slices
+/// can therefore share one 64-byte line; issuing one request per slice wastes
+/// bandwidth without returning any additional data. This helper models a DMA
+/// burst coalescer while preserving first-occurrence issue order and the
+/// original scatter order.
+pub async fn gather_coalesced(
+    hbm: &Arc<dyn ErasedMemoryModel>,
+    total_len: usize,
+    reads: Vec<ChunkRead>,
+) -> Vec<u8> {
+    let mut unique_addresses = Vec::new();
+    let mut address_to_index = HashMap::new();
+
+    for read in &reads {
+        debug_assert!(read.len <= 64, "ChunkRead::len {} exceeds 64", read.len);
+        let aligned = (read.addr / 64) * 64;
+        if !address_to_index.contains_key(&aligned) {
+            let index = unique_addresses.len();
+            unique_addresses.push(aligned);
+            address_to_index.insert(aligned, index);
+        }
+    }
+
+    let futures = unique_addresses.iter().copied().map(|aligned| {
+        let hbm = hbm.clone();
+        async move { hbm.read(aligned).await }
+    });
+    let blocks = join_all(futures).await;
+
+    let mut out = vec![0u8; total_len];
+    for read in reads {
+        let aligned = (read.addr / 64) * 64;
+        let block = &blocks[address_to_index[&aligned]];
+        let within = (read.addr % 64) as usize;
+        let end = std::cmp::min(within + read.len, 64);
+        let n = end - within;
+        out[read.dst_offset..read.dst_offset + n].copy_from_slice(&block[within..end]);
     }
     out
 }
@@ -250,6 +295,40 @@ mod tests {
         )
         .await;
         assert_eq!(*memory.read_order.lock().unwrap(), vec![128, 0, 64]);
+    }
+
+    #[tokio::test]
+    async fn test_gather_coalesced_reads_shared_block_once_and_scatters_slices() {
+        let memory = Arc::new(RecordingMemory {
+            read_order: Mutex::new(Vec::new()),
+        });
+        let hbm: Arc<dyn ErasedMemoryModel> = memory.clone();
+
+        let out = gather_coalesced(
+            &hbm,
+            12,
+            vec![
+                ChunkRead {
+                    addr: 72,
+                    dst_offset: 0,
+                    len: 4,
+                },
+                ChunkRead {
+                    addr: 0,
+                    dst_offset: 4,
+                    len: 4,
+                },
+                ChunkRead {
+                    addr: 80,
+                    dst_offset: 8,
+                    len: 4,
+                },
+            ],
+        )
+        .await;
+
+        assert_eq!(out, vec![0; 12]);
+        assert_eq!(*memory.read_order.lock().unwrap(), vec![64, 0]);
     }
 
     #[tokio::test]

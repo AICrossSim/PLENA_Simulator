@@ -626,6 +626,7 @@ impl Accelerator {
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
+                        self.coalesce_hbm_bursts,
                     );
 
                     self.m_machine
@@ -660,6 +661,7 @@ impl Accelerator {
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
+                        self.coalesce_hbm_bursts,
                     );
 
                     let dest = self.reg_file.read_gp(*rd);
@@ -871,6 +873,7 @@ impl Accelerator {
                     *MLEN,
                     *PREFETCH_M_AMOUNT,
                     *MLEN,
+                    self.coalesce_hbm_bursts,
                 );
                 let dest = self.reg_file.read_gp(*rd);
                 // The transfer produces MLEN * PREFETCH_M_AMOUNT elements.
@@ -905,6 +908,7 @@ impl Accelerator {
                     *VLEN,
                     *PREFETCH_V_AMOUNT,
                     1,
+                    self.coalesce_hbm_bursts,
                 );
                 let dest = self.reg_file.read_gp(*rd);
                 let senders = self
