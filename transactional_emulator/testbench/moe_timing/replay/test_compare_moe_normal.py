@@ -1,4 +1,5 @@
 """Evidence gate tests through a real fallible executable; Python 3.6+ stdlib."""
+
 import copy
 import importlib.util
 import json
@@ -8,11 +9,12 @@ import tempfile
 import unittest
 
 SPEC = importlib.util.spec_from_file_location(
-    "compare_moe_normal", str(Path(__file__).with_name("compare_moe_normal.py")))
+    "compare_moe_normal", str(Path(__file__).with_name("compare_moe_normal.py"))
+)
 compare = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(compare)
 
-FAKE_RUNNER = r'''
+FAKE_RUNNER = r"""
 import argparse
 import fcntl
 import hashlib
@@ -65,65 +67,127 @@ for mutation in scenario.get("mutations", []):
         target = target[key]
     target[mutation["path"][-1]] = mutation["value"]
 Path(args.output).write_text(json.dumps(envelope))
-'''
+"""
 
 
 def core_config(name, blen, mlen):
-    return dict(id=name, blen=blen, mlen=mlen, vector_sram_bytes=4096,
-                accumulator_bytes=1024, weight_sram_bytes=2048)
+    return dict(id=name, blen=blen, mlen=mlen, vector_sram_bytes=4096, accumulator_bytes=1024, weight_sram_bytes=2048)
 
 
 def architecture(name, cores):
-    return dict(schema_version=1, name=name, cores=cores, dispatch_threshold=2,
-                large_core=0, small_core=len(cores) - 1, global_dma_credits=2,
-                global_dma_staging_bytes=128, combine_sram_bytes=4096,
-                clock_period_ps=10, mac_pipeline_cycles=8, vector_elements_per_cycle=8)
+    return dict(
+        schema_version=1,
+        name=name,
+        cores=cores,
+        dispatch_threshold=2,
+        large_core=0,
+        small_core=len(cores) - 1,
+        global_dma_credits=2,
+        global_dma_staging_bytes=128,
+        combine_sram_bytes=4096,
+        clock_period_ps=10,
+        mac_pipeline_cycles=8,
+        vector_elements_per_cycle=8,
+    )
 
 
 def core_report(core, jobs, rows, total_ps, busy_ps):
     useful = rows * 3 * 8 * 8
     multipliers = core["blen"] * core["mlen"]
-    return dict(id=core["id"], blen=core["blen"], mlen=core["mlen"],
-                multipliers=multipliers, jobs=jobs, useful_macs=useful,
-                issued_macs=useful, compute_busy_ps=busy_ps,
-                accumulator_dependency_stall_ps=0, pipeline_drain_ps=10,
-                pipeline_register_bytes=64, weight_ready_wait_ps=0,
-                vector_wait_ps=0, vector_sram_peak_bytes=256,
-                accumulator_peak_bytes=128, weight_sram_peak_bytes=256,
-                weight_slots_peak=2, hbm_read_bytes=192 * jobs,
-                compute_busy_fraction=busy_ps / total_ps,
-                mac_utilization=useful / (multipliers * total_ps / 10))
+    return dict(
+        id=core["id"],
+        blen=core["blen"],
+        mlen=core["mlen"],
+        multipliers=multipliers,
+        jobs=jobs,
+        useful_macs=useful,
+        issued_macs=useful,
+        compute_busy_ps=busy_ps,
+        accumulator_dependency_stall_ps=0,
+        pipeline_drain_ps=10,
+        pipeline_register_bytes=64,
+        weight_ready_wait_ps=0,
+        vector_wait_ps=0,
+        vector_sram_peak_bytes=256,
+        accumulator_peak_bytes=128,
+        weight_sram_peak_bytes=256,
+        weight_slots_peak=2,
+        hbm_read_bytes=192 * jobs,
+        compute_busy_fraction=busy_ps / total_ps,
+        mac_utilization=useful / (multipliers * total_ps / 10),
+    )
 
 
 def envelope(arch):
     single = len(arch["cores"]) == 1
     total = 1000 if single else 800
     jobs = [
-        dict(job=0, expert=0, shared=False, core=arch["cores"][0]["id"], rows=2,
-             start_ps=0, compute_done_ps=200, output_copied_ps=220),
-        dict(job=1, expert=2, shared=True, core=arch["cores"][0]["id"], rows=2,
-             start_ps=220, compute_done_ps=420, output_copied_ps=440),
-        dict(job=2, expert=1, shared=False, core=arch["cores"][-1]["id"], rows=1,
-             start_ps=440 if single else 0, compute_done_ps=600 if single else 180,
-             output_copied_ps=620 if single else 200),
+        dict(
+            job=0,
+            expert=0,
+            shared=False,
+            core=arch["cores"][0]["id"],
+            rows=2,
+            start_ps=0,
+            compute_done_ps=200,
+            output_copied_ps=220,
+        ),
+        dict(
+            job=1,
+            expert=2,
+            shared=True,
+            core=arch["cores"][0]["id"],
+            rows=2,
+            start_ps=220,
+            compute_done_ps=420,
+            output_copied_ps=440,
+        ),
+        dict(
+            job=2,
+            expert=1,
+            shared=False,
+            core=arch["cores"][-1]["id"],
+            rows=1,
+            start_ps=440 if single else 0,
+            compute_done_ps=600 if single else 180,
+            output_copied_ps=620 if single else 200,
+        ),
     ]
-    cores = ([core_report(arch["cores"][0], 3, 5, total, 600)] if single else
-             [core_report(arch["cores"][0], 2, 4, total, 600),
-              core_report(arch["cores"][1], 1, 1, total, 200)])
-    result = dict(schema_version=1, workload="fixture", architecture=arch["name"],
-                  timing_model="analytical", timing_boundary="operator",
-                  weight_format="local_mx", total_ps=total, multipliers=32,
-                  useful_macs=960, issued_macs=960, hbm_read_bytes=576,
-                  hbm_write_bytes=0, global_dma_inflight_peak=2,
-                  global_dma_staging_peak_bytes=128, combine_sram_peak_bytes=256,
-                  shared_vector_busy_ps=100, cores=cores,
-                  job_completions=jobs if single else [jobs[2], jobs[0], jobs[1]],
-                  output_f32=[[1.0] * 8, [-1.0] * 8],
-                  output_bf16=[[16256] * 8, [49024] * 8],
-                  pre_round_output_f32=[[1.0] * 8, [-1.0] * 8])
-    return dict(schema_version=1, evidence_level="fixture_only", provenance={},
-                memory_model=dict(name="Ramulator HBM2 preset", channels=8,
-                                  upper_burst_bytes=64), result=result)
+    cores = (
+        [core_report(arch["cores"][0], 3, 5, total, 600)]
+        if single
+        else [core_report(arch["cores"][0], 2, 4, total, 600), core_report(arch["cores"][1], 1, 1, total, 200)]
+    )
+    result = dict(
+        schema_version=1,
+        workload="fixture",
+        architecture=arch["name"],
+        timing_model="analytical",
+        timing_boundary="operator",
+        weight_format="local_mx",
+        total_ps=total,
+        multipliers=32,
+        useful_macs=960,
+        issued_macs=960,
+        hbm_read_bytes=576,
+        hbm_write_bytes=0,
+        global_dma_inflight_peak=2,
+        global_dma_staging_peak_bytes=128,
+        combine_sram_peak_bytes=256,
+        shared_vector_busy_ps=100,
+        cores=cores,
+        job_completions=jobs if single else [jobs[2], jobs[0], jobs[1]],
+        output_f32=[[1.0] * 8, [-1.0] * 8],
+        output_bf16=[[16256] * 8, [49024] * 8],
+        pre_round_output_f32=[[1.0] * 8, [-1.0] * 8],
+    )
+    return dict(
+        schema_version=1,
+        evidence_level="fixture_only",
+        provenance={},
+        memory_model=dict(name="Ramulator HBM2 preset", channels=8, upper_burst_bytes=64),
+        result=result,
+    )
 
 
 class ComparisonEvidenceTests(unittest.TestCase):
@@ -136,37 +200,48 @@ class ComparisonEvidenceTests(unittest.TestCase):
         self.binary.chmod(0o700)
         self.hbm = self.root / "weights.bin"
         self.hbm.write_bytes(bytes(1152))
-        self.workload = dict(schema_version=1, name="fixture", hbm_file="weights.bin",
-                             input_dim=8, expert_hidden_dim=8,
-                             inputs_bf16=[[16256] * 8, [16256] * 8],
-                             routes=[dict(token=0, slot=0, expert=0, weight=0.5),
-                                     dict(token=0, slot=1, expert=1, weight=0.5),
-                                     dict(token=1, slot=0, expert=0, weight=1.0)],
-                             shared_expert=dict(expert=2, weight=1.0), metadata={})
+        self.workload = dict(
+            schema_version=1,
+            name="fixture",
+            hbm_file="weights.bin",
+            input_dim=8,
+            expert_hidden_dim=8,
+            inputs_bf16=[[16256] * 8, [16256] * 8],
+            routes=[
+                dict(token=0, slot=0, expert=0, weight=0.5),
+                dict(token=0, slot=1, expert=1, weight=0.5),
+                dict(token=1, slot=0, expert=0, weight=1.0),
+            ],
+            shared_expert=dict(expert=2, weight=1.0),
+            metadata={},
+        )
         self.workload["experts"] = []
         for expert in range(3):
             record = dict(id=expert)
             for projection, name in enumerate(("gate", "up", "down")):
                 base = (expert * 3 + projection) * 128
-                record[name] = dict(rows=8, cols=8, element_base=base,
-                                    scale_base=base + 64, element_row_stride=8,
-                                    scale_row_stride=1)
+                record[name] = dict(
+                    rows=8, cols=8, element_base=base, scale_base=base + 64, element_row_stride=8, scale_row_stride=1
+                )
             self.workload["experts"].append(record)
         self.workload_path = self.root / "workload.json"
         self.write(self.workload_path, self.workload)
-        self.architectures = [architecture("single", [core_config("single", 4, 8)]),
-                              architecture("dual", [core_config("large", 2, 8),
-                                                    core_config("small", 1, 16)])]
+        self.architectures = [
+            architecture("single", [core_config("single", 4, 8)]),
+            architecture("dual", [core_config("large", 2, 8), core_config("small", 1, 16)]),
+        ]
         self.arch_paths = [self.root / "single.json", self.root / "dual.json"]
         for path, arch in zip(self.arch_paths, self.architectures):
             self.write(path, arch)
         self.reports = {arch["name"]: envelope(arch) for arch in self.architectures}
         self.write(self.root / "reports.json", self.reports)
-        self.golden = dict(schema_version=1,
-                           workload_sha256=compare.digest(self.workload_path),
-                           hbm_sha256=compare.digest(self.hbm),
-                           output_f32=[[1.0] * 8, [-1.0] * 8],
-                           output_bf16=[[16256] * 8, [49024] * 8])
+        self.golden = dict(
+            schema_version=1,
+            workload_sha256=compare.digest(self.workload_path),
+            hbm_sha256=compare.digest(self.hbm),
+            output_f32=[[1.0] * 8, [-1.0] * 8],
+            output_bf16=[[16256] * 8, [49024] * 8],
+        )
         self.golden_path = self.root / "golden.json"
         self.write(self.golden_path, self.golden)
         self.scenario = {}
@@ -179,9 +254,9 @@ class ComparisonEvidenceTests(unittest.TestCase):
 
     def run_comparison(self, **kwargs):
         self.write(self.root / "scenario.json", self.scenario)
-        return compare.run_comparison(str(self.binary), str(self.workload_path),
-                                      str(self.golden_path), self.arch_paths,
-                                      self.output, **kwargs)
+        return compare.run_comparison(
+            str(self.binary), str(self.workload_path), str(self.golden_path), self.arch_paths, self.output, **kwargs
+        )
 
     def mutate(self, path, value, **filters):
         self.scenario.setdefault("mutations", []).append(dict(path=path, value=value, **filters))
@@ -207,68 +282,81 @@ class ComparisonEvidenceTests(unittest.TestCase):
 
     def test_parallel_architectures_keep_order_and_repeat_gates(self):
         result = self.run_comparison(workers=2)
-        self.assertEqual([r['architecture']['name'] for r in result['comparisons']], ['single','dual'])
-        self.assertEqual(compare.read_json(self.root/'calls.json'),{'single':2,'dual':2})
-        self.mutate(['result','total_ps'],801,architecture='dual',repeat=3)
+        self.assertEqual([r["architecture"]["name"] for r in result["comparisons"]], ["single", "dual"])
+        self.assertEqual(compare.read_json(self.root / "calls.json"), {"single": 2, "dual": 2})
+        self.mutate(["result", "total_ps"], 801, architecture="dual", repeat=3)
         self.rejected(workers=2)
 
     def test_invalid_parallelism_is_rejected(self):
-        for workers in [0,9,True,1.5]:
-            with self.subTest(workers=workers): self.rejected(workers=workers)
+        for workers in [0, 9, True, 1.5]:
+            with self.subTest(workers=workers):
+                self.rejected(workers=workers)
 
     def enable_full_shape_resources(self):
         for path, arch in zip(self.arch_paths, self.architectures):
             arch.update(dispatch_queue_bytes=256, dispatch_cycles=1)
-            parts = len(arch['cores'])
-            for core in arch['cores']:
-                core.update(read_cache_bytes=160 // parts, vector_sram_bytes=4096 // parts,
-                            accumulator_bytes=1024 // parts, weight_sram_bytes=2048 // parts)
-            report = self.reports[arch['name']]['result']
+            parts = len(arch["cores"])
+            for core in arch["cores"]:
+                core.update(
+                    read_cache_bytes=160 // parts,
+                    vector_sram_bytes=4096 // parts,
+                    accumulator_bytes=1024 // parts,
+                    weight_sram_bytes=2048 // parts,
+                )
+            report = self.reports[arch["name"]]["result"]
             report.update(dispatch_queue_peak_bytes=192, dispatcher_busy_ps=30)
-            for core in report['cores']:
-                misses = core['hbm_read_bytes'] // 64
-                core.update(cache_requests=misses+2, cache_hits=2,
-                            cache_port_busy_ps=(2*misses+2)*10, cache_peak_bytes=80)
+            for core in report["cores"]:
+                misses = core["hbm_read_bytes"] // 64
+                core.update(
+                    cache_requests=misses + 2,
+                    cache_hits=2,
+                    cache_port_busy_ps=(2 * misses + 2) * 10,
+                    cache_peak_bytes=80,
+                )
             self.write(path, arch)
-        self.write(self.root / 'reports.json', self.reports)
+        self.write(self.root / "reports.json", self.reports)
 
     def test_full_shape_resource_accounting_passes(self):
         self.enable_full_shape_resources()
-        self.assertTrue(self.run_comparison()['all_gates_passed'])
+        self.assertTrue(self.run_comparison()["all_gates_passed"])
 
     def test_cache_capacity_traffic_and_port_undercharging_are_rejected(self):
         self.enable_full_shape_resources()
-        for metric,value in [('cache_peak_bytes',240),('cache_requests',0),
-                             ('cache_port_busy_ps',0),('cache_hits',-1)]:
+        for metric, value in [
+            ("cache_peak_bytes", 240),
+            ("cache_requests", 0),
+            ("cache_port_busy_ps", 0),
+            ("cache_hits", -1),
+        ]:
             with self.subTest(metric=metric):
                 self.scenario = {}
-                self.mutate(['result','cores',0,metric],value)
+                self.mutate(["result", "cores", 0, metric], value)
                 self.rejected()
 
     def test_dispatch_capacity_and_service_are_required(self):
         self.enable_full_shape_resources()
-        for metric,value in [('dispatch_queue_peak_bytes',0),('dispatcher_busy_ps',0)]:
+        for metric, value in [("dispatch_queue_peak_bytes", 0), ("dispatcher_busy_ps", 0)]:
             with self.subTest(metric=metric):
                 self.scenario = {}
-                self.mutate(['result',metric],value)
+                self.mutate(["result", metric], value)
                 self.rejected()
 
     def test_unequal_or_partly_missing_cache_budgets_fail_before_execution(self):
         self.enable_full_shape_resources()
-        self.architectures[0]['cores'][0]['read_cache_bytes'] += 80
-        self.write(self.arch_paths[0],self.architectures[0])
+        self.architectures[0]["cores"][0]["read_cache_bytes"] += 80
+        self.write(self.arch_paths[0], self.architectures[0])
         self.rejected()
-        self.assertFalse((self.root/'calls.json').exists())
-        del self.architectures[0]['cores'][0]['read_cache_bytes']
-        self.write(self.arch_paths[0],self.architectures[0])
+        self.assertFalse((self.root / "calls.json").exists())
+        del self.architectures[0]["cores"][0]["read_cache_bytes"]
+        self.write(self.arch_paths[0], self.architectures[0])
         self.rejected()
-        self.assertFalse((self.root/'calls.json').exists())
+        self.assertFalse((self.root / "calls.json").exists())
 
     def test_unequal_timing_modes_fail_before_execution(self):
-        self.architectures[0]['matrix_timing'] = 'legacy_serialized'
-        self.write(self.arch_paths[0],self.architectures[0])
+        self.architectures[0]["matrix_timing"] = "legacy_serialized"
+        self.write(self.arch_paths[0], self.architectures[0])
         self.rejected()
-        self.assertFalse((self.root/'calls.json').exists())
+        self.assertFalse((self.root / "calls.json").exists())
 
     def test_nonfinite_output_is_rejected(self):
         for value in (float("nan"), float("inf"), -float("inf")):
@@ -289,17 +377,19 @@ class ComparisonEvidenceTests(unittest.TestCase):
         self.rejected()
 
     def test_every_finite_storage_bound_is_enforced(self):
-        cases = [(["global_dma_inflight_peak"], 3),
-                 (["global_dma_staging_peak_bytes"], 129),
-                 (["combine_sram_peak_bytes"], 4097),
-                 (["cores", 0, "vector_sram_peak_bytes"], 4097),
-                 (["cores", 0, "accumulator_peak_bytes"], 1025),
-                 (["cores", 0, "weight_sram_peak_bytes"], 2049),
-                 (["cores", 0, "weight_slots_peak"], 3)]
+        cases = [
+            (["global_dma_inflight_peak"], 3),
+            (["global_dma_staging_peak_bytes"], 129),
+            (["combine_sram_peak_bytes"], 4097),
+            (["cores", 0, "vector_sram_peak_bytes"], 4097),
+            (["cores", 0, "accumulator_peak_bytes"], 1025),
+            (["cores", 0, "weight_sram_peak_bytes"], 2049),
+            (["cores", 0, "weight_slots_peak"], 3),
+        ]
         for path, value in cases:
             with self.subTest(metric=path):
                 self.scenario = {}
-                self.mutate(["result"] + path, value)
+                self.mutate(["result", *path], value)
                 self.rejected()
 
     def test_negative_resource_counter_is_rejected(self):
@@ -326,7 +416,7 @@ class ComparisonEvidenceTests(unittest.TestCase):
 
     def test_missing_or_duplicate_expert_completions_are_rejected(self):
         original = self.reports["single"]["result"]["job_completions"]
-        for jobs in (original[:-1], original + [copy.deepcopy(original[0])]):
+        for jobs in (original[:-1], [*original, copy.deepcopy(original[0])]):
             with self.subTest(count=len(jobs)):
                 self.scenario = {}
                 self.mutate(["result", "job_completions"], jobs, architecture="single")
@@ -345,9 +435,12 @@ class ComparisonEvidenceTests(unittest.TestCase):
         self.rejected()
 
     def test_nonfinite_or_negative_timings_are_rejected(self):
-        for metric, value in (("total_ps", float("inf")), ("total_ps", -1),
-                              ("shared_vector_busy_ps", float("nan")),
-                              ("shared_vector_busy_ps", -1)):
+        for metric, value in (
+            ("total_ps", float("inf")),
+            ("total_ps", -1),
+            ("shared_vector_busy_ps", float("nan")),
+            ("shared_vector_busy_ps", -1),
+        ):
             with self.subTest(metric=metric, value=value):
                 self.scenario = {}
                 self.mutate(["result", metric], value)
@@ -393,8 +486,14 @@ class ComparisonEvidenceTests(unittest.TestCase):
 
     def test_different_shared_resources_are_rejected_before_execution(self):
         original = copy.deepcopy(self.architectures[1])
-        for field in ("clock_period_ps", "mac_pipeline_cycles", "vector_elements_per_cycle",
-                      "global_dma_credits", "global_dma_staging_bytes", "combine_sram_bytes"):
+        for field in (
+            "clock_period_ps",
+            "mac_pipeline_cycles",
+            "vector_elements_per_cycle",
+            "global_dma_credits",
+            "global_dma_staging_bytes",
+            "combine_sram_bytes",
+        ):
             with self.subTest(field=field):
                 altered = copy.deepcopy(original)
                 altered[field] += 1
@@ -421,9 +520,16 @@ class ComparisonEvidenceTests(unittest.TestCase):
             self.assertIsNot(compare.read_json(summary).get("all_gates_passed"), True)
 
     def test_invalid_run_controls_are_rejected(self):
-        for kwargs in (dict(repeats=1), dict(repeats=2.5), dict(atol=-1.0),
-                       dict(rtol=float("nan")), dict(hbm_channels=0),
-                       dict(hbm_channels=3), dict(timeout=0), dict(timeout=float("inf"))):
+        for kwargs in (
+            dict(repeats=1),
+            dict(repeats=2.5),
+            dict(atol=-1.0),
+            dict(rtol=float("nan")),
+            dict(hbm_channels=0),
+            dict(hbm_channels=3),
+            dict(timeout=0),
+            dict(timeout=float("inf")),
+        ):
             with self.subTest(kwargs=kwargs):
                 self.rejected(**kwargs)
 
