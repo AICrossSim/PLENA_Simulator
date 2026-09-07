@@ -6,6 +6,9 @@
 
 #include <exception>
 #include <iostream>
+#include <sstream>
+#include <cstring>
+#include <dlfcn.h>
 
 #include "ramulator_capi.h"
 
@@ -50,4 +53,26 @@ float ramulator_period(ramulator *val) {
 
 void ramulator_tick(ramulator *val) {
     val->memory_system->tick();
+}
+
+uint32_t ramulator_capi_version() { return 2; }
+
+uint32_t ramulator_tx_bytes(ramulator *val) {
+    return val->memory_system->get_tx_bytes();
+}
+
+uint64_t ramulator_stats(ramulator *val, char *buffer, uint64_t capacity) {
+    val->memory_system->update_stats_recursive();
+    std::ostringstream stream;
+    val->memory_system->print_stats(stream);
+    const auto text = stream.str();
+    const auto required = text.size() + 1;
+    if (buffer && capacity >= required) std::memcpy(buffer, text.c_str(), required);
+    return required;
+}
+
+const char *ramulator_library_path() {
+    Dl_info info{};
+    if (!dladdr(reinterpret_cast<void *>(&ramulator_capi_version), &info)) return nullptr;
+    return info.dli_fname;
 }
