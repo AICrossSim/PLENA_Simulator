@@ -5,6 +5,10 @@ normal-buffer cores with private accumulators, shared HBM, and a fair single-cor
 comparison. It executes actual nonzero MoE arithmetic. The best tested large/small
 pair is **slower than the optimized single core**; this is not a speedup claim.
 
+For the missing port, arithmetic, DMA and dispatch contracts, see the
+[architecture refinement proposal](moe_architecture_refinement.md). Proposed
+behavior there is not included in the measured results below.
+
 ## Read the implementation in this order
 
 1. `transactional_emulator/src/moe_normal/types.rs`: workload, per-core resources
@@ -26,7 +30,7 @@ Paths in items 2–4 are relative to `transactional_emulator/`.
 
 ## Current dimensions
 
-Physical tiles have M=N=BLEN and K=MLEN. A tile is serviced over multiple cycles;
+Scheduled tiles have M=N=BLEN and K=MLEN. A tile is serviced over multiple cycles;
 multiplier count is BLEN×MLEN, not M×K×N. Whole-model D/F dimensions are separate.
 
 | Resource | Single baseline | Large core | Small core |
