@@ -1,0 +1,257 @@
+{
+  "schema": "plena.gpu_capture_catalog.v1",
+  "published_date": "2026-09-08",
+  "research_branch": "feat/matrix-sram-lcompute",
+  "simulator_evidence_base_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+  "compiler_commit": "9fd6a59299fd9432e455f674f1bf9d414628ec36",
+  "release_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/tag/gpu-captures-20260908",
+  "captures": [
+    {
+      "id": "nemotron_agentic_20260903",
+      "gpu": "B200",
+      "scope": "Real Nemotron-3 Nano NVFP4: 48 workload prompts, timed B1/2/4/8/16 plus B1-long; separate B1 routing.",
+      "asset_name": "nemotron_agentic_20260903.tar.gz",
+      "archive_bytes": 185171470,
+      "archive_sha256": "25c47786dc2c5178ca14b67a14d1ea6a563fa59fd1691f6f9b70dd34f9b5e8a3",
+      "download_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/download/gpu-captures-20260908/nemotron_agentic_20260903.tar.gz",
+      "manifest": "manifests/nemotron_agentic_20260903.json",
+      "tables": [
+        {
+          "path": "tables/nemotron_agentic_20260903/latency_summary.csv",
+          "archive_member": "nemotron_agentic_20260903/latency_summary.csv",
+          "sha256": "5416e209459227c53883d04d06457386117412d14bf477155fe0c8e49d1a17dc"
+        },
+        {
+          "path": "tables/nemotron_agentic_20260903/routing_summary.csv",
+          "archive_member": "nemotron_agentic_20260903/routing_summary.csv",
+          "sha256": "a5ac93a2cd34ac96e00dd57e4ccf9a260452ec471b60475681b6fb6f0d3c7058"
+        },
+        {
+          "path": "tables/nemotron_agentic_20260903/campaign_summary.json",
+          "archive_member": "nemotron_agentic_20260903/campaign_summary.json",
+          "sha256": "b4c72c94b13a56f154de3d1d4754f71a17d67db3fe590856fbfd9698a831df84"
+        },
+        {
+          "path": "tables/nemotron_agentic_20260903/validation.json",
+          "archive_member": "nemotron_agentic_20260903/validation.json",
+          "sha256": "d089af03ed04866cf689adcc00d528781adfc1ed712180a4954450bb0a607a8b"
+        }
+      ]
+    },
+    {
+      "id": "hybrid_formal_b200_20260819",
+      "gpu": "B200",
+      "scope": "Real Nemotron NVFP4 timing/routing/profiles and synthetic official-shape KDA layer stages.",
+      "asset_name": "hybrid_formal_b200_20260819.tar.gz",
+      "archive_bytes": 155377890,
+      "archive_sha256": "a01bff5714df348dd38af98210397e5c3fceeb6ea4a55ea480a749f7ff0da272",
+      "download_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/download/gpu-captures-20260908/hybrid_formal_b200_20260819.tar.gz",
+      "manifest": "manifests/hybrid_formal_b200_20260819.json",
+      "tables": [
+        {
+          "path": "tables/hybrid_formal_b200_20260819/latency-summary.json",
+          "archive_member": "hybrid_formal_b200_20260819/home/mcl123/plena-profiles/formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2/nemotron/timing-routing-data/timing/latency-summary.json",
+          "sha256": "7d8ffba71399b92be496620009186201bd3b8d15e9520f98bb306d3fe3305682"
+        },
+        {
+          "path": "tables/hybrid_formal_b200_20260819/nemotron_ncu_summary.csv",
+          "archive_member": "hybrid_formal_b200_20260819/home/mcl123/plena-profiles/formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2/nemotron/ncu-summary/nemotron_ncu_summary.csv",
+          "sha256": "1f0c9a1af92d2f37bca5d5405b4a634d45a903c391478e61942a6b21e0120b47"
+        },
+        {
+          "path": "tables/hybrid_formal_b200_20260819/ncu-validation.json",
+          "archive_member": "hybrid_formal_b200_20260819/home/mcl123/plena-profiles/formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2/nemotron/ncu-validation.json",
+          "sha256": "3d48f729098c9b51e721a38d0f761472d917d84a6887017e03c4d05eaa7b172a"
+        },
+        {
+          "path": "tables/hybrid_formal_b200_20260819/nsys-layer-type-summary.json",
+          "archive_member": "hybrid_formal_b200_20260819/home/mcl123/plena-profiles/formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2/nemotron/nsys-layer-type-summary.json",
+          "sha256": "4f12e40e300c1062a253b049d433545585b563ab55372d272155f07244740741"
+        },
+        {
+          "path": "tables/hybrid_formal_b200_20260819/kda_ncu_summary.csv",
+          "archive_member": "hybrid_formal_b200_20260819/home/mcl123/plena-profiles/formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2/kda/summary/kda_ncu_summary.csv",
+          "sha256": "15a3d83cdaa150649a39970884b40e79100aed96b997251d1c69330c6e8fc090"
+        },
+        {
+          "path": "tables/hybrid_formal_b200_20260819/kda_custom_vs_official.json",
+          "archive_member": "hybrid_formal_b200_20260819/home/mcl123/plena-profiles/formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2/kda/kda_custom_vs_official.json",
+          "sha256": "5d568376c9f09ab8b506aa335879d0f665efac9e8af2c516c64ff79bbd908fe2"
+        }
+      ],
+      "original_archive": {
+        "name": "kda_nemotron_nvfp4_campaign_gpu3_attempt2_COMPLETE_20260819T043954Z.tar.gz",
+        "sha256": "eac1d2637ff82286365070a40e21e260d222b53b0c3b3b28172f5ef925ec15c9",
+        "bytes": 123292703
+      }
+    },
+    {
+      "id": "kda_stage2_20260817",
+      "gpu": "B200",
+      "scope": "Synthetic official-shape KDA prefill B1/S2048 and decode B1/B8; latency, parity and profiling.",
+      "asset_name": "kda_stage2_20260817.tar.gz",
+      "archive_bytes": 15287465,
+      "archive_sha256": "4f46a72f5611d267a678e75f21caa5d478510e0283c3634f4549633c72772a4d",
+      "download_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/download/gpu-captures-20260908/kda_stage2_20260817.tar.gz",
+      "manifest": "manifests/kda_stage2_20260817.json",
+      "tables": [
+        {
+          "path": "tables/kda_stage2_20260817/kda_memory_traffic_summary.csv",
+          "archive_member": "kda_stage2_20260817/plena-profiles/ncu/kda_memory_traffic_summary.csv",
+          "sha256": "8465f230409aab8b95728fecf11f6f7aaa1eb55c0aff6b9a64520e4493503ec1"
+        },
+        {
+          "path": "tables/kda_stage2_20260817/flashkda_vs_fla.json",
+          "archive_member": "kda_stage2_20260817/plena-profiles/validation/flashkda_vs_fla.json",
+          "sha256": "34732cb4ec50461e1e657fda800accc3cca9ef280204ecfbc2e1216bfb387c0e"
+        },
+        {
+          "path": "tables/kda_stage2_20260817/kda_custom_vs_official.json",
+          "archive_member": "kda_stage2_20260817/plena-profiles/validation/kda_custom_vs_official.json",
+          "sha256": "5d568376c9f09ab8b506aa335879d0f665efac9e8af2c516c64ff79bbd908fe2"
+        },
+        {
+          "path": "tables/kda_stage2_20260817/20260817T013725Z_gpu2_prefill_b1_s2048.json",
+          "archive_member": "kda_stage2_20260817/plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/summary.json",
+          "sha256": "b6d2b2b72f5084a905a46214382b399d6f02ec818b1eefaa415042f6362fe43e"
+        },
+        {
+          "path": "tables/kda_stage2_20260817/20260817T013737Z_gpu2_decode_b1.json",
+          "archive_member": "kda_stage2_20260817/plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/summary.json",
+          "sha256": "0c92f40a439cfd738f6288189df2b62926e9228acb1805f81d1cc9a45d9bb9c9"
+        },
+        {
+          "path": "tables/kda_stage2_20260817/20260817T013746Z_gpu2_decode_b8.json",
+          "archive_member": "kda_stage2_20260817/plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/summary.json",
+          "sha256": "2173778671a3edb026865c973239c8b404aad397fc68aa6b13e4e40775ceee81"
+        },
+        {
+          "path": "tables/kda_stage2_20260817/20260817T014314Z_gpu2_prefill_b1_s2048.json",
+          "archive_member": "kda_stage2_20260817/plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/summary.json",
+          "sha256": "1f2a5a380e56e69333c1b6116ca4c1aba4e33caad269d032f70add9aab29c0cf"
+        }
+      ],
+      "original_archive": {
+        "name": "plena-kda-stage2-b200-20260817T030439Z.tar.gz",
+        "sha256": "6fada27aeaff8b359ad540d5e9bcf5655331d64cc2d27094b70da2d6bf55906c",
+        "bytes": 18843087
+      }
+    },
+    {
+      "id": "kimi_components_precision_20260819",
+      "gpu": "B200",
+      "scope": "Synthetic MLA/MoE components (16-active-expert proxy) and historical block-128 MX8 Mamba state precision.",
+      "asset_name": "kimi_components_precision_20260819.tar.gz",
+      "archive_bytes": 163550149,
+      "archive_sha256": "671a36a668f281e635994eb76847f49bbd3f0fb72d536460a8ffc02d7ab35aef",
+      "download_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/download/gpu-captures-20260908/kimi_components_precision_20260819.tar.gz",
+      "manifest": "manifests/kimi_components_precision_20260819.json",
+      "tables": [
+        {
+          "path": "tables/kimi_components_precision_20260819/latency_summary.csv",
+          "archive_member": "kimi_components_precision_20260819/kimi_components/summary/latency_summary.csv",
+          "sha256": "2d92feb82dc437a097e2199460e47cf47a5cbad794e0f79060a0974188099a79"
+        },
+        {
+          "path": "tables/kimi_components_precision_20260819/ncu_summary.csv",
+          "archive_member": "kimi_components_precision_20260819/kimi_components/summary/ncu_summary.csv",
+          "sha256": "cfcfe8bbbac1340093f297631132af198c74b7ac8a0b8e6be0ff1b3bca9a8956"
+        },
+        {
+          "path": "tables/kimi_components_precision_20260819/nsys_summary.csv",
+          "archive_member": "kimi_components_precision_20260819/kimi_components/summary/nsys_summary.csv",
+          "sha256": "a77f11e31e72717bb8a7509c0b6f2f28f6962da685e2b8f200bd212f8539ebb0"
+        },
+        {
+          "path": "tables/kimi_components_precision_20260819/parity.json",
+          "archive_member": "kimi_components_precision_20260819/kimi_components/parity_attempt2/parity.json",
+          "sha256": "974b253b3e02a0c63ad577867a3c3add2b247f9cb674faf01dc289e53085db1c"
+        },
+        {
+          "path": "tables/kimi_components_precision_20260819/mamba_state_precision.csv",
+          "archive_member": "kimi_components_precision_20260819/mamba_precision/formal/mamba_state_precision.csv",
+          "sha256": "00494e451b0c2535960cbad7bb366e42bbd025b25e83c7a9bd8ff5e92d9c378e"
+        },
+        {
+          "path": "tables/kimi_components_precision_20260819/mamba_precision_aggregate.csv",
+          "archive_member": "kimi_components_precision_20260819/mamba_precision/summary/mamba_precision_aggregate.csv",
+          "sha256": "80af6ab91e697927055667824b9ddd42f4fc41d7318ae0ffba2b16d35fdd12ad"
+        },
+        {
+          "path": "tables/kimi_components_precision_20260819/validation.json",
+          "archive_member": "kimi_components_precision_20260819/validation.json",
+          "sha256": "a85be5e5e19570e96591aae4da1391e9ac549d189c78dd1117fdf629f49b1056"
+        }
+      ]
+    },
+    {
+      "id": "kda_numeric_20260905",
+      "gpu": "B200",
+      "scope": "Synthetic KDA B1, three seeds, 32 steps and six numerical modes; nine completed tensor snapshots.",
+      "asset_name": "kda_numeric_20260905.tar.gz",
+      "archive_bytes": 212133888,
+      "archive_sha256": "28680994c04d45bc111e75b1d3d5b437911904fe9ad9c099a3678215f8f4dc11",
+      "download_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/download/gpu-captures-20260908/kda_numeric_20260905.tar.gz",
+      "manifest": "manifests/kda_numeric_20260905.json",
+      "tables": [
+        {
+          "path": "tables/kda_numeric_20260905/summary.json",
+          "archive_member": "kda_numeric_20260905/capture_20260905T150716Z/summary.json",
+          "sha256": "a9c5d9e8580e19ea68407058e093d5e8e87fe66fe8adc851fb9d2d3eadc683b2"
+        },
+        {
+          "path": "tables/kda_numeric_20260905/validation.json",
+          "archive_member": "kda_numeric_20260905/validation.json",
+          "sha256": "a811bdd9c4c1baf3f5efe3b993af4f4905acb064a1e71f25aaed669b17b29725"
+        },
+        {
+          "path": "tables/kda_numeric_20260905/rust_B.json",
+          "archive_member": "kda_numeric_20260905/rust_B.json",
+          "sha256": "b1d8ca182e3e109e6e47a36a8ab02db2eb18ef07891b3c92498fd50b0c03bef1"
+        },
+        {
+          "path": "tables/kda_numeric_20260905/rust_D.json",
+          "archive_member": "kda_numeric_20260905/rust_D.json",
+          "sha256": "a84c10aff7a081532cb3fc4c72b37b4bbbf95058b735d68b812fc17485dd09f8"
+        }
+      ]
+    },
+    {
+      "id": "nemotron_mamba_rtx5090",
+      "gpu": "RTX 5090",
+      "scope": "Historical Nemotron Mamba mixer with random BF16 weights; prefill and B1/4/8/16 decode.",
+      "asset_name": "nemotron_mamba_rtx5090.tar.gz",
+      "archive_bytes": 17643263,
+      "archive_sha256": "5f145d7aab3e575a5450ea0e785261c2bb863cfac173ae0d254e70bf636bee7d",
+      "download_url": "https://github.com/AICrossSim/PLENA_Simulator/releases/download/gpu-captures-20260908/nemotron_mamba_rtx5090.tar.gz",
+      "manifest": "manifests/nemotron_mamba_rtx5090.json",
+      "tables": [
+        {
+          "path": "tables/nemotron_mamba_rtx5090/mamba_layer_latency.csv",
+          "archive_member": "nemotron_mamba_rtx5090/results/NEMOTRON3_NANO_5090/mamba_layer_latency.csv",
+          "sha256": "c0dece3ec0a2da8d2b01c52c19648c5a4d04c0e4b2f28ab8ce4890fe0a7af5e6"
+        },
+        {
+          "path": "tables/nemotron_mamba_rtx5090/mamba_layer_latency_meta.json",
+          "archive_member": "nemotron_mamba_rtx5090/results/NEMOTRON3_NANO_5090/mamba_layer_latency_meta.json",
+          "sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4"
+        },
+        {
+          "path": "tables/nemotron_mamba_rtx5090/nvtx_stage_cuda_kernel_summary.csv",
+          "archive_member": "nemotron_mamba_rtx5090/results/NEMOTRON3_NANO_5090/nsys_nvtx_stage_summary/nvtx_stage_cuda_kernel_summary.csv",
+          "sha256": "056da2a6dca752d24c65a10bdf2267f66d87b287507aa389afa2644a22fb646e"
+        },
+        {
+          "path": "tables/nemotron_mamba_rtx5090/official_source_manifest.json",
+          "archive_member": "nemotron_mamba_rtx5090/results/NEMOTRON3_NANO_5090/official_source_manifest.json",
+          "sha256": "a158697686feaba58aa8793a1c521e0545c5bdd0dedea431c495adf093666b01"
+        }
+      ],
+      "original_archive": {
+        "name": "NEMOTRON3_NANO_5090.tar.gz",
+        "sha256": "e0a33f64c6366c557afb44eb77bd788cc6623f53357c1556578991a5bba08227",
+        "bytes": 17055133
+      }
+    }
+  ]
+}

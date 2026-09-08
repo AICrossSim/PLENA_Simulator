@@ -1,0 +1,66 @@
+{
+  "status": "completed",
+  "batch": 1,
+  "heads": 96,
+  "state_rows": 128,
+  "state_columns": 128,
+  "seeds": [
+    20260903,
+    17,
+    65537
+  ],
+  "tokens_per_seed": 32,
+  "gpu_uuid": "GPU-8c996f18-fe9f-d85c-cd1a-b5f18f4a69c1",
+  "physical_gpu": 4,
+  "torch_version": "2.9.0+cu128",
+  "gpu_cpu_reference_exact": true,
+  "rust_hash_comparison": [
+    {
+      "token": 0,
+      "gpu_B_output_sha256": "5baaf7113d13a96584124f242ebf42dd59e08b9569cfbf240c83788a2e5eb4a9",
+      "gpu_D_output_sha256": "46d19f15fabf0ed9a51dd90aa492d2905edc77000d568d2c74b6a0d482a87005",
+      "rust_B_output_sha256": "5baaf7113d13a96584124f242ebf42dd59e08b9569cfbf240c83788a2e5eb4a9",
+      "rust_D_output_sha256": "46d19f15fabf0ed9a51dd90aa492d2905edc77000d568d2c74b6a0d482a87005"
+    },
+    {
+      "token": 1,
+      "gpu_B_output_sha256": "1b564fa64760ef04e50cd30886bd7c7d703eb84699a9e1b172fa44cf8e2969e7",
+      "gpu_D_output_sha256": "06b6ce44bc81ef7f47fa03a8738f55c8ab604bbe8c4ab9206e6027f83189570d",
+      "rust_B_output_sha256": "1b564fa64760ef04e50cd30886bd7c7d703eb84699a9e1b172fa44cf8e2969e7",
+      "rust_D_output_sha256": "06b6ce44bc81ef7f47fa03a8738f55c8ab604bbe8c4ab9206e6027f83189570d"
+    }
+  ],
+  "modes": [
+    {
+      "mode": "common",
+      "max_output_relative_l2_vs_common": 0.0,
+      "max_state_relative_l2_vs_common": 0.0
+    },
+    {
+      "mode": "ordinary",
+      "max_output_relative_l2_vs_common": 0.015462374314665794,
+      "max_state_relative_l2_vs_common": 0.006354672834277153
+    },
+    {
+      "mode": "promote_dot",
+      "max_output_relative_l2_vs_common": 0.007099324371665716,
+      "max_state_relative_l2_vs_common": 0.0063170818611979485
+    },
+    {
+      "mode": "promote_update",
+      "max_output_relative_l2_vs_common": 0.014749892987310886,
+      "max_state_relative_l2_vs_common": 0.00453518982976675
+    },
+    {
+      "mode": "promote_error",
+      "max_output_relative_l2_vs_common": 0.015134699642658234,
+      "max_state_relative_l2_vs_common": 0.005663043353706598
+    },
+    {
+      "mode": "fp32",
+      "max_output_relative_l2_vs_common": 0.010682014748454094,
+      "max_state_relative_l2_vs_common": 0.010328583419322968
+    }
+  ],
+  "scope": "GPU PyTorch rounding diagnostic; deterministic synthetic BF16 inputs; no checkpoint or GPU performance claim"
+}

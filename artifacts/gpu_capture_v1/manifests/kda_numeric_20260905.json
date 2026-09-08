@@ -1,0 +1,479 @@
+{
+  "schema": "plena-gpu-publication-v1",
+  "campaign": "kda_numeric_20260905",
+  "source_archive": "KDA_NUMERIC_B1_20260905",
+  "inventory_sha256": "124310aaeec4fa184ec4ec5ce9af95c9f661f573b41b7415f5c70ac409ae75b8",
+  "source_inventory_archive": "numeric_sep5_completed",
+  "scope": {
+    "completed_capture": "capture_20260905T150716Z",
+    "status": "completed",
+    "batch": 1,
+    "seeds": [
+      20260903,
+      17,
+      65537
+    ],
+    "tokens_per_seed": 32,
+    "modes": [
+      "common",
+      "ordinary",
+      "promote_dot",
+      "promote_update",
+      "promote_error",
+      "fp32"
+    ],
+    "per_token_rows": 576,
+    "every_seed_mode_has_32_rows": true,
+    "seed_mode_groups": 18,
+    "snapshot_count": 9,
+    "snapshot_total_bytes": 363094542,
+    "snapshot_contents": [
+      "initial_state (token0 only)",
+      "prepared operands",
+      "outputs for six arithmetic modes",
+      "state tensors for six arithmetic modes"
+    ],
+    "snapshot_tokens": [
+      0,
+      1,
+      31
+    ],
+    "snapshot_no_pickle_execution_in_audit": true,
+    "meaning": "GPU PyTorch rounding diagnostic; deterministic synthetic BF16 inputs; no checkpoint or GPU performance claim",
+    "no_model_weights_or_workload_prompts": true,
+    "aborted_attempt": "capture_20260905T150709Z",
+    "aborted_tensor_bytes": 82785041
+  },
+  "source_files": 21,
+  "source_bytes": 363415268,
+  "published_payload_bytes": 363415268,
+  "transformation_events": 1,
+  "files": [
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "SHA256SUMS",
+      "published_relative_path": "source_SHA256SUMS.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "ceffd45919bdd4f7fd1fd4fbabb853dbd64156a230140188fad9839e8b546cc3",
+      "published_sha256": "ceffd45919bdd4f7fd1fd4fbabb853dbd64156a230140188fad9839e8b546cc3",
+      "source_size_bytes": 2787,
+      "published_size_bytes": 2787,
+      "transformations": [
+        {
+          "action": "renamed_source_checksum_manifest",
+          "note": "Historical original-byte checksums; publication SHA256SUMS is authoritative for this subset."
+        }
+      ],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/per_token.jsonl",
+      "published_relative_path": "capture_20260905T150716Z/per_token.jsonl",
+      "category": "measurement_table",
+      "source_sha256": "0be61d2e2aae029e2b850677c6a5a03113c419eb23d5a30830483bd160f4c16b",
+      "published_sha256": "0be61d2e2aae029e2b850677c6a5a03113c419eb23d5a30830483bd160f4c16b",
+      "source_size_bytes": 249614,
+      "published_size_bytes": 249614,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed17_token0.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed17_token0.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "995c636728a0e86d4d24255b049fe08f059074b3faee3baac769e50d21501597",
+      "published_sha256": "995c636728a0e86d4d24255b049fe08f059074b3faee3baac769e50d21501597",
+      "source_size_bytes": 44538237,
+      "published_size_bytes": 44538237,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed17_token1.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed17_token1.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "78ee1c66c1940d52a25ca6fe653c6eb6eb77efc2c37b293a31cf2a4d1c31011d",
+      "published_sha256": "78ee1c66c1940d52a25ca6fe653c6eb6eb77efc2c37b293a31cf2a4d1c31011d",
+      "source_size_bytes": 38246522,
+      "published_size_bytes": 38246522,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed17_token31.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed17_token31.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "8cd2b78acfbbb4c2d61d4b35b3ad787c1bff201486b68d19e83771ab1fecdf8f",
+      "published_sha256": "8cd2b78acfbbb4c2d61d4b35b3ad787c1bff201486b68d19e83771ab1fecdf8f",
+      "source_size_bytes": 38246545,
+      "published_size_bytes": 38246545,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed20260903_token0.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed20260903_token0.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "12ffa4c5a689c7660e05ab5b2037106bc17e989c28a97a0f3de5f720039bd861",
+      "published_sha256": "12ffa4c5a689c7660e05ab5b2037106bc17e989c28a97a0f3de5f720039bd861",
+      "source_size_bytes": 44538381,
+      "published_size_bytes": 44538381,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed20260903_token1.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed20260903_token1.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "f11a6387878e6ea7a3114ee70baa83012d2dfe1cb5e83ada6c0e570de1da3113",
+      "published_sha256": "f11a6387878e6ea7a3114ee70baa83012d2dfe1cb5e83ada6c0e570de1da3113",
+      "source_size_bytes": 38246660,
+      "published_size_bytes": 38246660,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed20260903_token31.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed20260903_token31.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "97ca5fdd13a821558fe6c43b7fc8322d6b88618d341709fb8981f90b420a6efb",
+      "published_sha256": "97ca5fdd13a821558fe6c43b7fc8322d6b88618d341709fb8981f90b420a6efb",
+      "source_size_bytes": 38246683,
+      "published_size_bytes": 38246683,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed65537_token0.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed65537_token0.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "a9d291d84c3a31509a93a597225f9af558a16b1cedf7a3d09dd03081676bf6b5",
+      "published_sha256": "a9d291d84c3a31509a93a597225f9af558a16b1cedf7a3d09dd03081676bf6b5",
+      "source_size_bytes": 44538309,
+      "published_size_bytes": 44538309,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed65537_token1.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed65537_token1.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "2bb894948b3fc9ddc22a41ecbd5205ad10f9ad262d33d6e60e1ea2ad3e9b0bda",
+      "published_sha256": "2bb894948b3fc9ddc22a41ecbd5205ad10f9ad262d33d6e60e1ea2ad3e9b0bda",
+      "source_size_bytes": 38246591,
+      "published_size_bytes": 38246591,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/seed65537_token31.pt",
+      "published_relative_path": "capture_20260905T150716Z/seed65537_token31.pt",
+      "category": "tensor_snapshot",
+      "source_sha256": "7d83b48b9bece7e89e06aaf2f548d18b594d062c354646b6b002bae4c173268d",
+      "published_sha256": "7d83b48b9bece7e89e06aaf2f548d18b594d062c354646b6b002bae4c173268d",
+      "source_size_bytes": 38246614,
+      "published_size_bytes": 38246614,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": true
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z/summary.json",
+      "published_relative_path": "capture_20260905T150716Z/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "a9c5d9e8580e19ea68407058e093d5e8e87fe66fe8adc851fb9d2d3eadc683b2",
+      "published_sha256": "a9c5d9e8580e19ea68407058e093d5e8e87fe66fe8adc851fb9d2d3eadc683b2",
+      "source_size_bytes": 2301,
+      "published_size_bytes": 2301,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_20260905T150716Z.log",
+      "published_relative_path": "capture_20260905T150716Z.log",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "fb1447c681e208df6d3667a5f84bbf93f010ae2de1912fd6cfbed2cb6ed11e85",
+      "published_sha256": "fb1447c681e208df6d3667a5f84bbf93f010ae2de1912fd6cfbed2cb6ed11e85",
+      "source_size_bytes": 2831,
+      "published_size_bytes": 2831,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "capture_command.json",
+      "published_relative_path": "capture_command.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "e1dfa7eb3a8e65dd76d3d7003579bd284d02758b036f7d24271cc79d51a320c4",
+      "published_sha256": "e1dfa7eb3a8e65dd76d3d7003579bd284d02758b036f7d24271cc79d51a320c4",
+      "source_size_bytes": 242,
+      "published_size_bytes": 242,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "execution_source.py",
+      "published_relative_path": "execution_source.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "154203d5f0145a10e86d691d56f2e5fc8c4264bb64aa6c4875bb3a85cea8a7ab",
+      "published_sha256": "154203d5f0145a10e86d691d56f2e5fc8c4264bb64aa6c4875bb3a85cea8a7ab",
+      "source_size_bytes": 21335,
+      "published_size_bytes": 21335,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "recurrence_source.py",
+      "published_relative_path": "recurrence_source.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "90b9fe4176259e8778cd1456e88c6f908498bce78e981816a0948da54b2aed42",
+      "published_sha256": "90b9fe4176259e8778cd1456e88c6f908498bce78e981816a0948da54b2aed42",
+      "source_size_bytes": 25952,
+      "published_size_bytes": 25952,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "run_numeric.py",
+      "published_relative_path": "run_numeric.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "ee5bbb46fae2a832db198d661fc204b056dea18b50986f0d56f8752119aa5383",
+      "published_sha256": "ee5bbb46fae2a832db198d661fc204b056dea18b50986f0d56f8752119aa5383",
+      "source_size_bytes": 7941,
+      "published_size_bytes": 7941,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "rust_B.json",
+      "published_relative_path": "rust_B.json",
+      "category": "summary_or_validation",
+      "source_sha256": "b1d8ca182e3e109e6e47a36a8ab02db2eb18ef07891b3c92498fd50b0c03bef1",
+      "published_sha256": "b1d8ca182e3e109e6e47a36a8ab02db2eb18ef07891b3c92498fd50b0c03bef1",
+      "source_size_bytes": 3842,
+      "published_size_bytes": 3842,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "rust_D.json",
+      "published_relative_path": "rust_D.json",
+      "category": "summary_or_validation",
+      "source_sha256": "a84c10aff7a081532cb3fc4c72b37b4bbbf95058b735d68b812fc17485dd09f8",
+      "published_sha256": "a84c10aff7a081532cb3fc4c72b37b4bbbf95058b735d68b812fc17485dd09f8",
+      "source_size_bytes": 3419,
+      "published_size_bytes": 3419,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "status.json",
+      "published_relative_path": "status.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "046dcec3d000c3c52ffa31fbdfa1b7f3036a151d064bbf311b0762a4a935470f",
+      "published_sha256": "046dcec3d000c3c52ffa31fbdfa1b7f3036a151d064bbf311b0762a4a935470f",
+      "source_size_bytes": 204,
+      "published_size_bytes": 204,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_NUMERIC_B1_20260905",
+      "source_relative_path": "validation.json",
+      "published_relative_path": "validation.json",
+      "category": "summary_or_validation",
+      "source_sha256": "a811bdd9c4c1baf3f5efe3b993af4f4905acb064a1e71f25aaed669b17b29725",
+      "published_sha256": "a811bdd9c4c1baf3f5efe3b993af4f4905acb064a1e71f25aaed669b17b29725",
+      "source_size_bytes": 258,
+      "published_size_bytes": 258,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    }
+  ],
+  "exclusions": [
+    {
+      "source_relative_path": "watcher_pid",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 7,
+      "source_sha256": "e7c1153e8e8a3265bbd7f3cc8859c4f58f71072830146e60bed29829bb6a9102"
+    },
+    {
+      "source_relative_path": "queue.log",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 1114,
+      "source_sha256": "e2aaa402129c4cb3fe736048e0d7fdb0c746fb83b2a0ab0fa2e9fd8d8c7adf52"
+    },
+    {
+      "source_relative_path": "wait_and_capture.py",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 7450,
+      "source_sha256": "9de3089d8f945a8b435291b252b12f960e970f55ec739be5b231f541eacf38b0"
+    },
+    {
+      "source_relative_path": "job.json",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 395,
+      "source_sha256": "f4d921c6b94e4df689a7bfa66007872c2e5922d7825629c82df4ee778309ea25"
+    },
+    {
+      "source_relative_path": "queue.lock",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 0,
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_relative_path": "capture_20260905T150709Z.log",
+      "reason": "aborted_numeric_capture",
+      "source_size_bytes": 288,
+      "source_sha256": "2f71c8d5752dc0bf5cdf1562561f60dae7dc873d1dd8b4c1718fc52c697db99f"
+    },
+    {
+      "source_relative_path": "capture_20260905T150709Z/seed20260903_token1.pt",
+      "reason": "aborted_numeric_capture",
+      "source_size_bytes": 38246660,
+      "source_sha256": "f11a6387878e6ea7a3114ee70baa83012d2dfe1cb5e83ada6c0e570de1da3113"
+    },
+    {
+      "source_relative_path": "capture_20260905T150709Z/seed20260903_token0.pt",
+      "reason": "aborted_numeric_capture",
+      "source_size_bytes": 44538381,
+      "source_sha256": "12ffa4c5a689c7660e05ab5b2037106bc17e989c28a97a0f3de5f720039bd861"
+    },
+    {
+      "source_relative_path": "capture_20260905T150709Z/per_token.jsonl",
+      "reason": "aborted_numeric_capture",
+      "source_size_bytes": 70632,
+      "source_sha256": "3e3f483ead7f60ed26ad6a4a8554c5f5776a35146d3f9748c833d895e0e03728"
+    }
+  ],
+  "credential_screening": [
+    {
+      "source_relative_path": "SHA256SUMS",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/per_token.jsonl",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed17_token0.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed17_token1.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed17_token31.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed20260903_token0.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed20260903_token1.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed20260903_token31.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed65537_token0.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed65537_token1.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/seed65537_token31.pt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_20260905T150716Z.log",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "capture_command.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "execution_source.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "recurrence_source.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "run_numeric.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "rust_B.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "rust_D.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "status.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "validation.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    }
+  ],
+  "opaque_credential_exclusions": 0,
+  "redaction_policy": "Remove lexical token IDs, prompt/response/message content and credentials recursively from JSON/JSONL/CSV; preserve expert IDs, token positions, counts and numerical measurements.",
+  "binary_policy": "Credential-containing opaque binaries are excluded, with their exported CSV/JSON retained and sanitized. Clean native profiler files and nine synthetic tensor snapshots are preserved byte-for-byte. All source bytes credential-pattern screened; Torch pickle metadata inspected without execution. No credentials or credential-value hashes are published.",
+  "metadata_policy": "Source paths in this manifest are relative to source_archive. Native capture metadata such as GPU UUIDs, host paths and numeric process IDs remains measurement provenance.",
+  "checksum_policy": "SHA256SUMS covers every published regular file except itself, including this manifest. source_SHA256SUMS.txt, if present, refers to original source bytes and may name excluded historical files.",
+  "packaging_tool_sha256": "8b8468f865ae9c16942f9f7e1558a76498edd7c94baa0541d77101636e32c734"
+}
