@@ -5,6 +5,10 @@ mod dma_credits;
 mod engine;
 mod read_cache;
 mod types;
+pub mod weight_bank;
+// Source-aware transpose primitive; not an Attention operator graph.
+#[allow(dead_code)]
+pub mod matrix_view;
 
 // `execute` is retained for an embedding caller with an existing executor.
 #[allow(unused_imports)]

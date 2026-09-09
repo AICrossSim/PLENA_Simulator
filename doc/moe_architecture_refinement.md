@@ -1,5 +1,9 @@
 # MoE architecture refinement: compute, SRAM, DMA and dispatch
 
+Historical proposal. For the implemented 2026-09-09 normal V2 subset, its
+validation boundary and reproduction commands, see
+[MoE refinement implementation](moe_refinement_implementation.md).
+
 Status: **design proposal, not implemented or performance-validated** (2026-09-07).
 The runnable reference is Simulator `bead42b2` and Compiler `c45cf7b`.
 The [existing review guide](moe_normal_review.md) describes that implementation.

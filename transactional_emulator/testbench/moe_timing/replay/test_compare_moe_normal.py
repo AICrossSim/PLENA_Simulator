@@ -24,6 +24,7 @@ import sys
 parser = argparse.ArgumentParser()
 for name in ("workload", "architecture", "output", "hbm-channels"):
     parser.add_argument("--" + name, required=True)
+parser.add_argument("--max-hbm-bytes", type=int, default=536870912)
 args = parser.parse_args()
 root = Path(__file__).parent
 scenario = json.loads((root / "scenario.json").read_text())
@@ -392,6 +393,29 @@ class ComparisonEvidenceTests(unittest.TestCase):
         self.architectures[1]["cores"][0]["activation_elements_per_cycle"] += 1
         self.write(self.arch_paths[1], self.architectures[1])
         with self.assertRaisesRegex(ValueError, "equal total activation supply"):
+            self.run_comparison()
+        self.assertFalse((self.root / "calls.json").exists())
+
+    def test_refined_port_budget_must_match_before_ranking(self):
+        for arch in self.architectures:
+            arch["schema_version"] = 2
+            for core in arch["cores"]:
+                core["refinement"] = dict(weight_read_elements_per_cycle=24 // len(arch["cores"]),
+                                          accumulator_elements_per_cycle=8 // len(arch["cores"]))
+        for field in ("weight_read_elements_per_cycle", "accumulator_elements_per_cycle"):
+            with self.subTest(field=field):
+                candidates = copy.deepcopy(self.architectures)
+                candidates[1]["cores"][0]["refinement"][field] += 1
+                for path, arch in zip(self.arch_paths, candidates):
+                    self.write(path, arch)
+                with self.assertRaisesRegex(ValueError, "SRAM port throughput"):
+                    self.run_comparison()
+                self.assertFalse((self.root / "calls.json").exists())
+
+    def test_legacy_and_refined_timing_are_not_ranked_as_one_model(self):
+        self.architectures[0]["cores"][0]["refinement"] = {}
+        self.write(self.arch_paths[0], self.architectures[0])
+        with self.assertRaisesRegex(ValueError, "separate experiments"):
             self.run_comparison()
         self.assertFalse((self.root / "calls.json").exists())
 

@@ -88,6 +88,11 @@ def validate_native(envelope, architecture, channels):
         cal["native_pending"] == 0 and 0 <= cal["native_inflight_peak"] <= 256 and cal["submission_entries"] == 256,
         "native requests not drained or finite tracker bound exceeded",
     )
+    if architecture.get("dma", {}).get("issue_policy") == "demand_aware":
+        require(cal["submission_entries_available"] == 256 and cal["submission_inflight_peak"] <= 256,
+                "demand-aware native descriptors leaked or exceeded their bound")
+        require(cal["demand_accepted"] + cal["prefetch_accepted"] == sum(cal["accepted_per_channel"]),
+                "demand/prefetch classes do not reconcile with native requests")
     for key in ("accepted_per_channel", "rejected_per_channel"):
         require(
             len(cal[key]) == channels and all(type(v) is int and v >= 0 for v in cal[key]),
@@ -325,6 +330,7 @@ def _run_comparison(
     rtol=0.01,
     timeout=180,
     workers=1,
+    max_hbm_bytes=536_870_912,
 ):
     require(type(workers) is int and 1 <= workers <= 8, "workers must be an integer between 1 and 8")
     require(type(repeats) is int and repeats >= 2, "at least two integer repeats are required")
@@ -336,6 +342,7 @@ def _run_comparison(
         type(timeout) in (int, float) and math.isfinite(timeout) and timeout > 0, "timeout must be finite and positive"
     )
     require(len(architecture_paths) >= 2, "provide baseline and at least one candidate")
+    require(type(max_hbm_bytes) is int and max_hbm_bytes > 0, "max_hbm_bytes must be a positive integer")
     require(all(type(x) in (int, float) and math.isfinite(x) and x >= 0 for x in (atol, rtol)), "invalid tolerance")
     binary = Path(binary).resolve()
     workload_path = Path(workload_path).resolve()
@@ -363,6 +370,14 @@ def _run_comparison(
         for a in architectures
     ]
     require(len(set(activation_totals)) == 1, "comparison requires equal total activation supply")
+    refined = [all(c.get("refinement") is not None for c in a["cores"]) for a in architectures]
+    require(all(refined) or not any(refined), "compare legacy and refined timing in separate experiments")
+    if all(refined):
+        for field in ("weight_read_elements_per_cycle", "accumulator_elements_per_cycle"):
+            require(
+                len({sum(c["refinement"][field] for c in a["cores"]) for a in architectures}) == 1,
+                "comparison requires equal total modeled SRAM port throughput: " + field,
+            )
     for field in (
         "clock_period_ps",
         "mac_pipeline_cycles",
@@ -404,6 +419,13 @@ def _run_comparison(
     }
     for field in ("workload_sha256", "hbm_sha256"):
         require(golden[field] == expected_hashes[field], "golden identity mismatch: " + field)
+    bank_path = None
+    bank_hash = None
+    if workload.get("weight_bank") is not None:
+        bank_path = workload_path.parent / workload["weight_bank"]["manifest"]
+        bank_hash = digest(bank_path)
+        require(bank_hash == workload["weight_bank"]["sha256"] == golden["bank_sha256"],
+                "immutable weight bank identity differs from golden/window")
     run_dir = output_dir / ("run_" + uuid.uuid4().hex)
     run_dir.mkdir()
 
@@ -424,12 +446,17 @@ def _run_comparison(
                 str(report_path),
                 "--hbm-channels",
                 str(hbm_channels),
+                "--max-hbm-bytes",
+                str(max_hbm_bytes),
             ]
             with log_path.open("wb") as log:
                 subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=timeout)
             envelope = read_json(report_path)
             for field, value in dict(expected_hashes, architecture_sha256=architecture_hash).items():
                 require(envelope["provenance"][field] == value, "input/binary identity changed: " + field)
+            if bank_hash is not None:
+                require(envelope["provenance"]["weight_bank"]["manifest_sha256"] == bank_hash,
+                        "runner did not bind the expected immutable bank")
             gates.append(validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_channels))
             repeat_results.append(envelope["result"])
             native_repeats.append(envelope["memory_model"].get("calibration"))
@@ -454,6 +481,8 @@ def _run_comparison(
     # order and propagate every exception before publishing any speedup.
     with ThreadPoolExecutor(max_workers=workers) as pool:
         results = list(pool.map(execute_architecture, range(len(architectures))))
+    if bank_path is not None:
+        require(digest(bank_path) == bank_hash, "weight bank catalog changed during comparison")
     for path, expected, label in (
         (workload_path, expected_hashes["workload_sha256"], "workload"),
         (golden_path, golden_hash, "golden"),
@@ -502,6 +531,7 @@ def run_comparison(
     rtol=0.01,
     timeout=180,
     workers=1,
+    max_hbm_bytes=536_870_912,
 ):
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -522,6 +552,7 @@ def run_comparison(
             rtol,
             timeout,
             workers,
+            max_hbm_bytes,
         )
     except Exception as error:
         summary_path.write_text(

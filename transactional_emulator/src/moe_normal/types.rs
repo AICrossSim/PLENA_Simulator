@@ -39,10 +39,20 @@ pub struct SharedExpert {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct WeightBankReference {
+    pub manifest: String,
+    /// SHA256 of the exact immutable bank manifest bytes.
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Workload {
     pub schema_version: u32,
     pub name: String,
     pub hbm_file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight_bank: Option<WeightBankReference>,
     pub input_dim: usize,
     pub expert_hidden_dim: usize,
     pub inputs_bf16: Vec<Vec<u16>>,
@@ -79,6 +89,31 @@ pub struct CoreConfig {
     /// full-width analytical assumption; this is not a physical area estimate.
     #[serde(default)]
     pub activation_elements_per_cycle: Option<usize>,
+    /// V2 makes token scheduling independent of BLEN output lanes / MLEN K lanes.
+    #[serde(default)]
+    pub refinement: Option<CoreRefinement>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TailPolicy {
+    Padded,
+    ValidRows,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoreRefinement {
+    pub m_rows: usize,
+    pub tail_policy: TailPolicy,
+    /// At most two independent N tiles; each always owns a demand weight slot.
+    pub active_n_tiles: usize,
+    /// Shared decoded-SRAM read/write port; BF16 elements per cycle.
+    pub weight_read_elements_per_cycle: usize,
+    /// One shared FP32 accumulator read/write port, elements per cycle.
+    pub accumulator_elements_per_cycle: usize,
+    /// Stationary BF16 operands, charged inside weight_sram_bytes, not extra SRAM.
+    pub operand_latch_bytes: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -183,6 +218,24 @@ pub struct CoreReport {
     pub cache_hits: u64,
     pub cache_port_busy_ps: u64,
     pub cache_peak_bytes: usize,
+    pub refinement: Option<RefinementReport>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct RefinementReport {
+    pub m_rows: usize,
+    pub operand_latch_reserved_bytes: usize,
+    pub output_context_peak_bytes: usize,
+    pub pending_result_peak_bytes: usize,
+    pub weight_port_busy_ps: u64,
+    pub weight_port_wait_ps: u64,
+    pub accumulator_port_busy_ps: u64,
+    pub accumulator_port_wait_ps: u64,
+    pub output_context_stall_ps: u64,
+    pub independent_output_switches: u64,
+    pub output_contexts_peak: usize,
+    pub finalized_elements: u64,
+    pub output_finalize_elapsed_ps: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]

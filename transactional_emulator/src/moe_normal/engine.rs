@@ -3,20 +3,44 @@ use futures::{
     future::{BoxFuture, Shared as SharedFuture},
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use half::bf16;
-use memory::ErasedMemoryModel;
+use memory::{ErasedMemoryModel, ReadPriority};
 use quantize::{DataType, FpType};
 use runtime::{Duration, Executor, Instant};
-use tokio::sync::{Semaphore, oneshot};
+use tokio::sync::{Notify, Semaphore, oneshot};
 
 use super::dma_credits::CreditPool;
 use super::read_cache::{ENTRY_BYTES, ReadCache};
 use super::types::*;
 
 const BLOCK: usize = 8;
+const OUTPUT_CONTEXT_BYTES: usize = 32;
+
+fn m_rows(c: &CoreConfig) -> usize {
+    c.refinement.as_ref().map_or(c.blen, |r| r.m_rows)
+}
+
+fn refined_context_bytes(rows: usize, c: &CoreConfig) -> Result<usize, String> {
+    c.refinement.as_ref().map_or(Ok(0), |r| {
+        checked(
+            &[
+                r.active_n_tiles,
+                rows.div_ceil(r.m_rows),
+                OUTPUT_CONTEXT_BYTES,
+            ],
+            "output contexts",
+        )
+    })
+}
+
+fn refined_result_bytes(rows: usize, c: &CoreConfig) -> Result<usize, String> {
+    c.refinement.as_ref().map_or(Ok(0), |r| {
+        checked(&[r.active_n_tiles, rows, c.blen, 4], "pending FP32 results")
+    })
+}
 
 fn checked(values: &[usize], what: &str) -> Result<usize, String> {
     values.iter().try_fold(1usize, |a, b| {
@@ -36,7 +60,8 @@ fn service_cycles(a: &Architecture, c: &CoreConfig) -> u64 {
     match a.matrix_timing {
         MatrixTiming::Pipelined => {
             let supply = c.activation_elements_per_cycle.unwrap_or(c.mlen);
-            (c.blen as u64).max((c.blen as u64 * c.mlen as u64).div_ceil(supply as u64))
+            let rows = m_rows(c) as u64;
+            rows.max((rows * c.mlen as u64).div_ceil(supply as u64))
         }
         MatrixTiming::LegacySerialized => c.mlen as u64 + a.mac_pipeline_cycles,
     }
@@ -72,6 +97,8 @@ fn accumulator_bytes(
         "accumulator",
     )?
     .checked_add(pipeline_bytes(a, c)?)
+    .and_then(|v| v.checked_add(refined_context_bytes(rows, c).ok()?))
+    .and_then(|v| v.checked_add(refined_result_bytes(rows, c).ok()?))
     .ok_or_else(|| "accumulator plus pipeline storage overflow".into())
 }
 
@@ -257,8 +284,16 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
     let mut multipliers = 0u128;
     for (c, queue) in a.cores.iter().zip(&p.queues) {
         multipliers += checked(&[c.blen, c.mlen], "multipliers")? as u128;
-        let per_tile_macs = checked(&[c.blen, c.blen, c.mlen], "tile MACs")? as u128;
-        let tile_latency = service_cycles(a, c) as u128 + extra_cycles(a, c) as u128;
+        let per_tile_macs = checked(&[m_rows(c), c.blen, c.mlen], "tile MACs")? as u128;
+        let mut tile_latency = service_cycles(a, c) as u128 + extra_cycles(a, c) as u128;
+        if let Some(r) = &c.refinement {
+            // Conservative serialization bound includes decoded writes, latch
+            // preload and both accumulator directions (overlap can only help).
+            tile_latency += 2 * checked(&[c.blen, c.mlen], "operand service")?
+                .div_ceil(r.weight_read_elements_per_cycle) as u128;
+            tile_latency += 2 * checked(&[m_rows(c), c.blen], "accumulator service")?
+                .div_ceil(r.accumulator_elements_per_cycle) as u128;
+        }
         let decode_cycles = checked(&[c.blen, c.mlen], "decode elements")?.div_ceil(lanes) as u128;
         let candidates: Vec<&Job> = if a.dispatch_policy == DispatchPolicy::WorkConserving {
             p.queues
@@ -283,12 +318,17 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
                 (w.expert_hidden_dim, w.input_dim),
                 (w.input_dim, w.expert_hidden_dim),
             ] {
+                if let Some(r) = &c.refinement {
+                    let outputs = checked(&[m, n], "finalized output elements")?;
+                    cycles += outputs.div_ceil(r.accumulator_elements_per_cycle) as u128
+                        + outputs.div_ceil(lanes) as u128;
+                }
                 let weight_tiles = checked(
                     &[n.div_ceil(c.blen), k.div_ceil(c.mlen)],
                     "weight tile count",
                 )? as u128;
                 let macro_tiles = weight_tiles
-                    .checked_mul(m.div_ceil(c.blen) as u128)
+                    .checked_mul(m.div_ceil(m_rows(c)) as u128)
                     .ok_or("macro tile count overflow")?;
                 issued = issued
                     .checked_add(
@@ -337,8 +377,16 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
 /// Validate all capacities, shape/route contracts and complete HBM ranges before
 /// spawning work. Out-of-range MemoryBacked reads must never silently turn to 0.
 pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), String> {
-    if w.schema_version != 1 || a.schema_version != 1 {
-        return Err("only workload/architecture schema_version 1 is supported".into());
+    super::weight_bank::validate_contract(w)?;
+    if !(1..=2).contains(&a.schema_version)
+        || a.cores
+            .iter()
+            .any(|c| c.refinement.is_some() != (a.schema_version == 2))
+    {
+        return Err(
+            "architecture V1 requires legacy cores; V2 requires explicit refinement on every core"
+                .into(),
+        );
     }
     if w.input_dim == 0 || w.expert_hidden_dim == 0 || w.inputs_bf16.is_empty() {
         return Err("input_dim, expert_hidden_dim and token count must be positive".into());
@@ -368,6 +416,9 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         return Err("global DMA staging must provide 64 bytes per credit".into());
     }
     if let Some(dma) = &a.dma {
+        if dma.issue_policy == ramulator::model::IssuePolicy::DemandAware && a.schema_version != 2 {
+            return Err("demand-aware DMA requires V2 active-output dependencies".into());
+        }
         if !(1..=2).contains(&dma.lookup_ii_cycles) {
             return Err("lookup_ii_cycles must be 1 or 2".into());
         }
@@ -406,14 +457,29 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         // Keep the legacy square MatrixMachine's complete BLEN column slices
         // inside an MLEN row. The local normal-buffer loop itself could handle
         // other ratios; those would be a separate mapping/ISA extension.
-        if !c.mlen.is_multiple_of(c.blen) {
+        if c.refinement.is_none() && !c.mlen.is_multiple_of(c.blen) {
             return Err(format!(
                 "core {} MLEN must be divisible by BLEN for the square mapping",
                 c.id
             ));
         }
         checked(&[c.blen, c.mlen], "multiplier count")?;
-        checked(&[c.blen, c.blen, c.mlen], "issued MACs per tile")?;
+        checked(&[m_rows(c), c.blen, c.mlen], "issued MACs per tile")?;
+        if let Some(r) = &c.refinement {
+            if r.m_rows == 0
+                || !(1..=2).contains(&r.active_n_tiles)
+                || r.active_n_tiles > c.weight_slots
+                || r.weight_read_elements_per_cycle == 0
+                || r.accumulator_elements_per_cycle == 0
+                || a.matrix_timing != MatrixTiming::Pipelined
+            {
+                return Err("refinement needs positive token/port dimensions, one or two active N tiles, and pipelined timing".into());
+            }
+            let latch = checked(&[r.active_n_tiles, c.blen, c.mlen, 2], "operand latches")?;
+            if r.operand_latch_bytes < latch {
+                return Err(format!("core {} needs {latch} operand latch bytes", c.id));
+            }
+        }
         if a.mac_pipeline_cycles > u32::MAX as u64 {
             return Err("mac_pipeline_cycles exceeds supported range".into());
         }
@@ -422,6 +488,7 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         }
         let need = weight_slot_bytes(c)?
             .checked_mul(c.weight_slots)
+            .and_then(|v| v.checked_add(c.refinement.as_ref().map_or(0, |r| r.operand_latch_bytes)))
             .ok_or("weight SRAM overflow")?;
         if need > c.weight_sram_bytes {
             return Err(format!(
@@ -482,6 +549,8 @@ struct CoreState {
     slots_peak: AtomicUsize,
     weight_bytes: AtomicUsize,
     weight_peak: AtomicUsize,
+    weight_port: Semaphore,
+    accumulator_port: Semaphore,
 }
 
 impl CoreState {
@@ -514,11 +583,22 @@ impl CoreState {
                 cache_hits: 0,
                 cache_port_busy_ps: 0,
                 cache_peak_bytes: 0,
+                refinement: c.refinement.as_ref().map(|r| RefinementReport {
+                    m_rows: r.m_rows,
+                    operand_latch_reserved_bytes: r.operand_latch_bytes,
+                    ..Default::default()
+                }),
             }),
             slots: AtomicUsize::new(0),
             slots_peak: AtomicUsize::new(0),
-            weight_bytes: AtomicUsize::new(0),
-            weight_peak: AtomicUsize::new(0),
+            weight_bytes: AtomicUsize::new(
+                c.refinement.as_ref().map_or(0, |r| r.operand_latch_bytes),
+            ),
+            weight_peak: AtomicUsize::new(
+                c.refinement.as_ref().map_or(0, |r| r.operand_latch_bytes),
+            ),
+            weight_port: Semaphore::new(1),
+            accumulator_port: Semaphore::new(1),
         }
     }
 }
@@ -573,9 +653,21 @@ struct Dma {
 // Tile copy fragments cost 24B each; 128B state per resident tile. 4KiB
 // covers queue heads, lookup/copy pipelines, and bounded arbitration state.
 fn frontend_bytes(a: &Architecture) -> Result<usize, String> {
+    let demand = a
+        .dma
+        .as_ref()
+        .is_some_and(|d| d.issue_policy == ramulator::model::IssuePolicy::DemandAware);
     let mut bytes = checked(&[a.global_dma_credits, 120], "DMA line metadata")?
         .checked_add(8192)
         .ok_or("DMA control storage overflow")?;
+    if demand {
+        // Native priority/age/order: 16B * 256 trackers. Reserve 32 channel
+        // heads (the runner's maximum), and two 4B priority IDs per line.
+        bytes = bytes
+            .checked_add(4096 + 32 * 16)
+            .and_then(|v| v.checked_add(a.global_dma_credits * 8))
+            .ok_or("DMA demand metadata overflow")?;
+    }
     for c in &a.cores {
         let fragments = c
             .mlen
@@ -583,9 +675,12 @@ fn frontend_bytes(a: &Architecture) -> Result<usize, String> {
             .checked_add(c.mlen.div_ceil(BLOCK).div_ceil(64))
             .and_then(|v| v.checked_add(2))
             .ok_or("DMA fragment count overflow")?;
-        let tile = checked(&[c.blen, fragments, 24], "DMA fragment descriptors")?
-            .checked_add(128)
-            .ok_or("DMA tile state overflow")?;
+        let tile = checked(
+            &[c.blen, fragments, if demand { 40 } else { 24 }],
+            "DMA fragment descriptors",
+        )?
+        .checked_add(128)
+        .ok_or("DMA tile state overflow")?;
         bytes = bytes
             .checked_add(checked(
                 &[c.weight_slots, tile],
@@ -599,14 +694,61 @@ fn frontend_bytes(a: &Architecture) -> Result<usize, String> {
 type SectorFuture = SharedFuture<BoxFuture<'static, [u8; 32]>>;
 struct PendingLine {
     users: usize,
-    sectors: [Option<SectorFuture>; 2],
+    sectors: [Option<(ReadPriority, SectorFuture)>; 2],
+}
+
+/// The only decision state is bounded by a resident tile's fragment count.
+/// A merged sector inherits demand from every consumer, even after enqueue.
+struct TileDemand {
+    demanded: AtomicBool,
+    aliases: Mutex<Vec<ReadPriority>>,
+    alias_limit: usize,
+}
+
+impl TileDemand {
+    fn new(c: &CoreConfig, demanded: bool) -> Arc<Self> {
+        Arc::new(Self {
+            demanded: AtomicBool::new(demanded),
+            aliases: Mutex::new(Vec::new()),
+            alias_limit: 2 * c.blen * (c.mlen.div_ceil(64) + (c.mlen / BLOCK).div_ceil(64) + 2),
+        })
+    }
+
+    fn attach(&self, priority: &ReadPriority) {
+        let mut aliases = self.aliases.lock().unwrap();
+        assert!(
+            aliases.len() < self.alias_limit,
+            "tile priority descriptors exhausted"
+        );
+        if self.demanded.load(Ordering::SeqCst) {
+            priority.promote();
+        }
+        aliases.push(priority.clone());
+    }
+
+    fn promote(&self) {
+        let aliases = self.aliases.lock().unwrap();
+        self.demanded.store(true, Ordering::SeqCst);
+        for priority in aliases.iter() {
+            priority.promote();
+        }
+    }
 }
 
 impl Dma {
-    fn sector(self: &Arc<Self>, address: u64, sector: usize, core: Arc<CoreState>) -> SectorFuture {
+    fn sector(
+        self: &Arc<Self>,
+        address: u64,
+        sector: usize,
+        core: Arc<CoreState>,
+        priority: ReadPriority,
+    ) -> SectorFuture {
         let dma = self.clone();
         async move {
-            let data = dma.hbm.box_read_mask(address, 1 << sector).await;
+            let data = dma
+                .hbm
+                .box_read_mask_priority(address, 1 << sector, priority)
+                .await;
             dma.bytes.fetch_add(32, Ordering::SeqCst);
             core.report.lock().unwrap().hbm_read_bytes += 32;
             let mut bytes = [0; 32];
@@ -623,6 +765,7 @@ impl Dma {
         requested: u8,
         useful: usize,
         core: Arc<CoreState>,
+        demand: Option<&TileDemand>,
     ) -> [u8; 64] {
         let config = self.config.as_ref().unwrap();
         let mask = if config.sector_reads { requested } else { 3 };
@@ -664,9 +807,19 @@ impl Dma {
                 if entry.sectors[sector].is_some() {
                     self.report.lock().unwrap().merged_sectors += 1;
                 } else {
-                    entry.sectors[sector] = Some(self.sector(address, sector, core.clone()));
+                    let priority = ReadPriority::prefetch();
+                    entry.sectors[sector] = Some((
+                        priority.clone(),
+                        self.sector(address, sector, core.clone(), priority),
+                    ));
                 }
-                needed.push((sector, entry.sectors[sector].as_ref().unwrap().clone()));
+                let (priority, future) = entry.sectors[sector].as_ref().unwrap();
+                if let Some(demand) = demand {
+                    demand.attach(priority);
+                } else {
+                    priority.promote();
+                }
+                needed.push((sector, future.clone()));
             }
             let mut report = self.report.lock().unwrap();
             report.mshr_peak = report.mshr_peak.max(lines.len());
@@ -674,7 +827,15 @@ impl Dma {
         } else {
             (0..2)
                 .filter(|s| mask & (1 << s) != 0)
-                .map(|s| (s, self.sector(address, s, core.clone())))
+                .map(|s| {
+                    let priority = ReadPriority::prefetch();
+                    if let Some(demand) = demand {
+                        demand.attach(&priority);
+                    } else {
+                        priority.promote();
+                    }
+                    (s, self.sector(address, s, core.clone(), priority))
+                })
                 .collect()
         };
         let responses = futures::future::join_all(
@@ -783,10 +944,20 @@ fn spawn_load(
     region: MatrixRegion,
     tile: TileSpec,
 ) -> oneshot::Receiver<Result<WeightTile, String>> {
+    spawn_load_with_demand(core, shared, region, tile, None)
+}
+
+fn spawn_load_with_demand(
+    core: Arc<CoreState>,
+    shared: Arc<Shared>,
+    region: MatrixRegion,
+    tile: TileSpec,
+    demand: Option<Arc<TileDemand>>,
+) -> oneshot::Receiver<Result<WeightTile, String>> {
     let reservation = SlotReservation::new(core.clone());
     let (tx, rx) = oneshot::channel();
     Executor::current().spawn(async move {
-        let result = load_tile(core, shared, region, tile, reservation).await;
+        let result = load_tile(core, shared, region, tile, reservation, demand).await;
         let _ = tx.send(result);
     });
     rx
@@ -798,6 +969,7 @@ async fn load_tile(
     region: MatrixRegion,
     tile: TileSpec,
     reservation: SlotReservation,
+    demand: Option<Arc<TileDemand>>,
 ) -> Result<WeightTile, String> {
     let c = &core.config;
     let nr = c.blen.min(region.rows - tile.n);
@@ -824,6 +996,7 @@ async fn load_tile(
     }
     let mut pending = Vec::with_capacity(reads.len());
     for (address, spans) in reads {
+        let demand = demand.clone();
         let dma = shared.dma.clone();
         let packed = packed.clone();
         let core = core.clone();
@@ -852,6 +1025,7 @@ async fn load_tile(
                     mask,
                     spans.iter().map(|s| s.len).sum(),
                     core.clone(),
+                    demand.as_deref(),
                 )
                 .await
             } else if let Some(bytes) = core.cache.lookup(address).await {
@@ -883,6 +1057,11 @@ async fn load_tile(
     // decoded data cannot become available for free at the final HBM response.
     let wait = shared.vector.work(nr * kr).await;
     core.report.lock().unwrap().vector_wait_ps += wait;
+    if core.config.refinement.is_some() {
+        // Includes writing padded zeros; the same local SRAM port later reads
+        // decoded operands into the separately reserved stationary latches.
+        refined_port_work(&core, true, elements, shared.vector.clock).await;
+    }
     let packed = Arc::try_unwrap(packed)
         .map_err(|_| "DMA buffer retained after completion")?
         .into_inner()
@@ -915,8 +1094,308 @@ async fn load_tile(
     })
 }
 
-// Keep the three separately owned data buffers explicit at the execution boundary.
-#[allow(clippy::too_many_arguments)]
+/// One finite local port. Reads and writes contend on the same resource. This
+/// deliberately specifies aggregate ports, not an unimplemented SRAM bank map.
+async fn refined_port_work(core: &CoreState, weight: bool, elements: usize, clock: u64) {
+    let r = core.config.refinement.as_ref().unwrap();
+    let (port, rate) = if weight {
+        (&core.weight_port, r.weight_read_elements_per_cycle)
+    } else {
+        (&core.accumulator_port, r.accumulator_elements_per_cycle)
+    };
+    let ex = Executor::current();
+    let begin = ex.now().as_picos();
+    let _permit = port.acquire().await.unwrap();
+    let wait = ex.now().as_picos() - begin;
+    let busy = elements.div_ceil(rate) as u64 * clock;
+    ex.resolve_at(Duration::from_picos(busy)).await;
+    let mut report = core.report.lock().unwrap();
+    let report = report.refinement.as_mut().unwrap();
+    if weight {
+        report.weight_port_busy_ps += busy;
+        report.weight_port_wait_ps += wait;
+    } else {
+        report.accumulator_port_busy_ps += busy;
+        report.accumulator_port_wait_ps += wait;
+    }
+}
+
+type PendingTile = (
+    oneshot::Receiver<Result<WeightTile, String>>,
+    Option<Arc<TileDemand>>,
+);
+
+struct RefinedOutput {
+    n: usize,
+    next_load_k: usize,
+    k: usize,
+    pending: VecDeque<PendingTile>,
+    tile: Option<WeightTile>,
+    latched: bool,
+    operands: Vec<bf16>,
+    issued: Vec<bool>,
+    feedback: Vec<Arc<AtomicBool>>,
+    slot_limit: usize,
+}
+
+impl RefinedOutput {
+    fn new(n: usize, m: usize, c: &CoreConfig, slot_limit: usize) -> Self {
+        let mb = m.div_ceil(m_rows(c));
+        Self {
+            n,
+            next_load_k: 0,
+            k: 0,
+            pending: VecDeque::new(),
+            tile: None,
+            latched: false,
+            operands: vec![bf16::ZERO; c.blen * c.mlen],
+            issued: vec![false; mb],
+            feedback: (0..mb).map(|_| Arc::new(AtomicBool::new(true))).collect(),
+            slot_limit,
+        }
+    }
+
+    fn refill(
+        &mut self,
+        core: &Arc<CoreState>,
+        shared: &Arc<Shared>,
+        region: &MatrixRegion,
+        wake: &Arc<Notify>,
+    ) {
+        // Each active N group owns at least one slot. FIFO K order within that
+        // reservation prevents future fragments from blocking its predecessor.
+        while self.pending.len() + usize::from(self.tile.is_some()) < self.slot_limit
+            && self.next_load_k < region.cols
+        {
+            let demand = shared
+                .dma
+                .config
+                .as_ref()
+                .filter(|d| d.issue_policy == ramulator::model::IssuePolicy::DemandAware)
+                .map(|_| TileDemand::new(&core.config, self.next_load_k == self.k));
+            let rx = spawn_load_with_demand(
+                core.clone(),
+                shared.clone(),
+                region.clone(),
+                TileSpec {
+                    n: self.n,
+                    k: self.next_load_k,
+                },
+                demand.clone(),
+            );
+            let (tx, receiver) = oneshot::channel();
+            let wake = wake.clone();
+            Executor::current().spawn(async move {
+                let result = rx
+                    .await
+                    .unwrap_or_else(|_| Err("refined weight loader failed".into()));
+                let _ = tx.send(result);
+                wake.notify_one();
+            });
+            self.pending.push_back((receiver, demand));
+            self.next_load_k += core.config.mlen;
+        }
+    }
+}
+
+/// Normal V2: fixed physical P×R operands, independent temporal token extent,
+/// finite ports and at most two independent output-column groups. Numerical
+/// updates retain ascending global K; the feedback latency remains analytical.
+#[allow(clippy::too_many_arguments)] // Explicitly separate the three owned data buffers.
+async fn refined_gemm(
+    input: &[bf16],
+    output: &mut [bf16],
+    accumulator: &mut [f32],
+    m: usize,
+    region: &MatrixRegion,
+    core: &Arc<CoreState>,
+    a: &Architecture,
+    shared: &Arc<Shared>,
+) -> Result<(), String> {
+    let c = &core.config;
+    let r = c.refinement.as_ref().unwrap();
+    let (n, k) = (region.rows, region.cols);
+    let acc = &mut accumulator[..m * n];
+    // This initializes the functional reference. The modeled first K update
+    // injects zero instead of reading/clearing old accumulator SRAM contents.
+    acc.fill(0.0);
+    let active = r.active_n_tiles.min(n.div_ceil(c.blen));
+    let wake = Arc::new(Notify::new());
+    let mut groups: Vec<_> = (0..active)
+        .map(|i| {
+            RefinedOutput::new(
+                i * c.blen,
+                m,
+                c,
+                c.weight_slots / active + usize::from(i < c.weight_slots % active),
+            )
+        })
+        .collect();
+    let mut next_n = active * c.blen;
+    let mut last_group = None;
+    let ex = Executor::current();
+    {
+        let mut report = core.report.lock().unwrap();
+        let detail = report.refinement.as_mut().unwrap();
+        detail.output_context_peak_bytes = detail
+            .output_context_peak_bytes
+            .max(refined_context_bytes(m, c)?);
+        detail.pending_result_peak_bytes = detail
+            .pending_result_peak_bytes
+            .max(refined_result_bytes(m, c)?);
+        detail.output_contexts_peak = detail
+            .output_contexts_peak
+            .max(active * m.div_ceil(r.m_rows));
+    }
+    loop {
+        for group in &mut groups {
+            if group.k >= k && group.feedback.iter().all(|f| f.load(Ordering::SeqCst)) && next_n < n
+            {
+                *group = RefinedOutput::new(next_n, m, c, group.slot_limit);
+                next_n += c.blen;
+            }
+            group.refill(core, shared, region, &wake);
+            if group.tile.is_none()
+                && let Some((rx, demand)) = group.pending.front_mut()
+            {
+                if let Some(demand) = demand {
+                    demand.promote();
+                }
+                match rx.try_recv() {
+                    Ok(value) => {
+                        group.tile = Some(value?);
+                        group.pending.pop_front();
+                        group.latched = false;
+                    }
+                    Err(oneshot::error::TryRecvError::Empty) => (),
+                    Err(oneshot::error::TryRecvError::Closed) => {
+                        return Err("refined tile completion channel closed".into());
+                    }
+                }
+            }
+        }
+        if groups
+            .iter()
+            .all(|g| g.k >= k && g.feedback.iter().all(|f| f.load(Ordering::SeqCst)))
+        {
+            break;
+        }
+        let start = last_group.map_or(0, |i: usize| (i + 1) % active);
+        let selected = (0..active).find_map(|step| {
+            let i = (start + step) % active;
+            let g = &groups[i];
+            g.tile.as_ref()?;
+            g.issued
+                .iter()
+                .enumerate()
+                .find(|(mb, issued)| !**issued && g.feedback[*mb].load(Ordering::SeqCst))
+                .map(|(mb, _)| (i, mb))
+        });
+        let Some((group_index, mb)) = selected else {
+            let begin = ex.now().as_picos();
+            let waiting_feedback = groups.iter().any(|g| g.tile.is_some());
+            wake.notified().await;
+            let delay = ex.now().as_picos() - begin;
+            let mut report = core.report.lock().unwrap();
+            if waiting_feedback {
+                report.accumulator_dependency_stall_ps += delay;
+                report.refinement.as_mut().unwrap().output_context_stall_ps += delay;
+            } else {
+                report.weight_ready_wait_ps += delay;
+            }
+            continue;
+        };
+        let g = &mut groups[group_index];
+        if !g.latched {
+            refined_port_work(core, true, c.blen * c.mlen, a.clock_period_ps).await;
+            g.operands.copy_from_slice(&g.tile.as_ref().unwrap().values);
+            g.latched = true;
+        }
+        let m0 = mb * r.m_rows;
+        let mr = r.m_rows.min(m - m0);
+        let nr = c.blen.min(n - g.n);
+        let kr = c.mlen.min(k - g.k);
+        if g.k > 0 {
+            refined_port_work(core, false, mr * nr, a.clock_period_ps).await;
+        }
+        for row in 0..mr {
+            for col in 0..nr {
+                let target = (m0 + row) * n + g.n + col;
+                for kk in 0..kr {
+                    let product = input[(m0 + row) * k + g.k + kk].to_f32()
+                        * g.operands[col * c.mlen + kk].to_f32();
+                    acc[target] += product;
+                }
+            }
+        }
+        let issue_rows = match r.tail_policy {
+            TailPolicy::Padded => r.m_rows,
+            TailPolicy::ValidRows => mr,
+        };
+        let supply = c.activation_elements_per_cycle.unwrap_or(c.mlen);
+        let service =
+            issue_rows.max((issue_rows * c.mlen).div_ceil(supply)) as u64 * a.clock_period_ps;
+        let result_time =
+            ex.now() + Duration::from_picos(service + extra_cycles(a, c) * a.clock_period_ps);
+        g.feedback[mb].store(false, Ordering::SeqCst);
+        let done = g.feedback[mb].clone();
+        let completion_core = core.clone();
+        let completion_wake = wake.clone();
+        let clock = a.clock_period_ps;
+        ex.spawn(async move {
+            Executor::current().resolve_at(result_time).await;
+            refined_port_work(&completion_core, false, mr * nr, clock).await;
+            done.store(true, Ordering::SeqCst);
+            completion_wake.notify_one();
+        });
+        {
+            let mut report = core.report.lock().unwrap();
+            report.useful_macs += (mr * nr * kr) as u64;
+            report.issued_macs += (issue_rows * c.blen * c.mlen) as u64;
+            report.compute_busy_ps += service;
+            if last_group.is_some_and(|prev| prev != group_index) {
+                report
+                    .refinement
+                    .as_mut()
+                    .unwrap()
+                    .independent_output_switches += 1;
+            }
+        }
+        last_group = Some(group_index);
+        ex.resolve_at(Duration::from_picos(service)).await;
+        g.issued[mb] = true;
+        if g.issued.iter().all(|v| *v) {
+            // Operands have been captured for every M consumer. The separately
+            // budgeted pending FP32 results retain ownership until writeback.
+            g.tile.take();
+            g.latched = false;
+            g.k += c.mlen;
+            g.issued.fill(false);
+        }
+    }
+    // All FP32 writebacks have completed. Materializing a BF16 projection in
+    // vector SRAM costs an accumulator read plus shared vector conversion/copy.
+    // It cannot be consumed by SwiGLU/down until both services complete.
+    let finalize_start = ex.now().as_picos();
+    refined_port_work(core, false, m * n, a.clock_period_ps).await;
+    let vector_wait = shared.vector.work(m * n).await;
+    {
+        let mut report = core.report.lock().unwrap();
+        report.vector_wait_ps += vector_wait;
+        let detail = report.refinement.as_mut().unwrap();
+        detail.finalized_elements += (m * n) as u64;
+        detail.output_finalize_elapsed_ps += ex.now().as_picos() - finalize_start;
+    }
+    for (value, sum) in output.iter_mut().zip(acc.iter().copied()) {
+        *value = bf16::from_f32(sum);
+        if !value.is_finite() {
+            return Err("GEMM produced non-finite BF16".into());
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)] // Explicitly separate the three owned data buffers.
 async fn gemm(
     input: &[bf16],
     output: &mut [bf16],
@@ -927,6 +1406,9 @@ async fn gemm(
     a: &Architecture,
     shared: &Arc<Shared>,
 ) -> Result<(), String> {
+    if core.config.refinement.is_some() {
+        return refined_gemm(input, output, accumulator, m, region, core, a, shared).await;
+    }
     let n = region.rows;
     let k = region.cols;
     let c = &core.config;
@@ -1331,7 +1813,11 @@ pub async fn execute(
     }
     Ok(RunReport {
         schema_version: 1, workload: w.name.clone(), architecture: a.name.clone(),
-        timing_model: format!("{:?}: pipelined max(BLEN, ceil(BLEN*MLEN/activation_supply)) service with log2(MLEN)+pipeline readiness, or legacy serialized MLEN+overhead per instruction; shared ErasedMemoryModel; not RTL calibrated", a.matrix_timing),
+        timing_model: if a.schema_version == 2 {
+            "normal_v2: independent temporal M / physical P,R; finite shared decoded-SRAM and accumulator ports; reserved stationary operands; bounded independent-N interleave; ascending-global-K FP32 arithmetic with unchanged analytical log2(R)+pipeline feedback (not a validated reduction tree)".into()
+        } else {
+            format!("{:?}: pipelined max(BLEN, ceil(BLEN*MLEN/activation_supply)) service with log2(MLEN)+pipeline readiness, or legacy serialized MLEN+overhead per instruction; shared ErasedMemoryModel; not RTL calibrated", a.matrix_timing)
+        },
         timing_boundary: "ready BF16 inputs/routes and resident MX weights -> core gathers, weight reads/decode, three numerical GEMMs, SwiGLU, route reorder, deterministic weighted combine -> ready BF16 output; excludes router, initial input/weight placement, output HBM store".into(),
         weight_format: "PLENA local E4M3/E8M0 block8, output-major [N,K], separate element/scale streams, decoded BF16 normal SRAM; not an OCP MX conformance claim".into(),
         total_ps, multipliers: reports.iter().map(|r| r.multipliers).sum(),
@@ -1409,12 +1895,25 @@ mod dma_lifetime_tests {
         let ex = Executor::new();
         let d = dma.clone();
         ex.spawn(async move {
-            let first = d.read(0, 1, 32, core.clone());
+            let prefetched = TileDemand::new(&core.config, false);
+            let demanded = TileDemand::new(&core.config, true);
+            let first = d.read(0, 1, 32, core.clone(), Some(&prefetched));
             let late = async {
                 Executor::current()
                     .resolve_at(Duration::from_picos(3000))
                     .await;
-                d.read(0, 3, 64, core.clone()).await
+                let priority = d.lines.lock().unwrap()[&0].sectors[0]
+                    .as_ref()
+                    .unwrap()
+                    .0
+                    .clone();
+                assert!(!priority.is_demand());
+                let response = d.read(0, 3, 64, core.clone(), Some(&demanded)).await;
+                assert!(
+                    priority.is_demand(),
+                    "demand merged into prefetch was not promoted"
+                );
+                response
             };
             let (a, b) = futures::join!(first, late);
             assert_eq!(&a[..32], &(0..32u8).collect::<Vec<_>>());
@@ -1427,7 +1926,7 @@ mod dma_lifetime_tests {
                 d.lines.lock().unwrap().is_empty(),
                 "MSHR retained after final copy"
             );
-            d.read(0, 1, 32, core).await;
+            d.read(0, 1, 32, core, None).await;
         });
         ex.enter(Instant::ETERNITY).await;
         let r = dma.report.lock().unwrap();
@@ -1442,5 +1941,19 @@ mod dma_lifetime_tests {
         );
         assert_eq!(hbm.statistics().total_bytes_read, 96);
         assert_eq!(dma.bytes.load(Ordering::SeqCst), 96);
+    }
+
+    #[test]
+    fn tile_promotion_covers_already_queued_and_future_fragments() {
+        let a = super::super::tests::architecture();
+        let tile = TileDemand::new(&a.cores[0], false);
+        let queued = ReadPriority::prefetch();
+        tile.attach(&queued);
+        assert!(!queued.is_demand());
+        tile.promote();
+        assert!(queued.is_demand());
+        let later = ReadPriority::prefetch();
+        tile.attach(&later);
+        assert!(later.is_demand());
     }
 }

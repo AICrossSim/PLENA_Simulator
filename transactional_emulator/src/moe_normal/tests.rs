@@ -137,6 +137,7 @@ fn fixture() -> (Workload, Vec<u8>, Vec<DenseExpert>) {
             schema_version: 1,
             name: "unit_nonzero_tails".into(),
             hbm_file: "unused.bin".into(),
+            weight_bank: None,
             input_dim: d,
             expert_hidden_dim: e,
             inputs_bf16: input,
@@ -166,6 +167,7 @@ pub(super) fn architecture() -> Architecture {
                 read_cache_bytes: 0,
                 weight_slots: 2,
                 activation_elements_per_cycle: None,
+                refinement: None,
             },
             CoreConfig {
                 id: "small".into(),
@@ -177,6 +179,7 @@ pub(super) fn architecture() -> Architecture {
                 read_cache_bytes: 0,
                 weight_slots: 2,
                 activation_elements_per_cycle: None,
+                refinement: None,
             },
         ],
         dispatch_threshold: 4,
@@ -738,4 +741,193 @@ async fn pipelined_dma_lookup_accounts_port_occupancy_and_preserves_numerics() {
                 .contains("lookup_ii_cycles")
         );
     }
+}
+
+fn refined_architecture(active: usize) -> Architecture {
+    let mut a = architecture();
+    a.schema_version = 2;
+    // P=3,R=16 is deliberately forbidden by the old square mapping.
+    a.cores[0].blen = 3;
+    for (index, core) in a.cores.iter_mut().enumerate() {
+        core.refinement = Some(CoreRefinement {
+            m_rows: if index == 0 { 5 } else { 3 },
+            tail_policy: TailPolicy::ValidRows,
+            active_n_tiles: active,
+            weight_read_elements_per_cycle: 8,
+            accumulator_elements_per_cycle: 2,
+            operand_latch_bytes: active * core.blen * core.mlen * 2,
+        });
+    }
+    a
+}
+
+#[tokio::test]
+async fn refined_nonsquare_shapes_and_interleave_preserve_global_k_reference() {
+    let (w, bytes, dense) = fixture();
+    let expected = reference(&w, &dense);
+    for active in [1, 2] {
+        for mt in [1, 3, 5, 9] {
+            let mut a = refined_architecture(active);
+            for c in &mut a.cores {
+                c.refinement.as_mut().unwrap().m_rows = mt;
+            }
+            let result = simulate(w.clone(), a.clone(), &bytes).await;
+            assert_eq!(result.output_bf16, expected);
+            assert_eq!(
+                result.useful_macs,
+                (w.routes.len() * 3 * w.input_dim * w.expert_hidden_dim) as u64
+            );
+            assert_eq!(result.multipliers, (3 * 16 + 2 * 8) as u64);
+            for (report, config) in result.cores.iter().zip(&a.cores) {
+                assert!(report.weight_slots_peak <= config.weight_slots);
+                assert!(report.weight_sram_peak_bytes <= config.weight_sram_bytes);
+                assert!(report.accumulator_peak_bytes <= config.accumulator_bytes);
+                let detail = report.refinement.as_ref().unwrap();
+                assert!(detail.weight_port_busy_ps > 0);
+                assert!(detail.accumulator_port_busy_ps > 0);
+                assert!(detail.output_context_peak_bytes > 0);
+                assert!(detail.pending_result_peak_bytes > 0);
+                assert!(
+                    detail.output_contexts_peak
+                        <= active
+                            * if config.id == "large" {
+                                4usize.div_ceil(mt)
+                            } else {
+                                2usize.div_ceil(mt)
+                            }
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn refined_tail_policy_changes_padding_work_without_changing_hbm_or_values() {
+    let (w, bytes, _) = fixture();
+    let a = refined_architecture(2);
+    let valid = simulate(w.clone(), a.clone(), &bytes).await;
+    let mut padded = a;
+    for c in &mut padded.cores {
+        c.refinement.as_mut().unwrap().tail_policy = TailPolicy::Padded;
+    }
+    let padded = simulate(w, padded, &bytes).await;
+    assert_eq!(valid.output_bf16, padded.output_bf16);
+    assert_eq!(valid.hbm_read_bytes, padded.hbm_read_bytes);
+    assert_eq!(valid.useful_macs, padded.useful_macs);
+    assert!(valid.issued_macs < padded.issued_macs);
+    assert!(
+        valid
+            .cores
+            .iter()
+            .zip(&padded.cores)
+            .all(|(v, p)| v.compute_busy_ps < p.compute_busy_ps)
+    );
+}
+
+#[tokio::test]
+async fn refined_finite_ports_are_serviced_and_backpressure_preserves_output() {
+    let (w, bytes, _) = fixture();
+    let expected_finalized = (w.routes.len() * (2 * w.expert_hidden_dim + w.input_dim)) as u64;
+    let mut a = refined_architecture(2);
+    for c in &mut a.cores {
+        let r = c.refinement.as_mut().unwrap();
+        r.weight_read_elements_per_cycle = 64;
+        r.accumulator_elements_per_cycle = 64;
+    }
+    let fast = simulate(w.clone(), a.clone(), &bytes).await;
+    for c in &mut a.cores {
+        let r = c.refinement.as_mut().unwrap();
+        r.weight_read_elements_per_cycle = 1;
+        r.accumulator_elements_per_cycle = 1;
+    }
+    let slow = simulate(w, a, &bytes).await;
+    assert_eq!(fast.output_bf16, slow.output_bf16);
+    assert_eq!(fast.useful_macs, slow.useful_macs);
+    assert!(slow.total_ps > fast.total_ps);
+    assert_eq!(
+        slow.cores
+            .iter()
+            .map(|c| c.refinement.as_ref().unwrap().finalized_elements)
+            .sum::<u64>(),
+        expected_finalized
+    );
+    for (f, s) in fast.cores.iter().zip(&slow.cores) {
+        let f = f.refinement.as_ref().unwrap();
+        let s = s.refinement.as_ref().unwrap();
+        assert!(s.weight_port_busy_ps > f.weight_port_busy_ps);
+        assert!(s.accumulator_port_busy_ps > f.accumulator_port_busy_ps);
+        assert!(s.weight_port_busy_ps <= slow.total_ps);
+        assert!(s.accumulator_port_busy_ps <= slow.total_ps);
+        assert!(
+            s.output_finalize_elapsed_ps >= s.finalized_elements * 1000,
+            "the one-element accumulator port must drain every BF16 output"
+        );
+    }
+}
+
+#[tokio::test]
+async fn refined_two_slot_window_progresses_under_long_feedback_without_reordering_k() {
+    let (w, bytes, dense) = fixture();
+    let mut a = refined_architecture(2);
+    a.mac_pipeline_cycles = 100;
+    for c in &mut a.cores {
+        c.refinement.as_mut().unwrap().m_rows = 1;
+        c.weight_slots = 2;
+    }
+    let result = simulate(w.clone(), a, &bytes).await;
+    assert_eq!(result.output_bf16, reference(&w, &dense));
+    assert!(
+        result
+            .cores
+            .iter()
+            .all(|c| c.refinement.as_ref().unwrap().independent_output_switches > 0)
+    );
+    assert!(
+        result
+            .cores
+            .iter()
+            .any(|c| c.refinement.as_ref().unwrap().output_context_stall_ps > 0)
+    );
+    assert!(result.cores.iter().all(|c| c.weight_slots_peak <= 2));
+}
+
+#[test]
+fn refined_latches_contexts_and_schema_are_not_free() {
+    let (w, bytes, _) = fixture();
+    let a = refined_architecture(2);
+    validate(&w, &a, bytes.len() as u64).unwrap();
+    let mut bad = a.clone();
+    bad.cores[0]
+        .refinement
+        .as_mut()
+        .unwrap()
+        .operand_latch_bytes = 0;
+    assert!(
+        validate(&w, &bad, bytes.len() as u64)
+            .unwrap_err()
+            .contains("operand latch")
+    );
+    let mut bad = a.clone();
+    let c = &bad.cores[0];
+    bad.cores[0].weight_sram_bytes = c.weight_slots * c.blen * (c.mlen / 8) * 25;
+    assert!(
+        validate(&w, &bad, bytes.len() as u64)
+            .unwrap_err()
+            .contains("weight slots")
+    );
+    let mut bad = a.clone();
+    // Enough for the existing expert data + pipeline, but not the added bounded
+    // output contexts and pending result buffers.
+    bad.cores[0].accumulator_bytes = 4 * 11 * 4 + 3 * (4 + 2) * 4;
+    assert!(
+        validate(&w, &bad, bytes.len() as u64)
+            .unwrap_err()
+            .contains("accumulator")
+    );
+    let mut bad = a.clone();
+    bad.schema_version = 1;
+    assert!(validate(&w, &bad, bytes.len() as u64).is_err());
+    let mut bad = a;
+    bad.cores[0].refinement.as_mut().unwrap().m_rows = 0;
+    assert!(validate(&w, &bad, bytes.len() as u64).is_err());
 }

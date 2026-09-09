@@ -5,10 +5,39 @@ mod simple;
 pub mod testutils;
 
 use std::mem::ManuallyDrop;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 pub use naive::NaiveTiming;
 pub use simple::SimpleTiming;
+
+/// Monotonic urgency shared by a resident tile and its in-flight requests.
+/// Coalescing callers must share/promote the same line token for every consumer.
+/// This only affects requests not yet accepted by a supporting timing model.
+#[derive(Clone, Debug, Default)]
+pub struct ReadPriority(Arc<AtomicBool>);
+
+impl ReadPriority {
+    pub fn prefetch() -> Self {
+        Self::new(false)
+    }
+
+    pub fn demand() -> Self {
+        Self::new(true)
+    }
+
+    pub fn new(demand: bool) -> Self {
+        Self(Arc::new(AtomicBool::new(demand)))
+    }
+
+    pub fn promote(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    pub fn is_demand(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
 
 #[derive(Copy, Clone)]
 pub struct Statistics {
@@ -30,6 +59,14 @@ pub trait MemoryTimingModel: Send + Sync {
             self.read(addr).await;
         }
     }
+    fn read_mask_priority(
+        &self,
+        addr: u64,
+        mask: u8,
+        _priority: ReadPriority,
+    ) -> impl Future<Output = ()> + Send {
+        self.read_mask(addr, mask)
+    }
     fn supports_sector_reads(&self) -> bool {
         false
     }
@@ -45,6 +82,9 @@ impl<T: MemoryTimingModel> MemoryTimingModel for ManuallyDrop<T> {
 
     async fn read_mask(&self, addr: u64, mask: u8) {
         T::read_mask(self, addr, mask).await
+    }
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) {
+        T::read_mask_priority(self, addr, mask, priority).await
     }
     fn supports_sector_reads(&self) -> bool {
         T::supports_sector_reads(self)
@@ -65,6 +105,14 @@ pub trait MemoryModel: Send + Sync {
             self.read(addr).await
         }
     }
+    fn read_mask_priority(
+        &self,
+        addr: u64,
+        mask: u8,
+        _priority: ReadPriority,
+    ) -> impl Future<Output = [u8; 64]> + Send {
+        self.read_mask(addr, mask)
+    }
     fn supports_sector_reads(&self) -> bool {
         false
     }
@@ -82,6 +130,8 @@ pub trait MemoryModel: Send + Sync {
 pub trait ErasedMemoryModel: Send + Sync {
     async fn box_read(&self, addr: u64) -> [u8; 64];
     async fn box_read_mask(&self, addr: u64, mask: u8) -> [u8; 64];
+    async fn box_read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority)
+    -> [u8; 64];
     fn supports_sector_reads(&self) -> bool;
     async fn box_write(&self, addr: u64, bytes: [u8; 64]);
     fn statistics(&self) -> Option<Statistics>;
@@ -91,6 +141,14 @@ pub trait ErasedMemoryModel: Send + Sync {
 impl<T: MemoryModel> ErasedMemoryModel for T {
     async fn box_read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
         self.read_mask(addr, mask).await
+    }
+    async fn box_read_mask_priority(
+        &self,
+        addr: u64,
+        mask: u8,
+        priority: ReadPriority,
+    ) -> [u8; 64] {
+        self.read_mask_priority(addr, mask, priority).await
     }
     fn supports_sector_reads(&self) -> bool {
         MemoryModel::supports_sector_reads(self)
@@ -111,6 +169,9 @@ impl<T: MemoryModel> ErasedMemoryModel for T {
 impl MemoryModel for dyn ErasedMemoryModel {
     async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
         self.box_read_mask(addr, mask).await
+    }
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) -> [u8; 64] {
+        self.box_read_mask_priority(addr, mask, priority).await
     }
     fn supports_sector_reads(&self) -> bool {
         ErasedMemoryModel::supports_sector_reads(self)
@@ -205,6 +266,10 @@ impl<T, M> WithTiming<T, M> {
 }
 
 impl<T: MemoryTimingModel, M: MemoryModel> MemoryModel for WithTiming<T, M> {
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) -> [u8; 64] {
+        self.timing.read_mask_priority(addr, mask, priority).await;
+        self.data.read(addr).await
+    }
     async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
         self.timing.read_mask(addr, mask).await;
         self.data.read(addr).await
@@ -253,6 +318,16 @@ impl<T> WithStats<T> {
 }
 
 impl<T: MemoryModel> MemoryModel for WithStats<T> {
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) -> [u8; 64] {
+        assert!((1..=3).contains(&mask));
+        let bytes = if self.model.supports_sector_reads() {
+            32 * u64::from(mask.count_ones())
+        } else {
+            64
+        };
+        self.statistics.lock().unwrap().total_bytes_read += bytes;
+        self.model.read_mask_priority(addr, mask, priority).await
+    }
     async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
         assert!((1..=3).contains(&mask));
         let bytes = if self.model.supports_sector_reads() {
@@ -290,6 +365,41 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct PriorityProbe(Arc<Mutex<Vec<bool>>>);
+
+    impl MemoryTimingModel for PriorityProbe {
+        async fn read(&self, _addr: u64) {
+            panic!("priority was dropped by a memory wrapper");
+        }
+
+        async fn read_mask_priority(&self, _addr: u64, mask: u8, priority: ReadPriority) {
+            assert_eq!(mask, 1);
+            self.0.lock().unwrap().push(priority.is_demand());
+        }
+
+        fn supports_sector_reads(&self) -> bool {
+            true
+        }
+
+        async fn write(&self, _addr: u64) {}
+    }
+
+    #[tokio::test]
+    async fn priority_alias_survives_erasure_timing_and_statistics_wrappers() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let timing = PriorityProbe(seen.clone());
+        let memory = WithStats::new(WithTiming::new(timing, NoData));
+        let erased: &dyn ErasedMemoryModel = &memory;
+        let priority = ReadPriority::prefetch();
+        let alias = priority.clone();
+        assert!(!alias.is_demand());
+        priority.promote();
+        assert!(alias.is_demand());
+        assert_eq!(erased.box_read_mask_priority(0, 1, alias).await, [0; 64]);
+        assert_eq!(*seen.lock().unwrap(), vec![true]);
+        assert_eq!(memory.statistics().total_bytes_read, 32);
+    }
 
     #[tokio::test]
     async fn test_memory_backed_roundtrip() {

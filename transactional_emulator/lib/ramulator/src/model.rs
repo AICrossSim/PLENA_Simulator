@@ -1,4 +1,5 @@
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -24,6 +25,47 @@ pub enum IssuePolicy {
     #[default]
     GlobalFifo,
     PerChannel,
+    /// Re-arbitrate pending requests each cycle; accepted DRAM commands retain
+    /// the native controller's scheduling and are never cancelled/preempted.
+    DemandAware,
+}
+
+struct QueuedAccess {
+    addr: u64,
+    write: bool,
+    priority: memory::ReadPriority,
+    enqueued_ps: u64,
+    retry_skip: bool,
+    done: tokio::sync::oneshot::Sender<()>,
+    _entry: tokio::sync::OwnedSemaphorePermit,
+}
+
+#[derive(Default)]
+struct DemandQueue {
+    entries: VecDeque<QueuedAccess>,
+    running: bool,
+}
+
+impl DemandQueue {
+    fn select(&self, now: u64, age_ps: u64) -> Option<usize> {
+        self.entries
+            .iter()
+            .enumerate()
+            // A rejected request yields one arbitration when another pending
+            // request exists, even if that other request has lower priority.
+            .filter(|(_, entry)| self.entries.len() == 1 || !entry.retry_skip)
+            .min_by_key(|(index, entry)| {
+                let rank = if now.saturating_sub(entry.enqueued_ps) >= age_ps {
+                    0
+                } else if entry.priority.is_demand() {
+                    1
+                } else {
+                    2
+                };
+                (rank, *index)
+            })
+            .map(|(index, _)| index)
+    }
 }
 
 struct Inner {
@@ -43,11 +85,20 @@ struct Inner {
     issue_period: Duration,
     port_locks: Vec<tokio::sync::Mutex<()>>,
     next_issue: Mutex<Vec<Instant>>,
-    queue_capacity: tokio::sync::Semaphore,
+    queue_capacity: Arc<tokio::sync::Semaphore>,
     accepted: Vec<AtomicU64>,
     rejected: Vec<AtomicU64>,
     admission_wait_ps: AtomicU64,
     native_peak: AtomicU32,
+    demand_queues: Mutex<Vec<DemandQueue>>,
+    demand_age_cycles: u64,
+    submission_peak: AtomicU32,
+    demand_accepted: AtomicU64,
+    prefetch_accepted: AtomicU64,
+    aged_accepted: AtomicU64,
+    reconsidered_rejections: AtomicU64,
+    #[cfg(test)]
+    acceptance_log: Mutex<Vec<(u64, u64)>>,
 }
 
 /// A wrapped ramulator that works with the event-based simulation.
@@ -88,11 +139,20 @@ impl Ramulator {
             issue_period: period,
             port_locks: (0..channels).map(|_| tokio::sync::Mutex::new(())).collect(),
             next_issue: Mutex::new(vec![Instant::INIT; channels]),
-            queue_capacity: tokio::sync::Semaphore::new(256),
+            queue_capacity: Arc::new(tokio::sync::Semaphore::new(256)),
             accepted: (0..channels).map(|_| AtomicU64::new(0)).collect(),
             rejected: (0..channels).map(|_| AtomicU64::new(0)).collect(),
             admission_wait_ps: AtomicU64::new(0),
             native_peak: AtomicU32::new(0),
+            demand_queues: Mutex::new((0..channels).map(|_| DemandQueue::default()).collect()),
+            demand_age_cycles: 128,
+            submission_peak: AtomicU32::new(0),
+            demand_accepted: AtomicU64::new(0),
+            prefetch_accepted: AtomicU64::new(0),
+            aged_accepted: AtomicU64::new(0),
+            reconsidered_rejections: AtomicU64::new(0),
+            #[cfg(test)]
+            acceptance_log: Mutex::new(Vec::new()),
         })))
     }
 
@@ -101,9 +161,32 @@ impl Ramulator {
     pub fn with_issue_policy(mut self, policy: IssuePolicy, period: Duration) -> Self {
         assert!(period.as_picos() > 0);
         let inner = Arc::get_mut(&mut self.0).expect("configure before sharing");
+        assert!(
+            period
+                .as_picos()
+                .checked_mul(inner.demand_age_cycles)
+                .is_some()
+        );
         inner.policy = policy;
         inner.issue_period = period;
         self
+    }
+
+    /// Age is measured from finite native-tracker admission, in output-port
+    /// issue cycles. This does not promise latency for unaccepted upstream work.
+    pub fn with_demand_age_cycles(mut self, cycles: u64) -> Self {
+        assert!(cycles > 0);
+        let inner = Arc::get_mut(&mut self.0).expect("configure before sharing");
+        assert!(cycles.checked_mul(inner.issue_period.as_picos()).is_some());
+        inner.demand_age_cycles = cycles;
+        self
+    }
+
+    /// Additional modeled descriptor storage: age/token/flags per native tracker
+    /// plus finite head/tail/arbitration state per channel. Host futures and
+    /// allocator overhead are not a synthesized hardware area estimate.
+    pub fn demand_metadata_bytes(channels: usize) -> usize {
+        256 * 16 + channels * 16
     }
 
     pub fn channel_for(&self, addr: u64) -> usize {
@@ -126,6 +209,14 @@ impl Ramulator {
             "admission_wait_ps": self.0.admission_wait_ps.load(Ordering::Relaxed),
             "native_inflight_peak": self.0.native_peak.load(Ordering::Relaxed),
             "native_pending": self.0.pending_accesses.load(Ordering::Relaxed),
+            "demand_age_cycles": self.0.demand_age_cycles,
+            "demand_metadata_bytes": if self.0.policy == IssuePolicy::DemandAware { Self::demand_metadata_bytes(self.0.channels) } else { 0 },
+            "submission_inflight_peak": self.0.submission_peak.load(Ordering::Relaxed),
+            "submission_entries_available": self.0.queue_capacity.available_permits(),
+            "demand_accepted": self.0.demand_accepted.load(Ordering::Relaxed),
+            "prefetch_accepted": self.0.prefetch_accepted.load(Ordering::Relaxed),
+            "aged_accepted": self.0.aged_accepted.load(Ordering::Relaxed),
+            "reconsidered_rejections": self.0.reconsidered_rejections.load(Ordering::Relaxed),
             "native_stats": state.ramulator.native_stats(),
         })
     }
@@ -182,7 +273,11 @@ impl Ramulator {
     }
 
     /// Send a request to ramulator.
-    fn try_access(&self, addr: u64, write: bool) -> Result<impl Future<Output = ()>, ()> {
+    fn try_access(
+        &self,
+        addr: u64,
+        write: bool,
+    ) -> Result<impl Future<Output = ()> + Send + use<>, ()> {
         let (send, recv) = tokio::sync::oneshot::channel();
 
         {
@@ -246,11 +341,11 @@ impl Ramulator {
             }
         }
 
-        Ok(async { recv.await.unwrap() })
+        Ok(async move { recv.await.unwrap() })
     }
 
     /// Send a request to ramulator.
-    pub async fn access(&self, addr: u64, write: bool) {
+    async fn access_legacy(&self, addr: u64, write: bool) {
         assert_eq!(
             addr % u64::from(self.0.transfer_size),
             0,
@@ -263,6 +358,7 @@ impl Ramulator {
         let guard = match self.0.policy {
             IssuePolicy::GlobalFifo => self.0.lock.lock().await,
             IssuePolicy::PerChannel => self.0.port_locks[port].lock().await,
+            IssuePolicy::DemandAware => unreachable!("demand-aware policy has a pending queue"),
         };
         let completion = loop {
             let due = self.0.next_issue.lock().unwrap()[port];
@@ -288,6 +384,119 @@ impl Ramulator {
         completion.await;
     }
 
+    pub async fn access(&self, addr: u64, write: bool) {
+        self.access_priority(addr, write, memory::ReadPriority::demand())
+            .await;
+    }
+
+    pub async fn access_priority(&self, addr: u64, write: bool, priority: memory::ReadPriority) {
+        if self.0.policy != IssuePolicy::DemandAware {
+            self.access_legacy(addr, write).await;
+            return;
+        }
+        assert!(addr.is_multiple_of(u64::from(self.0.transfer_size)));
+        let executor = Executor::current();
+        let begin = executor.now().as_picos();
+        let entry = self.0.queue_capacity.clone().acquire_owned().await.unwrap();
+        self.0.submission_peak.fetch_max(
+            (256 - self.0.queue_capacity.available_permits()) as u32,
+            Ordering::Relaxed,
+        );
+        let port = self.channel_for(addr);
+        let (done, response) = tokio::sync::oneshot::channel();
+        let start_worker = {
+            let mut queues = self.0.demand_queues.lock().unwrap();
+            let queue = &mut queues[port];
+            queue.entries.push_back(QueuedAccess {
+                addr,
+                write,
+                priority,
+                enqueued_ps: executor.now().as_picos(),
+                retry_skip: false,
+                done,
+                _entry: entry,
+            });
+            let start = !queue.running;
+            queue.running = true;
+            start
+        };
+        // Tracker waiting is separately included in total admission wait. The
+        // worker adds the pending-queue portion upon native acceptance.
+        self.0
+            .admission_wait_ps
+            .fetch_add(executor.now().as_picos() - begin, Ordering::Relaxed);
+        if start_worker {
+            let ram = self.clone();
+            executor.spawn(async move { ram.issue_demand_queue(port).await });
+        }
+        // Cancellation cannot free accepted/queued tracker state prematurely:
+        // ownership moved into the queue and subsequently into its response task.
+        let _ = response.await;
+    }
+
+    async fn issue_demand_queue(&self, port: usize) {
+        let executor = Executor::current();
+        let age_ps = self.0.issue_period.as_picos() * self.0.demand_age_cycles;
+        loop {
+            let due = self.0.next_issue.lock().unwrap()[port];
+            if due > executor.now() {
+                executor.resolve_at(due).await;
+            }
+            let now = executor.now().as_picos();
+            let mut entry = {
+                let mut queues = self.0.demand_queues.lock().unwrap();
+                let queue = &mut queues[port];
+                let Some(index) = queue.select(now, age_ps) else {
+                    queue.running = false;
+                    return;
+                };
+                // Clear last cycle's one-attempt cooldown before re-insertion.
+                for pending in &mut queue.entries {
+                    pending.retry_skip = false;
+                }
+                queue.entries.remove(index).unwrap()
+            };
+            self.0.next_issue.lock().unwrap()[port] = executor.now() + self.0.issue_period;
+            match self.try_access(entry.addr, entry.write) {
+                Ok(completion) => {
+                    self.0.accepted[port].fetch_add(1, Ordering::Relaxed);
+                    self.0
+                        .admission_wait_ps
+                        .fetch_add(now - entry.enqueued_ps, Ordering::Relaxed);
+                    if entry.priority.is_demand() {
+                        self.0.demand_accepted.fetch_add(1, Ordering::Relaxed);
+                    } else {
+                        self.0.prefetch_accepted.fetch_add(1, Ordering::Relaxed);
+                    }
+                    if now.saturating_sub(entry.enqueued_ps) >= age_ps {
+                        self.0.aged_accepted.fetch_add(1, Ordering::Relaxed);
+                    }
+                    #[cfg(test)]
+                    self.0
+                        .acceptance_log
+                        .lock()
+                        .unwrap()
+                        .push((entry.addr, now));
+                    executor.spawn(async move {
+                        completion.await;
+                        let _ = entry.done.send(());
+                        drop(entry._entry);
+                    });
+                }
+                Err(()) => {
+                    self.0.rejected[port].fetch_add(1, Ordering::Relaxed);
+                    self.0
+                        .reconsidered_rejections
+                        .fetch_add(1, Ordering::Relaxed);
+                    entry.retry_skip = true;
+                    self.0.demand_queues.lock().unwrap()[port]
+                        .entries
+                        .push_back(entry);
+                }
+            }
+        }
+    }
+
     /// Send a read request to ramulator.
     pub async fn read_transfer(&self, addr: u64) {
         self.access(addr, false).await
@@ -300,6 +509,14 @@ impl Ramulator {
 }
 
 impl memory::MemoryTimingModel for Ramulator {
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: memory::ReadPriority) {
+        assert!(self.supports_sector_reads() && addr.is_multiple_of(64) && (1..=3).contains(&mask));
+        let transfers: Vec<_> = (0..2u64)
+            .filter(|s| mask & (1 << s) != 0)
+            .map(|s| self.access_priority(addr + s * 32, false, priority.clone()))
+            .collect();
+        futures::future::join_all(transfers).await;
+    }
     async fn read_mask(&self, addr: u64, mask: u8) {
         assert!(self.supports_sector_reads() && addr.is_multiple_of(64) && (1..=3).contains(&mask));
         let transfers: Vec<_> = (0..2u64)
@@ -548,5 +765,157 @@ mod calibration_tests {
         assert_eq!(a["native_pending"], 0);
         assert_eq!(b["native_pending"], 0);
         eprintln!("HOL global_ps={global} ported_ps={ported}");
+    }
+}
+
+#[cfg(test)]
+mod demand_tests {
+    use super::*;
+    use futures::FutureExt;
+    use memory::ReadPriority;
+
+    fn queued(addr: u64, priority: ReadPriority, enqueued_ps: u64) -> QueuedAccess {
+        let (done, _) = tokio::sync::oneshot::channel();
+        QueuedAccess {
+            addr,
+            write: false,
+            priority,
+            enqueued_ps,
+            retry_skip: false,
+            done,
+            _entry: Arc::new(tokio::sync::Semaphore::new(1))
+                .try_acquire_owned()
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn live_promotion_age_and_retry_cooldown_change_pending_selection() {
+        let shared_line = ReadPriority::prefetch();
+        let mut queue = DemandQueue::default();
+        queue.entries.push_back(queued(0, shared_line.clone(), 0));
+        queue
+            .entries
+            .push_back(queued(32, ReadPriority::demand(), 100));
+        assert_eq!(queue.select(110, 128), Some(1));
+        // A second consumer can promote a coalesced line after it was queued.
+        shared_line.promote();
+        assert_eq!(queue.select(110, 128), Some(0));
+        queue.entries[0].retry_skip = true;
+        assert_eq!(queue.select(110, 128), Some(1));
+        // Cooldown still lets an alternative prefetch try an unblocked bank.
+        queue.entries[1].priority = ReadPriority::prefetch();
+        assert_eq!(queue.select(110, 128), Some(1));
+        queue.entries[0].retry_skip = false;
+        queue.entries[0].priority = ReadPriority::prefetch();
+        queue.entries[1].priority = ReadPriority::demand();
+        assert_eq!(queue.select(128, 128), Some(0));
+        queue.entries.pop_back();
+        queue.entries[0].retry_skip = true;
+        assert_eq!(queue.select(130, 128), Some(0));
+    }
+
+    #[tokio::test]
+    async fn pending_native_request_observes_late_demand_promotion() {
+        let ram = Ramulator::hbm2_preset(1)
+            .unwrap()
+            .with_issue_policy(IssuePolicy::DemandAware, Duration::from_picos(1000));
+        let executor = Executor::new();
+        let promoted = ReadPriority::prefetch();
+        for index in 0..24u64 {
+            let r = ram.clone();
+            let priority = if index == 23 {
+                promoted.clone()
+            } else {
+                ReadPriority::prefetch()
+            };
+            executor.spawn(async move { r.access_priority(index * 65536, false, priority).await });
+        }
+        executor.spawn(async move {
+            Executor::current()
+                .resolve_at(Duration::from_picos(3500))
+                .await;
+            promoted.promote();
+        });
+        executor
+            .enter(Instant::INIT + Duration::from_micros(100))
+            .await;
+        let log = ram.0.acceptance_log.lock().unwrap();
+        assert_eq!(log.len(), 24);
+        let promoted_position = log
+            .iter()
+            .position(|(addr, _)| *addr == 23 * 65536)
+            .unwrap();
+        assert!(
+            promoted_position <= 5,
+            "late demand stayed behind prefetches: {log:?}"
+        );
+        assert!(log[promoted_position].1 >= 3500);
+        assert_eq!(ram.telemetry()["demand_accepted"], 1);
+    }
+
+    #[tokio::test]
+    async fn native_retries_keep_finite_trackers_until_response_and_drain() {
+        let ram = Ramulator::hbm2_preset(1)
+            .unwrap()
+            .with_issue_policy(IssuePolicy::DemandAware, Duration::from_picos(1000))
+            .with_demand_age_cycles(128);
+        let executor = Executor::new();
+        let completed = Arc::new(AtomicU32::new(0));
+        for index in 0..512u64 {
+            let r = ram.clone();
+            let done = completed.clone();
+            executor.spawn(async move {
+                r.access_priority(index * 65536, false, ReadPriority::prefetch())
+                    .await;
+                done.fetch_add(1, Ordering::Relaxed);
+            });
+        }
+        executor
+            .enter(Instant::INIT + Duration::from_micros(500))
+            .await;
+        assert_eq!(completed.load(Ordering::Relaxed), 512);
+        let stats = ram.telemetry();
+        assert_eq!(stats["native_pending"], 0);
+        assert_eq!(stats["submission_entries_available"], 256);
+        assert_eq!(stats["submission_inflight_peak"], 256);
+        assert!(stats["native_inflight_peak"].as_u64().unwrap() <= 256);
+        assert!(stats["reconsidered_rejections"].as_u64().unwrap() > 0);
+        assert!(stats["aged_accepted"].as_u64().unwrap() > 0);
+        assert_eq!(stats["prefetch_accepted"], 512);
+        let log = ram.0.acceptance_log.lock().unwrap();
+        assert!(log.windows(2).all(|pair| pair[1].1 - pair[0].1 >= 1000));
+        assert!(
+            ram.0
+                .demand_queues
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|q| !q.running && q.entries.is_empty())
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_caller_cannot_release_a_queued_native_tracker() {
+        let ram = Ramulator::hbm2_preset(1)
+            .unwrap()
+            .with_issue_policy(IssuePolicy::DemandAware, Duration::from_picos(1000));
+        let executor = Executor::new();
+        for index in 0..64u64 {
+            let r = ram.clone();
+            executor.spawn(async move {
+                // Poll once to admit the request, then cancel its caller.
+                let _ = r
+                    .access_priority(index * 65536, false, ReadPriority::demand())
+                    .now_or_never();
+            });
+        }
+        executor
+            .enter(Instant::INIT + Duration::from_micros(100))
+            .await;
+        let stats = ram.telemetry();
+        assert_eq!(stats["accepted_per_channel"], serde_json::json!([64]));
+        assert_eq!(stats["native_pending"], 0);
+        assert_eq!(stats["submission_entries_available"], 256);
     }
 }

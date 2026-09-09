@@ -57,6 +57,10 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
     let architecture_bytes = std::fs::read(&architecture_path)?;
     let workload_json: serde_json::Value = serde_json::from_slice(&workload_bytes)?;
     let architecture_json: serde_json::Value = serde_json::from_slice(&architecture_bytes)?;
+    let workload: moe_normal::Workload = serde_json::from_slice(&workload_bytes)?;
+    let architecture: moe_normal::Architecture = serde_json::from_slice(&architecture_bytes)?;
+    let bank = moe_normal::weight_bank::resolve(&workload, &workload_path)
+        .map_err(std::io::Error::other)?;
     let image_name = workload_json["hbm_file"]
         .as_str()
         .ok_or("workload.hbm_file must name the encoded weight image")?;
@@ -66,6 +70,9 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
         .join(image_name)
         .canonicalize()?;
     let image_len = std::fs::metadata(&image_path)?.len();
+    if bank.as_ref().is_some_and(|b| b.image_bytes != image_len) {
+        return Err("weight bank image length differs from its catalog".into());
+    }
     if image_len == 0 || image_len % 64 != 0 || image_len > opts.max_hbm_bytes {
         return Err(format!(
             "HBM image must be nonempty, 64-byte aligned and at most {} bytes; got {}",
@@ -89,19 +96,44 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
     if [&workload_path, &architecture_path, &image_path].contains(&&existing_output) {
         return Err("output may not overwrite workload, architecture or HBM input".into());
     }
-    let workload: moe_normal::Workload = serde_json::from_slice(&workload_bytes)?;
-    let architecture: moe_normal::Architecture = serde_json::from_slice(&architecture_bytes)?;
+    if bank
+        .as_ref()
+        .is_some_and(|b| b.manifest_path == existing_output)
+    {
+        return Err("output may not overwrite the immutable weight bank catalog".into());
+    }
     moe_normal::validate(&workload, &architecture, image_len).map_err(std::io::Error::other)?;
-    let image = std::fs::read(&image_path)?;
-    let image_sha256 = format!("{:x}", Sha256::digest(&image));
+    // Load directly into the backing allocation. A complete expert bank can
+    // exceed 512 MiB; avoid a second full image and require an explicit cap.
+    let backing = memory::MemoryBacked::with_capacity(usize::try_from(image_len)?);
+    let mut image_file = std::fs::File::open(&image_path)?;
+    let mut digest = Sha256::new();
+    let mut load_result = Ok(());
+    backing.with_data(|destination| {
+        for chunk in destination.chunks_mut(1024 * 1024) {
+            if let Err(error) = image_file.read_exact(chunk) {
+                load_result = Err(error);
+                return;
+            }
+            digest.update(chunk);
+        }
+    });
+    load_result?;
+    if image_file.read(&mut [0u8; 1])? != 0 {
+        return Err("weight image grew during loading".into());
+    }
+    let image_sha256 = format!("{:x}", digest.finalize());
     if let Some(expected) = workload_json.pointer("/metadata/hbm_sha256")
         && expected.as_str() != Some(image_sha256.as_str())
     {
         return Err("encoded HBM image does not match manifest metadata.hbm_sha256".into());
     }
-    let backing = memory::MemoryBacked::with_capacity(usize::try_from(image_len)?);
-    backing.with_data(|destination| destination.copy_from_slice(&image));
-    drop(image);
+    if bank
+        .as_ref()
+        .is_some_and(|b| b.image_sha256 != image_sha256)
+    {
+        return Err("weight bank encoded image SHA256 mismatch".into());
+    }
     // Match the existing runner's native-model lifetime: the process owns this
     // one HBM model until exit, after the executor drains all memory requests.
     let native = ramulator::Ramulator::hbm2_preset(opts.hbm_channels as usize)?.with_issue_policy(
@@ -139,6 +171,10 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
             "hbm_path": image_path,
             "hbm_sha256": image_sha256,
             "hbm_image_bytes": image_len,
+            "weight_bank": bank.as_ref().map(|b| json!({
+                "manifest_path": b.manifest_path, "manifest_sha256": b.manifest_sha256,
+                "state_policy": "cold_start_per_invocation; fixed_physical_weight_image",
+            })),
             "native_library_path": library_path,
             "native_library_sha256": library_sha256,
             "executable_sha256": sha256_file(&std::env::current_exe()?)?,
