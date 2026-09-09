@@ -237,6 +237,52 @@ class MemoryTraffic:
         return MemoryTraffic(read_bytes=self.read_bytes * factor, write_bytes=self.write_bytes * factor)
 
 
+def expected_unique_experts(
+    num_experts: int,
+    experts_per_token: int,
+    token_count: int,
+) -> float:
+    """Expected distinct experts touched by independent uniform top-k routes.
+
+    Selection is without replacement within each token.  The expectation is
+    used only when a measured per-step route trace is unavailable; callers that
+    allocate physical traffic round it up rather than understating HBM reads.
+    """
+
+    num_experts = int(num_experts)
+    experts_per_token = int(experts_per_token)
+    token_count = int(token_count)
+    if num_experts <= 0 or token_count <= 0:
+        raise ValueError("num_experts and token_count must be positive")
+    if experts_per_token <= 0 or experts_per_token > num_experts:
+        raise ValueError("experts_per_token must be in [1, num_experts]")
+    probability_unselected = 1.0 - experts_per_token / num_experts
+    return num_experts * (1.0 - probability_unselected**token_count)
+
+
+def conservative_unique_experts(
+    num_experts: int,
+    experts_per_token: int,
+    token_count: int,
+) -> int:
+    """Integral HBM-allocation form of :func:`expected_unique_experts`."""
+
+    return min(
+        int(num_experts),
+        max(
+            int(experts_per_token),
+            math.ceil(
+                expected_unique_experts(
+                    num_experts,
+                    experts_per_token,
+                    token_count,
+                )
+                - 1e-12
+            ),
+        ),
+    )
+
+
 @dataclass
 class KVCacheFootprint:
     """KV cache memory footprint."""
@@ -791,6 +837,9 @@ class MemoryModel:
         seq_len: int,
         batch_size: int,
         mode: str = "prefill",
+        *,
+        unique_experts: int | None = None,
+        router_weight_bits: float = 16.0,
     ) -> MemoryTraffic:
         """MoE layer HBM traffic (router + activated expert weights + activations).
 
@@ -813,13 +862,29 @@ class MemoryModel:
             (hidden_size * 2 + intermediate_size * 2) * (self.activation_bits / 8)
         )
 
-        # Router weights (always read)
-        router_bytes = self.moe_router_weights(hidden_size, num_experts)
+        # The router is an accuracy-sensitive BF16 safety island.  Expert
+        # tensors retain the configured FFN precision.
+        router_bytes = self._bits_to_bytes(
+            hidden_size * num_experts,
+            router_weight_bits,
+        )
 
         # Expert weights for activated experts only
         # Each expert: gate + up + down = 3 * hidden * intermediate
         expert_weight_per = self._bits_to_bytes(3 * hidden_size * intermediate_size, self.weight_bits)
-        expert_weights_bytes = expert_weight_per * experts_per_token
+        token_count = seq_len * batch_size
+        if unique_experts is None:
+            unique_experts = conservative_unique_experts(
+                num_experts,
+                experts_per_token,
+                token_count,
+            )
+        unique_experts = int(unique_experts)
+        if not experts_per_token <= unique_experts <= num_experts:
+            raise ValueError(
+                "unique_experts must be between experts_per_token and num_experts"
+            )
+        expert_weights_bytes = expert_weight_per * unique_experts
 
         if mode == "prefill" or (batch_size > decode_max_batch_size and mode == "decode"):
             num_tokens = seq_len * batch_size

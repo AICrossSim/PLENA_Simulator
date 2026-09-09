@@ -245,13 +245,27 @@ class LLMMemoryModel:
         self.head_dim = model_param.get("head_dim", self.hidden_size // self.num_attention_heads)
 
         # MoE parameters
-        self.num_experts = model_param.get("num_local_experts", 1)
+        self.num_experts = model_param.get(
+            "num_experts",
+            model_param.get("num_local_experts", 1),
+        )
         self.experts_per_token = model_param.get("experts_per_token", model_param.get("num_experts_per_tok", 1))
+        self.moe_intermediate_size = model_param.get(
+            "moe_intermediate_size",
+            self.intermediate_size,
+        )
 
         # Per-layer MLP types: "ffn" or "moe"
         # Default: all "moe" if num_experts > 1, else all "ffn"
         default_mlp_type = "moe" if self.num_experts > 1 else "ffn"
-        self.mlp_types = model_param.get("mlp_types", [default_mlp_type] * self.num_hidden_layers)
+        if "mlp_types" in model_param:
+            self.mlp_types = model_param["mlp_types"]
+        else:
+            dense_layers = {int(index) for index in model_param.get("mlp_only_layers", [])}
+            self.mlp_types = [
+                "ffn" if index in dense_layers else default_mlp_type
+                for index in range(self.num_hidden_layers)
+            ]
         self.num_moe_layers = sum(1 for mt in self.mlp_types if mt == "moe")
         self.num_ffn_layers = self.num_hidden_layers - self.num_moe_layers
 
@@ -490,7 +504,7 @@ class LLMMemoryModel:
         )
         moe_traffic = self.mem.moe_traffic(
             self.hidden_size,
-            self.intermediate_size,
+            self.moe_intermediate_size,
             self.num_experts,
             self.experts_per_token,
             self.input_seq_len,
@@ -559,7 +573,7 @@ class LLMMemoryModel:
         )
         moe_per_layer = self.mem.moe_traffic(
             self.hidden_size,
-            self.intermediate_size,
+            self.moe_intermediate_size,
             self.num_experts,
             self.experts_per_token,
             1,  # decode generates 1 token
