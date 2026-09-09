@@ -26,6 +26,9 @@ KV_HEAD_REUSE_MEASURED_LATENCY_DELTA = {
     2: -0.0061,
     4: -0.0116,
 }
+KV_HEAD_REUSE_NOOP_REASON = (
+    "rank_local_single_kv_head_reuse_is_structural_no_op"
+)
 
 
 def _aligned_bytes(bits: int, alignment_bytes: int) -> int:
@@ -226,32 +229,49 @@ def kv_head_reuse_status(
         * broadcast_heads
         * kv_heads
     )
-    supported = (
-        not enabled
-        or (
-            kv_heads <= broadcast_heads
-            and required_slots <= fp_sram_depth
-        )
+    schedule_legal = (
+        kv_heads <= broadcast_heads and required_slots <= fp_sram_depth
     )
+    structural_no_op = enabled and kv_heads == 1
+    supported = not enabled or (schedule_legal and not structural_no_op)
     measured_delta = (
         KV_HEAD_REUSE_MEASURED_LATENCY_DELTA.get(kv_heads)
-        if enabled
+        if enabled and schedule_legal and not structural_no_op
         else None
     )
     if not enabled:
         evidence_tier = "source_derived_per_head_schedule"
+        legality_reason = "reuse_disabled_per_head_schedule"
+    elif structural_no_op:
+        evidence_tier = "not_applicable_structural_no_op"
+        legality_reason = KV_HEAD_REUSE_NOOP_REASON
+    elif kv_heads > broadcast_heads:
+        evidence_tier = "not_applicable_illegal_geometry"
+        legality_reason = "rank_local_kv_heads_exceed_broadcast_slots"
+    elif required_slots > fp_sram_depth:
+        evidence_tier = "not_applicable_illegal_geometry"
+        legality_reason = "rank_local_reuse_exceeds_fp_sram_slots"
     elif measured_delta is not None:
         evidence_tier = "transactional_emulator_measured"
+        legality_reason = "legal_measured_rank_local_hkv2_or_hkv4"
     else:
         evidence_tier = "analytic_extrapolation_from_hkv2_hkv4"
+        legality_reason = "legal_unmeasured_rank_local_multi_kv_head"
     return {
         "enabled": enabled,
         "supported": supported,
+        "schedule_legal": schedule_legal,
+        "structurally_selectable": supported,
+        "structural_no_op": structural_no_op,
+        "beneficial_rank_local_reuse": enabled and kv_heads > 1,
+        "legality_reason": legality_reason,
         "broadcast_heads": broadcast_heads,
         "kv_heads": kv_heads,
         "kv_read_factor": 1 if enabled else kv_heads,
         "traffic_reduction_vs_per_head": kv_heads if enabled else 1,
-        "required_fp_sram_slots": required_slots if enabled else 0,
+        "required_fp_sram_slots": (
+            required_slots if enabled and not structural_no_op else 0
+        ),
         "available_fp_sram_slots": fp_sram_depth,
         "measured_latency_delta_fraction": measured_delta,
         "evidence_tier": evidence_tier,
@@ -290,6 +310,8 @@ def architecture_option_area_mm2(
             raise ValueError(f"{name} must be a positive integer")
     if mlen % hlen:
         raise ValueError("architecture-option geometry is invalid")
+    if kv_head_reuse and kv_heads == 1:
+        raise ValueError(KV_HEAD_REUSE_NOOP_REASON)
 
     try:
         from analytic_models.area.evidence import STRUCTURAL_ESTIMATE, weakest_tier
@@ -361,6 +383,7 @@ __all__ = [
     "PACKED_KV_MODES",
     "PADDED_PER_HEAD",
     "PackedKVTraffic",
+    "KV_HEAD_REUSE_NOOP_REASON",
     "architecture_option_area_mm2",
     "kv_head_reuse_status",
     "traffic_from_precision",

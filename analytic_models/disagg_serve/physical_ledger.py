@@ -7,10 +7,17 @@ from dataclasses import dataclass
 
 try:
     from .packed_kv import traffic_from_precision
+    from ..memory.memory_model import conservative_unique_experts
 except ImportError:
     from packed_kv import traffic_from_precision
+    from memory_model import conservative_unique_experts
 
 MIN_MATRIX_TILE_CAPACITY = 4
+LOCAL_HEAD_TOP_K = 20
+LOCAL_HEAD_CANDIDATE_BYTES = 8
+LOCAL_HEAD_SAMPLER_STATE_BYTES = 16
+LOCAL_HEAD_ARGMAX_STATE_BYTES = 8
+LOCAL_HEAD_LOGIT_BYTES = 2
 
 
 def _align(value: int, alignment: int) -> int:
@@ -47,7 +54,6 @@ class PlaneBytes:
             self.scale_raw + other.scale_raw,
             self.scale_aligned + other.scale_aligned,
         )
-
 
 def matrix_planes(
     rows: int,
@@ -107,10 +113,14 @@ class WeightLedger:
     attention: PlaneBytes
     ffn_resident: PlaneBytes
     ffn_streamed: PlaneBytes
+    lm_head_resident: PlaneBytes
+    lm_head_streamed: PlaneBytes
     bf16_embedding: PlaneBytes
     bf16_norms: PlaneBytes
     bf16_lm_head_resident: PlaneBytes
     bf16_lm_head_streamed: PlaneBytes
+    bf16_router_resident: PlaneBytes = PlaneBytes()
+    bf16_router_streamed: PlaneBytes = PlaneBytes()
 
     @property
     def bf16_resident(self) -> PlaneBytes:
@@ -118,20 +128,34 @@ class WeightLedger:
             self.bf16_embedding
             + self.bf16_norms
             + self.bf16_lm_head_resident
+            + self.bf16_router_resident
         )
 
     @property
     def bf16_streamed(self) -> PlaneBytes:
-        return self.bf16_norms + self.bf16_lm_head_streamed
+        return (
+            self.bf16_norms
+            + self.bf16_lm_head_streamed
+            + self.bf16_router_streamed
+        )
 
     @property
     def resident(self) -> PlaneBytes:
-        return self.attention + self.ffn_resident + self.bf16_resident
+        return (
+            self.attention
+            + self.ffn_resident
+            + self.lm_head_resident
+            + self.bf16_resident
+        )
 
     @property
     def streamed_per_batch_step(self) -> PlaneBytes:
-        return self.attention + self.ffn_streamed + self.bf16_streamed
-
+        return (
+            self.attention
+            + self.ffn_streamed
+            + self.lm_head_streamed
+            + self.bf16_streamed
+        )
 
 def weight_ledger(
     dims: dict,
@@ -139,6 +163,10 @@ def weight_ledger(
     *,
     alignment_bytes: int = 64,
     include_lm_head: bool = True,
+    batch: int = 1,
+    decode_tokens_per_sequence: int = 1,
+    unique_experts: int | None = None,
+    mlen: int | None = None,
 ) -> WeightLedger:
     """Build the immutable model-weight ledger for dense or MoE decoders."""
 
@@ -170,18 +198,35 @@ def weight_ledger(
     experts = int(dims.get("num_experts", 1))
     active_experts = int(dims.get("experts_per_token", 1))
     if experts > 1:
-        router = quant(experts, hidden, layers, "ffn")
+        if unique_experts is None:
+            unique_experts = conservative_unique_experts(
+                experts,
+                active_experts,
+                int(batch) * int(decode_tokens_per_sequence),
+            )
+        unique_experts = int(unique_experts)
+        if not active_experts <= unique_experts <= experts:
+            raise ValueError(
+                "unique_experts must be between experts_per_token and num_experts"
+            )
+        router = bf16_matrix_planes(
+            experts,
+            hidden,
+            layers,
+            alignment_bytes=alignment_bytes,
+        )
         resident_experts = (
             quant(inter, hidden, 2 * layers * experts, "ffn")
             + quant(hidden, inter, layers * experts, "ffn")
         )
         streamed_experts = (
-            quant(inter, hidden, 2 * layers * active_experts, "ffn")
-            + quant(hidden, inter, layers * active_experts, "ffn")
+            quant(inter, hidden, 2 * layers * unique_experts, "ffn")
+            + quant(hidden, inter, layers * unique_experts, "ffn")
         )
-        ffn_resident = router + resident_experts
-        ffn_streamed = router + streamed_experts
+        ffn_resident = resident_experts
+        ffn_streamed = streamed_experts
     else:
+        router = PlaneBytes()
         ffn_resident = (
             quant(inter, hidden, 2 * layers, "ffn")
             + quant(hidden, inter, layers, "ffn")
@@ -208,31 +253,60 @@ def weight_ledger(
         )
     tied = bool(dims.get("tie_embeddings", False))
     if include_lm_head:
-        lm_head_resident = (
-            PlaneBytes()
-            if tied
-            else bf16_matrix_planes(
+        if bool(precision.get("lm_head_quantized", False)):
+            # The serving head follows the profile's W/A precision.  A tied
+            # BF16 embedding cannot be reused as an MX matrix, so this remains
+            # a separately packed physical plane even for tied checkpoints.
+            if mlen is None or int(mlen) <= 0:
+                raise ValueError(
+                    "quantized local LM-head storage requires candidate MLEN"
+                )
+            head_mlen = int(mlen)
+            physical_vocab = math.ceil(vocab / head_mlen) * head_mlen
+            physical_hidden = math.ceil(hidden / head_mlen) * head_mlen
+            lm_head_resident = quant(
+                physical_vocab,
+                physical_hidden,
+                1,
+                "head",
+            )
+            lm_head_streamed = lm_head_resident
+            bf16_lm_head_resident = PlaneBytes()
+            bf16_lm_head_streamed = PlaneBytes()
+        else:
+            lm_head_resident = PlaneBytes()
+            lm_head_streamed = PlaneBytes()
+            bf16_lm_head_resident = (
+                PlaneBytes()
+                if tied
+                else bf16_matrix_planes(
+                    vocab,
+                    hidden,
+                    alignment_bytes=alignment_bytes,
+                )
+            )
+            bf16_lm_head_streamed = bf16_matrix_planes(
                 vocab,
                 hidden,
                 alignment_bytes=alignment_bytes,
             )
-        )
-        lm_head_streamed = bf16_matrix_planes(
-            vocab,
-            hidden,
-            alignment_bytes=alignment_bytes,
-        )
     else:
         lm_head_resident = PlaneBytes()
         lm_head_streamed = PlaneBytes()
+        bf16_lm_head_resident = PlaneBytes()
+        bf16_lm_head_streamed = PlaneBytes()
     return WeightLedger(
         attention=attention,
         ffn_resident=ffn_resident,
         ffn_streamed=ffn_streamed,
+        lm_head_resident=lm_head_resident,
+        lm_head_streamed=lm_head_streamed,
         bf16_embedding=embedding,
         bf16_norms=norms,
-        bf16_lm_head_resident=lm_head_resident,
-        bf16_lm_head_streamed=lm_head_streamed,
+        bf16_lm_head_resident=bf16_lm_head_resident,
+        bf16_lm_head_streamed=bf16_lm_head_streamed,
+        bf16_router_resident=router,
+        bf16_router_streamed=router,
     )
 
 
@@ -293,6 +367,21 @@ class DecodeStepTrafficLedger:
         return self.read_bytes + self.write_bytes
 
 
+def _rank_local_kv_heads(dims: dict, tp: int) -> int:
+    """KV heads owned by one tensor-parallel rank.
+
+    A packed KV row is formed per rank from the heads that rank owns, so the
+    row count of the whole system is the sum over ``tp`` ranks. Pricing the
+    packed row with the model's global head count under-counts a tensor-
+    parallel cache by ``tp`` (2026-09-08 fix).
+    """
+    heads = int(dims["kv_heads"])
+    if tp <= 0:
+        raise ValueError("tp must be positive")
+    if heads % tp:
+        raise ValueError("TP must own complete KV heads")
+    return heads // tp
+
 def decode_step_traffic_ledger(
     dims: dict,
     precision: dict,
@@ -303,6 +392,7 @@ def decode_step_traffic_ledger(
     kv_layout: str,
     weights: WeightLedger | None = None,
     include_lm_head: bool = True,
+    tp: int = 1,
 ) -> DecodeStepTrafficLedger:
     """Physical weight and KV planes moved by one cached q_len=1 step.
 
@@ -316,15 +406,21 @@ def decode_step_traffic_ledger(
         dims,
         precision,
         include_lm_head=include_lm_head,
+        batch=batch,
+        mlen=mlen,
     )
-    quantized = weights.attention + weights.ffn_streamed
+    quantized = (
+        weights.attention
+        + weights.ffn_streamed
+        + weights.lm_head_streamed
+    )
     embedding_row_bytes = _align(
         math.ceil(int(dims["hidden"]) * 16 / 8),
         64,
     )
     block = int(precision.get("block_size", 8))
     key_layout = traffic_from_precision(
-        kv_heads=int(dims["kv_heads"]),
+        kv_heads=_rank_local_kv_heads(dims, tp),
         head_dim=int(dims["head_dim"]),
         mlen=mlen,
         element_bits=int(precision.get("key_elem", precision["kv_elem"])),
@@ -332,7 +428,7 @@ def decode_step_traffic_ledger(
         block_size=block,
     )
     value_layout = traffic_from_precision(
-        kv_heads=int(dims["kv_heads"]),
+        kv_heads=_rank_local_kv_heads(dims, tp),
         head_dim=int(dims["head_dim"]),
         mlen=mlen,
         element_bits=int(precision.get("value_elem", precision["kv_elem"])),
@@ -345,8 +441,9 @@ def decode_step_traffic_ledger(
     attended_token_layers = full * context
     if sliding:
         attended_token_layers += sliding * min(context, window)
-    read_tensors = batch * attended_token_layers
-    write_tensors = batch * int(dims["layers"])
+    # Per-rank rows summed over the tp ranks that each own local_kv_heads.
+    read_tensors = batch * attended_token_layers * tp
+    write_tensors = batch * int(dims["layers"]) * tp
     return DecodeStepTrafficLedger(
         weight_element_read_bytes=quantized.element_aligned,
         weight_scale_read_bytes=quantized.scale_aligned,
@@ -395,6 +492,7 @@ def kv_ledger(
     batch: int,
     mlen: int,
     kv_layout: str,
+    tp: int = 1,
 ) -> KVLedger:
     """Account K and V planes at the full and sliding-window layer spans."""
 
@@ -402,7 +500,7 @@ def kv_ledger(
         raise ValueError("context and batch must be positive")
     block = int(precision.get("block_size", 8))
     key_layout = traffic_from_precision(
-        kv_heads=int(dims["kv_heads"]),
+        kv_heads=_rank_local_kv_heads(dims, tp),
         head_dim=int(dims["head_dim"]),
         mlen=mlen,
         element_bits=int(precision.get("key_elem", precision["kv_elem"])),
@@ -410,7 +508,7 @@ def kv_ledger(
         block_size=block,
     )
     value_layout = traffic_from_precision(
-        kv_heads=int(dims["kv_heads"]),
+        kv_heads=_rank_local_kv_heads(dims, tp),
         head_dim=int(dims["head_dim"]),
         mlen=mlen,
         element_bits=int(precision.get("value_elem", precision["kv_elem"])),
@@ -423,11 +521,11 @@ def kv_ledger(
     token_layers = full * context
     if sliding:
         token_layers += sliding * min(context, window)
-    per_batch_element = token_layers * (
+    per_batch_element = token_layers * tp * (
         key_layout.storage_element_bytes(kv_layout)
         + value_layout.storage_element_bytes(kv_layout)
     )
-    per_batch_scale = token_layers * (
+    per_batch_scale = token_layers * tp * (
         key_layout.storage_scale_bytes(kv_layout)
         + value_layout.storage_scale_bytes(kv_layout)
     )
@@ -458,6 +556,9 @@ class SRAMLedger:
     matrix_required_tiles: int
     max_vector_batch: int
     max_synchronous_batch: int
+    output_head_logit_tile_bytes: int
+    output_head_selection_state_bytes: int
+    output_head_workspace_bytes: int
 
     @property
     def fits(self) -> bool:
@@ -486,8 +587,39 @@ def sram_ledger(
     attention_elements = 2 * hidden + 2 * query + 2 * kv
     ffn_elements = 2 * hidden + 2 * inter
     vector_per_sequence = max(attention_elements, ffn_elements) * activation_bytes
+    output_head_logit_tile_bytes = 0
+    output_head_selection_state_bytes = 0
+    output_head_workspace_bytes = 0
+    if bool(precision.get("lm_head_quantized", False)):
+        top_k = int(precision.get("lm_head_top_k", LOCAL_HEAD_TOP_K))
+        if top_k != LOCAL_HEAD_TOP_K:
+            raise ValueError("local output head requires top_k=20")
+        per_sequence_state = (
+            top_k * LOCAL_HEAD_CANDIDATE_BYTES
+            + LOCAL_HEAD_SAMPLER_STATE_BYTES
+            + LOCAL_HEAD_ARGMAX_STATE_BYTES
+        )
+        output_head_logit_tile_bytes = (
+            int(hardware.BLEN)
+            * int(hardware.MLEN)
+            * LOCAL_HEAD_LOGIT_BYTES
+        )
+        output_head_selection_state_bytes = per_sequence_state * batch
+        output_head_workspace_bytes = (
+            output_head_selection_state_bytes
+            + output_head_logit_tile_bytes
+        )
     vector_capacity = int(hardware.VECTOR_SRAM_SIZE) * int(hardware.VLEN) * activation_bytes
-    max_vector_batch = vector_capacity // max(vector_per_sequence, 1)
+    body_max_batch = vector_capacity // max(vector_per_sequence, 1)
+    if bool(precision.get("lm_head_quantized", False)):
+        head_max_batch = max(
+            0,
+            (vector_capacity - output_head_logit_tile_bytes)
+            // max(per_sequence_state, 1),
+        )
+        max_vector_batch = min(body_max_batch, head_max_batch)
+    else:
+        max_vector_batch = body_max_batch
 
     # HBM operands dequantize into compiler-managed BF16 Matrix SRAM tiles.
     row_bytes = int(hardware.MLEN) * 2
@@ -510,13 +642,21 @@ def sram_ledger(
     return SRAMLedger(
         vector_capacity_bytes=vector_capacity,
         vector_bytes_per_sequence=vector_per_sequence,
-        vector_required_bytes=vector_per_sequence * batch,
+        vector_required_bytes=max(
+            vector_per_sequence * batch,
+            output_head_workspace_bytes,
+        ),
         matrix_capacity_bytes=matrix_capacity,
         matrix_required_bytes=matrix_required,
         matrix_tile_capacity=matrix_tile_capacity,
         matrix_required_tiles=matrix_required_tiles,
         max_vector_batch=max_vector_batch,
         max_synchronous_batch=max_synchronous,
+        output_head_logit_tile_bytes=output_head_logit_tile_bytes,
+        output_head_selection_state_bytes=(
+            output_head_selection_state_bytes
+        ),
+        output_head_workspace_bytes=output_head_workspace_bytes,
     )
 
 
@@ -533,10 +673,21 @@ class PhysicalDecodeLedger:
     max_resident_batch: int
     max_runtime_batch: int
     kv_layout: str
+    slowest_rank_hbm_required_bytes: int | None = None
+    per_chip_hbm_capacity_bytes: int | None = None
 
     @property
     def fits_hbm(self) -> bool:
-        return self.hbm_required_bytes <= self.hbm_capacity_bytes
+        aggregate_fits = self.hbm_required_bytes <= self.hbm_capacity_bytes
+        if self.slowest_rank_hbm_required_bytes is None:
+            return aggregate_fits
+        if self.per_chip_hbm_capacity_bytes is None:
+            raise ValueError("slowest-rank HBM use requires per-chip capacity")
+        return (
+            aggregate_fits
+            and self.slowest_rank_hbm_required_bytes
+            <= self.per_chip_hbm_capacity_bytes
+        )
 
     @property
     def fits_runtime(self) -> bool:
@@ -554,6 +705,7 @@ def build_physical_decode_ledger(
     runtime_hbm_reserve_bytes: int,
     kv_layout: str,
     include_lm_head: bool = True,
+    tp: int = 1,
 ) -> PhysicalDecodeLedger:
     """Build the aligned physical ledger used by capacity and traffic checks."""
 
@@ -563,6 +715,8 @@ def build_physical_decode_ledger(
         dims,
         precision,
         include_lm_head=include_lm_head,
+        batch=batch,
+        mlen=int(hardware.MLEN),
     )
     kv = kv_ledger(
         dims,
@@ -571,6 +725,7 @@ def build_physical_decode_ledger(
         batch=batch,
         mlen=int(hardware.MLEN),
         kv_layout=kv_layout,
+        tp=tp,
     )
     sram = sram_ledger(dims, precision, hardware, batch=batch)
     resident_fixed = weights.resident.total_aligned + runtime_hbm_reserve_bytes
@@ -599,6 +754,11 @@ __all__ = [
     "DecodeStepTrafficLedger",
     "KVLedger",
     "MIN_MATRIX_TILE_CAPACITY",
+    "LOCAL_HEAD_CANDIDATE_BYTES",
+    "LOCAL_HEAD_ARGMAX_STATE_BYTES",
+    "LOCAL_HEAD_LOGIT_BYTES",
+    "LOCAL_HEAD_SAMPLER_STATE_BYTES",
+    "LOCAL_HEAD_TOP_K",
     "PhysicalDecodeLedger",
     "PlaneBytes",
     "SRAMLedger",
