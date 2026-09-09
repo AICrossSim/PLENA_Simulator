@@ -8,6 +8,9 @@ from pathlib import Path
 from unittest import mock
 
 from compiler.aten.packedkv_profile_hook import (
+    COMPILER_TARGET_MODE,
+    MATRIX_SEMANTICS_SCHEMA,
+    MXINT2_ACTIVATION_SCOPE,
     PROFILE_SCHEMA,
     TARGET,
     _MATRIX_SEMANTICS,
@@ -24,12 +27,12 @@ from transactional_emulator.tools.packedkv_profile_hook import (
 )
 
 
-def _profile(*, weight: str = "MXINT4") -> dict:
+def _profile(*, weight: str = "MXINT4", activation: str = "MXINT4") -> dict:
     return {
         "schema_version": PROFILE_SCHEMA,
         "kind": "quantized",
         "weight_format": weight,
-        "activation_format": "MXINT2",
+        "activation_format": activation,
         "key_format": "MXINT4",
         "value_format": "MXINT4",
         "vector_format": "FP_E3M2",
@@ -94,11 +97,11 @@ class PackedKVEmulatorHookTests(unittest.TestCase):
             evidence_target = bundle["binding"]["evidence_target"]
             self.assertEqual(
                 evidence_target["target_mode"],
-                "simulator_compiler_emulator",
+                COMPILER_TARGET_MODE,
             )
             self.assertEqual(
                 evidence_target["mxint2_activation_scope"],
-                "emulator_only",
+                MXINT2_ACTIVATION_SCOPE,
             )
             self.assertFalse(evidence_target["common_deployment_valid"])
             physical = bundle["binding"]["runtime_precision_contract"][
@@ -127,12 +130,16 @@ class PackedKVEmulatorHookTests(unittest.TestCase):
                     metrics["cache_tokens"] - 1,
                 )
             settings = Path(bundle["settings_path"]).read_text(encoding="utf-8")
-            self.assertIn('schema_version = "plena-matrix-semantics/v3"', settings)
+            self.assertIn(
+                f'schema_version = "{MATRIX_SEMANTICS_SCHEMA}"', settings
+            )
             self.assertIn("physical_k_width = 1024", settings)
             self.assertIn('format = "FP_E3M2"', settings)
-            self.assertIn('source_profile_schema = "decode-precision-profile/v4"', settings)
             self.assertIn(
-                'schema_version = "plena-mx-physical-semantics/v2"',
+                f'source_profile_schema = "{PROFILE_SCHEMA}"', settings
+            )
+            self.assertIn(
+                f'schema_version = "{MX_PHYSICAL_SEMANTICS_SCHEMA}"',
                 settings,
             )
             self.assertIn(
@@ -174,6 +181,24 @@ class PackedKVEmulatorHookTests(unittest.TestCase):
             self.assertEqual(
                 result["tests"][0]["metrics"]["reason_code"],
                 "unsupported_mxint_weight",
+            )
+
+    def test_mxint2_activation_is_explicitly_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request_path = self._write_request(
+                root,
+                _request(_profile(activation="MXINT2")),
+            )
+            result = run_hook(
+                request_path,
+                root / "result.json",
+                root / "artifacts",
+            )
+            self.assertFalse(result["tests"][0]["passed"])
+            self.assertEqual(
+                result["tests"][0]["metrics"]["reason_code"],
+                "unsupported_mxint_activation",
             )
 
     def test_existing_artifact_tamper_fails_closed(self) -> None:

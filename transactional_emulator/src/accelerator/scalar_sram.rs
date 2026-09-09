@@ -7,6 +7,10 @@ use crate::runtime_config::FP_SRAM_DEPTH;
 pub(super) struct ScalarSram {
     intsram: Vec<u32>,
     fpsram: Vec<bf16>,
+    // Route scores follow a distinct numerical contract: Qwen3 keeps them in
+    // FP32 until the expert-output multiply. Existing scalar FP instructions
+    // continue to use the BF16 bank above.
+    route_f32_sram: Vec<f32>,
 }
 
 impl ScalarSram {
@@ -14,6 +18,7 @@ impl ScalarSram {
         Self {
             intsram: vec![0; 1024],
             fpsram: vec![bf16::ZERO; *FP_SRAM_DEPTH],
+            route_f32_sram: vec![0.0; 1024],
         }
     }
 
@@ -43,6 +48,19 @@ impl ScalarSram {
         self.intsram[addr] = value;
     }
 
+    pub(super) fn read_route_f32(&self, addr: usize) -> f32 {
+        self.route_f32_sram[addr]
+    }
+
+    pub(super) fn write_route_f32(&mut self, addr: usize, value: f32) {
+        self.route_f32_sram[addr] = value;
+    }
+
+    #[cfg(test)]
+    pub(super) fn read_route_f32_window(&self, start: usize, len: usize) -> &[f32] {
+        &self.route_f32_sram[start..start + len]
+    }
+
     pub(super) fn read_fp_window(&self, start: usize, len: usize) -> &[bf16] {
         &self.fpsram[start..start + len]
     }
@@ -54,6 +72,20 @@ impl ScalarSram {
 
     pub(super) fn fpsram_to_le_bytes(&self) -> Vec<u8> {
         self.fpsram.iter().flat_map(|f| f.to_le_bytes()).collect()
+    }
+
+    pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
+        self.intsram
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
+    }
+
+    pub(super) fn route_f32_sram_to_le_bytes(&self) -> Vec<u8> {
+        self.route_f32_sram
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
     }
 }
 
@@ -110,12 +142,18 @@ mod tests {
         sram.write_fp(4, bf16::from_f32(3.5));
         sram.write_fp(5, bf16::from_f32(-0.5));
         sram.write_int(6, 42);
+        sram.write_route_f32(7, 0.123_456_79);
 
         assert_eq!(
             sram.read_fp_window(4, 2),
             &[bf16::from_f32(3.5), bf16::from_f32(-0.5)]
         );
         assert_eq!(sram.read_int(6), 42);
+        assert_eq!(sram.read_route_f32(7).to_bits(), 0.123_456_79f32.to_bits());
+        assert_eq!(
+            sram.read_route_f32_window(7, 1)[0].to_bits(),
+            0.123_456_79f32.to_bits()
+        );
 
         let dump = sram.fpsram_to_le_bytes();
         let mut expected = Vec::new();
@@ -124,5 +162,19 @@ mod tests {
         let start = 4 * std::mem::size_of::<bf16>();
         let end = start + 2 * std::mem::size_of::<bf16>();
         assert_eq!(&dump[start..end], expected.as_slice());
+
+        let route_dump = sram.route_f32_sram_to_le_bytes();
+        let route_start = 7 * std::mem::size_of::<f32>();
+        assert_eq!(
+            &route_dump[route_start..route_start + std::mem::size_of::<f32>()],
+            &0.123_456_79f32.to_le_bytes()
+        );
+
+        let int_dump = sram.intsram_to_le_bytes();
+        let int_start = 6 * std::mem::size_of::<u32>();
+        assert_eq!(
+            &int_dump[int_start..int_start + std::mem::size_of::<u32>()],
+            &42u32.to_le_bytes()
+        );
     }
 }

@@ -314,7 +314,7 @@ class PlenaCompiler(_PlenaCompiler):
         ))
         alloc.free_gp(gp_for_preload)
 
-        padded_vocab = lm_head_vocab_padding(vocab_size, self.blen)
+        padded_vocab = lm_head_vocab_padding(vocab_size, self.blen, self.mlen)
         logits_name = self._scoped_name(name)
         self.allocate_vram_matrix(
             name=logits_name, rows=batch, cols=padded_vocab, strict=False

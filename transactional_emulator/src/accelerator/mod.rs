@@ -15,6 +15,7 @@ use crate::vector_machine::VectorMachine;
 
 mod dispatch;
 mod loop_state;
+mod qwen3_moe;
 mod registers;
 mod scalar_sram;
 
@@ -136,5 +137,13 @@ impl Accelerator {
 
     pub(crate) fn fpsram_dump_bytes(&self) -> Vec<u8> {
         self.scalar_sram.fpsram_to_le_bytes()
+    }
+
+    pub(crate) fn intsram_dump_bytes(&self) -> Vec<u8> {
+        self.scalar_sram.intsram_to_le_bytes()
+    }
+
+    pub(crate) fn route_f32_sram_dump_bytes(&self) -> Vec<u8> {
+        self.scalar_sram.route_f32_sram_to_le_bytes()
     }
 }

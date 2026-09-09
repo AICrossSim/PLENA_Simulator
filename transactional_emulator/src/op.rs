@@ -110,6 +110,61 @@ pub enum Opcode {
         rs2: u8,
         rmask: u8,
     },
+    /// Execute the sealed Qwen3 router GEMV with BF16 inputs/weights and one
+    /// BF16 logits cast. Policy `0` is hidden-64/128-expert validation and
+    /// policy `1` is hidden-2048/128-expert target execution.
+    V_ROUTER_LINEAR_BF16 {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    /// Select and renormalize routed-expert weights in FP32 route SRAM.
+    ///
+    /// `rs1` is the VRAM base for BF16 router logits. `rd` and `rs2` name GP
+    /// registers containing the FP32-route and scalar-INT expert-ID
+    /// base respectively. The policy selector is fixed and fail-closed:
+    /// `0` = 32 experts/top-4 and `1` = 128 experts/top-8.
+    V_TOPK {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    /// Multiply a BF16 expert-output vector by one FP32 route score and cast
+    /// the result once to the destination vector format.
+    ///
+    /// `rd`/`rs1` hold destination/source VRAM addresses. `rs2` holds an FP32
+    /// route-SRAM address written by `V_TOPK`.
+    V_MUL_ROUTE_F32 {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    /// Execute the selected Qwen3 expert banks from an exact raw-BF16 HBM
+    /// descriptor, then combine all top-k contributions in ascending expert
+    /// order (the Transformers 5.5 accumulation order).
+    ///
+    /// `rd`/`rs1` hold destination/source VRAM addresses. `rs2` holds the
+    /// common FP32-route/INT-ID SRAM base. `rmask` names the HBM address
+    /// register containing the 64-byte expert-bank descriptor.
+    V_QWEN3_EXPERT_COMBINE_BF16 {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    /// Execute exact Qwen3 RMSNorm: FP32 variance/rsqrt, BF16 normalized
+    /// activation cast, then BF16 affine multiplication.
+    ///
+    /// Policy `0` is hidden-64 validation and policy `1` is hidden-2048 target.
+    V_QWEN3_RMSNORM_BF16 {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
     V_EXP_V {
         rd: u8,
         rs1: u8,
@@ -300,6 +355,11 @@ impl Opcode {
             Self::V_SUB_VF { .. } => "V_SUB_VF",
             Self::V_MUL_VV { .. } => "V_MUL_VV",
             Self::V_MUL_VF { .. } => "V_MUL_VF",
+            Self::V_ROUTER_LINEAR_BF16 { .. } => "V_ROUTER_LINEAR_BF16",
+            Self::V_TOPK { .. } => "V_TOPK",
+            Self::V_MUL_ROUTE_F32 { .. } => "V_MUL_ROUTE_F32",
+            Self::V_QWEN3_EXPERT_COMBINE_BF16 { .. } => "V_QWEN3_EXPERT_COMBINE_BF16",
+            Self::V_QWEN3_RMSNORM_BF16 { .. } => "V_QWEN3_RMSNORM_BF16",
             Self::V_EXP_V { .. } => "V_EXP_V",
             Self::V_RECI_V { .. } => "V_RECI_V",
             Self::V_RED_SUM { .. } => "V_RED_SUM",
@@ -448,6 +508,36 @@ impl Opcode {
             0x16 => Self::V_RED_MAX {
                 rd,
                 rs1,
+                rmask: rs3,
+            },
+            0x36 => Self::V_ROUTER_LINEAR_BF16 {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x37 => Self::V_TOPK {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x38 => Self::V_MUL_ROUTE_F32 {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x39 => Self::V_QWEN3_EXPERT_COMBINE_BF16 {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x3A => Self::V_QWEN3_RMSNORM_BF16 {
+                rd,
+                rs1,
+                rs2,
                 rmask: rs3,
             },
 
@@ -822,6 +912,71 @@ mod tests {
         match Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0xF)) {
             Opcode::V_ADD_VV { rmask, .. } => assert_eq!(rmask, 0),
             other => panic!("expected V_ADD_VV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_qwen_topk_preserves_all_register_fields() {
+        match Opcode::decode(rform(0x37, 9, 10, 11, 1, 0)) {
+            Opcode::V_TOPK {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (9, 10, 11, 1)),
+            other => panic!("expected V_TOPK, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_qwen_router_linear_preserves_all_register_fields() {
+        match Opcode::decode(rform(0x36, 3, 7, 12, 1, 0)) {
+            Opcode::V_ROUTER_LINEAR_BF16 {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (3, 7, 12, 1)),
+            other => panic!("expected V_ROUTER_LINEAR_BF16, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_qwen_route_multiply_preserves_all_register_fields() {
+        match Opcode::decode(rform(0x38, 4, 5, 6, 0, 0)) {
+            Opcode::V_MUL_ROUTE_F32 {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (4, 5, 6, 0)),
+            other => panic!("expected V_MUL_ROUTE_F32, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_qwen_expert_combine_preserves_descriptor_register() {
+        match Opcode::decode(rform(0x39, 4, 5, 6, 13, 0)) {
+            Opcode::V_QWEN3_EXPERT_COMBINE_BF16 {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (4, 5, 6, 13)),
+            other => panic!("expected V_QWEN3_EXPERT_COMBINE_BF16, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_qwen_rmsnorm_preserves_policy() {
+        match Opcode::decode(rform(0x3A, 7, 8, 9, 1, 0)) {
+            Opcode::V_QWEN3_RMSNORM_BF16 {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (7, 8, 9, 1)),
+            other => panic!("expected V_QWEN3_RMSNORM_BF16, got {other:?}"),
         }
     }
 }

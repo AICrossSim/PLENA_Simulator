@@ -7,7 +7,7 @@ use half::bf16;
 use quantize::MxDataType;
 
 use crate::runtime_config::{
-    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+    BLEN, HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
@@ -15,6 +15,7 @@ use crate::{cycle, dma, op};
 
 use super::Accelerator;
 use super::loop_state::LoopDecision;
+use super::qwen3_moe;
 
 impl Accelerator {
     /// Resolve the V_* opcode mask.
@@ -285,6 +286,176 @@ impl Accelerator {
                             self.reg_file.read_fp(*rs2).into(),
                             *rmask,
                             mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_ROUTER_LINEAR_BF16 {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let hidden = match *rmask {
+                        0 => 64,
+                        1 => 2048,
+                        other => {
+                            tracing::error!(
+                                pc,
+                                policy = other,
+                                "unsupported V_ROUTER_LINEAR_BF16 policy"
+                            );
+                            panic!(
+                                "unsupported V_ROUTER_LINEAR_BF16 policy {other} at pc {pc}; expected 0=hidden64 or 1=hidden2048"
+                            );
+                        }
+                    };
+                    self.v_machine
+                        .router_linear_bf16(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            hidden,
+                            128,
+                            *BLEN as usize,
+                        )
+                        .await;
+                }
+                op::Opcode::V_TOPK {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let (expert_count, topk) = match *rmask {
+                        0 => (32, 4),
+                        1 => (128, 8),
+                        other => {
+                            tracing::error!(pc, rmask = other, "unsupported V_TOPK policy");
+                            panic!(
+                                "unsupported V_TOPK policy {other} at pc {pc}; expected 0=32/top4 or 1=128/top8"
+                            );
+                        }
+                    };
+                    let route_base = self.reg_file.read_gp(*rd) as usize;
+                    let int_base = self.reg_file.read_gp(*rs2) as usize;
+                    let (indices, weights) = self
+                        .v_machine
+                        .topk_softmax(self.reg_file.read_gp(*rs1), expert_count, topk)
+                        .await;
+                    for (offset, (index, weight)) in indices.iter().zip(weights.iter()).enumerate()
+                    {
+                        self.scalar_sram.write_int(int_base + offset, *index);
+                        self.scalar_sram
+                            .write_route_f32(route_base + offset, *weight);
+                    }
+                }
+                op::Opcode::V_MUL_ROUTE_F32 {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let mask = self.resolve_v_mask(*rmask);
+                    let route_score = self
+                        .scalar_sram
+                        .read_route_f32(self.reg_file.read_gp(*rs2) as usize);
+                    assert!(
+                        route_score.is_finite(),
+                        "V_MUL_ROUTE_F32 route score must be finite"
+                    );
+                    self.v_machine
+                        .mul_route_f32(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            route_score,
+                            *rmask,
+                            mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_QWEN3_EXPERT_COMBINE_BF16 {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let descriptor_base = self.reg_file.read_hbm(*rmask);
+                    let descriptor = qwen3_moe::read_descriptor(&self.hbm, descriptor_base).await;
+                    hbm_issue_read_bytes = qwen3_moe::descriptor_physical_read_bytes();
+                    let pair_base = self.reg_file.read_gp(*rs2) as usize;
+                    let mut pairs = (0..8)
+                        .map(|offset| {
+                            (
+                                self.scalar_sram.read_int(pair_base + offset),
+                                self.scalar_sram.read_route_f32(pair_base + offset),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    assert!(
+                        pairs.iter().all(|(expert, score)| {
+                            *expert < 128 && score.is_finite() && *score >= 0.0
+                        }),
+                        "V_QWEN3_EXPERT_COMBINE_BF16 route pair is invalid"
+                    );
+                    pairs.sort_by_key(|(expert, _)| *expert);
+                    assert!(
+                        pairs.windows(2).all(|pair| pair[0].0 < pair[1].0),
+                        "V_QWEN3_EXPERT_COMBINE_BF16 expert IDs must be unique"
+                    );
+                    let route_sum = pairs.iter().map(|(_, score)| score).sum::<f32>();
+                    assert!(
+                        (route_sum - 1.0).abs() <= 1.0e-5,
+                        "V_QWEN3_EXPERT_COMBINE_BF16 route scores are not normalized"
+                    );
+                    for (ordinal, (expert_id, route_score)) in pairs.into_iter().enumerate() {
+                        hbm_issue_read_bytes = hbm_issue_read_bytes
+                            .checked_add(descriptor.expert_physical_read_bytes())
+                            .expect("Qwen3 expert issue-origin traffic overflow");
+                        let (gate_up, down) =
+                            qwen3_moe::read_expert(&self.hbm, &descriptor, expert_id).await;
+                        self.v_machine
+                            .qwen3_expert_accumulate_bf16(
+                                self.reg_file.read_gp(*rd),
+                                self.reg_file.read_gp(*rs1),
+                                descriptor.hidden,
+                                descriptor.intermediate,
+                                *BLEN as usize,
+                                expert_id,
+                                route_score,
+                                gate_up,
+                                down,
+                                ordinal == 0,
+                            )
+                            .await;
+                    }
+                }
+                op::Opcode::V_QWEN3_RMSNORM_BF16 {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let hidden = match *rmask {
+                        0 => 64,
+                        1 => 2048,
+                        other => {
+                            tracing::error!(
+                                pc,
+                                policy = other,
+                                "unsupported V_QWEN3_RMSNORM_BF16 policy"
+                            );
+                            panic!(
+                                "unsupported V_QWEN3_RMSNORM_BF16 policy {other} at pc {pc}; expected 0=hidden64 or 1=hidden2048"
+                            );
+                        }
+                    };
+                    self.v_machine
+                        .qwen3_rmsnorm_bf16(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            hidden,
+                            *BLEN as usize,
                         )
                         .await;
                 }
@@ -655,5 +826,525 @@ impl Accelerator {
         // SRAM dumps.
         self.drain_m_load().await;
         self.drain_v_load().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use half::bf16;
+    use memory::{ErasedMemoryModel, MemoryBacked, NoData};
+    use quantize::{DataType, FpType, MxDataType, QuantTensor};
+    use runtime::{Executor, Instant};
+    use sram::{MatrixSram, VectorSram};
+    use tch::Tensor;
+
+    use crate::matrix_machine::MatrixMachine;
+    use crate::op::Opcode;
+    use crate::vector_machine::VectorMachine;
+
+    use super::Accelerator;
+
+    fn fnv1a_bf16(values: &[f32]) -> u64 {
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for value in values {
+            for byte in bf16::from_f32(*value).to_bits().to_le_bytes() {
+                hash ^= byte as u64;
+                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+        hash
+    }
+
+    fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u64(bytes: &mut [u8], offset: usize, value: u64) {
+        bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_bf16(bytes: &mut [u8], offset: usize, value: f32) {
+        bytes[offset..offset + 2].copy_from_slice(&bf16::from_f32(value).to_bits().to_le_bytes());
+    }
+
+    #[tokio::test]
+    async fn qwen_topk_dispatch_writes_expert_ids_and_route_weights() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let storage_type = MxDataType::Plain(fp_type);
+            let vram = Arc::new(VectorSram::new(64, 4, fp_type, 4));
+            let mut first = vec![-100.0f32; 64];
+            let mut second = vec![-100.0f32; 64];
+            first[2] = 7.0;
+            first[5] = 7.0;
+            first[63] = 3.0;
+            second[0] = 4.0;
+            second[7] = 5.0;
+            second[20] = 2.5;
+            second[21] = 2.25;
+            second[63] = 6.0;
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&first), storage_type),
+            )
+            .await;
+            vram.write(
+                64,
+                QuantTensor::quantize(Tensor::from_slice(&second), storage_type),
+            )
+            .await;
+
+            let mram = Arc::new(MatrixSram::new(64, 4096, storage_type));
+            let matrix = MatrixMachine::new(mram, vram.clone(), 64, 16, 4, 4, storage_type, "mxfp");
+            let vector = VectorMachine::new(vram, 64, 16);
+            let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(NoData);
+            let mut accelerator = Accelerator::new(matrix, vector, hbm);
+            accelerator.reg_file.write_gp(1, 20);
+            accelerator.reg_file.write_gp(2, 0);
+            accelerator.reg_file.write_gp(3, 40);
+            accelerator
+                .do_ops(&[Opcode::V_TOPK {
+                    rd: 1,
+                    rs1: 2,
+                    rs2: 3,
+                    rmask: 1,
+                }])
+                .await;
+
+            let indices = (40..48)
+                .map(|address| accelerator.scalar_sram.read_int(address))
+                .collect::<Vec<_>>();
+            let weights = accelerator
+                .scalar_sram
+                .read_route_f32_window(20, 8)
+                .to_vec();
+            *got_task.lock().unwrap() = Some((indices, weights));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let (indices, weights) = got.lock().unwrap().take().unwrap();
+        assert_eq!(indices, vec![2, 5, 127, 71, 64, 63, 84, 85]);
+        assert!((weights.iter().sum::<f32>() - 1.0).abs() < 0.01);
+        assert!(weights.windows(2).all(|pair| pair[0] >= pair[1]));
+        assert!(
+            weights
+                .iter()
+                .any(|weight| { bf16::from_f32(*weight).to_f32().to_bits() != weight.to_bits() })
+        );
+    }
+
+    #[tokio::test]
+    async fn qwen_router_linear_to_topk_matches_transformers_fixture() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            const TILE: usize = 64;
+            const EXPERTS: usize = 128;
+            const INPUT_ROWS: usize = 4;
+            let fp_type = DataType::Fp(FpType::BF16);
+            let storage_type = MxDataType::Plain(fp_type);
+            let weight_base = (INPUT_ROWS * TILE) as u32;
+            let output_base = weight_base + (EXPERTS * TILE) as u32;
+            let vram = Arc::new(VectorSram::new(TILE as u32, 134, fp_type, 4));
+            let input = (0..TILE)
+                .map(|index| {
+                    let raw = ((index * 37 + 11) % 2001) as i32 - 1000;
+                    bf16::from_f32(raw as f32 / 257.0).to_f32()
+                })
+                .collect::<Vec<_>>();
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&input), storage_type),
+            )
+            .await;
+            for expert in 0..EXPERTS {
+                let weight = (0..TILE)
+                    .map(|index| {
+                        let raw = ((expert * 97 + index * 53 + 19) % 2001) as i32 - 1000;
+                        bf16::from_f32(raw as f32 / 263.0).to_f32()
+                    })
+                    .collect::<Vec<_>>();
+                vram.write(
+                    weight_base + (expert * TILE) as u32,
+                    QuantTensor::quantize(Tensor::from_slice(&weight), storage_type),
+                )
+                .await;
+            }
+
+            let mram = Arc::new(MatrixSram::new(64, 4096, storage_type));
+            let matrix = MatrixMachine::new(mram, vram.clone(), 64, 16, 4, 4, storage_type, "mxfp");
+            let vector = VectorMachine::new(vram, 64, 16);
+            let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(NoData);
+            let mut accelerator = Accelerator::new(matrix, vector, hbm);
+            accelerator.reg_file.write_gp(1, output_base);
+            accelerator.reg_file.write_gp(2, 0);
+            accelerator.reg_file.write_gp(3, weight_base);
+            accelerator.reg_file.write_gp(4, 20);
+            accelerator.reg_file.write_gp(5, 40);
+            accelerator
+                .do_ops(&[
+                    Opcode::V_ROUTER_LINEAR_BF16 {
+                        rd: 1,
+                        rs1: 2,
+                        rs2: 3,
+                        rmask: 0,
+                    },
+                    Opcode::V_TOPK {
+                        rd: 4,
+                        rs1: 1,
+                        rs2: 5,
+                        rmask: 1,
+                    },
+                ])
+                .await;
+            let indices = (40..48)
+                .map(|address| accelerator.scalar_sram.read_int(address))
+                .collect::<Vec<_>>();
+            let weights = accelerator
+                .scalar_sram
+                .read_route_f32_window(20, 8)
+                .to_vec();
+            *got_task.lock().unwrap() = Some((indices, weights));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let (indices, weights) = got.lock().unwrap().take().unwrap();
+        assert_eq!(indices, vec![53, 115, 12, 33, 95, 74, 32, 94]);
+        assert_eq!(
+            weights
+                .iter()
+                .map(|weight| weight.to_bits())
+                .collect::<Vec<_>>(),
+            vec![
+                0x3f5d_e77b,
+                0x3df0_4073,
+                0x3c82_0ee4,
+                0x2e0f_eb3d,
+                0x2d00_735a,
+                0x2730_7f89,
+                0x24aa_8d95,
+                0x23fa_f8cc,
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn qwen_post_attention_moe_tail_matches_transformers_5_5_fixture() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            const TILE: usize = 64;
+            const BLEN_VALUE: usize = 4;
+            const EXPERTS: usize = 128;
+            const INTERMEDIATE: usize = 64;
+            const DESCRIPTOR_BYTES: usize = 64;
+            const GATE_UP_STRIDE: usize = 2 * INTERMEDIATE * TILE * 2;
+            const DOWN_STRIDE: usize = TILE * INTERMEDIATE * 2;
+            const GATE_UP_BASE: usize = DESCRIPTOR_BYTES;
+            const DOWN_BASE: usize = GATE_UP_BASE + EXPERTS * GATE_UP_STRIDE;
+            const HBM_END: usize = DOWN_BASE + EXPERTS * DOWN_STRIDE;
+            const ATTENTION: u32 = 0;
+            const RESIDUAL: u32 = 256;
+            const POST_ATTENTION: u32 = 512;
+            const MOE_RESIDUAL: u32 = 768;
+            const NORM_WEIGHT: u32 = 1024;
+            const NORMALIZED: u32 = 1280;
+            const ROUTER_WEIGHT: u32 = 1536;
+            const LOGITS: u32 = 9728;
+            const COMBINED: u32 = 9856;
+
+            let hbm_backing = Arc::new(MemoryBacked::with_capacity(HBM_END));
+            hbm_backing.with_data(|bytes| {
+                bytes[..8].copy_from_slice(b"Q3MOEBF1");
+                put_u32(bytes, 8, 1);
+                put_u32(bytes, 12, TILE as u32);
+                put_u32(bytes, 16, INTERMEDIATE as u32);
+                put_u32(bytes, 20, EXPERTS as u32);
+                put_u64(bytes, 24, GATE_UP_BASE as u64);
+                put_u64(bytes, 32, DOWN_BASE as u64);
+                put_u64(bytes, 40, GATE_UP_STRIDE as u64);
+                put_u64(bytes, 48, DOWN_STRIDE as u64);
+                put_u64(bytes, 56, HBM_END as u64);
+                for expert in 0..EXPERTS {
+                    let expert_gate_up = GATE_UP_BASE + expert * GATE_UP_STRIDE;
+                    for output in 0..INTERMEDIATE {
+                        for input in 0..TILE {
+                            let gate_raw =
+                                ((expert * 13 + output * 17 + input * 19 + 5) % 257) as i32 - 128;
+                            let up_raw =
+                                ((expert * 23 + output * 29 + input * 31 + 7) % 257) as i32 - 128;
+                            put_bf16(
+                                bytes,
+                                expert_gate_up + (output * TILE + input) * 2,
+                                gate_raw as f32 / 509.0,
+                            );
+                            put_bf16(
+                                bytes,
+                                expert_gate_up + ((INTERMEDIATE + output) * TILE + input) * 2,
+                                up_raw as f32 / 521.0,
+                            );
+                        }
+                    }
+                    let expert_down = DOWN_BASE + expert * DOWN_STRIDE;
+                    for output in 0..TILE {
+                        for input in 0..INTERMEDIATE {
+                            let raw =
+                                ((expert * 37 + output * 41 + input * 43 + 11) % 257) as i32 - 128;
+                            put_bf16(
+                                bytes,
+                                expert_down + (output * INTERMEDIATE + input) * 2,
+                                raw as f32 / 523.0,
+                            );
+                        }
+                    }
+                }
+            });
+            let hbm: Arc<dyn ErasedMemoryModel> = hbm_backing;
+            let fp_type = DataType::Fp(FpType::BF16);
+            let storage_type = MxDataType::Plain(fp_type);
+            let vram = Arc::new(VectorSram::new(TILE as u32, 160, fp_type, BLEN_VALUE));
+            let attention = (0..TILE)
+                .map(|index| {
+                    let raw = ((index * 17 + 3) % 127) as i32 - 63;
+                    bf16::from_f32(raw as f32 / 41.0).to_f32()
+                })
+                .collect::<Vec<_>>();
+            let residual = (0..TILE)
+                .map(|index| {
+                    let raw = ((index * 29 + 7) % 131) as i32 - 65;
+                    bf16::from_f32(raw as f32 / 43.0).to_f32()
+                })
+                .collect::<Vec<_>>();
+            let norm_weight = (0..TILE)
+                .map(|index| bf16::from_f32(0.75 + ((index * 11) % 17) as f32 / 64.0).to_f32())
+                .collect::<Vec<_>>();
+            for (address, values) in [
+                (ATTENTION, attention),
+                (RESIDUAL, residual),
+                (NORM_WEIGHT, norm_weight),
+            ] {
+                vram.write(
+                    address,
+                    QuantTensor::quantize(Tensor::from_slice(&values), storage_type),
+                )
+                .await;
+            }
+            for expert in 0..EXPERTS {
+                let values = (0..TILE)
+                    .map(|index| {
+                        let raw = ((expert * 97 + index * 53 + 19) % 2001) as i32 - 1000;
+                        bf16::from_f32(raw as f32 / 263.0).to_f32()
+                    })
+                    .collect::<Vec<_>>();
+                vram.write(
+                    ROUTER_WEIGHT + (expert * TILE) as u32,
+                    QuantTensor::quantize(Tensor::from_slice(&values), storage_type),
+                )
+                .await;
+            }
+
+            let mram = Arc::new(MatrixSram::new(64, 4096, storage_type));
+            let matrix = MatrixMachine::new(
+                mram,
+                vram.clone(),
+                64,
+                16,
+                BLEN_VALUE as u32,
+                BLEN_VALUE as u32,
+                storage_type,
+                "mxfp",
+            );
+            let vector = VectorMachine::new(vram.clone(), 64, 16);
+            let mut accelerator = Accelerator::new(matrix, vector, hbm);
+            for (register, value) in [
+                (1, POST_ATTENTION),
+                (2, ATTENTION),
+                (3, RESIDUAL),
+                (4, MOE_RESIDUAL),
+                (5, NORM_WEIGHT),
+                (6, NORMALIZED),
+                (7, ROUTER_WEIGHT),
+                (8, LOGITS),
+                (9, 0),
+                (10, COMBINED),
+                (11, 0),
+            ] {
+                accelerator.reg_file.write_gp(register, value);
+            }
+            accelerator
+                .do_ops(&[
+                    Opcode::V_ADD_VV {
+                        rd: 1,
+                        rs1: 2,
+                        rs2: 3,
+                        rmask: 0,
+                    },
+                    Opcode::V_ADD_VF {
+                        rd: 4,
+                        rs1: 1,
+                        rs2: 0,
+                        rmask: 0,
+                    },
+                    Opcode::V_QWEN3_RMSNORM_BF16 {
+                        rd: 6,
+                        rs1: 1,
+                        rs2: 5,
+                        rmask: 0,
+                    },
+                    Opcode::V_ROUTER_LINEAR_BF16 {
+                        rd: 8,
+                        rs1: 6,
+                        rs2: 7,
+                        rmask: 0,
+                    },
+                    Opcode::V_TOPK {
+                        rd: 9,
+                        rs1: 8,
+                        rs2: 9,
+                        rmask: 1,
+                    },
+                    Opcode::C_SET_ADDR_REG {
+                        rd: 1,
+                        rs1: 0,
+                        rs2: 11,
+                    },
+                    Opcode::V_QWEN3_EXPERT_COMBINE_BF16 {
+                        rd: 10,
+                        rs1: 6,
+                        rs2: 9,
+                        rmask: 1,
+                    },
+                    Opcode::V_ADD_VV {
+                        rd: 10,
+                        rs1: 10,
+                        rs2: 4,
+                        rmask: 0,
+                    },
+                ])
+                .await;
+            let output = vram.read(COMBINED).await;
+            let output_values =
+                Vec::<f32>::try_from(output.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            let normalized = vram.read(NORMALIZED).await;
+            let normalized_values =
+                Vec::<f32>::try_from(normalized.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            let indices = (0..8)
+                .map(|address| accelerator.scalar_sram.read_int(address))
+                .collect::<Vec<_>>();
+            let scores = accelerator
+                .scalar_sram
+                .read_route_f32_window(0, 8)
+                .iter()
+                .map(|score| score.to_bits())
+                .collect::<Vec<_>>();
+            *got_task.lock().unwrap() = Some((
+                fnv1a_bf16(&output_values),
+                fnv1a_bf16(&normalized_values),
+                indices,
+                scores,
+            ));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let (output_hash, normalized_hash, indices, scores) = got.lock().unwrap().take().unwrap();
+        assert_eq!(output_hash, 0x910c_569b_727d_0efc);
+        assert_eq!(normalized_hash, 0x07eb_bab0_6edc_1369);
+        assert_eq!(indices, vec![29, 99, 33, 95, 8, 70, 91, 50]);
+        assert_eq!(
+            scores,
+            vec![
+                0x3f7e_d0dc,
+                0x3b0e_b240,
+                0x3aad_196f,
+                0x3a86_cf57,
+                0x3856_c6fd,
+                0x383d_8a52,
+                0x35cf_8af5,
+                0x358e_a456,
+            ]
+        );
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "unsupported V_ROUTER_LINEAR_BF16 policy 2")]
+    async fn qwen_router_linear_unknown_policy_fails_closed() {
+        let executor = Executor::new();
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let storage_type = MxDataType::Plain(fp_type);
+            let vram = Arc::new(VectorSram::new(64, 1, fp_type, 4));
+            let mram = Arc::new(MatrixSram::new(64, 4096, storage_type));
+            let matrix = MatrixMachine::new(mram, vram.clone(), 64, 16, 4, 4, storage_type, "mxfp");
+            let vector = VectorMachine::new(vram, 64, 16);
+            let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(NoData);
+            let mut accelerator = Accelerator::new(matrix, vector, hbm);
+            accelerator
+                .do_ops(&[Opcode::V_ROUTER_LINEAR_BF16 {
+                    rd: 1,
+                    rs1: 2,
+                    rs2: 3,
+                    rmask: 2,
+                }])
+                .await;
+        });
+        executor.enter(Instant::ETERNITY).await;
+    }
+
+    #[tokio::test]
+    async fn qwen_route_multiply_retains_fp32_score_until_bf16_output_cast() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let storage_type = MxDataType::Plain(fp_type);
+            let vram = Arc::new(VectorSram::new(64, 4, fp_type, 4));
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&vec![1.625f32; 64]), storage_type),
+            )
+            .await;
+
+            let mram = Arc::new(MatrixSram::new(64, 4096, storage_type));
+            let matrix = MatrixMachine::new(mram, vram.clone(), 64, 16, 4, 4, storage_type, "mxfp");
+            let vector = VectorMachine::new(vram.clone(), 64, 16);
+            let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(NoData);
+            let mut accelerator = Accelerator::new(matrix, vector, hbm);
+            let score = 0.123_456_79f32;
+            accelerator.scalar_sram.write_route_f32(12, score);
+            accelerator.reg_file.write_gp(1, 64);
+            accelerator.reg_file.write_gp(2, 0);
+            accelerator.reg_file.write_gp(3, 12);
+            accelerator
+                .do_ops(&[Opcode::V_MUL_ROUTE_F32 {
+                    rd: 1,
+                    rs1: 2,
+                    rs2: 3,
+                    rmask: 0,
+                }])
+                .await;
+            let output = vram.read(64).await;
+            let first = output.as_tensor().double_value(&[0]) as f32;
+            *got_task.lock().unwrap() = Some(first);
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let actual = got.lock().unwrap().take().unwrap();
+        let expected = bf16::from_f32(1.625 * 0.123_456_79).to_f32();
+        let prematurely_rounded =
+            bf16::from_f32(1.625 * bf16::from_f32(0.123_456_79).to_f32()).to_f32();
+        assert_eq!(actual.to_bits(), expected.to_bits());
+        assert_ne!(actual.to_bits(), prematurely_rounded.to_bits());
     }
 }

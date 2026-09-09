@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::mem::ManuallyDrop;
+use std::path::Path;
 use std::sync::Arc;
 
 use runtime::Executor;
@@ -10,11 +11,10 @@ use crate::accelerator::Accelerator;
 use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
-    BLEN, BROADCAST_AMOUNT, HBM_CHANNELS, HBM_GEN, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE,
-    MATRIX_KV_TYPE, MATRIX_SEMANTICS, MATRIX_SRAM_TYPE, MATRIX_WEIGHT_TYPE,
-    MAX_LOOP_INSTRUCTIONS, MLEN,
-    PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE,
-    VECTOR_KV_TYPE, VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
+    BLEN, BROADCAST_AMOUNT, HBM_CHANNELS, HBM_GEN, HBM_SIZE, HLEN, MATRIX_KV_TYPE,
+    MATRIX_SEMANTICS, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE, MATRIX_WEIGHT_TYPE,
+    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
+    VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
@@ -24,10 +24,11 @@ use crate::{cli, op};
 /// Dumps are post-run artifacts, so a write failure (e.g. read-only cwd, full
 /// disk) is logged as a warning and the run continues rather than panicking and
 /// discarding an already-completed simulation.
-fn dump_to_file(path: &str, bytes: &[u8]) {
+fn dump_to_file(path: impl AsRef<Path>, bytes: &[u8]) {
+    let path = path.as_ref();
     match std::fs::File::create(path).and_then(|mut f| f.write_all(bytes)) {
-        Ok(()) => tracing::info!(path, bytes = bytes.len(), "dumped content"),
-        Err(err) => tracing::warn!(path, %err, "failed to write dump file"),
+        Ok(()) => tracing::info!(path = %path.display(), bytes = bytes.len(), "dumped content"),
+        Err(err) => tracing::warn!(path = %path.display(), %err, "failed to write dump file"),
     }
 }
 
@@ -272,18 +273,26 @@ pub(crate) async fn run_from_cli() {
     // Dump FPSRAM
     let fpsram_bytes = accelerator.fpsram_dump_bytes();
     dump_to_file("fpsram_dump.bin", &fpsram_bytes);
+    let intsram_bytes = accelerator.intsram_dump_bytes();
+    dump_to_file("intsram_dump.bin", &intsram_bytes);
+    let route_f32_sram_bytes = accelerator.route_f32_sram_dump_bytes();
+    dump_to_file("route_f32_sram_dump.bin", &route_f32_sram_bytes);
 
     // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
     // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
     // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
+    if opts.hbm_dump.is_some() || tracing::enabled!(tracing::Level::DEBUG) {
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
             hbm_bytes[..len].copy_from_slice(&f[..len]);
         });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+        if let Some(path) = opts.hbm_dump.as_ref() {
+            dump_to_file(path, &hbm_bytes);
+        } else {
+            dump_to_file("hbm_dump.bin", &hbm_bytes);
+        }
     }
 
     let memory_stats = hbm.statistics();

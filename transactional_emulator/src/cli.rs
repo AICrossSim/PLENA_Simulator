@@ -172,6 +172,11 @@ pub(crate) struct Opts {
     pub(crate) op_stats: Option<PathBuf>,
 
     #[arg(long)]
+    /// Write the complete post-run HBM image to this path. Unlike the legacy
+    /// debug-level dump, this is honored at every log level for parity audits.
+    pub(crate) hbm_dump: Option<PathBuf>,
+
+    #[arg(long)]
     /// HBM generation for the Ramulator timing model: HBM2 or HBM3.
     /// Overrides HBM_GEN in plena_settings.toml (default HBM2).
     pub(crate) hbm_gen: Option<String>,
@@ -186,4 +191,26 @@ pub(crate) struct Opts {
     /// Number of HBM channels in the Ramulator model.
     /// Overrides HBM_CHANNELS in plena_settings.toml (default 8).
     pub(crate) hbm_channels: Option<usize>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Opts, Parser};
+
+    #[test]
+    fn parses_explicit_hbm_dump_for_fail_closed_audits() {
+        let opts = Opts::try_parse_from([
+            "transactional_emulator",
+            "--opcode",
+            "program.hex",
+            "--hbm",
+            "input.hbm",
+            "--fpsram",
+            "input.fp",
+            "--hbm-dump",
+            "post.hbm",
+        ])
+        .expect("valid CLI");
+        assert_eq!(opts.hbm_dump.unwrap().to_string_lossy(), "post.hbm");
+    }
 }
