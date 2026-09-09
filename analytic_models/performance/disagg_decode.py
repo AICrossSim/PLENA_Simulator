@@ -42,7 +42,7 @@ import io
 import json
 import math
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -73,7 +73,14 @@ from packed_q1_timing import (                                             # noq
     PackedQ1TimingContract,
     validate_packed_q1_timing_contract,
 )
-from memory_model import MemoryConfig, MemoryModel, MemoryTraffic, load_memory_config_from_toml  # noqa: E402
+from memory_model import (                                                  # noqa: E402
+    MemoryConfig,
+    MemoryModel,
+    MemoryTraffic,
+    conservative_unique_experts,
+    expected_unique_experts,
+    load_memory_config_from_toml,
+)
 from llm_memory_model import LLMMemoryModel                                # noqa: E402
 from packed_kv import (                                                     # noqa: E402
     DENSE_SELECTOR,
@@ -95,11 +102,19 @@ from physical_ledger import (                                               # no
     kv_ledger,
     weight_ledger,
 )
+from body_weight_layout import (                                            # noqa: E402
+    EXPERT_ID_PARALLEL,
+    EXPERT_PARALLEL_MODES,
+    EXPERT_TENSOR_PARALLEL,
+    BodyWeightPhysicalLayout,
+    build_body_weight_physical_layout,
+)
 from utilisation_model import PLENAUtilization                             # noqa: E402
 from hbm_technology import HBM_TECHNOLOGIES, hbm_technology                # noqa: E402
 from decode_power import decode_power                                      # noqa: E402
 from handoff import LINK_GENS                                               # noqa: E402
 from emulator_calibration import EmulatorCalibration                       # noqa: E402
+from router_trace_summary import validate_model_overlay                    # noqa: E402
 try:                                                                        # noqa: E402
     from .compiler_trace_timing import (
         COMPILER_TRACE,
@@ -125,9 +140,10 @@ ACT_BITS = 16                        # activations stored bf16 on-chip (never HB
 LM_HEAD_BITS = 16                    # vocab projection left unquantised by the software DSE
 EMBED_BITS = 16                      # embedding table stored at bf16
 DECODE_BF16_HEAD = "decode_bf16_unmodeled"
+DECODE_MX_HEAD = "decode_local_mx_head"
 EXTERNAL_BF16_HEAD = "external_bf16_service"
 OUTPUT_HEAD_LOCATIONS = frozenset(
-    {DECODE_BF16_HEAD, EXTERNAL_BF16_HEAD}
+    {DECODE_BF16_HEAD, DECODE_MX_HEAD, EXTERNAL_BF16_HEAD}
 )
 DEFAULT_LINK_GENERATION = "nvlink4"
 COMPILER_TRACE_TIMING_SET_SCHEMA = "plena-compiler-trace-timing-set-v1"
@@ -142,13 +158,125 @@ SRAM_POLICIES = frozenset(
     }
 )
 
+BODY_PARALLEL_TIMING_SCHEMA = "plena-body-rank-local-timing/v1"
+LAYER_EXACT_MOE_ROUTE_PROJECTION_SCHEMA = (
+    "plena-layer-exact-moe-route-projection/v1"
+)
+
 
 def decoder_owns_output_head(location: str) -> bool:
     """Return whether LM-head work and storage belong to the decode ledger."""
 
     if location not in OUTPUT_HEAD_LOCATIONS:
         raise ValueError(f"unsupported output-head location {location!r}")
-    return location == DECODE_BF16_HEAD
+    return location in {DECODE_BF16_HEAD, DECODE_MX_HEAD}
+
+
+def _validate_layer_exact_moe_route_projection(
+    projection: Mapping[str, object],
+    dims: Mapping[str, object],
+    *,
+    batch: int,
+    tp: int,
+    kvp: int,
+    expert_parallel_mode: str,
+) -> tuple[tuple[float, ...], tuple[PlaneBytes, ...], tuple[PlaneBytes, ...]]:
+    """Validate a content-addressed, layer-specific routed-expert override.
+
+    The normal decode model owns every non-expert operation.  This hook may
+    replace only the routed-expert cycles and its streamed element/scale
+    planes.  Keeping one record per decoder layer prevents a global maximum
+    from inventing a route pattern that never occurred.
+    """
+
+    if not isinstance(projection, Mapping):
+        raise ValueError("layer-exact MoE route projection must be an object")
+    body = dict(projection)
+    observed_hash = body.pop("content_hash", None)
+    if observed_hash != canonical_sha256(body):
+        raise ValueError("layer-exact MoE route projection content hash mismatch")
+    if projection.get("schema") != LAYER_EXACT_MOE_ROUTE_PROJECTION_SCHEMA:
+        raise ValueError("unsupported layer-exact MoE route projection schema")
+    if (
+        int(projection.get("batch_size", -1)) != batch
+        or int(projection.get("tensor_parallel_degree", -1)) != tp
+        or int(projection.get("kv_parallel_degree", -1)) != kvp
+        or projection.get("expert_parallel_mode") != expert_parallel_mode
+    ):
+        raise ValueError("layer-exact MoE route projection topology differs")
+    if (
+        expert_parallel_mode == EXPERT_ID_PARALLEL
+        and projection.get("mapping")
+        != "replicated_hidden_local_route_filter_then_output_allreduce"
+    ):
+        raise ValueError("layer-exact expert-ID mapping token differs")
+    classification = projection.get("classification")
+    if not isinstance(classification, Mapping) or any(
+        classification.get(field) is not False
+        for field in (
+            "publication_rankable",
+            "hardware_rankable",
+            "selection_eligible",
+            "timing_selection_allowed",
+        )
+    ):
+        raise ValueError("layer-exact MoE route projection must remain fail-closed")
+    if projection.get("global_layer_collapse_allowed") is not False:
+        raise ValueError("layer-exact MoE route projection permits layer collapse")
+    layers = projection.get("layers")
+    layer_count = int(dims["layers"])
+    if (
+        not isinstance(layers, list)
+        or len(layers) != layer_count
+        or [int(row.get("layer", -1)) for row in layers]
+        != list(range(layer_count))
+    ):
+        raise ValueError("layer-exact MoE route projection lacks layer coverage")
+
+    expected_assignments = batch * int(dims["experts_per_token"])
+    expected_collectives = int(tp > 1)
+    cycles: list[float] = []
+    rank_planes: list[PlaneBytes] = []
+    system_planes: list[PlaneBytes] = []
+    for row in layers:
+        if (
+            int(row.get("logical_route_assignments", -1))
+            != expected_assignments
+            or int(row.get("physical_whole_expert_assignments_across_kvp", -1))
+            != expected_assignments * kvp
+            or int(row.get("source_hidden_dispatch_bytes", -1)) != 0
+            or int(row.get("expert_output_collective_count", -1))
+            != expected_collectives
+        ):
+            raise ValueError("layer-exact MoE route projection does not conserve")
+        value = float(row.get("slowest_rank_expert_stage_cycles", -1))
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("layer-exact expert cycles must be finite and positive")
+
+        def plane(field: str) -> PlaneBytes:
+            raw = row.get(field)
+            if not isinstance(raw, Mapping):
+                raise ValueError("layer-exact expert plane is missing")
+            element = int(raw.get("element_aligned", -1))
+            scale = int(raw.get("scale_aligned", -1))
+            total = int(raw.get("total_aligned", -1))
+            if min(element, scale) < 0 or total != element + scale or total <= 0:
+                raise ValueError("layer-exact expert plane does not conserve")
+            return PlaneBytes(
+                element_raw=element,
+                element_aligned=element,
+                scale_raw=scale,
+                scale_aligned=scale,
+            )
+
+        rank_plane = plane("slowest_rank_expert_streamed")
+        system_plane = plane("system_expert_streamed")
+        if system_plane.total_aligned < rank_plane.total_aligned:
+            raise ValueError("system expert traffic is below one rank")
+        cycles.append(value)
+        rank_planes.append(rank_plane)
+        system_planes.append(system_plane)
+    return tuple(cycles), tuple(rank_planes), tuple(system_planes)
 # Mirrors the MXFP formats the software quantiser supports: 4-bit E1M2/E2M1,
 # 6-bit E2M3/E3M2, 8-bit E3M4/E4M3/E5M2.
 MXFP_FORMATS = {"E1M2": (1, 2), "E2M1": (2, 1), "E2M3": (2, 3), "E3M2": (3, 2),
@@ -357,21 +485,182 @@ def load_model_dims(path: str) -> dict:
         window = 0
     n_sliding = (sum(1 for lt in p.get("layer_types", []) if lt == "sliding_attention")
                  if window > 0 else 0)
+    model_type = str(p.get("model_type", ""))
+    num_experts = int(p.get("num_experts", p.get("num_local_experts", 1)))
+    experts_per_token = int(
+        p.get("num_experts_per_tok", p.get("experts_per_token", 1))
+    )
+    if num_experts <= 0 or not 1 <= experts_per_token <= num_experts:
+        raise ValueError("invalid MoE expert count or top-k routing width")
+    for field in ("num_shared_experts", "shared_expert_intermediate_size"):
+        value = p.get(field)
+        if value not in (None, 0):
+            raise ValueError(
+                f"{field} enables shared experts, which the decode model does not price"
+            )
+    dense_inter = int(p["intermediate_size"])
+    inter = int(p.get("moe_intermediate_size", dense_inter)) if num_experts > 1 else dense_inter
+    routing_imbalance = float(p.get("moe_routing_imbalance_factor", 1.0))
+    if not math.isfinite(routing_imbalance) or routing_imbalance < 1.0:
+        raise ValueError("moe_routing_imbalance_factor must be finite and >= 1")
+    unique_experts = p.get("moe_unique_experts_per_step")
+    if unique_experts is not None:
+        unique_experts = int(unique_experts)
+        if not experts_per_token <= unique_experts <= num_experts:
+            raise ValueError(
+                "moe_unique_experts_per_step must be between top-k and num_experts"
+            )
+    route_repricing = validate_model_overlay(p)
     return {"hidden": p["hidden_size"], "heads": ah, "kv_heads": p["num_key_value_heads"],
             "head_dim": p.get("head_dim", p["hidden_size"] // ah), "layers": layers,
-            "inter": p["intermediate_size"], "vocab": p["vocab_size"],
+            "inter": inter, "dense_inter": dense_inter, "vocab": p["vocab_size"],
             "tie_embeddings": p.get("tie_word_embeddings", False),
-            "model_type": p.get("model_type", ""),
+            "model_type": model_type,
             "qk_norm": bool(
-                p.get("qk_norm", p.get("model_type") == "qwen3")
+                p.get(
+                    "qk_norm",
+                    p.get("use_qk_norm", model_type.startswith("qwen3")),
+                )
             ),
-            "num_experts": p.get("num_local_experts", 1),
-            "experts_per_token": p.get("experts_per_token", p.get("num_experts_per_tok", 1)),
+            "num_experts": num_experts,
+            "experts_per_token": experts_per_token,
+            "router_weight_bits": int(p.get("router_weight_bits", 16)),
+            "norm_topk_prob": bool(p.get("norm_topk_prob", False)),
+            "moe_routing_imbalance_factor": routing_imbalance,
+            "moe_unique_experts_per_step": unique_experts,
+            "moe_route_repricing": (
+                dict(route_repricing) if route_repricing is not None else None
+            ),
             "sliding_window": window, "n_sliding": n_sliding, "n_full": layers - n_sliding}
 
 
 def is_moe(d: dict) -> bool:
     return d.get("num_experts", 1) > 1
+
+
+def _moe_route_accounting(dims: Mapping[str, object], batch: int) -> dict:
+    """Return conserved route-count and scheduling-penalty provenance."""
+
+    assignments = int(batch) * int(dims["experts_per_token"])
+    return {
+        "routes_per_step": assignments,
+        "physical_route_assignments_per_step": assignments,
+        "route_assignment_accounting": "conserved_batch_times_topk",
+        "routing_imbalance_factor": float(
+            dims.get("moe_routing_imbalance_factor", 1.0)
+        ),
+        "routing_imbalance_application": (
+            "expert_stage_ragged_schedule_cycle_penalty_only"
+        ),
+    }
+
+
+def _moe_workload_accounting(
+    perf: PerfModel,
+    dims: Mapping[str, object],
+    batch: int,
+) -> dict:
+    """Build one-source routed-expert timing and provenance for report rows."""
+
+    route_unique_override = dims.get("moe_unique_experts_per_step")
+    route_repricing = dims.get("moe_route_repricing")
+    active_expert_source = (
+        (
+            "verified_trace_summary_conservative_observed_max"
+            if route_repricing is not None
+            else "explicit_unique_expert_override"
+        )
+        if route_unique_override is not None
+        else None
+    )
+    expert_timing = perf.moe_decode_expert_timing(
+        int(dims["hidden"]),
+        int(batch),
+        int(dims["num_experts"]),
+        int(dims["experts_per_token"]),
+        int(dims["inter"]),
+        active_experts=(
+            int(route_unique_override)
+            if route_unique_override is not None
+            else None
+        ),
+        active_expert_source=active_expert_source,
+        routing_imbalance_factor=float(
+            dims.get("moe_routing_imbalance_factor", 1.0)
+        ),
+    )
+    route_accounting = _moe_route_accounting(dims, batch)
+    if int(expert_timing["route_assignments"]) != int(
+        route_accounting["physical_route_assignments_per_step"]
+    ):
+        raise AssertionError("MoE route and timing ledgers disagree")
+
+    expected_unique = expected_unique_experts(
+        int(dims["num_experts"]),
+        int(dims["experts_per_token"]),
+        int(batch),
+    )
+    return {
+        "schema": "plena-routed-moe-decode-workload/v1",
+        "num_experts": int(dims["num_experts"]),
+        "experts_per_token": int(dims["experts_per_token"]),
+        "expert_intermediate_size": int(dims["inter"]),
+        "tokens_per_step": int(batch),
+        **route_accounting,
+        "expected_unique_experts_uniform": expected_unique,
+        "charged_unique_experts_per_layer": int(
+            expert_timing["active_experts"]
+        ),
+        "unique_expert_source": str(
+            expert_timing["active_expert_source"]
+        ),
+        "expert_row_tiles_per_layer": int(
+            expert_timing["expert_row_tiles"]
+        ),
+        "expert_padded_rows_per_layer": int(
+            expert_timing["expert_padded_rows"]
+        ),
+        "expert_padding_rows_per_layer": int(
+            expert_timing["expert_padding_rows"]
+        ),
+        "expert_batch_ledger_source": str(
+            expert_timing["assignment_distribution"]
+        ),
+        "expert_batch_ledger": expert_timing,
+        "router_weight_precision_bits": int(
+            dims.get("router_weight_bits", 16)
+        ),
+        "norm_topk_prob": bool(dims.get("norm_topk_prob", False)),
+        "route_repricing": (
+            dict(route_repricing) if isinstance(route_repricing, Mapping) else None
+        ),
+        "timing_events": [
+            "router_gemm",
+            "topk_selection",
+            "route_probability_softmax",
+            "expert_gate_up",
+            "expert_silu_multiply",
+            "expert_down",
+            "weighted_expert_combine",
+        ],
+        "provenance": {
+            "expert_matrix_cycles_included": True,
+            "expert_matrix_drain_cycles_included": True,
+            "expert_auxiliary_issue_cycles_included": True,
+            "expert_blen_padding_included": True,
+            "router_and_vector_cycles_included": True,
+            "expert_hbm_traffic_included": True,
+            "router_bf16_hbm_traffic_included": True,
+            "moe_specific_area_calibrated": False,
+            "moe_specific_dynamic_power_calibrated": False,
+            "publication_rankable": False,
+            "route_repricing_publication_rankable": False,
+            "unrankable_reason": (
+                "routed-MoE control area and dynamic power lack matched "
+                "emulator/RTL calibration"
+            ),
+        },
+    }
 
 
 def _attn_split(d: dict) -> tuple[int, int, int]:
@@ -525,8 +814,9 @@ def onchip_activation_bytes(d: dict, batch: int) -> int:
 # precision enters the byte model. The FFN term picks dense vs MoE by expert count.
 def weight_footprint_bytes(mem: MemoryModel, d: dict, prec: dict) -> dict:
     """HBM weight storage: attention @ attn_bits, FFN/experts @ ffn_bits,
-    embedding/lm_head/norms @ bf16. MoE keeps every expert (and the router)
-    resident, which sets the capacity wall for these models.
+    embedding/norms/router @ BF16 and the canonical local head at profile W.
+    An optional external head is excluded. MoE keeps every expert resident,
+    which sets the capacity wall for these models.
     """
     h, ah, kvh, hd = d["hidden"], d["heads"], d["kv_heads"], d["head_dim"]
     inter, vocab, layers = d["inter"], d["vocab"], d["layers"]
@@ -534,14 +824,31 @@ def weight_footprint_bytes(mem: MemoryModel, d: dict, prec: dict) -> dict:
     mem.weight_bits = EMBED_BITS
     embedding = mem.embedding_weights(vocab, h)
     norms = mem.layer_norm_weights(h) * 2 * layers
-    mem.weight_bits = LM_HEAD_BITS
-    lm_head = mem.lm_head_weights(h, vocab, d.get("tie_embeddings", False))
+    if bool(d.get("qk_norm", False)):
+        norms += mem.layer_norm_weights(hd) * 2 * layers
+    mem.weight_bits = (
+        prec["head_bits"]
+        if bool(prec.get("lm_head_quantized", False))
+        else LM_HEAD_BITS
+    )
+    # An MX serving head is a separately packed matrix even when a checkpoint
+    # ties its BF16 embedding table.
+    lm_head = mem.lm_head_weights(
+        h,
+        vocab,
+        d.get("tie_embeddings", False)
+        and not bool(prec.get("lm_head_quantized", False)),
+    )
 
     mem.weight_bits = prec["attn_bits"]
     attention = mem.attention_weights(h, ah, kvh, hd) * layers
     mem.weight_bits = prec["ffn_bits"]
     if is_moe(d):
-        router, experts = mem.moe_weights(h, inter, d["num_experts"])   # router + all experts resident
+        router = mem._bits_to_bytes(
+            h * d["num_experts"],
+            d.get("router_weight_bits", 16),
+        )
+        experts = mem.moe_expert_weights(h, inter, d["num_experts"])
         ffn = (router + experts) * layers
     else:
         ffn = mem.ffn_weights(h, inter) * layers
@@ -570,6 +877,7 @@ def kv_footprint_bytes(
     *,
     mlen: int | None = None,
     kv_layout: str = DENSE_SELECTOR,
+    tp: int = 1,
 ) -> int:
     """HBM KV-cache footprint at kv_bits. Full layers store the whole `ctx`;
     sliding-window layers store only the last `window` tokens -- windowing's
@@ -589,6 +897,7 @@ def kv_footprint_bytes(
         batch=batch,
         mlen=mlen,
         kv_layout=kv_layout,
+        tp=tp,
     ).total_bytes
 
 
@@ -604,10 +913,12 @@ def decode_traffic(
     physical_weights=None,
     physical_step=None,
     include_lm_head: bool = True,
+    tp: int = 1,
 ) -> MemoryTraffic:
     """Per-token HBM traffic: read every weight once (attn @ attn_bits,
-    FFN/experts @ ffn_bits, lm_head @ bf16), read the whole KV cache @ kv_bits,
-    write the new token's KV. MoE reads the router + top-k experts, not all."""
+    FFN/experts @ ffn_bits, local head @ profile W), read the whole KV cache @
+    kv_bits, and write the new token's KV. Embedding/norm/router remain BF16;
+    MoE reads the router plus active experts rather than every expert."""
     h, ah, kvh, hd = d["hidden"], d["heads"], d["kv_heads"], d["head_dim"]
     inter, vocab, layers = d["inter"], d["vocab"], d["layers"]
 
@@ -623,11 +934,25 @@ def decode_traffic(
 
     mem.weight_bits = prec["ffn_bits"]
     if is_moe(d):
-        ffn = mem.moe_traffic(h, inter, d["num_experts"], d["experts_per_token"], 1, batch, "decode") * layers
+        ffn = mem.moe_traffic(
+            h,
+            inter,
+            d["num_experts"],
+            d["experts_per_token"],
+            1,
+            batch,
+            "decode",
+            unique_experts=d.get("moe_unique_experts_per_step"),
+            router_weight_bits=d.get("router_weight_bits", 16),
+        ) * layers
     else:
         ffn = mem.ffn_traffic(h, inter, 1, batch, "decode") * layers
 
-    mem.weight_bits = LM_HEAD_BITS
+    mem.weight_bits = (
+        prec["head_bits"]
+        if bool(prec.get("lm_head_quantized", False))
+        else LM_HEAD_BITS
+    )
     head = mem.lm_head_traffic(h, vocab) if include_lm_head else MemoryTraffic()
     traffic = attn + ffn + head
     if mlen is None:
@@ -658,6 +983,9 @@ def decode_traffic(
         d,
         prec,
         include_lm_head=include_lm_head,
+        batch=batch,
+        unique_experts=d.get("moe_unique_experts_per_step"),
+        mlen=mlen,
     )
     step_traffic = physical_step or decode_step_traffic_ledger(
         d,
@@ -668,6 +996,7 @@ def decode_traffic(
         kv_layout=kv_layout,
         weights=weights,
         include_lm_head=include_lm_head,
+        tp=tp,
     )
     mem.weight_bits = prec["attn_bits"]
     logical_weight_read = (
@@ -675,16 +1004,30 @@ def decode_traffic(
     )
     mem.weight_bits = prec["ffn_bits"]
     if is_moe(d):
-        router = mem.moe_router_weights(h, d["num_experts"])
+        router = mem._bits_to_bytes(
+            h * d["num_experts"],
+            d.get("router_weight_bits", 16),
+        )
+        unique_experts = d.get("moe_unique_experts_per_step")
+        if unique_experts is None:
+            unique_experts = conservative_unique_experts(
+                d["num_experts"],
+                d["experts_per_token"],
+                batch,
+            )
         active = (
             mem._bits_to_bytes(3 * h * inter, prec["ffn_bits"])
-            * d["experts_per_token"]
+            * unique_experts
         )
         logical_weight_read += (router + active) * layers
     else:
         logical_weight_read += mem.ffn_weights(h, inter) * layers
     if include_lm_head:
-        mem.weight_bits = LM_HEAD_BITS
+        mem.weight_bits = (
+            prec["head_bits"]
+            if bool(prec.get("lm_head_quantized", False))
+            else LM_HEAD_BITS
+        )
         logical_weight_read += mem.lm_head_weights(
             h,
             vocab,
@@ -703,12 +1046,40 @@ def decode_traffic(
 
 # Compute cycles + FLOPs per decode token
 def _ffn_label_cycles(perf: PerfModel, d: dict, batch: int) -> tuple[str, int]:
-    """FFN cycles for the decode step. MoE runs the top-k experts as k FFN passes;
-    each expert is a full FFN of width `inter`."""
-    ffn = perf.feed_forward(d["hidden"], d["inter"], 1, batch, "decode")
+    """FFN cycles including routed-MoE router, top-k, experts, and combine."""
     if is_moe(d):
-        return f"MoE {d['experts_per_token']}/{d['num_experts']} experts", ffn * d["experts_per_token"]
-    return "FFN (gate/up/down)", ffn
+        cycles = perf.mlp_moe(
+            d["hidden"],
+            1,
+            batch,
+            d["num_experts"],
+            d["experts_per_token"],
+            d["inter"],
+            "decode",
+            include_input_norm=False,
+            active_experts=d.get("moe_unique_experts_per_step"),
+            active_expert_source=(
+                (
+                    "verified_trace_summary_conservative_observed_max"
+                    if d.get("moe_route_repricing") is not None
+                    else "explicit_unique_expert_override"
+                )
+                if d.get("moe_unique_experts_per_step") is not None
+                else None
+            ),
+            routing_imbalance_factor=d.get(
+                "moe_routing_imbalance_factor",
+                1.0,
+            ),
+        )
+        return (
+            f"MoE router+top-k+{d['experts_per_token']}/{d['num_experts']} experts+combine",
+            cycles,
+        )
+    return (
+        "FFN (gate/up/down)",
+        perf.feed_forward(d["hidden"], d["inter"], 1, batch, "decode"),
+    )
 
 
 def _flash_cycles(
@@ -793,14 +1164,35 @@ def decode_token_components(
         f"Residual adds (x2) x{layers} layers":      perf.residual(h, 1, batch, "decode") * 2 * layers,
         f"{ffn_label} x{layers} layers":             ffn_cyc * layers,
     }
+    if bool(d.get("qk_norm", False)):
+        comp[f"Q/K RMSNorm x{layers} layers"] = (
+            perf.rms_layer(hd, 1, batch * ah, "decode")
+            + perf.rms_layer(hd, 1, batch * kvh, "decode")
+        ) * layers
     comp["Embedding lookup"] = perf.embeddings(h, 1, batch, "decode")
     comp["Final RMSNorm"] = perf.rms_layer(h, 1, batch, "decode")
     if include_lm_head:
         comp["LM head"] = perf.lm_head(h, d["vocab"], batch)
-        comp["Vocab softmax"] = perf.softmax_full_seq(
+        head_padding = perf.lm_head_padding_preparation(
+            h,
             d["vocab"],
-            1,
             batch,
+        )
+        # The activation tail and BLEN-inactive rows are initialized locally on
+        # every rank.  Padded vocabulary rows are masked across the sharded
+        # output space before the bounded selector consumes them.
+        comp["LM head activation padding zero-fill"] = int(
+            head_padding["zero_fill_cycles_per_rank"]
+        )
+        comp["LM head padded-vocab mask"] = int(
+            head_padding["padded_vocab_mask_cycles_aggregate"]
+        )
+        comp["Vocab streamed top-k/top-p selection"] = (
+            perf.lm_head_streaming_selection(
+            d["vocab"],
+            batch,
+            top_k=20,
+            )
         )
     return comp
 
@@ -880,6 +1272,9 @@ def _parallel_topology(hw_over, n_chips: int) -> dict[str, int | str]:
     link_generation = str(
         values.get("LINK_GENERATION", DEFAULT_LINK_GENERATION)
     )
+    expert_parallel_mode = str(
+        values.get("EXPERT_PARALLEL_MODE", EXPERT_TENSOR_PARALLEL)
+    )
     e2_explicit = (
         "KV_HEAD_REUSE" in values or "DRAIN_OVERLAPPED" in values
     )
@@ -900,6 +1295,10 @@ def _parallel_topology(hw_over, n_chips: int) -> dict[str, int | str]:
         raise ValueError(
             f"unsupported link generation {link_generation!r}"
         )
+    if expert_parallel_mode not in EXPERT_PARALLEL_MODES:
+        raise ValueError(
+            f"unsupported expert parallel mode {expert_parallel_mode!r}"
+        )
     required_ports = int(tp > 1) + int(kvp > 1)
     if chips == 1 and ports != 0:
         raise ValueError("single-chip decode cannot use link ports")
@@ -916,6 +1315,7 @@ def _parallel_topology(hw_over, n_chips: int) -> dict[str, int | str]:
         "link_ports": ports,
         "sram_policy": policy,
         "link_generation": link_generation,
+        "expert_parallel_mode": expert_parallel_mode,
         "architecture_knobs_explicit": e2_explicit,
         "kv_head_reuse": kv_head_reuse,
         "drain_overlapped": drain_overlapped,
@@ -940,6 +1340,282 @@ def _kv_resident_fraction(policy: str) -> float:
     return int(policy.rsplit("_", 1)[1]) / 100.0
 
 
+def _balanced_partition_widths(value: int, ranks: int) -> tuple[int, ...]:
+    """Return deterministic rank widths without hiding an uneven tail."""
+
+    if value <= 0 or ranks <= 0 or ranks > value:
+        raise ValueError("partition dimensions must be positive")
+    quotient, remainder = divmod(value, ranks)
+    return tuple(quotient + int(rank < remainder) for rank in range(ranks))
+
+
+def _partitioned_component_cycles(
+    perf: PerfModel,
+    d: dict,
+    kv: int,
+    batch: int,
+    *,
+    tp: int,
+    kvp: int,
+    include_lm_head: bool,
+    kv_layout: str,
+    packed_q1_timing_contract,
+    batch_packed_attention: bool,
+    kv_head_reuse: bool | None,
+    body_layout: BodyWeightPhysicalLayout | None = None,
+    expert_parallel_mode: str = EXPERT_TENSOR_PARALLEL,
+) -> dict[str, float]:
+    """Operation-shaped slowest-rank component cycles for explicit TP x KVP.
+
+    Replicated vector/control operations are not divided by TP. Q/K/V, O, the
+    expert intermediate dimension, the local vocabulary shard, and the
+    KVP-local cache span are re-evaluated at their actual rank-local shapes.
+    """
+
+    if tp <= 0 or kvp <= 0:
+        raise ValueError("parallel degrees must be positive")
+    if expert_parallel_mode not in EXPERT_PARALLEL_MODES:
+        raise ValueError("unsupported expert parallel mode")
+    if int(d["heads"]) % tp or int(d["kv_heads"]) % tp:
+        raise ValueError("TP must own complete query and KV heads")
+
+    hidden = int(d["hidden"])
+    layers = int(d["layers"])
+    local_heads = int(d["heads"]) // tp
+    local_kv_heads = int(d["kv_heads"]) // tp
+    local_inter_widths = _balanced_partition_widths(int(d["inter"]), tp)
+    local_vocab_widths = _balanced_partition_widths(int(d["vocab"]), tp)
+    if body_layout is not None:
+        provenance = body_layout.provenance
+        if (
+            int(provenance["tp"]) != tp
+            or int(provenance["kvp"]) != kvp
+            or int(provenance["mlen"]) != int(perf.mlen)
+            or str(provenance["expert_parallel_mode"])
+            != expert_parallel_mode
+        ):
+            raise ValueError("body layout differs from the timing topology")
+        rank_shapes = provenance.get("rank_shapes")
+        if not isinstance(rank_shapes, Mapping):
+            raise ValueError("body layout omitted rank-local timing shapes")
+        expert_shapes = rank_shapes.get("experts")
+        if not isinstance(expert_shapes, Sequence) or len(expert_shapes) != tp:
+            raise ValueError("body layout omitted expert rank shapes")
+        local_inter_widths = tuple(
+            int(shape["gate_up"]["logical_rows"])
+            for shape in expert_shapes
+        )
+        if include_lm_head:
+            head_shapes = rank_shapes.get("local_head")
+            if not isinstance(head_shapes, Sequence) or len(head_shapes) != tp:
+                raise ValueError("body layout omitted local-head rank shapes")
+            local_vocab_widths = tuple(
+                int(shape["logical_rows"])
+                for shape in head_shapes
+            )
+    components: dict[str, float] = {
+        "replicated_rmsnorm": float(
+            perf.rms_layer(hidden, 1, batch, "decode") * (2 * layers + 1)
+        ),
+        "rank_local_qkv_projection": float(
+            perf.projection(
+                hidden,
+                local_heads,
+                local_kv_heads,
+                int(d["head_dim"]),
+                1,
+                batch,
+                "decode",
+            )
+            * layers
+        ),
+        "rank_local_output_projection": float(
+            perf.output_projection(
+                hidden,
+                local_heads,
+                int(d["head_dim"]),
+                1,
+                batch,
+                "decode",
+            )
+            * layers
+        ),
+        "replicated_residual": float(
+            perf.residual(hidden, 1, batch, "decode") * 2 * layers
+        ),
+        "replicated_embedding_lookup": float(
+            perf.embeddings(hidden, 1, batch, "decode")
+        ),
+    }
+    if bool(d.get("qk_norm", False)):
+        components["rank_local_qk_rmsnorm"] = float(
+            (
+                perf.rms_layer(
+                    int(d["head_dim"]),
+                    1,
+                    batch * local_heads,
+                    "decode",
+                )
+                + perf.rms_layer(
+                    int(d["head_dim"]),
+                    1,
+                    batch * local_kv_heads,
+                    "decode",
+                )
+            )
+            * layers
+        )
+
+    full_layers, sliding_layers, window = _attn_split(d)
+    full_local_context = math.ceil(kv / kvp)
+    sliding_local_context = (
+        math.ceil(min(kv, window) / kvp) if sliding_layers else 0
+    )
+    local_trace_contract = (
+        packed_q1_timing_contract if tp == kvp == 1 else None
+    )
+
+    def flash(context: int, count: int) -> int:
+        if count == 0:
+            return 0
+        return perf.flash_attention(
+            local_heads,
+            local_kv_heads,
+            int(d["head_dim"]),
+            1,
+            context,
+            batch,
+            "decode",
+            packed_q1=(kv_layout == DENSE_SELECTOR and kv_head_reuse is not False),
+            packed_q1_contract=local_trace_contract,
+            batch_packed=batch_packed_attention,
+        ) * count
+
+    components["kvp_local_flash_attention"] = float(
+        flash(full_local_context, full_layers)
+        + flash(sliding_local_context, sliding_layers)
+    )
+
+    if is_moe(d):
+        active_experts = d.get("moe_unique_experts_per_step")
+        active_source = (
+            (
+                "verified_trace_summary_conservative_observed_max"
+                if d.get("moe_route_repricing") is not None
+                else "explicit_unique_expert_override"
+            )
+            if active_experts is not None
+            else None
+        )
+        common = {
+            "active_experts": active_experts,
+            "active_expert_source": active_source,
+            "routing_imbalance_factor": float(
+                d.get("moe_routing_imbalance_factor", 1.0)
+            ),
+        }
+        full_expert = perf.moe_decode_expert_timing(
+            hidden,
+            batch,
+            int(d["num_experts"]),
+            int(d["experts_per_token"]),
+            int(d["inter"]),
+            **common,
+        )
+        full_moe = perf.mlp_moe(
+            hidden,
+            1,
+            batch,
+            int(d["num_experts"]),
+            int(d["experts_per_token"]),
+            int(d["inter"]),
+            "decode",
+            include_input_norm=False,
+            **common,
+        )
+        replicated_control = full_moe - int(full_expert["expert_stage_cycles"])
+        components["replicated_router_topk_softmax_combine"] = float(
+            replicated_control * layers
+        )
+        if expert_parallel_mode == EXPERT_TENSOR_PARALLEL:
+            local_expert_cycles = max(
+                int(
+                    perf.moe_decode_expert_timing(
+                        hidden,
+                        batch,
+                        int(d["num_experts"]),
+                        int(d["experts_per_token"]),
+                        width,
+                        **common,
+                    )["expert_stage_cycles"]
+                )
+                for width in local_inter_widths
+            )
+        else:
+            # Safe projected bound: no route balance is assumed without a
+            # measured per-rank route trace.
+            local_expert_cycles = int(full_expert["expert_stage_cycles"])
+        components["rank_local_routed_experts"] = float(
+            local_expert_cycles * layers
+        )
+    else:
+        components["rank_local_dense_ffn"] = float(
+            max(
+                perf.feed_forward(hidden, width, 1, batch, "decode")
+                for width in local_inter_widths
+            )
+            * layers
+        )
+
+    if include_lm_head:
+        physical_hidden = math.ceil(hidden / perf.mlen) * perf.mlen
+        physical_batch = math.ceil(batch / perf.blen) * perf.blen
+        activation_tail = (
+            batch * (physical_hidden - hidden)
+            + (physical_batch - batch) * physical_hidden
+        )
+        activation_padding_cycles = (
+            math.ceil(activation_tail / perf.vlen) * perf.instr["V_BASIC"]
+        )
+        rank_head_schedules = []
+        for width in local_vocab_widths:
+            matrix_cycles = perf.lm_head(physical_hidden, width, batch)
+            selection_cycles = perf.lm_head_streaming_selection(
+                width,
+                batch,
+                top_k=20,
+            )
+            mask_elements = batch * (
+                math.ceil(width / perf.mlen) * perf.mlen - width
+            )
+            mask_cycles = (
+                math.ceil(mask_elements / perf.vlen)
+                * perf.instr["V_BASIC"]
+            )
+            rank_head_schedules.append(
+                (
+                    matrix_cycles
+                    + selection_cycles
+                    + activation_padding_cycles
+                    + mask_cycles,
+                    matrix_cycles,
+                    selection_cycles,
+                    mask_cycles,
+                )
+            )
+        _, matrix_cycles, selection_cycles, mask_cycles = max(
+            rank_head_schedules,
+            key=lambda value: value[0],
+        )
+        components["rank_local_lm_head"] = float(matrix_cycles)
+        components["rank_local_vocab_selection"] = float(selection_cycles)
+        components["rank_local_head_padding"] = float(
+            activation_padding_cycles + mask_cycles
+        )
+
+    return components
+
+
 def _partitioned_components(
     perf: PerfModel,
     d: dict,
@@ -953,28 +1629,27 @@ def _partitioned_components(
     packed_q1_timing_contract,
     batch_packed_attention: bool,
     kv_head_reuse: bool | None,
+    body_layout: BodyWeightPhysicalLayout | None = None,
+    expert_parallel_mode: str = EXPERT_TENSOR_PARALLEL,
 ) -> float:
-    """Slowest-rank cycles with TP head/column and KVP sequence sharding."""
+    """Sum the explicit slowest-rank operation schedule without global division."""
 
-    components = decode_token_components(
+    components = _partitioned_component_cycles(
         perf,
         d,
         kv,
         batch,
+        tp=tp,
+        kvp=kvp,
         include_lm_head=include_lm_head,
         kv_layout=kv_layout,
         packed_q1_timing_contract=packed_q1_timing_contract,
         batch_packed_attention=batch_packed_attention,
         kv_head_reuse=kv_head_reuse,
+        body_layout=body_layout,
+        expert_parallel_mode=expert_parallel_mode,
     )
-    total = 0.0
-    for label, cycles in components.items():
-        if label.startswith("Flash attention"):
-            divisor = tp * kvp
-        else:
-            divisor = tp
-        total += float(cycles) / divisor
-    return total
+    return math.fsum(components.values())
 
 
 def _partitioned_peak_flops(
@@ -985,26 +1660,65 @@ def _partitioned_peak_flops(
     tp: int,
     kvp: int,
     include_lm_head: bool,
+    expert_parallel_mode: str = EXPERT_TENSOR_PARALLEL,
 ) -> float:
-    total = float(
-        decode_step_flops(
-            d,
-            kv,
-            batch,
-            include_lm_head=include_lm_head,
-        )
-    )
-    heads = int(d["heads"])
+    """Useful FLOPs executed by the slowest explicit-topology rank."""
+
+    if int(d["heads"]) % tp or int(d["kv_heads"]) % tp:
+        raise ValueError("TP must own complete attention heads")
+    hidden = int(d["hidden"])
+    heads = int(d["heads"]) // tp
+    kv_heads = int(d["kv_heads"]) // tp
     head_dim = int(d["head_dim"])
+    query = heads * head_dim
+    kv_width = kv_heads * head_dim
+    layers = int(d["layers"])
+    qkvo_macs = (
+        hidden * query
+        + 2 * hidden * kv_width
+        + query * hidden
+    ) * layers
+    if is_moe(d):
+        local_inter = (
+            max(_balanced_partition_widths(int(d["inter"]), tp))
+            if expert_parallel_mode == EXPERT_TENSOR_PARALLEL
+            else int(d["inter"])
+        )
+        expert_macs = (
+            3
+            * hidden
+            * local_inter
+            * int(d["experts_per_token"])
+            * layers
+        )
+        # Router is replicated and therefore receives no TP speedup.
+        router_macs = hidden * int(d["num_experts"]) * layers
+    else:
+        local_inter = max(_balanced_partition_widths(int(d["inter"]), tp))
+        expert_macs = 3 * hidden * local_inter * layers
+        router_macs = 0
     n_full, n_slide, window = _attn_split(d)
-    attention_macs = 2 * heads * head_dim * kv * n_full
+    attention_macs = (
+        2 * heads * head_dim * math.ceil(kv / kvp) * n_full
+    )
     if n_slide:
         attention_macs += (
-            2 * heads * head_dim * min(kv, window) * n_slide
+            2
+            * heads
+            * head_dim
+            * math.ceil(min(kv, window) / kvp)
+            * n_slide
         )
-    attention_flops = float(2 * batch * attention_macs)
-    non_attention_flops = total - attention_flops
-    return non_attention_flops / tp + attention_flops / (tp * kvp)
+    head_macs = (
+        hidden * max(_balanced_partition_widths(int(d["vocab"]), tp))
+        if include_lm_head
+        else 0
+    )
+    return float(
+        2
+        * batch
+        * (qkvo_macs + expert_macs + router_macs + attention_macs + head_macs)
+    )
 
 
 def collective_cost_per_step(
@@ -1016,6 +1730,9 @@ def collective_cost_per_step(
     link_ports: int,
     link_generation: str = DEFAULT_LINK_GENERATION,
     activation_bytes: int = ACT_BITS // 8,
+    include_local_output_selection: bool = False,
+    local_output_top_k: int = 20,
+    expert_parallel_mode: str = EXPERT_TENSOR_PARALLEL,
 ) -> dict[str, float]:
     """Dependency-bound collective time and physical bytes for one step.
 
@@ -1023,15 +1740,30 @@ def collective_cost_per_step(
     distributed-softmax reduction: max, then sum plus the partial value vector.
     """
 
-    if batch <= 0 or tp <= 0 or kvp <= 0 or activation_bytes <= 0:
+    if (
+        batch <= 0
+        or tp <= 0
+        or kvp <= 0
+        or activation_bytes <= 0
+        or local_output_top_k <= 0
+    ):
         raise ValueError("collective dimensions must be positive")
     if link_generation not in LINK_GENS:
         raise ValueError("unsupported link generation")
+    if expert_parallel_mode not in EXPERT_PARALLEL_MODES:
+        raise ValueError("unsupported expert parallel mode")
     active_dimensions = int(tp > 1) + int(kvp > 1)
     if active_dimensions == 0:
         return {
             "tp_bytes": 0.0,
             "kvp_bytes": 0.0,
+            "local_output_selection_bytes": 0.0,
+            "local_output_selection_time_s": 0.0,
+            "expert_routing_bytes": 0.0,
+            "expert_routing_time_s": 0.0,
+            "expert_output_collective_slowest_rank_bytes": 0.0,
+            "expert_output_collective_system_bytes": 0.0,
+            "expert_output_collective_time_s": 0.0,
             "total_bytes": 0.0,
             "time_s": 0.0,
         }
@@ -1065,8 +1797,42 @@ def collective_cost_per_step(
     index = 0
     tp_time = 0.0
     kvp_time = 0.0
+    local_output_selection_bytes = 0.0
+    local_output_selection_time_s = 0.0
+    expert_routing_bytes = 0.0
+    expert_routing_time_s = 0.0
+    expert_output_collective_slowest_rank_bytes = 0.0
+    expert_output_collective_system_bytes = 0.0
+    expert_output_collective_time_s = 0.0
     if tp > 1:
-        tp_time = tp_bytes / (LINK_GENS[link_generation] * dimension_ports[index])
+        tp_ports = dimension_ports[index]
+        tp_time = tp_bytes / (LINK_GENS[link_generation] * tp_ports)
+        if include_local_output_selection:
+            # Each TP rank emits top-k (FP32 score, uint32 token-id) pairs.
+            # The designated sampling owner receives every remote rank's
+            # bounded candidate list, selects from at most TP*k candidates,
+            # and broadcasts one uint32 token id.  KVP replicas execute the
+            # same TP-local protocol.  This charges the slowest owner path and
+            # every physical byte without ever materializing full logits.
+            candidate_bytes = batch * local_output_top_k * (4 + 4)
+            token_bytes = batch * 4
+            slowest_bytes = (tp - 1) * (candidate_bytes + token_bytes)
+            local_output_selection_bytes = slowest_bytes * kvp
+            local_output_selection_time_s = slowest_bytes / (
+                LINK_GENS[link_generation] * tp_ports
+            )
+        if expert_parallel_mode == EXPERT_ID_PARALLEL:
+            # The first decoder all-reduce leaves the normalized hidden row on
+            # every TP rank. Replicated router/top-k work therefore permits a
+            # zero-byte local expert-ID filter; dispatching the hidden row again
+            # would double-charge traffic. The second already-charged per-layer
+            # all-reduce combines the whole-expert partial output. Expose that
+            # subset without adding it to the total a second time.
+            expert_output_collective_slowest_rank_bytes = tp_bytes / 2.0
+            expert_output_collective_system_bytes = (
+                expert_output_collective_slowest_rank_bytes * tp * kvp
+            )
+            expert_output_collective_time_s = tp_time / 2.0
         index += 1
     if kvp > 1:
         kvp_time = kvp_bytes / (LINK_GENS[link_generation] * dimension_ports[index])
@@ -1077,8 +1843,26 @@ def collective_cost_per_step(
         # These are slowest-rank byte counts.  Every rank participates in one
         # collective along each active mesh dimension, so aggregate traffic is
         # their sum across the complete TP x KVP mesh.
-        "total_bytes": (tp_bytes + kvp_bytes) * chip_count,
-        "time_s": tp_time + kvp_time,
+        "local_output_selection_bytes": local_output_selection_bytes,
+        "local_output_selection_time_s": local_output_selection_time_s,
+        "expert_routing_bytes": expert_routing_bytes,
+        "expert_routing_time_s": expert_routing_time_s,
+        "expert_output_collective_slowest_rank_bytes": (
+            expert_output_collective_slowest_rank_bytes
+        ),
+        "expert_output_collective_system_bytes": (
+            expert_output_collective_system_bytes
+        ),
+        "expert_output_collective_time_s": expert_output_collective_time_s,
+        "total_bytes": (
+            (tp_bytes + kvp_bytes) * chip_count
+            + local_output_selection_bytes
+        ),
+        "time_s": (
+            tp_time
+            + kvp_time
+            + local_output_selection_time_s
+        ),
     }
 
 
@@ -1131,6 +1915,211 @@ def _traffic_for_kv_head_reuse(
         traffic,
         kv_element_read_bytes=traffic.kv_element_read_bytes * kv_heads,
         kv_scale_read_bytes=traffic.kv_scale_read_bytes * kv_heads,
+    )
+
+
+def _partitioned_kv_ledgers(
+    dims: Mapping[str, object],
+    precision: Mapping[str, object],
+    *,
+    context: int,
+    batch: int,
+    mlen: int,
+    kv_layout: str,
+    tp: int,
+    kvp: int,
+) -> tuple[KVLedger, KVLedger, dict[str, object]]:
+    """Return exact slowest-rank and aggregate-system PackedKV storage.
+
+    Head partitioning happens before the PackedKV row shape is formed, and the
+    full/sliding context spans are partitioned independently across KVP.  The
+    slowest rank therefore uses the largest integer context shard rather than
+    an average byte count.
+    """
+
+    if context <= 0 or batch <= 0 or tp <= 0 or kvp <= 0:
+        raise ValueError("partitioned KV dimensions must be positive")
+    global_kv_heads = int(dims["kv_heads"])
+    if global_kv_heads % tp:
+        raise ValueError("TP must own complete KV heads")
+    local_kv_heads = global_kv_heads // tp
+    block = int(precision.get("block_size", 8))
+    key = traffic_from_precision(
+        kv_heads=local_kv_heads,
+        head_dim=int(dims["head_dim"]),
+        mlen=mlen,
+        element_bits=int(precision.get("key_elem", precision["kv_elem"])),
+        effective_bits=float(precision.get("key_bits", precision["kv_bits"])),
+        block_size=block,
+    )
+    value = traffic_from_precision(
+        kv_heads=local_kv_heads,
+        head_dim=int(dims["head_dim"]),
+        mlen=mlen,
+        element_bits=int(precision.get("value_elem", precision["kv_elem"])),
+        effective_bits=float(precision.get("value_bits", precision["kv_bits"])),
+        block_size=block,
+    )
+    full_layers, sliding_layers, window = _attn_split(dict(dims))
+    sliding_tokens = min(context, window) if sliding_layers else 0
+    global_token_layers = full_layers * context + sliding_layers * sliding_tokens
+    slowest_token_layers = (
+        full_layers * math.ceil(context / kvp)
+        + sliding_layers * math.ceil(sliding_tokens / kvp)
+    )
+    element_per_token = (
+        key.storage_element_bytes(kv_layout)
+        + value.storage_element_bytes(kv_layout)
+    )
+    scale_per_token = (
+        key.storage_scale_bytes(kv_layout)
+        + value.storage_scale_bytes(kv_layout)
+    )
+
+    def ledger(token_layers: int, rank_copies: int) -> KVLedger:
+        per_batch_element = token_layers * element_per_token
+        per_batch_scale = token_layers * scale_per_token
+        return KVLedger(
+            element_bytes=per_batch_element * batch * rank_copies,
+            scale_bytes=per_batch_scale * batch * rank_copies,
+            per_batch_element_bytes=per_batch_element * rank_copies,
+            per_batch_scale_bytes=per_batch_scale * rank_copies,
+            layout_id=(
+                f"key={key.layout_id};value={value.layout_id};"
+                f"tp={tp};kvp={kvp};partition=rank_local_heads_context"
+            ),
+        )
+
+    slowest = ledger(slowest_token_layers, 1)
+    system = ledger(global_token_layers, tp)
+    provenance = {
+        "local_kv_heads": local_kv_heads,
+        "full_context_tokens_global": context,
+        "full_context_tokens_slowest_kvp_rank": math.ceil(context / kvp),
+        "sliding_context_tokens_global": sliding_tokens,
+        "sliding_context_tokens_slowest_kvp_rank": (
+            math.ceil(sliding_tokens / kvp) if sliding_layers else 0
+        ),
+        "partition_order": "tp_complete_heads_then_kvp_integer_context_shards",
+        "system_storage_is_sum_of_rank_local_packed_rows": True,
+        "slowest_rank_capacity_checked": True,
+    }
+    return slowest, system, provenance
+
+
+def _partitioned_step_traffic_pair(
+    dims: Mapping[str, object],
+    precision: Mapping[str, object],
+    *,
+    context: int,
+    batch: int,
+    mlen: int,
+    kv_layout: str,
+    tp: int,
+    kvp: int,
+    weights: BodyWeightPhysicalLayout,
+    kv_head_reuse: bool | None,
+) -> tuple[DecodeStepTrafficLedger, DecodeStepTrafficLedger]:
+    """Return slowest-rank and aggregate-system physical step traffic."""
+
+    local_kv_heads = int(dims["kv_heads"]) // tp
+    block = int(precision.get("block_size", 8))
+    key = traffic_from_precision(
+        kv_heads=local_kv_heads,
+        head_dim=int(dims["head_dim"]),
+        mlen=mlen,
+        element_bits=int(precision.get("key_elem", precision["kv_elem"])),
+        effective_bits=float(precision.get("key_bits", precision["kv_bits"])),
+        block_size=block,
+    )
+    value = traffic_from_precision(
+        kv_heads=local_kv_heads,
+        head_dim=int(dims["head_dim"]),
+        mlen=mlen,
+        element_bits=int(precision.get("value_elem", precision["kv_elem"])),
+        effective_bits=float(precision.get("value_bits", precision["kv_bits"])),
+        block_size=block,
+    )
+    full_layers, sliding_layers, window = _attn_split(dict(dims))
+    sliding_tokens = min(context, window) if sliding_layers else 0
+    slowest_read_token_layers = (
+        full_layers * math.ceil(context / kvp)
+        + sliding_layers * math.ceil(sliding_tokens / kvp)
+    )
+    system_read_token_layers = (
+        full_layers * context + sliding_layers * sliding_tokens
+    ) * tp
+    read_factor = (
+        local_kv_heads if kv_head_reuse is False else 1
+    )
+    key_read_element = key.read_element_bytes(kv_layout)
+    value_read_element = value.read_element_bytes(kv_layout)
+    key_read_scale = key.read_scale_bytes(kv_layout)
+    value_read_scale = value.read_scale_bytes(kv_layout)
+    write_element = (
+        key.storage_element_bytes(kv_layout)
+        + value.storage_element_bytes(kv_layout)
+    )
+    write_scale = (
+        key.storage_scale_bytes(kv_layout)
+        + value.storage_scale_bytes(kv_layout)
+    )
+    embedding_row_bytes = math.ceil(int(dims["hidden"]) * 2 / 64) * 64
+
+    def make(
+        ledger: WeightLedger,
+        *,
+        read_token_layers: int,
+        write_rank_copies: int,
+        embedding_copies: int,
+    ) -> DecodeStepTrafficLedger:
+        quantized = (
+            ledger.attention + ledger.ffn_streamed + ledger.lm_head_streamed
+        )
+        return DecodeStepTrafficLedger(
+            weight_element_read_bytes=quantized.element_aligned,
+            weight_scale_read_bytes=quantized.scale_aligned,
+            bf16_weight_read_bytes=(
+                ledger.bf16_streamed.total_aligned
+                + batch * embedding_row_bytes * embedding_copies
+            ),
+            activation_read_bytes=0,
+            activation_write_bytes=0,
+            kv_element_read_bytes=(
+                batch
+                * read_token_layers
+                * (key_read_element + value_read_element)
+                * read_factor
+            ),
+            kv_scale_read_bytes=(
+                batch
+                * read_token_layers
+                * (key_read_scale + value_read_scale)
+                * read_factor
+            ),
+            # One KVP owner writes the new context position. Across the system
+            # there is one owner per TP head shard, not one write per KVP rank.
+            kv_element_write_bytes=(
+                batch * int(dims["layers"]) * write_element * write_rank_copies
+            ),
+            kv_scale_write_bytes=(
+                batch * int(dims["layers"]) * write_scale * write_rank_copies
+            ),
+        )
+
+    return (
+        make(
+            weights.slowest_rank,
+            read_token_layers=slowest_read_token_layers,
+            write_rank_copies=1,
+            embedding_copies=1,
+        ),
+        make(
+            weights.system,
+            read_token_layers=system_read_token_layers,
+            write_rank_copies=tp,
+            embedding_copies=tp * kvp,
+        ),
     )
 
 
@@ -1191,10 +2180,14 @@ def _partition_weight_ledger(
         attention=attention,
         ffn_resident=part(weights.ffn_resident),
         ffn_streamed=part(weights.ffn_streamed),
+        lm_head_resident=part(weights.lm_head_resident),
+        lm_head_streamed=part(weights.lm_head_streamed),
         bf16_embedding=part(weights.bf16_embedding),
         bf16_norms=part(weights.bf16_norms),
         bf16_lm_head_resident=part(weights.bf16_lm_head_resident),
         bf16_lm_head_streamed=part(weights.bf16_lm_head_streamed),
+        bf16_router_resident=part(weights.bf16_router_resident),
+        bf16_router_streamed=part(weights.bf16_router_streamed),
     )
 
 
@@ -1206,12 +2199,140 @@ def _partition_physical_ledger(
     hbm_per_chip: int,
     sram_policy: str,
     batch: int,
+    body_weight_layout: BodyWeightPhysicalLayout | None = None,
+    slowest_rank_kv: KVLedger | None = None,
+    system_kv: KVLedger | None = None,
 ) -> PhysicalDecodeLedger:
     """Build aggregate HBM accounting while retaining per-chip SRAM limits."""
 
-    if tp == kvp == 1 and sram_policy == "streaming":
+    if (
+        body_weight_layout is None
+        and tp == kvp == 1
+        and sram_policy == "streaming"
+    ):
         return ledger
     chips = tp * kvp
+    if body_weight_layout is not None:
+        if slowest_rank_kv is None or system_kv is None:
+            raise ValueError("rank-local body layout requires rank-local KV ledgers")
+        if int(body_weight_layout.provenance["tp"]) != tp or int(
+            body_weight_layout.provenance["kvp"]
+        ) != kvp:
+            raise ValueError("body layout topology differs from capacity topology")
+        rank_weights = body_weight_layout.slowest_rank
+        weights = body_weight_layout.system
+        if sram_policy == "projection_resident":
+            rank_attention = rank_weights.attention
+            rank_weights = replace(rank_weights, attention=PlaneBytes())
+            weights = replace(weights, attention=PlaneBytes())
+        else:
+            rank_attention = PlaneBytes()
+        kv_fraction = _kv_resident_fraction(sram_policy)
+
+        def hbm_kv_exact(value: KVLedger) -> KVLedger:
+            return KVLedger(
+                element_bytes=int(round(value.element_bytes * (1.0 - kv_fraction))),
+                scale_bytes=int(round(value.scale_bytes * (1.0 - kv_fraction))),
+                per_batch_element_bytes=int(
+                    round(value.per_batch_element_bytes * (1.0 - kv_fraction))
+                ),
+                per_batch_scale_bytes=int(
+                    round(value.per_batch_scale_bytes * (1.0 - kv_fraction))
+                ),
+                layout_id=(
+                    value.layout_id
+                    if kv_fraction == 0.0
+                    else f"{value.layout_id}:{sram_policy}"
+                ),
+            )
+
+        rank_hbm_kv = hbm_kv_exact(slowest_rank_kv)
+        kv = hbm_kv_exact(system_kv)
+        sram = ledger.sram
+        vector_per_sequence = sram.vector_bytes_per_sequence + math.ceil(
+            slowest_rank_kv.per_batch_bytes * kv_fraction
+        )
+        vector_required = max(
+            vector_per_sequence * batch,
+            sram.output_head_workspace_bytes,
+        )
+        matrix_required = (
+            sram.matrix_required_bytes + rank_attention.total_aligned
+        )
+        body_max_vector_batch = (
+            sram.vector_capacity_bytes // max(vector_per_sequence, 1)
+        )
+        if sram.output_head_logit_tile_bytes:
+            per_sequence_selection_state = (
+                sram.output_head_selection_state_bytes // max(batch, 1)
+            )
+            head_max_vector_batch = max(
+                0,
+                (
+                    sram.vector_capacity_bytes
+                    - sram.output_head_logit_tile_bytes
+                )
+                // max(per_sequence_selection_state, 1),
+            )
+            max_vector_batch = min(body_max_vector_batch, head_max_vector_batch)
+        else:
+            max_vector_batch = body_max_vector_batch
+        max_synchronous = (
+            min(max_vector_batch, sram.max_synchronous_batch)
+            if matrix_required <= sram.matrix_capacity_bytes
+            else 0
+        )
+        sram = SRAMLedger(
+            vector_capacity_bytes=sram.vector_capacity_bytes,
+            vector_bytes_per_sequence=vector_per_sequence,
+            vector_required_bytes=vector_required,
+            matrix_capacity_bytes=sram.matrix_capacity_bytes,
+            matrix_required_bytes=matrix_required,
+            matrix_tile_capacity=sram.matrix_tile_capacity,
+            matrix_required_tiles=sram.matrix_required_tiles,
+            max_vector_batch=max_vector_batch,
+            max_synchronous_batch=max_synchronous,
+            output_head_logit_tile_bytes=sram.output_head_logit_tile_bytes,
+            output_head_selection_state_bytes=(
+                sram.output_head_selection_state_bytes
+            ),
+            output_head_workspace_bytes=sram.output_head_workspace_bytes,
+        )
+        hbm_capacity = hbm_per_chip * chips
+        system_reserve = ledger.runtime_hbm_reserve_bytes * chips
+        system_fixed = weights.resident.total_aligned + system_reserve
+        rank_fixed = (
+            rank_weights.resident.total_aligned
+            + ledger.runtime_hbm_reserve_bytes
+        )
+        system_max = max(0, hbm_capacity - system_fixed) // max(
+            kv.per_batch_bytes, 1
+        )
+        rank_max = max(0, hbm_per_chip - rank_fixed) // max(
+            rank_hbm_kv.per_batch_bytes, 1
+        )
+        max_resident = min(system_max, rank_max)
+        max_runtime = (
+            min(max_resident, sram.max_vector_batch)
+            if sram.matrix_required_bytes <= sram.matrix_capacity_bytes
+            else 0
+        )
+        return PhysicalDecodeLedger(
+            weights=weights,
+            kv=kv,
+            sram=sram,
+            hbm_capacity_bytes=hbm_capacity,
+            runtime_hbm_reserve_bytes=system_reserve,
+            hbm_required_bytes=system_fixed + kv.total_bytes,
+            max_resident_batch=max_resident,
+            max_runtime_batch=max_runtime,
+            kv_layout=ledger.kv_layout,
+            slowest_rank_hbm_required_bytes=(
+                rank_fixed + rank_hbm_kv.total_bytes
+            ),
+            per_chip_hbm_capacity_bytes=hbm_per_chip,
+        )
+
     weights = _partition_weight_ledger(
         ledger.weights,
         tp=tp,
@@ -1241,16 +2362,37 @@ def _partition_physical_ledger(
     vector_per_sequence = sram.vector_bytes_per_sequence + math.ceil(
         ledger.kv.per_batch_bytes * kv_fraction / chips
     )
-    vector_required = vector_per_sequence * batch
+    vector_required = max(
+        vector_per_sequence * batch,
+        sram.output_head_workspace_bytes,
+    )
     projection_bytes = (
         math.ceil(ledger.weights.attention.total_aligned / tp)
         if sram_policy == "projection_resident"
         else 0
     )
     matrix_required = sram.matrix_required_bytes + projection_bytes
-    max_vector_batch = (
+    body_max_vector_batch = (
         sram.vector_capacity_bytes // max(vector_per_sequence, 1)
     )
+    if sram.output_head_logit_tile_bytes:
+        per_sequence_selection_state = (
+            sram.output_head_selection_state_bytes // max(batch, 1)
+        )
+        head_max_vector_batch = max(
+            0,
+            (
+                sram.vector_capacity_bytes
+                - sram.output_head_logit_tile_bytes
+            )
+            // max(per_sequence_selection_state, 1),
+        )
+        max_vector_batch = min(
+            body_max_vector_batch,
+            head_max_vector_batch,
+        )
+    else:
+        max_vector_batch = body_max_vector_batch
     max_synchronous = (
         min(max_vector_batch, sram.max_synchronous_batch)
         if matrix_required <= sram.matrix_capacity_bytes
@@ -1266,6 +2408,13 @@ def _partition_physical_ledger(
         matrix_required_tiles=sram.matrix_required_tiles,
         max_vector_batch=max_vector_batch,
         max_synchronous_batch=max_synchronous,
+        output_head_logit_tile_bytes=(
+            sram.output_head_logit_tile_bytes
+        ),
+        output_head_selection_state_bytes=(
+            sram.output_head_selection_state_bytes
+        ),
+        output_head_workspace_bytes=sram.output_head_workspace_bytes,
     )
     hbm_capacity = hbm_per_chip * chips
     runtime_reserve = ledger.runtime_hbm_reserve_bytes * chips
@@ -1301,6 +2450,9 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
                     sram_policy="streaming",
                     legacy_ideal_parallelism=False,
                     kv_head_reuse=None,
+                    body_weight_layout: BodyWeightPhysicalLayout | None = None,
+                    expert_parallel_mode=EXPERT_TENSOR_PARALLEL,
+                    layer_exact_moe_route_projection: Mapping[str, object] | None = None,
                     execution_mode=LEGACY_AGGREGATE_BANDWIDTH,
                     trace_timing_provider=None,
                     trace_request_factory: Callable[[int], object] | None = None):
@@ -1352,6 +2504,38 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
             )
     else:
         raise ValueError(f"unsupported decode execution mode {execution_mode!r}")
+    exact_route_cycles: tuple[float, ...] | None = None
+    exact_route_rank_planes: tuple[PlaneBytes, ...] | None = None
+    exact_route_system_planes: tuple[PlaneBytes, ...] | None = None
+    exact_route_rank_total = PlaneBytes()
+    exact_route_system_total = PlaneBytes()
+    if layer_exact_moe_route_projection is not None:
+        if (
+            execution_mode != LEGACY_AGGREGATE_BANDWIDTH
+            or compatibility_path
+            or body_weight_layout is None
+            or not is_moe(d)
+        ):
+            raise ValueError(
+                "layer-exact MoE route projection requires the explicit-topology "
+                "legacy analytic body path"
+            )
+        (
+            exact_route_cycles,
+            exact_route_rank_planes,
+            exact_route_system_planes,
+        ) = _validate_layer_exact_moe_route_projection(
+            layer_exact_moe_route_projection,
+            d,
+            batch=batch,
+            tp=tp,
+            kvp=kvp,
+            expert_parallel_mode=expert_parallel_mode,
+        )
+        for value in exact_route_rank_planes:
+            exact_route_rank_total += value
+        for value in exact_route_system_planes:
+            exact_route_system_total += value
     total_time, total_bytes, first_step = 0.0, 0, None
     compute_time_total = 0.0
     peak_compute_time_total = 0.0
@@ -1359,6 +2543,7 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
     memory_time_total = 0.0
     collective_time_total = 0.0
     collective_bytes_total = 0.0
+    collective_breakdown_per_batch_step: dict[str, float] | None = None
     traffic_totals = {
         "weight_element_read_bytes": 0.0,
         "weight_scale_read_bytes": 0.0,
@@ -1383,7 +2568,7 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
     def step_seconds(model: PerfModel, kv: int) -> float:
         """Wall-clock of one decode step under `model`'s timing contract."""
         if not compatibility_path:
-            cycles = _partitioned_components(
+            components = _partitioned_component_cycles(
                 model,
                 d,
                 kv,
@@ -1395,25 +2580,47 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
                 packed_q1_timing_contract=packed_q1_timing_contract,
                 batch_packed_attention=batch_packed_attention,
                 kv_head_reuse=kv_head_reuse,
+                body_layout=body_weight_layout,
+                expert_parallel_mode=expert_parallel_mode,
             )
+            if exact_route_cycles is not None:
+                if "rank_local_routed_experts" not in components:
+                    raise AssertionError("exact MoE route hook found no expert stage")
+                components["rank_local_routed_experts"] = math.fsum(
+                    exact_route_cycles
+                )
+            cycles = math.fsum(components.values())
             return cycles_to_seconds(
                 cycles,
                 frequency_hz=FREQ_HZ,
                 compute_density=density,
                 chip_count=1,
             )
-        return cycles_to_seconds(
-            decode_token_cycles(
-                model,
-                d,
-                kv,
+        cycles = decode_token_cycles(
+            model,
+            d,
+            kv,
+            batch,
+            include_lm_head=include_lm_head,
+            kv_layout=kv_layout,
+            packed_q1_timing_contract=packed_q1_timing_contract,
+            batch_packed_attention=batch_packed_attention,
+            kv_head_reuse=kv_head_reuse,
+        )
+        if include_lm_head and n_chips > 1:
+            # Legacy ideal parallelism divides aggregate work by chip count,
+            # but each rank must still initialize its own padded activation
+            # rows/columns.  Add the copies removed by the final division.
+            head_padding = model.lm_head_padding_preparation(
+                int(d["hidden"]),
+                int(d["vocab"]),
                 batch,
-                include_lm_head=include_lm_head,
-                kv_layout=kv_layout,
-                packed_q1_timing_contract=packed_q1_timing_contract,
-                batch_packed_attention=batch_packed_attention,
-                kv_head_reuse=kv_head_reuse,
-            ),
+            )
+            cycles += int(head_padding["zero_fill_cycles_per_rank"]) * (
+                n_chips - 1
+            )
+        return cycles_to_seconds(
+            cycles,
             frequency_hz=FREQ_HZ,
             compute_density=density,
             chip_count=n_chips,
@@ -1517,6 +2724,7 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
                 tp=tp,
                 kvp=kvp,
                 include_lm_head=include_lm_head,
+                expert_parallel_mode=expert_parallel_mode,
             ) / peak_compute_per_chip_second
         step_traffic = decode_step_traffic_ledger(
             d,
@@ -1527,10 +2735,12 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
             kv_layout=kv_layout,
             weights=physical_weights,
             include_lm_head=include_lm_head,
+            tp=tp,
         )
         step_traffic = _traffic_for_kv_head_reuse(
             step_traffic,
-            kv_heads=int(d["kv_heads"]),
+            # Rank-local head count: the ledger already sums the tp ranks.
+            kv_heads=int(d["kv_heads"]) // tp,
             kv_head_reuse=kv_head_reuse,
         )
         if compatibility_path:
@@ -1553,16 +2763,77 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
                 for name in traffic_totals
             }
         else:
-            policy_traffic = _traffic_for_policy(
-                step_traffic,
-                physical_weights,
-                sram_policy,
-            )
-            rank_traffic, system_traffic = _partition_step_traffic(
-                policy_traffic,
-                tp=tp,
-                kvp=kvp,
-            )
+            if body_weight_layout is not None:
+                rank_step, system_step = _partitioned_step_traffic_pair(
+                    d,
+                    prec,
+                    context=kv,
+                    batch=batch,
+                    mlen=perf.mlen,
+                    kv_layout=kv_layout,
+                    tp=tp,
+                    kvp=kvp,
+                    weights=body_weight_layout,
+                    kv_head_reuse=kv_head_reuse,
+                )
+                rank_policy = _traffic_for_policy(
+                    rank_step,
+                    body_weight_layout.slowest_rank,
+                    sram_policy,
+                )
+                system_policy = _traffic_for_policy(
+                    system_step,
+                    body_weight_layout.system,
+                    sram_policy,
+                )
+                rank_traffic = {
+                    name: float(getattr(rank_policy, name))
+                    for name in traffic_totals
+                }
+                system_traffic = {
+                    name: float(getattr(system_policy, name))
+                    for name in traffic_totals
+                }
+                if exact_route_rank_planes is not None:
+                    replacements = (
+                        (
+                            rank_traffic,
+                            body_weight_layout.slowest_rank.ffn_streamed,
+                            exact_route_rank_total,
+                        ),
+                        (
+                            system_traffic,
+                            body_weight_layout.system.ffn_streamed,
+                            exact_route_system_total,
+                        ),
+                    )
+                    for target, original, replacement in replacements:
+                        target["weight_element_read_bytes"] += float(
+                            replacement.element_aligned
+                            - original.element_aligned
+                        )
+                        target["weight_scale_read_bytes"] += float(
+                            replacement.scale_aligned
+                            - original.scale_aligned
+                        )
+                        if (
+                            target["weight_element_read_bytes"] < 0
+                            or target["weight_scale_read_bytes"] < 0
+                        ):
+                            raise AssertionError(
+                                "layer-exact expert replacement made traffic negative"
+                            )
+            else:
+                policy_traffic = _traffic_for_policy(
+                    step_traffic,
+                    physical_weights,
+                    sram_policy,
+                )
+                rank_traffic, system_traffic = _partition_step_traffic(
+                    policy_traffic,
+                    tp=tp,
+                    kvp=kvp,
+                )
             rank_read_bytes = sum(
                 value
                 for name, value in rank_traffic.items()
@@ -1614,6 +2885,13 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
             {
                 "tp_bytes": 0.0,
                 "kvp_bytes": 0.0,
+                "local_output_selection_bytes": 0.0,
+                "local_output_selection_time_s": 0.0,
+                "expert_routing_bytes": 0.0,
+                "expert_routing_time_s": 0.0,
+                "expert_output_collective_slowest_rank_bytes": 0.0,
+                "expert_output_collective_system_bytes": 0.0,
+                "expert_output_collective_time_s": 0.0,
                 "total_bytes": 0.0,
                 "time_s": 0.0,
             }
@@ -1625,9 +2903,16 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
                 kvp=kvp,
                 link_ports=link_ports,
                 link_generation=link_generation,
+                include_local_output_selection=bool(
+                    prec.get("lm_head_quantized", False)
+                ),
+                local_output_top_k=int(prec.get("lm_head_top_k", 20)),
+                expert_parallel_mode=expert_parallel_mode,
             )
         )
         collective_time = collective["time_s"]
+        if collective_breakdown_per_batch_step is None:
+            collective_breakdown_per_batch_step = dict(collective)
         if execution_mode == COMPILER_TRACE:
             resolved_step = resolve_decode_step_timing(
                 COMPILER_TRACE,
@@ -1687,6 +2972,32 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
     write_bytes_total = sum(
         value for name, value in traffic_totals.items() if name.endswith("_write_bytes")
     )
+    route_projection_receipt = None
+    if layer_exact_moe_route_projection is not None:
+        route_projection_receipt = {
+            "schema": LAYER_EXACT_MOE_ROUTE_PROJECTION_SCHEMA,
+            "content_hash": layer_exact_moe_route_projection["content_hash"],
+            "mapping": layer_exact_moe_route_projection["mapping"],
+            "layer_count": len(exact_route_cycles or ()),
+            "sum_of_per_layer_slowest_rank_expert_stage_cycles": math.fsum(
+                exact_route_cycles or ()
+            ),
+            "sum_of_per_layer_slowest_rank_expert_streamed_element_bytes": (
+                exact_route_rank_total.element_aligned
+            ),
+            "sum_of_per_layer_slowest_rank_expert_streamed_scale_bytes": (
+                exact_route_rank_total.scale_aligned
+            ),
+            "sum_of_per_layer_slowest_rank_expert_streamed_bytes": (
+                exact_route_rank_total.total_aligned
+            ),
+            "system_expert_streamed_bytes": (
+                exact_route_system_total.total_aligned
+            ),
+            "source_hidden_dispatch_bytes": 0,
+            "global_layer_collapse_allowed": False,
+            "other_decode_components_changed": False,
+        }
     return {"total_time": total_time, "tpot": total_time / output_seq,
             "tps": (batch * output_seq) / total_time, "first_step": first_step,
             "step_composition": STEP_COMPOSITION,
@@ -1710,6 +3021,9 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
             "collective_bytes_per_generated_token": (
                 collective_bytes_total / (output_seq * batch)
             ),
+            "collective_breakdown_per_batch_step": (
+                collective_breakdown_per_batch_step or {}
+            ),
             "link_bytes_per_second": (
                 collective_bytes_total / total_time
             ),
@@ -1723,6 +3037,7 @@ def run_decode_loop(perf, mem, d, prec, input_seq, output_seq, batch, peak_bw, s
                 "collective_composition": "dependency_bound_additive",
                 "kv_head_reuse": kv_head_reuse,
             },
+            "layer_exact_moe_route_projection": route_projection_receipt,
             "traffic_breakdown_per_batch_step": per_step,
             "traffic_breakdown_per_generated_token": per_generated,
             "frac_mem_bound": mem_bound / output_seq,
@@ -1774,6 +3089,66 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
     (fewest HBM stacks that hold the model), else a fixed count; a model that fits
     one stack resolves to 1 chip. `runtime_hbm_reserve_bytes` is a per-chip
     reserve on every topology path (legacy aggregate and explicit TP x KVP)."""
+    prec = dict(prec)
+    local_mx_head = output_head_location == DECODE_MX_HEAD
+    prec["lm_head_quantized"] = local_mx_head
+    prec["lm_head_top_k"] = 20
+    if local_mx_head:
+        required_head_precision = {
+            "profile_id",
+            "head_bits",
+            "head_elem",
+            "head_label",
+            "head_activation_bits",
+            "head_activation_elem",
+            "head_activation_label",
+            "head_vector_format",
+            "head_matrix_storage_format",
+            "head_logit_container_format",
+            "head_bf16_container_precision_recovery",
+            "head_operand_family_supported",
+            "head_operand_family_binding",
+            "head_numerical_oracle_rule",
+            "head_partial_conversion_rule",
+            "head_hardware_bit_parity_verified",
+            "head_accumulation_chain",
+            "head_numerical_matrix_mlen",
+        }
+        missing_head_precision = sorted(required_head_precision - set(prec))
+        if missing_head_precision:
+            raise ValueError(
+                "decode-local MX head lacks profile W/A bindings: "
+                + ",".join(missing_head_precision)
+            )
+        if (
+            prec["head_bits"] != prec["attn_bits"]
+            or prec["head_elem"] != prec["attn_elem"]
+            or prec["head_label"] != prec["attn_label"]
+            or int(prec.get("block_size", 0)) != 8
+        ):
+            raise ValueError(
+                "decode-local MX head must follow profile W with E8M0 block8"
+            )
+        if (
+            prec["head_matrix_storage_format"]
+            != prec["head_vector_format"]
+            or prec["head_logit_container_format"] != "BF16"
+            or prec["head_bf16_container_precision_recovery"] is not False
+        ):
+            raise ValueError(
+                "local-head matrix format and BF16 container binding differ"
+            )
+    route_repricing = dims.get("moe_route_repricing")
+    if route_repricing is not None:
+        if int(route_repricing["batch_size"]) != int(batch):
+            raise ValueError(
+                "MoE route overlay batch does not match the evaluated batch"
+            )
+        if execution_mode != LEGACY_AGGREGATE_BANDWIDTH:
+            raise ValueError(
+                "MoE route overlays are supported only by the legacy analytic "
+                "sensitivity path; compiler-trace timing is not route-bound"
+            )
     include_lm_head = decoder_owns_output_head(output_head_location)
     topology = _parallel_topology(hw_over, n_chips)
     architecture_knobs_explicit = bool(
@@ -1875,6 +3250,23 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
         )
         else None
     )
+    if (
+        execution_mode == LEGACY_AGGREGATE_BANDWIDTH
+        and bool(topology["explicit_topology"])
+        and int(topology["tp"]) * int(topology["kvp"]) > 1
+    ):
+        # The available PackedQ1 artifact is bound to the global head/context
+        # geometry. Rank-local timing below is source-derived and exact to the
+        # analytic schedule, but it is not a compiler/RTL timing receipt.
+        timing_calibrated = False
+        timing_reason = "rank_local_body_timing_lacks_matched_compiler_trace"
+        timing_evidence_id = None
+        packed_q1_timing_validated = False
+        packed_q1_timing_reason = (
+            "global_packed_q1_trace_cannot_price_rank_local_geometry"
+        )
+        packed_q1_timing_contract_id = None
+        active_packed_q1_contract = None
     # Activations bf16; KV at kv_bits. weight_bits is set per-component in decode_traffic.
     mem_cfg = base_mem.model_copy(update={"weight_bits": prec["ffn_bits"], "activation_bits": ACT_BITS,
                                           "kv_cache_bits": prec["kv_bits"], **(hw_over or {})})
@@ -1910,6 +3302,9 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
         dims,
         prec,
         include_lm_head=include_lm_head,
+        batch=batch,
+        unique_experts=dims.get("moe_unique_experts_per_step"),
+        mlen=int(hw_cfg.MLEN),
     )
     # Per-chip capacity honours hw_over: a searched HBM_SIZE (channel count) must
     # gate the fit check, not the TOML default.
@@ -1939,7 +3334,62 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
         }
     else:
         _validate_parallel_model(dims, topology)
+    body_weight_layout = None
+    slowest_rank_kv = None
+    system_kv = None
+    kv_partition_provenance = None
+    exact_body_layout_supported = (
+        is_moe(dims)
+        and bool(topology["explicit_topology"])
+        and (local_mx_head or not include_lm_head)
+    )
+    if exact_body_layout_supported:
+        unique_experts = dims.get("moe_unique_experts_per_step")
+        if unique_experts is None:
+            unique_experts = conservative_unique_experts(
+                int(dims["num_experts"]),
+                int(dims["experts_per_token"]),
+                int(batch),
+            )
+        layout_precision = {
+            **prec,
+            "head_elem": int(prec.get("head_elem", prec["attn_elem"])),
+            "head_bits": float(prec.get("head_bits", prec["attn_bits"])),
+        }
+        body_weight_layout = build_body_weight_physical_layout(
+            dims,
+            layout_precision,
+            mlen=int(hw_cfg.MLEN),
+            tp=int(topology["tp"]),
+            kvp=int(topology["kvp"]),
+            batch=batch,
+            unique_experts=int(unique_experts),
+            expert_parallel_mode=str(topology["expert_parallel_mode"]),
+            # The current route-summary overlay deliberately excludes per-rank
+            # identities/counts, so expert-ID mode remains a conservative
+            # projected bound rather than inventing balanced placement.
+            active_experts_per_rank=None,
+            include_lm_head=local_mx_head,
+        )
+        slowest_rank_kv, system_kv, kv_partition_provenance = (
+            _partitioned_kv_ledgers(
+                dims,
+                prec,
+                context=ctx,
+                batch=batch,
+                mlen=int(hw_cfg.MLEN),
+                kv_layout=kv_layout,
+                tp=int(topology["tp"]),
+                kvp=int(topology["kvp"]),
+            )
+        )
     fp_sram_depth = int(getattr(hw_cfg, "FP_SRAM_DEPTH", 512))
+    reuse_kv_heads = int(dims["kv_heads"])
+    if architecture_knobs_explicit:
+        tp = int(topology["tp"])
+        if reuse_kv_heads % tp:
+            raise ValueError("KV heads must divide evenly across TP ranks")
+        reuse_kv_heads //= tp
     reuse_status = kv_head_reuse_status(
         enabled=(
             bool(topology["kv_head_reuse"])
@@ -1949,12 +3399,15 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
         mlen=int(hw_cfg.MLEN),
         hlen=int(hw_cfg.HLEN),
         blen=int(hw_cfg.BLEN),
-        kv_heads=int(dims["kv_heads"]),
+        # The head-broadcast state is private to a TP rank.  Pricing the
+        # global model head count here incorrectly rejects legal GQA reuse
+        # schedules after the attention tensors have already been sharded.
+        kv_heads=reuse_kv_heads,
         fp_sram_depth=fp_sram_depth,
     )
     if architecture_knobs_explicit and not bool(reuse_status["supported"]):
         raise ValueError(
-            "KV_HEAD_REUSE exceeds the current FP-SRAM/head-broadcast geometry"
+            "KV_HEAD_REUSE rejected: " + str(reuse_status["legality_reason"])
         )
     base_ledger = build_physical_decode_ledger(
         dims,
@@ -1966,6 +3419,7 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
         runtime_hbm_reserve_bytes=runtime_hbm_reserve_bytes,
         kv_layout=kv_layout,
         include_lm_head=include_lm_head,
+        tp=int(topology["tp"]),
     )
     if bool(topology["legacy_ideal_parallelism"]):
         ledger = build_physical_decode_ledger(
@@ -1983,6 +3437,7 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
             runtime_hbm_reserve_bytes=runtime_hbm_reserve_bytes * chips,
             kv_layout=kv_layout,
             include_lm_head=include_lm_head,
+            tp=int(topology["tp"]),
         )
     else:
         ledger = _partition_physical_ledger(
@@ -1992,16 +3447,34 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
             hbm_per_chip=hbm_per_chip,
             sram_policy=str(topology["sram_policy"]),
             batch=batch,
+            body_weight_layout=body_weight_layout,
+            slowest_rank_kv=slowest_rank_kv,
+            system_kv=system_kv,
         )
     hbm_capacity = ledger.hbm_capacity_bytes
     resident = ledger.weights.resident
     quantized_resident = (
-        ledger.weights.attention + ledger.weights.ffn_resident
+        ledger.weights.attention
+        + ledger.weights.ffn_resident
+        + ledger.weights.lm_head_resident
+    )
+    lm_head_resident = (
+        ledger.weights.lm_head_resident
+        + ledger.weights.bf16_lm_head_resident
     )
     wf = {
         "embedding": ledger.weights.bf16_embedding.total_aligned,
         "norms": ledger.weights.bf16_norms.total_aligned,
-        "lm_head": ledger.weights.bf16_lm_head_resident.total_aligned,
+        "lm_head": lm_head_resident.total_aligned,
+        "lm_head_element_plane": (
+            ledger.weights.lm_head_resident.element_aligned
+        ),
+        "lm_head_scale_plane": (
+            ledger.weights.lm_head_resident.scale_aligned
+        ),
+        "lm_head_bf16": (
+            ledger.weights.bf16_lm_head_resident.total_aligned
+        ),
         "attention": ledger.weights.attention.total_aligned,
         "ffn": ledger.weights.ffn_resident.total_aligned,
         "element_plane": quantized_resident.element_aligned,
@@ -2031,9 +3504,510 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
                                topology["legacy_ideal_parallelism"]
                            ),
                            kv_head_reuse=effective_kv_head_reuse,
+                           body_weight_layout=body_weight_layout,
+                           expert_parallel_mode=str(
+                               topology["expert_parallel_mode"]
+                           ),
                            execution_mode=execution_mode,
                            trace_timing_provider=trace_timing_provider,
                            trace_request_factory=trace_request_factory)
+    local_output_head = None
+    if local_mx_head:
+        head_rank_shapes = (
+            list(body_weight_layout.provenance["rank_shapes"]["local_head"])
+            if body_weight_layout is not None
+            else []
+        )
+        physical_head_batch = (
+            math.ceil(int(batch) / int(hw_cfg.BLEN)) * int(hw_cfg.BLEN)
+        )
+        default_physical_hidden = (
+            math.ceil(int(dims["hidden"]) / int(hw_cfg.MLEN))
+            * int(hw_cfg.MLEN)
+        )
+        activation_zero_fill_elements = (
+            batch * (default_physical_hidden - int(dims["hidden"]))
+            + (physical_head_batch - batch) * default_physical_hidden
+        )
+        activation_zero_fill_events = math.ceil(
+            activation_zero_fill_elements / int(hw_cfg.VLEN)
+        )
+        activation_zero_fill_cycles = (
+            activation_zero_fill_events * perf.instr["V_BASIC"]
+        )
+        rank_head_schedules: list[dict[str, int]] = []
+        source_shapes = head_rank_shapes or [
+            {
+                "logical_rows": int(dims["vocab"]),
+                "physical_rows": (
+                    math.ceil(int(dims["vocab"]) / int(hw_cfg.MLEN))
+                    * int(hw_cfg.MLEN)
+                ),
+                "physical_columns": default_physical_hidden,
+            }
+        ]
+        for rank_index, shape in enumerate(source_shapes):
+            rank_vocab = int(shape["logical_rows"])
+            rank_physical_vocab = int(shape["physical_rows"])
+            rank_physical_hidden = int(shape["physical_columns"])
+            mask_elements = batch * (rank_physical_vocab - rank_vocab)
+            mask_events = math.ceil(mask_elements / int(hw_cfg.VLEN))
+            matrix_cycles = perf.lm_head(
+                rank_physical_hidden,
+                rank_vocab,
+                batch,
+            )
+            selection_cycles = perf.lm_head_streaming_selection(
+                rank_vocab,
+                batch,
+                top_k=20,
+            )
+            mask_cycles = mask_events * perf.instr["V_BASIC"]
+            rank_head_schedules.append(
+                {
+                    "rank": rank_index,
+                    "logical_vocab": rank_vocab,
+                    "physical_vocab": rank_physical_vocab,
+                    "physical_hidden": rank_physical_hidden,
+                    "matrix_cycles": matrix_cycles,
+                    "selection_cycles": selection_cycles,
+                    "argmax_cycles": perf.lm_head_argmax_diagnostic(
+                        rank_vocab,
+                        batch,
+                    ),
+                    "mask_elements": mask_elements,
+                    "mask_events": mask_events,
+                    "mask_cycles": mask_cycles,
+                    "serving_cycles": (
+                        matrix_cycles
+                        + selection_cycles
+                        + activation_zero_fill_cycles
+                        + mask_cycles
+                    ),
+                }
+            )
+        slowest_head_schedule = max(
+            rank_head_schedules,
+            key=lambda value: value["serving_cycles"],
+        )
+        physical_head_vocab = slowest_head_schedule["physical_vocab"]
+        physical_head_hidden = slowest_head_schedule["physical_hidden"]
+        head_matrix_cycles = slowest_head_schedule["matrix_cycles"]
+        head_selection_cycles = slowest_head_schedule["selection_cycles"]
+        head_argmax_cycles = slowest_head_schedule["argmax_cycles"]
+        padded_vocab_mask_elements_slowest_rank = slowest_head_schedule[
+            "mask_elements"
+        ]
+        padded_vocab_mask_events_slowest_rank = slowest_head_schedule[
+            "mask_events"
+        ]
+        padded_vocab_mask_elements_system = (
+            sum(value["mask_elements"] for value in rank_head_schedules)
+            * (int(topology["kvp"]) if head_rank_shapes else 1)
+        )
+        # Vector events cannot be coalesced across independent TP ranks or KVP
+        # replicas: each rank rounds its own tail to a complete VLEN issue.
+        padded_vocab_mask_events_system = (
+            sum(value["mask_events"] for value in rank_head_schedules)
+            * (int(topology["kvp"]) if head_rank_shapes else 1)
+        )
+        head_padding = {
+            "zero_fill_elements_per_rank": activation_zero_fill_elements,
+            "zero_fill_vector_events_per_rank": activation_zero_fill_events,
+            "zero_fill_cycles_per_rank": activation_zero_fill_cycles,
+            "padded_vocab_mask_elements_slowest_rank": (
+                padded_vocab_mask_elements_slowest_rank
+            ),
+            "padded_vocab_mask_vector_events_slowest_rank": (
+                padded_vocab_mask_events_slowest_rank
+            ),
+            "padded_vocab_mask_cycles_slowest_rank": (
+                padded_vocab_mask_events_slowest_rank
+                * perf.instr["V_BASIC"]
+            ),
+            "padded_vocab_mask_elements_system": (
+                padded_vocab_mask_elements_system
+            ),
+            "padded_vocab_mask_vector_events_system": (
+                padded_vocab_mask_events_system
+            ),
+            "padded_vocab_mask_cycles_system": (
+                padded_vocab_mask_events_system * perf.instr["V_BASIC"]
+            ),
+        }
+        compute_divisor = 1 if body_weight_layout is not None else (
+            chips
+            if bool(topology["legacy_ideal_parallelism"])
+            else int(topology["tp"])
+        )
+        slowest_rank_cycles = (
+            (head_matrix_cycles + head_selection_cycles) / compute_divisor
+            + int(head_padding["zero_fill_cycles_per_rank"])
+            + int(head_padding["padded_vocab_mask_cycles_slowest_rank"])
+            / compute_divisor
+        )
+        head_compute_time_s = cycles_to_seconds(
+            slowest_rank_cycles,
+            frequency_hz=FREQ_HZ,
+            compute_density=compute_density(prec),
+            chip_count=1,
+        )
+        base_head_streamed = (
+            body_weight_layout.slowest_rank.lm_head_streamed
+            + body_weight_layout.slowest_rank.bf16_lm_head_streamed
+            if body_weight_layout is not None
+            else physical_weights.lm_head_streamed
+            + physical_weights.bf16_lm_head_streamed
+        )
+        rank_head_read_bytes = (
+            float(base_head_streamed.total_aligned)
+            / (1 if body_weight_layout is not None else (
+                chips
+                if bool(topology["legacy_ideal_parallelism"])
+                else int(topology["tp"])
+            ))
+        )
+        overfetch = matrix_overfetch_factor(hw_cfg)
+        rank_head_hbm_read_bytes = rank_head_read_bytes * overfetch
+        if active_bw_model is not None:
+            head_transfer_bytes = (
+                perf.mlen * perf.mlen * int(prec["head_elem"]) / 8
+            )
+            head_memory_time_s = active_bw_model.memory_time(
+                {"weights_kv": rank_head_hbm_read_bytes},
+                hbm_gen,
+                hbm_channels,
+                transfer_bytes=head_transfer_bytes,
+                pin_rate_gbps=hbm_pin_rate_gbps,
+            ) / (
+                chips
+                if bool(topology["legacy_ideal_parallelism"])
+                else 1
+            )
+        else:
+            head_memory_time_s = rank_head_hbm_read_bytes / (
+                peak_bw
+                * (
+                    chips
+                    if bool(topology["legacy_ideal_parallelism"])
+                    else 1
+                )
+            )
+        resident_head = (
+            ledger.weights.lm_head_resident
+            + ledger.weights.bf16_lm_head_resident
+        )
+        streamed_head = (
+            ledger.weights.lm_head_streamed
+            + ledger.weights.bf16_lm_head_streamed
+        )
+        aggregate_head_hbm_read_bytes = (
+            float(streamed_head.total_aligned) * overfetch
+        )
+        selection_collective = (
+            {
+                "local_output_selection_bytes": 0.0,
+                "local_output_selection_time_s": 0.0,
+            }
+            if bool(topology["legacy_ideal_parallelism"])
+            else collective_cost_per_step(
+                dims,
+                batch=batch,
+                tp=int(topology["tp"]),
+                kvp=int(topology["kvp"]),
+                link_ports=int(topology["link_ports"]),
+                link_generation=str(topology["link_generation"]),
+                include_local_output_selection=True,
+                local_output_top_k=20,
+                expert_parallel_mode=str(topology["expert_parallel_mode"]),
+            )
+        )
+        selection_collective_time_s = float(
+            selection_collective["local_output_selection_time_s"]
+        )
+        selection_collective_bytes = float(
+            selection_collective["local_output_selection_bytes"]
+        )
+        isolated_head_roofline_s = max(
+            head_compute_time_s,
+            head_memory_time_s,
+        )
+        isolated_head_time_s = (
+            isolated_head_roofline_s + selection_collective_time_s
+        )
+        local_head_failures = []
+        if body_weight_layout is None:
+            local_head_failures.append(
+                "body_weight_physical_padding_unmodelled"
+            )
+            if int(topology["tp"]) > 1:
+                local_head_failures.append(
+                    "local_head_tp_sharded_physical_shape_unmodelled"
+                )
+        if execution_mode != LEGACY_AGGREGATE_BANDWIDTH:
+            local_head_failures.append(
+                "compiler_trace_head_stage_breakdown_unavailable"
+            )
+        if not bool(prec["head_operand_family_supported"]):
+            local_head_failures.append(
+                "mixed_matrix_family_unsupported_without_trace_evidence"
+            )
+        numerical_matrix_mlen = int(prec["head_numerical_matrix_mlen"])
+        candidate_matrix_mlen = int(hw_cfg.MLEN)
+        numerical_matrix_mlen_exact_match = (
+            numerical_matrix_mlen == candidate_matrix_mlen
+        )
+        if not numerical_matrix_mlen_exact_match:
+            local_head_failures.append("numerical_matrix_mlen_mismatch")
+        if (
+            bool(topology["legacy_ideal_parallelism"])
+            and int(topology["tp"]) > 1
+        ):
+            local_head_failures.append(
+                "legacy_ideal_parallelism_omits_global_topk_merge"
+            )
+        if head_rank_shapes:
+            physical_head_compute_vocab_system = sum(
+                math.ceil(int(shape["logical_rows"]) / int(hw_cfg.BLEN))
+                * int(hw_cfg.BLEN)
+                for shape in head_rank_shapes
+            ) * int(topology["kvp"])
+            algorithmic_head_flops = (
+                2
+                * batch
+                * int(dims["hidden"])
+                * int(dims["vocab"])
+                * int(topology["kvp"])
+            )
+        else:
+            physical_head_compute_vocab_system = physical_head_vocab
+            algorithmic_head_flops = (
+                2 * batch * int(dims["hidden"]) * int(dims["vocab"])
+            )
+        physical_head_flops = (
+            2
+            * physical_head_batch
+            * physical_head_hidden
+            * physical_head_compute_vocab_system
+        )
+        local_output_head = {
+            "schema_version": "decode-local-mx-head-breakdown/v3",
+            "passed": not local_head_failures,
+            "failures": local_head_failures,
+            "operator": "decode_lm_head",
+            "profile_id": str(prec["profile_id"]),
+            "numerical_matrix_mlen": numerical_matrix_mlen,
+            "candidate_matrix_mlen": candidate_matrix_mlen,
+            "numerical_matrix_mlen_exact_match": (
+                numerical_matrix_mlen_exact_match
+            ),
+            "batch_geometry": {
+                "active_rows": int(batch),
+                "physical_rows": physical_head_batch,
+                "zero_padded_rows": physical_head_batch - int(batch),
+            },
+            "padding_preparation": {
+                "schedule": "v_basic_full_width_chunks_before_matrix_and_selection",
+                "weight_padding": (
+                    "offline_zero_fill_included_in_head_hbm_planes"
+                ),
+                "activation_zero_fill_elements_per_rank": int(
+                    head_padding["zero_fill_elements_per_rank"]
+                ),
+                "activation_zero_fill_vector_events_per_rank": int(
+                    head_padding["zero_fill_vector_events_per_rank"]
+                ),
+                "activation_zero_fill_cycles_per_rank": int(
+                    head_padding["zero_fill_cycles_per_rank"]
+                ),
+                "padded_vocab_mask": "negative_infinity",
+                "slowest_serving_rank": int(
+                    slowest_head_schedule["rank"]
+                ),
+                "padded_vocab_mask_by_tp_rank": [
+                    {
+                        "rank": int(value["rank"]),
+                        "logical_vocab": int(value["logical_vocab"]),
+                        "physical_vocab": int(value["physical_vocab"]),
+                        "elements": int(value["mask_elements"]),
+                        "vector_events": int(value["mask_events"]),
+                        "cycles": int(value["mask_cycles"]),
+                    }
+                    for value in rank_head_schedules
+                ],
+                "padded_vocab_mask_elements_slowest_rank": int(
+                    head_padding["padded_vocab_mask_elements_slowest_rank"]
+                ),
+                "padded_vocab_mask_vector_events_slowest_rank": int(
+                    head_padding[
+                        "padded_vocab_mask_vector_events_slowest_rank"
+                    ]
+                ),
+                "padded_vocab_mask_cycles_slowest_rank": int(
+                    head_padding["padded_vocab_mask_cycles_slowest_rank"]
+                ),
+                "padded_vocab_mask_elements_system": int(
+                    head_padding["padded_vocab_mask_elements_system"]
+                ),
+                "padded_vocab_mask_vector_events_system": int(
+                    head_padding["padded_vocab_mask_vector_events_system"]
+                ),
+                "padded_vocab_mask_cycles_system": int(
+                    head_padding["padded_vocab_mask_cycles_system"]
+                ),
+                "analytic_cycles_charged": True,
+                "compiler_lowered": False,
+            },
+            "precision_policy": "profile_w_a_bf16_logits",
+            "weight_format": str(prec["head_label"]),
+            "activation_format": str(prec["head_activation_label"]),
+            "weight_element_bits": int(prec["head_elem"]),
+            "weight_effective_bits": float(prec["head_bits"]),
+            "activation_element_bits": int(prec["head_activation_elem"]),
+            "activation_effective_bits": float(
+                prec["head_activation_bits"]
+            ),
+            "block_size": int(prec["block_size"]),
+            "scale_format": "E8M0",
+            "accumulator_dtype": "signed_fixed16.16",
+            "operand_family_binding": str(
+                prec["head_operand_family_binding"]
+            ),
+            "numerical_oracle_rule": str(
+                prec["head_numerical_oracle_rule"]
+            ),
+            "partial_conversion_rule": str(
+                prec["head_partial_conversion_rule"]
+            ),
+            "operand_family_deployment_supported": bool(
+                prec["head_operand_family_supported"]
+            ),
+            "hardware_bit_parity_verified": bool(
+                prec["head_hardware_bit_parity_verified"]
+            ),
+            "accumulation_chain": list(prec["head_accumulation_chain"]),
+            "matrix_numeric_format": str(prec["head_vector_format"]),
+            "matrix_storage_format": str(
+                prec["head_matrix_storage_format"]
+            ),
+            "logit_container_format": str(
+                prec["head_logit_container_format"]
+            ),
+            "bf16_container_precision_recovery": bool(
+                prec["head_bf16_container_precision_recovery"]
+            ),
+            "selection": {
+                "serving_policy": "streaming_topk20_topp0.95_minp0",
+                "diagnostic_policy": "argmax_lowest_token_id_on_tie",
+                "full_vocab_logits_materialized": False,
+                "top_k": 20,
+                "top_p": 0.95,
+                "min_p": 0.0,
+                "logit_tile_bytes_per_chip": (
+                    ledger.sram.output_head_logit_tile_bytes
+                ),
+                "state_bytes_per_chip": (
+                    ledger.sram.output_head_selection_state_bytes
+                ),
+                "workspace_bytes_per_chip": (
+                    ledger.sram.output_head_workspace_bytes
+                ),
+                "distributed_merge": {
+                    "mode": "tp_topk20_gather_owner_then_u32_token_broadcast",
+                    "candidate_pair_bytes": 8,
+                    "candidate_count_per_rank_per_sequence": 20,
+                    "aggregate_link_bytes_per_batch_step": (
+                        selection_collective_bytes
+                    ),
+                    "slowest_path_serialization_time_s": (
+                        selection_collective_time_s
+                    ),
+                    "charged_to_system_collective_energy": True,
+                },
+            },
+            "cycles_per_batch_step": {
+                "matrix_slowest_rank": float(
+                    head_matrix_cycles / compute_divisor
+                ),
+                "selection_slowest_rank": float(
+                    head_selection_cycles / compute_divisor
+                ),
+                "argmax_diagnostic_slowest_rank": float(
+                    head_argmax_cycles / compute_divisor
+                ),
+                "activation_zero_fill_per_rank": int(
+                    head_padding["zero_fill_cycles_per_rank"]
+                ),
+                "padded_vocab_mask_slowest_rank": int(
+                    head_padding["padded_vocab_mask_cycles_slowest_rank"]
+                ),
+                "padded_vocab_mask_system": int(
+                    head_padding["padded_vocab_mask_cycles_system"]
+                ),
+                "serving_slowest_rank": float(slowest_rank_cycles),
+            },
+            "time_s_per_batch_step": {
+                "compute_slowest_rank": head_compute_time_s,
+                "hbm_slowest_rank": head_memory_time_s,
+                "local_roofline": isolated_head_roofline_s,
+                "distributed_selection_collective": (
+                    selection_collective_time_s
+                ),
+                "isolated_head_with_collective": isolated_head_time_s,
+                "scope": (
+                    "local_roofline_plus_dependency_bound_tp_selection_merge"
+                ),
+            },
+            "hbm_read_bytes_per_batch_step": {
+                "aggregate_system_before_overfetch": float(
+                    streamed_head.total_aligned
+                ),
+                "aggregate_system_after_overfetch": (
+                    aggregate_head_hbm_read_bytes
+                ),
+                "slowest_rank_after_overfetch": rank_head_hbm_read_bytes,
+            },
+            "resident_bytes": {
+                "aggregate_system": int(resident_head.total_aligned),
+                "element_plane": int(
+                    ledger.weights.lm_head_resident.element_aligned
+                ),
+                "scale_plane": int(
+                    ledger.weights.lm_head_resident.scale_aligned
+                ),
+                "bf16_plane": int(
+                    ledger.weights.bf16_lm_head_resident.total_aligned
+                ),
+            },
+            "algorithmic_flops_per_batch_step": (
+                algorithmic_head_flops
+            ),
+            "flops_per_batch_step": (
+                physical_head_flops
+            ),
+            "padding_flops_per_batch_step": (
+                physical_head_flops - algorithmic_head_flops
+            ),
+            "fractions": {
+                "isolated_roofline_time_over_decoder_tpot": (
+                    isolated_head_time_s / float(loop["tpot"])
+                ),
+                "hbm_read_over_decoder_traffic": (
+                    aggregate_head_hbm_read_bytes
+                    / float(loop["avg_bytes_per_batch_step"])
+                ),
+                "resident_over_decoder_capacity": (
+                    resident_head.total_aligned
+                    / int(ledger.hbm_required_bytes)
+                ),
+            },
+            "topology": {
+                "tp": int(topology["tp"]),
+                "kvp": int(topology["kvp"]),
+                "chip_count": chips,
+            },
+        }
+    loop["local_output_head"] = local_output_head
     if execution_mode == COMPILER_TRACE:
         trace_evidence = loop.get("compiler_trace_timing")
         if not isinstance(trace_evidence, Mapping):
@@ -2045,7 +4019,9 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
     option_area = architecture_option_area_mm2(
         mlen=int(hw_cfg.MLEN),
         hlen=int(hw_cfg.HLEN),
-        kv_heads=int(dims["kv_heads"]),
+        # Reuse control is private to the rank-local GQA head group, just like
+        # its legality and KV traffic schedule above.
+        kv_heads=reuse_kv_heads,
         kv_head_reuse=(
             bool(topology["kv_head_reuse"])
             if architecture_knobs_explicit
@@ -2116,10 +4092,128 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
     architecture_options = {
         "schema": "plena-decode-architecture-options",
         "explicit": architecture_knobs_explicit,
+        "expert_parallel_mode": str(topology["expert_parallel_mode"]),
         "kv_head_reuse": reuse_status,
         "drain_overlapped": drain_status,
         "area": option_area,
     }
+    moe_workload = (
+        _moe_workload_accounting(perf, dims, batch)
+        if is_moe(dims)
+        else None
+    )
+    if moe_workload is not None and body_weight_layout is not None:
+        moe_provenance = dict(moe_workload["provenance"])
+        expert_mode = str(topology["expert_parallel_mode"])
+        route_exact = bool(
+            body_weight_layout.provenance["expert_route_assignment_exact"]
+        )
+        moe_provenance.update(
+            {
+                "expert_parallel_mode": expert_mode,
+                "per_rank_route_assignment_exact": route_exact,
+                "expert_id_timing_semantics": (
+                    "not_applicable"
+                    if expert_mode == EXPERT_TENSOR_PARALLEL
+                    else "conservative_slowest_rank_all_routes_bound"
+                ),
+                "expert_id_route_filter_transport": (
+                    "not_applicable"
+                    if expert_mode == EXPERT_TENSOR_PARALLEL
+                    else (
+                        "replicated_hidden_local_route_filter_then_"
+                        "output_allreduce"
+                    )
+                ),
+                "expert_id_route_filter_collective_bytes": 0,
+                "expert_id_output_collective_charged": (
+                    expert_mode == EXPERT_ID_PARALLEL
+                    and int(topology["tp"]) > 1
+                ),
+            }
+        )
+        moe_workload = {
+            **moe_workload,
+            "provenance": moe_provenance,
+        }
+    body_physical_layout = None
+    if body_weight_layout is not None:
+        body_physical_layout = body_weight_layout.to_dict()
+        body_provenance = dict(body_physical_layout["provenance"])
+        body_blockers = list(body_provenance.get("blockers", []))
+        body_provenance.update(
+            {
+                "analytic_layout_valid": True,
+                "analytic_timing_valid": True,
+                "timing_schema": BODY_PARALLEL_TIMING_SCHEMA,
+                "timing_partition": (
+                    "replicated_control_vector;rank_local_qkv_o_expert_"
+                    "intermediate_head;kvp_integer_context_slowest_rank"
+                ),
+                "global_cycle_division_used": False,
+                "capacity_system_aggregate_checked": True,
+                "capacity_slowest_rank_checked": True,
+                "expert_collective_accounting": {
+                    "route_filter_mapping": body_provenance[
+                        "expert_routing_mapping"
+                    ],
+                    "route_filter_bytes": float(
+                        loop["collective_breakdown_per_batch_step"].get(
+                            "expert_routing_bytes", 0.0
+                        )
+                    ),
+                    "route_filter_time_s": float(
+                        loop["collective_breakdown_per_batch_step"].get(
+                            "expert_routing_time_s", 0.0
+                        )
+                    ),
+                    "output_allreduce_slowest_rank_bytes": float(
+                        loop["collective_breakdown_per_batch_step"].get(
+                            "expert_output_collective_slowest_rank_bytes",
+                            0.0,
+                        )
+                    ),
+                    "output_allreduce_system_bytes": float(
+                        loop["collective_breakdown_per_batch_step"].get(
+                            "expert_output_collective_system_bytes", 0.0
+                        )
+                    ),
+                    "output_allreduce_time_s": float(
+                        loop["collective_breakdown_per_batch_step"].get(
+                            "expert_output_collective_time_s", 0.0
+                        )
+                    ),
+                    "output_allreduce_already_in_system_collective_total": True,
+                },
+                "compiler_timing_parity_verified": False,
+                "rtl_timing_parity_verified": False,
+                "publication_rankable": False,
+                "selection_eligible": False,
+                "blockers": body_blockers,
+            }
+        )
+        body_physical_layout["provenance"] = body_provenance
+        body_physical_layout["kv_partition"] = dict(
+            kv_partition_provenance or {}
+        )
+        body_physical_layout["capacity"] = {
+            "system_required_bytes": int(ledger.hbm_required_bytes),
+            "system_capacity_bytes": int(ledger.hbm_capacity_bytes),
+            "slowest_rank_required_bytes": int(
+                ledger.slowest_rank_hbm_required_bytes or 0
+            ),
+            "per_chip_capacity_bytes": int(
+                ledger.per_chip_hbm_capacity_bytes or hbm_per_chip
+            ),
+            "system_feasible": (
+                ledger.hbm_required_bytes <= ledger.hbm_capacity_bytes
+            ),
+            "slowest_rank_feasible": (
+                int(ledger.slowest_rank_hbm_required_bytes or 0)
+                <= int(ledger.per_chip_hbm_capacity_bytes or hbm_per_chip)
+            ),
+            "overall_feasible": bool(ledger.fits_hbm),
+        }
     traffic_per_token = loop["traffic_breakdown_per_generated_token"]
     kv_read_bytes_per_token = float(
         traffic_per_token["kv_element_read_bytes"]
@@ -2187,6 +4281,8 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
                 output_head_location=output_head_location,
                 parallelism=dict(topology),
                 architecture_options=architecture_options,
+                moe_workload=moe_workload,
+                body_physical_layout=body_physical_layout,
                 capacity_throughput_chain=capacity_throughput_chain)
     option_logic_area = float(
         dict(option_area["breakdown_mm2_per_chip"]).get(

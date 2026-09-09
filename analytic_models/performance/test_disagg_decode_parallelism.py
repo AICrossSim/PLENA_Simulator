@@ -257,6 +257,13 @@ def test_explicit_reuse_switch_prices_per_head_kv_reads_only() -> None:
 
 
 def test_reuse_evidence_and_fp_sram_legality_are_explicit() -> None:
+    hkv1 = decode.kv_head_reuse_status(
+        enabled=True,
+        mlen=1024,
+        hlen=128,
+        blen=2,
+        kv_heads=1,
+    )
     hkv2 = decode.kv_head_reuse_status(
         enabled=True,
         mlen=1024,
@@ -292,6 +299,23 @@ def test_reuse_evidence_and_fp_sram_legality_are_explicit() -> None:
     assert qwen_legal["supported"] is True
     assert qwen_illegal["required_fp_sram_slots"] == 774
     assert qwen_illegal["supported"] is False
+    assert hkv1["supported"] is False
+    assert hkv1["structural_no_op"] is True
+    assert hkv1["structurally_selectable"] is False
+    assert hkv1["required_fp_sram_slots"] == 0
+    assert hkv1["measured_latency_delta_fraction"] is None
+    assert hkv1["evidence_tier"] == "not_applicable_structural_no_op"
+    assert hkv1["legality_reason"] == (
+        "rank_local_single_kv_head_reuse_is_structural_no_op"
+    )
+    with pytest.raises(ValueError, match="structural_no_op"):
+        decode.architecture_option_area_mm2(
+            mlen=1024,
+            hlen=128,
+            kv_heads=1,
+            kv_head_reuse=True,
+            drain_overlapped=False,
+        )
 
 
 def test_architecture_option_area_names_control_and_accumulator_bank() -> None:
@@ -432,6 +456,42 @@ def test_explicit_reuse_binds_legal_schedule_timing_and_control_area() -> None:
     assert "KVHeadReuseControl" in result[
         "architecture_options"
     ]["area"]["breakdown_mm2_per_chip"]
+
+
+def test_explicit_tp_prices_reuse_against_rank_local_gqa_heads() -> None:
+    args = build_parser().parse_args([])
+    model, shape, hardware, memory, precision = build_point(
+        args,
+        "qwen3-32b",
+    )
+    result = decode.evaluate(
+        model,
+        shape,
+        hardware,
+        args.isa_lib,
+        memory,
+        precision,
+        1,
+        16,
+        2,
+        hw_over={
+            "TP": 4,
+            "KVP": 1,
+            "LINK_PORTS": 1,
+            "SRAM_POLICY": "streaming",
+            "KV_HEAD_REUSE": True,
+            "DRAIN_OVERLAPPED": False,
+        },
+        stride=1,
+        n_chips=4,
+    )
+
+    reuse = result["architecture_options"]["kv_head_reuse"]
+    assert shape["kv_heads"] == 8
+    assert reuse["kv_heads"] == 2
+    assert reuse["traffic_reduction_vs_per_head"] == 2
+    assert reuse["measured_latency_delta_fraction"] == pytest.approx(-0.0061)
+    assert reuse["evidence_tier"] == "transactional_emulator_measured"
 
 
 def test_drain_overlap_is_unrankable_without_matching_timing_evidence() -> None:
