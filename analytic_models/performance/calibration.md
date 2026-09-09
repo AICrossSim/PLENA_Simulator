@@ -133,12 +133,13 @@ python -m analytic_models.performance.build_decode_crossover \
   --hbm-gen HBM2 \
   --hbm-channels 16 \
   --chips 1 \
-  --output-head-location external_bf16_service \
+  --output-head-location decode_local_mx_head \
   --out evidence/qwen3_32b_decode_crossover.json
 ```
 
-The external-head artifact has `decode_body_only` scope. Whole-model TPOT adds
-the separately calibrated BF16 output-head service before ranking.
+The canonical artifact includes the decode-local MX head in decode TPOT. The
+external BF16 endpoint remains an optional `decode_body_only` comparison whose
+service cost is composed only when both external receipts are supplied.
 
 The target `MLEN=1024` configuration uses an MRAM row depth of 4096: four
 compiler-addressable 1024×1024 BF16 tiles. SRAM capacity is counted as
@@ -148,8 +149,22 @@ configuration and physical-ledger gates.
 
 ## Output-head boundary
 
-`decode_bf16_unmodeled` preserves the analytical BF16 LM-head and vocabulary
-selection sensitivity but cannot establish a native decode-chip realization.
+`decode_local_mx_head` is the canonical cached-decode path. It uses profile W/A
+and vector formats on the existing matrix/vector units, stores already-rounded
+values in a BF16 container, and tile-streams top-k20/top-p selection. Its
+physical ledger includes MLEN-padded weight/scale planes, HBM reads, BLEN batch
+and MLEN hidden zero-fill, padded-vocab masking, bounded selection state,
+cycles/FLOPs and TP candidate communication. A numerical-MLEN mismatch keeps
+the cost row but blocks reuse of accuracy evidence.
+
+Current strict blockers are serialized rather than hidden: body matrices still
+need shard-aware physical padding, and TP>1 needs an exact per-rank local-head
+layout. The compiler local-head receipt is structural only; zero-fill, masking,
+streaming selector, TP merge, calibrated cycles and RTL parity remain false.
+
+`decode_bf16_unmodeled` preserves the older analytical BF16 LM-head and
+vocabulary selection sensitivity but cannot establish a native decode-chip
+realization.
 `external_bf16_service` stops the decode ledger after final RMSNorm: LM-head
 resident/streamed bytes, HBM traffic, cycles, FLOPs, and power events are
 removed together. Embedding lookup and embedding storage remain on the decode
@@ -165,10 +180,9 @@ that location. Sharing the endpoint with active prefill work requires separate
 queue and interference measurements and remains unrankable without them.
 
 The publication comparison retains both placements. The remote BF16 service is
-the deployment path after its link, service, and capacity artifact passes. The
-local BF16 head is a decode-chip sensitivity until native BF16 execution and
-its resident weight cost are calibrated. A low-precision local head is an
-accuracy ablation and does not inherit decoder-stack hardware validity.
+an optional whole-service sensitivity after its link, service, and capacity
+artifact passes; its absence does not block local decode evaluation. The older
+local BF16 mode remains unrankable.
 
 Returning the next BF16 embedding with the selected token is a separate
 untied-model sensitivity. It may remove the embedding table and row read from

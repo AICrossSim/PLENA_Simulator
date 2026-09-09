@@ -173,8 +173,10 @@ def test_results_use_the_batched_baseline_for_co_design_ordering() -> None:
     assert overlap.evidence_tier == one_read.evidence_tier == "analytic co-design"
     assert baseline.precision == "MXINT4/MXINT4/BF16/MXINT4"
     assert "selector timing + KV read 1x" in one_read.configuration
-    assert baseline.power_w == pytest.approx(42.2077605396844)
-    assert baseline.tokens_per_joule == pytest.approx(1.969461469033609)
+    # Qwen3 charges the per-head Q/K RMSNorm schedule in addition to the two
+    # hidden-width layer norms; the power point follows the resulting TPOT.
+    assert baseline.power_w == pytest.approx(42.19251215906162)
+    assert baseline.tokens_per_joule == pytest.approx(1.9674878813204937)
     for row in (overlap, one_read):
         assert math.isnan(row.area_mm2)
         assert math.isnan(row.power_w)

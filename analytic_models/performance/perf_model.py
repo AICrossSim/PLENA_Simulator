@@ -207,6 +207,238 @@ def ffn_decode_auxiliary_histogram(
     histogram["C_LOOP_END"] += silu_iterations
     return histogram
 
+
+def routed_expert_decode_ledger(
+    *,
+    batch_size: int,
+    expert_per_token: int,
+    num_experts: int,
+    blen: int,
+    active_experts: int | None = None,
+    active_expert_source: str | None = None,
+) -> dict[str, object]:
+    """Build a deterministic ragged expert-batch ledger for one decode layer.
+
+    The logical work is always ``batch_size * expert_per_token`` assignments.
+    In the absence of an explicit active-expert count, the charged count is the
+    ceiling of the uniform independent-top-k occupancy expectation.  The
+    assignments are then spread as evenly as possible over those anonymous
+    active experts.  This is deterministic, conserves every assignment, and
+    exposes the physical BLEN-row padding that the matrix schedule must retire.
+
+    An explicit active-expert count is accepted only when it can describe the
+    current step: every charged expert must receive at least one assignment.
+    A route trace can therefore override occupancy without silently inventing
+    empty experts or dropping routes.
+    """
+
+    dimensions = {
+        "batch_size": batch_size,
+        "expert_per_token": expert_per_token,
+        "num_experts": num_experts,
+        "blen": blen,
+    }
+    if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0
+           for value in dimensions.values()):
+        raise ValueError("routed-expert dimensions must be positive integers")
+    if expert_per_token > num_experts:
+        raise ValueError("expert_per_token cannot exceed num_experts")
+
+    assignments = batch_size * expert_per_token
+    if active_experts is None:
+        probability_unselected = 1.0 - expert_per_token / num_experts
+        expected_active = num_experts * (
+            1.0 - probability_unselected**batch_size
+        )
+        charged_active = min(
+            num_experts,
+            max(expert_per_token, math.ceil(expected_active - 1e-12)),
+        )
+        source = (
+            "conservative_ceil_uniform_independent_topk_expectation"
+        )
+    else:
+        if (
+            not isinstance(active_experts, int)
+            or isinstance(active_experts, bool)
+            or active_experts <= 0
+        ):
+            raise ValueError("active_experts must be a positive integer")
+        charged_active = active_experts
+        source = active_expert_source or "explicit_unique_expert_override"
+
+    max_active = min(num_experts, assignments)
+    if not expert_per_token <= charged_active <= max_active:
+        raise ValueError(
+            "active_experts must be between expert_per_token and "
+            "min(num_experts, batch_size * expert_per_token)"
+        )
+
+    tokens_per_expert, experts_with_extra_token = divmod(
+        assignments,
+        charged_active,
+    )
+    token_histogram: dict[int, int] = {
+        tokens_per_expert: charged_active - experts_with_extra_token,
+    }
+    if experts_with_extra_token:
+        token_histogram[tokens_per_expert + 1] = experts_with_extra_token
+    token_histogram = {
+        count: experts
+        for count, experts in token_histogram.items()
+        if experts
+    }
+    row_tile_histogram: dict[int, int] = {}
+    for token_count, expert_count in token_histogram.items():
+        row_tiles = math.ceil(token_count / blen)
+        row_tile_histogram[row_tiles] = (
+            row_tile_histogram.get(row_tiles, 0) + expert_count
+        )
+
+    total_row_tiles = sum(
+        row_tiles * expert_count
+        for row_tiles, expert_count in row_tile_histogram.items()
+    )
+    padded_rows = total_row_tiles * blen
+    if sum(
+        token_count * expert_count
+        for token_count, expert_count in token_histogram.items()
+    ) != assignments:
+        raise AssertionError("routed-expert assignment conservation failed")
+
+    return {
+        "schema": "plena-routed-expert-batch-ledger/v1",
+        "batch_size": batch_size,
+        "experts_per_token": expert_per_token,
+        "num_experts": num_experts,
+        "route_assignments": assignments,
+        "active_experts": charged_active,
+        "active_expert_source": source,
+        "assignment_distribution": (
+            "balanced_integer_distribution_over_charged_active_experts"
+        ),
+        "expert_token_count_histogram": {
+            str(token_count): expert_count
+            for token_count, expert_count in sorted(token_histogram.items())
+        },
+        "expert_row_tile_histogram": {
+            str(row_tiles): expert_count
+            for row_tiles, expert_count in sorted(row_tile_histogram.items())
+        },
+        "blen": blen,
+        "expert_row_tiles": total_row_tiles,
+        "expert_padded_rows": padded_rows,
+        "expert_padding_rows": padded_rows - assignments,
+        "assignments_conserved": True,
+    }
+
+
+def routed_expert_histogram_ledger(
+    *,
+    expert_token_count_histogram: dict[int | str, int],
+    owned_experts: int,
+    blen: int,
+    expected_route_assignments: int | None = None,
+    source: str = "verified_trace_rank_local_expert_histogram",
+) -> dict[str, object]:
+    """Build an exact rank-local routed-expert ledger from a trace histogram.
+
+    Unlike :func:`routed_expert_decode_ledger`, this path does not replace an
+    observed ragged distribution with an anonymous balanced distribution.  A
+    histogram key is the number of tokens received by one active expert and
+    its value is the number of experts with that load.  Empty ranks are valid
+    because expert-ID parallel routing can direct a small batch entirely to
+    other owners.
+    """
+
+    if (
+        not isinstance(owned_experts, int)
+        or isinstance(owned_experts, bool)
+        or owned_experts <= 0
+    ):
+        raise ValueError("owned_experts must be a positive integer")
+    if not isinstance(blen, int) or isinstance(blen, bool) or blen <= 0:
+        raise ValueError("blen must be a positive integer")
+    if not isinstance(expert_token_count_histogram, dict):
+        raise ValueError("expert_token_count_histogram must be a dictionary")
+    if not isinstance(source, str) or not source:
+        raise ValueError("histogram source must be a non-empty string")
+
+    normalized: dict[int, int] = {}
+    for token_count_value, expert_count in expert_token_count_histogram.items():
+        try:
+            token_count = int(token_count_value)
+        except (TypeError, ValueError) as error:
+            raise ValueError("histogram token counts must be integers") from error
+        if str(token_count) != str(token_count_value) and not isinstance(
+            token_count_value, int
+        ):
+            raise ValueError("histogram token-count keys must be canonical integers")
+        if token_count <= 0:
+            raise ValueError("histogram token counts must be positive")
+        if (
+            not isinstance(expert_count, int)
+            or isinstance(expert_count, bool)
+            or expert_count <= 0
+        ):
+            raise ValueError("histogram expert counts must be positive integers")
+        if token_count in normalized:
+            raise ValueError("histogram contains duplicate normalized token counts")
+        normalized[token_count] = expert_count
+
+    active_experts = sum(normalized.values())
+    if active_experts > owned_experts:
+        raise ValueError("histogram activates more experts than the rank owns")
+    route_assignments = sum(
+        token_count * expert_count
+        for token_count, expert_count in normalized.items()
+    )
+    if expected_route_assignments is not None:
+        if (
+            not isinstance(expected_route_assignments, int)
+            or isinstance(expected_route_assignments, bool)
+            or expected_route_assignments < 0
+        ):
+            raise ValueError("expected_route_assignments must be non-negative")
+        if route_assignments != expected_route_assignments:
+            raise ValueError("rank-local routed assignments do not conserve")
+
+    row_tile_histogram: dict[int, int] = {}
+    for token_count, expert_count in normalized.items():
+        row_tiles = math.ceil(token_count / blen)
+        row_tile_histogram[row_tiles] = (
+            row_tile_histogram.get(row_tiles, 0) + expert_count
+        )
+    total_row_tiles = sum(
+        row_tiles * expert_count
+        for row_tiles, expert_count in row_tile_histogram.items()
+    )
+    padded_rows = total_row_tiles * blen
+    return {
+        "schema": "plena-routed-expert-trace-histogram-ledger/v1",
+        "owned_experts": owned_experts,
+        "route_assignments": route_assignments,
+        "active_experts": active_experts,
+        "active_expert_source": source,
+        "assignment_distribution": "exact_verified_trace_rank_local_histogram",
+        "expert_token_count_histogram": {
+            str(token_count): expert_count
+            for token_count, expert_count in sorted(normalized.items())
+        },
+        "expert_row_tile_histogram": {
+            str(row_tiles): expert_count
+            for row_tiles, expert_count in sorted(row_tile_histogram.items())
+        },
+        "blen": blen,
+        "expert_row_tiles": total_row_tiles,
+        "expert_padded_rows": padded_rows,
+        "expert_padding_rows": padded_rows - route_assignments,
+        "assignments_conserved": (
+            expected_route_assignments is None
+            or route_assignments == expected_route_assignments
+        ),
+    }
+
 # =============================================================================
 # Hardware Configuration Schema
 # =============================================================================
@@ -596,7 +828,11 @@ class PerfModel:
             + RMSNORM_LOOP_LEVELS
             * (self.instr["C_LOOP_START"] + self.instr["C_LOOP_END"])
         )
-        loop_num = hidden_size // self.vlen
+        # Rank-local and head-local rows may be narrower than VLEN (for
+        # example Qwen3 head_dim=128 on an MLEN/VLEN=4096 candidate). The
+        # hardware still issues one masked vector chunk; floor division would
+        # incorrectly make the normalization's vector work disappear.
+        loop_num = math.ceil(hidden_size / self.vlen)
         row_cycles = row_inst_num + loop_num * chunk_inst_num
         overall_cycles = 0
 
@@ -1012,6 +1248,234 @@ class PerfModel:
         overall_cycles = single_batch_compute_cycles * batch_size
         return overall_cycles
 
+    def moe_decode_expert_timing(
+        self,
+        hidden_size: int,
+        batch_size: int,
+        num_experts: int,
+        expert_per_token: int,
+        intermediate_size: int,
+        *,
+        active_experts: int | None = None,
+        active_expert_source: str | None = None,
+        routing_imbalance_factor: float = 1.0,
+    ) -> dict[str, object]:
+        """Return cycles and physical ledgers for ragged routed experts.
+
+        Each active expert invokes the same looped gate/up/down decode schedule
+        as :meth:`feed_forward`, with its actual route count rounded to a BLEN
+        row tile.  Consequently M_MM accumulates, serialized M_MM_WO drains,
+        address/control issues, and matrix prefetches are all charged once for
+        the dynamic expert schedule.  Imbalance is a cycle-only penalty on that
+        schedule; it never creates logical routes or HBM traffic.
+        """
+
+        if (
+            not math.isfinite(routing_imbalance_factor)
+            or routing_imbalance_factor < 1.0
+        ):
+            raise ValueError("routing_imbalance_factor must be finite and >= 1")
+        ledger = routed_expert_decode_ledger(
+            batch_size=batch_size,
+            expert_per_token=expert_per_token,
+            num_experts=num_experts,
+            blen=self.blen,
+            active_experts=active_experts,
+            active_expert_source=active_expert_source,
+        )
+
+        auxiliary_histogram: dict[str, int] = {}
+        expert_stage_base_cycles = 0
+        for token_count_text, expert_count_object in dict(
+            ledger["expert_token_count_histogram"]
+        ).items():
+            token_count = int(token_count_text)
+            expert_count = int(expert_count_object)
+            expert_stage_base_cycles += expert_count * self.feed_forward(
+                hidden_size,
+                intermediate_size,
+                1,
+                token_count,
+                "decode",
+            )
+            histogram = ffn_decode_auxiliary_histogram(
+                mlen=self.mlen,
+                blen=self.blen,
+                vlen=self.vlen,
+                hidden_size=hidden_size,
+                intermediate_size=intermediate_size,
+                rows=token_count,
+            )
+            for opcode, count in histogram.items():
+                auxiliary_histogram[opcode] = (
+                    auxiliary_histogram.get(opcode, 0)
+                    + expert_count * count
+                )
+
+        row_tiles = int(ledger["expert_row_tiles"])
+        up_gate_reduction_tiles = math.ceil(hidden_size / self.mlen)
+        down_reduction_tiles = math.ceil(intermediate_size / self.mlen)
+        gate_up_writeouts = (
+            2 * row_tiles * math.ceil(intermediate_size / self.blen)
+        )
+        down_writeouts = row_tiles * math.ceil(hidden_size / self.blen)
+        gate_up_mm = gate_up_writeouts * up_gate_reduction_tiles
+        down_mm = down_writeouts * down_reduction_tiles
+        matrix_histogram = {
+            "M_MM": gate_up_mm + down_mm,
+            "M_MM_WO": gate_up_writeouts + down_writeouts,
+        }
+        matrix_cycles = sum(
+            count * self.instr[opcode]
+            for opcode, count in matrix_histogram.items()
+        )
+        activation_cycles = (
+            int(ledger["route_assignments"])
+            * math.ceil(intermediate_size / self.vlen)
+            * (
+                SILU_BASIC_OPS * self.instr["V_BASIC"]
+                + self.instr["V_RECI_V"]
+            )
+        )
+        auxiliary_cycles = sum(
+            count * self.instr[opcode]
+            for opcode, count in auxiliary_histogram.items()
+        )
+        independently_accounted_cycles = (
+            matrix_cycles + activation_cycles + auxiliary_cycles
+        )
+        if independently_accounted_cycles != expert_stage_base_cycles:
+            raise AssertionError(
+                "routed-expert timing ledger disagrees with FFN schedule"
+            )
+
+        expert_stage_cycles = math.ceil(
+            expert_stage_base_cycles * routing_imbalance_factor
+        )
+        return {
+            **ledger,
+            "matrix_instruction_histogram": matrix_histogram,
+            "auxiliary_instruction_histogram": dict(
+                sorted(auxiliary_histogram.items())
+            ),
+            "matrix_cycles": matrix_cycles,
+            "activation_cycles": activation_cycles,
+            "auxiliary_cycles": auxiliary_cycles,
+            "expert_stage_base_cycles": expert_stage_base_cycles,
+            "routing_imbalance_factor": routing_imbalance_factor,
+            "routing_imbalance_penalty_cycles": (
+                expert_stage_cycles - expert_stage_base_cycles
+            ),
+            "expert_stage_cycles": expert_stage_cycles,
+            "routing_imbalance_application": (
+                "expert_stage_ragged_schedule_cycle_penalty_only"
+            ),
+        }
+
+    def moe_decode_expert_timing_from_histogram(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        expert_token_count_histogram: dict[int | str, int],
+        *,
+        owned_experts: int,
+        expected_route_assignments: int | None = None,
+        source: str = "verified_trace_rank_local_expert_histogram",
+    ) -> dict[str, object]:
+        """Price one rank's exact routed-expert histogram.
+
+        This is the trace-exact counterpart to
+        :meth:`moe_decode_expert_timing`. It preserves every observed expert
+        load and BLEN row tail, including an empty rank, and deliberately has
+        no scalar imbalance multiplier.
+        """
+
+        ledger = routed_expert_histogram_ledger(
+            expert_token_count_histogram=expert_token_count_histogram,
+            owned_experts=owned_experts,
+            blen=self.blen,
+            expected_route_assignments=expected_route_assignments,
+            source=source,
+        )
+        auxiliary_histogram: dict[str, int] = {}
+        expert_stage_cycles = 0
+        for token_count_text, expert_count_object in dict(
+            ledger["expert_token_count_histogram"]
+        ).items():
+            token_count = int(token_count_text)
+            expert_count = int(expert_count_object)
+            expert_stage_cycles += expert_count * self.feed_forward(
+                hidden_size,
+                intermediate_size,
+                1,
+                token_count,
+                "decode",
+            )
+            histogram = ffn_decode_auxiliary_histogram(
+                mlen=self.mlen,
+                blen=self.blen,
+                vlen=self.vlen,
+                hidden_size=hidden_size,
+                intermediate_size=intermediate_size,
+                rows=token_count,
+            )
+            for opcode, count in histogram.items():
+                auxiliary_histogram[opcode] = (
+                    auxiliary_histogram.get(opcode, 0)
+                    + expert_count * count
+                )
+
+        row_tiles = int(ledger["expert_row_tiles"])
+        up_gate_reduction_tiles = math.ceil(hidden_size / self.mlen)
+        down_reduction_tiles = math.ceil(intermediate_size / self.mlen)
+        gate_up_writeouts = (
+            2 * row_tiles * math.ceil(intermediate_size / self.blen)
+        )
+        down_writeouts = row_tiles * math.ceil(hidden_size / self.blen)
+        gate_up_mm = gate_up_writeouts * up_gate_reduction_tiles
+        down_mm = down_writeouts * down_reduction_tiles
+        matrix_histogram = {
+            "M_MM": gate_up_mm + down_mm,
+            "M_MM_WO": gate_up_writeouts + down_writeouts,
+        }
+        matrix_cycles = sum(
+            count * self.instr[opcode]
+            for opcode, count in matrix_histogram.items()
+        )
+        activation_cycles = (
+            int(ledger["route_assignments"])
+            * math.ceil(intermediate_size / self.vlen)
+            * (
+                SILU_BASIC_OPS * self.instr["V_BASIC"]
+                + self.instr["V_RECI_V"]
+            )
+        )
+        auxiliary_cycles = sum(
+            count * self.instr[opcode]
+            for opcode, count in auxiliary_histogram.items()
+        )
+        if matrix_cycles + activation_cycles + auxiliary_cycles != expert_stage_cycles:
+            raise AssertionError(
+                "trace-histogram expert timing disagrees with FFN schedule"
+            )
+        return {
+            **ledger,
+            "matrix_instruction_histogram": matrix_histogram,
+            "auxiliary_instruction_histogram": dict(
+                sorted(auxiliary_histogram.items())
+            ),
+            "matrix_cycles": matrix_cycles,
+            "activation_cycles": activation_cycles,
+            "auxiliary_cycles": auxiliary_cycles,
+            "expert_stage_base_cycles": expert_stage_cycles,
+            "routing_imbalance_factor": 1.0,
+            "routing_imbalance_penalty_cycles": 0,
+            "expert_stage_cycles": expert_stage_cycles,
+            "routing_imbalance_application": (
+                "not_applicable_exact_rank_local_trace_histogram"
+            ),
+        }
+
     def mlp_moe(
         self,
         hidden_size: int,
@@ -1021,6 +1485,11 @@ class PerfModel:
         expert_per_token: int,
         intermediate_size: int,
         mode: str = "prefill",
+        *,
+        include_input_norm: bool = True,
+        active_experts: int | None = None,
+        active_expert_source: str | None = None,
+        routing_imbalance_factor: float = 1.0,
     ) -> int:
         """
         MoE cycle count.
@@ -1029,6 +1498,11 @@ class PerfModel:
         Each expert processes its batch of tokens using M_MM (not per-token M_MV).
         Average tokens per expert = (total_tokens * expert_per_token) / num_experts
         """
+        if (
+            not math.isfinite(routing_imbalance_factor)
+            or routing_imbalance_factor < 1.0
+        ):
+            raise ValueError("routing_imbalance_factor must be finite and >= 1")
         overall_cycles = 0
 
         if mode == "prefill":
@@ -1037,10 +1511,14 @@ class PerfModel:
 
             # Average tokens routed to each expert (for batched processing)
             # Each token selects expert_per_token experts, distributed across num_experts
-            tokens_per_expert = math.ceil((total_tokens * expert_per_token) / num_experts)
+            tokens_per_expert = math.ceil(
+                (total_tokens * expert_per_token / num_experts)
+                * routing_imbalance_factor
+            )
 
             # Normalize (b, s, h) -> (b, s, h)
-            overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+            if include_input_norm:
+                overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
 
             # Router / Gate: (b*s, h) @ (h, num_experts) -> (b*s, num_experts)
             # Using M_MM for batch matrix multiply
@@ -1095,11 +1573,14 @@ class PerfModel:
                 * (self.instr["V_MUL_VV"] + self.instr["V_ADD_VV"])
             )
 
-        else:  # decode mode: seq_len = 1, few tokens - use M_MV per token
+        else:  # decode mode: route assignments form ragged expert matrices
             total_tokens = batch_size
 
             # Normalize (b, h) -> (b, h)
-            overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+            if include_input_norm:
+                overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+
+            routed_tokens = total_tokens * expert_per_token
 
             # Router / Gate: (b, h) @ (h, num_experts) -> (b, num_experts)
             # For small batch, use M_MV per token
@@ -1119,32 +1600,21 @@ class PerfModel:
                 * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
 
-            # Expert FFN Computation - MLP1 (Gate + Up projection)
-            # In decode, few tokens so use M_MV per (token, expert) pair
-            overall_cycles += (
-                total_tokens
-                * expert_per_token
-                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
-                * math.ceil(2 * intermediate_size / self.blen)
+            expert_timing = self.moe_decode_expert_timing(
+                hidden_size,
+                batch_size,
+                num_experts,
+                expert_per_token,
+                intermediate_size,
+                active_experts=active_experts,
+                active_expert_source=active_expert_source,
+                routing_imbalance_factor=routing_imbalance_factor,
             )
-
-            # SiLU activation + element-wise multiply
-            overall_cycles += (
-                total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * (SILU_BASIC_OPS * self.instr["V_BASIC"] + self.instr["V_RECI_V"])
-            )
-
-            # Expert FFN Computation - MLP2 (Down projection)
-            overall_cycles += (
-                total_tokens
-                * expert_per_token
-                * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
-                * math.ceil(hidden_size / self.blen)
-            )
+            overall_cycles += int(expert_timing["expert_stage_cycles"])
 
             # Weighted sum of experts
             overall_cycles += (
-                total_tokens
-                * expert_per_token
+                routed_tokens
                 * math.ceil(hidden_size / self.vlen)
                 * (self.instr["V_MUL_VV"] + self.instr["V_ADD_VV"])
             )
@@ -1423,6 +1893,111 @@ class PerfModel:
     def lm_head(self, hidden_size: int, vocab_size: int, batch_size: int) -> int:
         """LM head cycle count (linear projection to vocab)."""
         return self._lm_head_rows(hidden_size, vocab_size, batch_size)
+
+    def lm_head_padding_preparation(
+        self,
+        hidden_size: int,
+        vocab_size: int,
+        batch_size: int,
+    ) -> dict[str, int]:
+        """Vector work for deterministic head padding and vocabulary masking."""
+
+        if min(hidden_size, vocab_size, batch_size) <= 0:
+            raise ValueError("local head padding geometry must be positive")
+        physical_hidden = math.ceil(hidden_size / self.mlen) * self.mlen
+        physical_vocab = math.ceil(vocab_size / self.mlen) * self.mlen
+        physical_batch = math.ceil(batch_size / self.blen) * self.blen
+        hidden_tail_elements_per_rank = (
+            batch_size * (physical_hidden - hidden_size)
+        )
+        padded_batch_elements_per_rank = (
+            (physical_batch - batch_size) * physical_hidden
+        )
+        zero_fill_elements_per_rank = (
+            hidden_tail_elements_per_rank + padded_batch_elements_per_rank
+        )
+        padded_vocab_mask_elements_aggregate = (
+            batch_size * (physical_vocab - vocab_size)
+        )
+        zero_fill_vector_events_per_rank = math.ceil(
+            zero_fill_elements_per_rank / self.vlen
+        )
+        padded_vocab_mask_vector_events_aggregate = math.ceil(
+            padded_vocab_mask_elements_aggregate / self.vlen
+        )
+        return {
+            "physical_hidden": physical_hidden,
+            "physical_vocab": physical_vocab,
+            "physical_batch": physical_batch,
+            "zero_fill_elements_per_rank": zero_fill_elements_per_rank,
+            "padded_vocab_mask_elements_aggregate": (
+                padded_vocab_mask_elements_aggregate
+            ),
+            "zero_fill_vector_events_per_rank": (
+                zero_fill_vector_events_per_rank
+            ),
+            "padded_vocab_mask_vector_events_aggregate": (
+                padded_vocab_mask_vector_events_aggregate
+            ),
+            "zero_fill_cycles_per_rank": (
+                zero_fill_vector_events_per_rank * self.instr["V_BASIC"]
+            ),
+            "padded_vocab_mask_cycles_aggregate": (
+                padded_vocab_mask_vector_events_aggregate
+                * self.instr["V_BASIC"]
+            ),
+        }
+
+    def lm_head_streaming_selection(
+        self,
+        vocab_size: int,
+        batch_size: int,
+        *,
+        top_k: int = 20,
+    ) -> int:
+        """Tile-streamed top-k/top-p selection without full-vocab residency.
+
+        Each vocabulary chunk updates a bounded running top-k state.  The final
+        top-k scores are normalized in FP32, scanned for top-p, and sampled;
+        the same state supports the deterministic lowest-token-id argmax
+        diagnostic.  This is the serving path, not the full-logit NLL path.
+        """
+
+        if vocab_size <= 0 or batch_size <= 0 or top_k != 20:
+            raise ValueError(
+                "streaming selection requires positive shapes and top_k=20"
+            )
+        vocab_chunks = math.ceil(vocab_size / self.vlen)
+        final_chunks = math.ceil(top_k / self.vlen)
+        running_topk = vocab_chunks * self.instr["V_TOPK"]
+        normalize = final_chunks * (
+            self.instr["V_RED_MAX"]
+            + self.instr["V_EXP_V"]
+            + self.instr["V_RED_SUM"]
+            + self.instr["V_RECI_V"]
+            + self.instr["V_BASIC"]
+        )
+        top_p_scan_and_sample = final_chunks * 3 * self.instr["V_BASIC"]
+        return batch_size * (
+            4 * self.instr["S_BASIC"]
+            + running_topk
+            + normalize
+            + top_p_scan_and_sample
+        )
+
+    def lm_head_argmax_diagnostic(
+        self,
+        vocab_size: int,
+        batch_size: int,
+    ) -> int:
+        """Cycle count for the tile-streamed greedy diagnostic."""
+
+        if vocab_size <= 0 or batch_size <= 0:
+            raise ValueError("argmax diagnostic shapes must be positive")
+        return batch_size * (
+            3 * self.instr["S_BASIC"]
+            + math.ceil(vocab_size / self.vlen) * self.instr["V_TOPK"]
+        )
 
     def lm_head_full_seq(self, hidden_size: int, vocab_size: int, seq_len: int, batch_size: int) -> int:
         """LM head cycle count over full sequence (used by LLaDA: all positions need logits)."""
