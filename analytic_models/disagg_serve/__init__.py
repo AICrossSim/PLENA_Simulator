@@ -4,6 +4,7 @@
   calibration_provenance.py — hashes, grids, history, and missing run receipts.
   hbm_technology.py — explicit HBM rate/capacity operating points.
   handoff.py  — prefill -> decode KV-cache transfer timing.
+  serving_queue.py — finite-buffer arrival, replica, and SLO-goodput simulation.
   area.py     — chip area, multiplier proxy or DC-calibrated model.
   serve.py    — single import surface over the decode-step evaluator.
 """
