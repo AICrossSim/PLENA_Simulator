@@ -560,7 +560,11 @@ def estimate_power(
         for operation in ("LINEAR", "QK", "PV")
     }
     for operation, signatures in operation_signatures.items():
-        if len(signatures) != 1:
+        # Heterogeneous routed operators may legitimately use more than one
+        # signature in a single estimate.  Every positive-count signature was
+        # checked independently above, and structural matrix area below keeps
+        # the maximum physical array implementation rather than averaging it.
+        if not signatures:
             missing.append(f"EVENT:{operation}")
     vector_events = sum(
         event.count
