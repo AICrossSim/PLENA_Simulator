@@ -27,7 +27,7 @@ impl MemoryTimingModel for TestTiming {
 }
 
 #[derive(Clone)]
-struct DenseExpert {
+pub(super) struct DenseExpert {
     gate: Vec<f32>,
     up: Vec<f32>,
     down: Vec<f32>,
@@ -89,7 +89,7 @@ fn append_matrix(
     )
 }
 
-fn fixture() -> (Workload, Vec<u8>, Vec<DenseExpert>) {
+pub(super) fn fixture() -> (Workload, Vec<u8>, Vec<DenseExpert>) {
     let d = 9;
     let e = 11;
     let mut bytes = Vec::new();
@@ -285,7 +285,7 @@ async fn ready_dispatch_steals_small_jobs_and_preserves_numerics() {
     assert!(validate(&w, &a, bytes.len() as u64).is_err());
 }
 
-async fn simulate(w: Workload, a: Architecture, bytes: &[u8]) -> RunReport {
+pub(super) async fn simulate(w: Workload, a: Architecture, bytes: &[u8]) -> RunReport {
     let backing = MemoryBacked::with_capacity(bytes.len());
     backing.with_data(|dst| dst.copy_from_slice(bytes));
     let memory = Arc::new(WithStats::new(WithTiming::new(
@@ -323,7 +323,7 @@ fn expert_reference(x: &[f32], w: &DenseExpert, d: usize, e: usize) -> Vec<f32> 
     gemm_reference(&z, &w.down, d, e)
 }
 
-fn reference(w: &Workload, dense: &[DenseExpert]) -> Vec<Vec<u16>> {
+pub(super) fn reference(w: &Workload, dense: &[DenseExpert]) -> Vec<Vec<u16>> {
     let mut routes = w.routes.clone();
     routes.sort_by_key(|r| (r.token, r.slot));
     (0..w.inputs_bf16.len())
@@ -743,7 +743,7 @@ async fn pipelined_dma_lookup_accounts_port_occupancy_and_preserves_numerics() {
     }
 }
 
-fn refined_architecture(active: usize) -> Architecture {
+pub(super) fn refined_architecture(active: usize) -> Architecture {
     let mut a = architecture();
     a.schema_version = 2;
     // P=3,R=16 is deliberately forbidden by the old square mapping.
@@ -756,6 +756,7 @@ fn refined_architecture(active: usize) -> Architecture {
             weight_read_elements_per_cycle: 8,
             accumulator_elements_per_cycle: 2,
             operand_latch_bytes: active * core.blen * core.mlen * 2,
+            output_pool: None,
         });
     }
     a

@@ -16,6 +16,9 @@ use super::dma_credits::CreditPool;
 use super::read_cache::{ENTRY_BYTES, ReadCache};
 use super::types::*;
 
+#[path = "output_pool.rs"]
+mod output_pool;
+
 const BLOCK: usize = 8;
 const OUTPUT_CONTEXT_BYTES: usize = 32;
 
@@ -25,6 +28,18 @@ fn m_rows(c: &CoreConfig) -> usize {
 
 fn refined_context_bytes(rows: usize, c: &CoreConfig) -> Result<usize, String> {
     c.refinement.as_ref().map_or(Ok(0), |r| {
+        if let Some(pool) = &r.output_pool {
+            // Per-context progress and pending ownership: 64 B. Per-band K/
+            // slot state: 64 B, conservatively reserve up to Q bands. Each
+            // finite slot and stage also owns a 64 B descriptor. Host Vec/Arc
+            // allocations are representations of these charged records.
+            return checked(&[pool.output_contexts, 128], "pool context/band metadata")?
+                .checked_add(checked(
+                    &[c.weight_slots + pool.operand_stages, 64],
+                    "pool slot/stage metadata",
+                )?)
+                .ok_or_else(|| "pool metadata overflow".into());
+        }
         checked(
             &[
                 r.active_n_tiles,
@@ -38,6 +53,12 @@ fn refined_context_bytes(rows: usize, c: &CoreConfig) -> Result<usize, String> {
 
 fn refined_result_bytes(rows: usize, c: &CoreConfig) -> Result<usize, String> {
     c.refinement.as_ref().map_or(Ok(0), |r| {
+        if let Some(pool) = &r.output_pool {
+            return checked(
+                &[pool.output_contexts, r.m_rows, c.blen, 4],
+                "pool pending FP32 results",
+            );
+        }
         checked(&[r.active_n_tiles, rows, c.blen, 4], "pending FP32 results")
     })
 }
@@ -157,8 +178,17 @@ struct Plan {
 }
 
 fn job_fits(w: &Workload, a: &Architecture, c: &CoreConfig, job: &Job) -> bool {
-    vector_bytes(w, job.rows.len()).is_ok_and(|v| v <= c.vector_sram_bytes)
+    pool_cohort_fits(job.rows.len(), c)
+        && vector_bytes(w, job.rows.len()).is_ok_and(|v| v <= c.vector_sram_bytes)
         && accumulator_bytes(w, job.rows.len(), a, c).is_ok_and(|v| v <= c.accumulator_bytes)
+}
+
+fn pool_cohort_fits(rows: usize, c: &CoreConfig) -> bool {
+    c.refinement.as_ref().is_none_or(|r| {
+        r.output_pool
+            .as_ref()
+            .is_none_or(|p| rows.div_ceil(r.m_rows) <= p.output_contexts)
+    })
 }
 
 fn plan(w: &Workload, a: &Architecture) -> Result<Plan, String> {
@@ -240,6 +270,15 @@ fn plan(w: &Workload, a: &Architecture) -> Result<Plan, String> {
                 .ok_or("expert group does not fit any core; group spilling is not enabled")?;
         }
         let c = &a.cores[target];
+        if !pool_cohort_fits(job.rows.len(), c) {
+            return Err(format!(
+                "core {} expert {} M={} needs a complete M cohort of {} output contexts; output pool is too small",
+                c.id,
+                job.expert,
+                job.rows.len(),
+                job.rows.len().div_ceil(m_rows(c))
+            ));
+        }
         let v = vector_bytes(w, job.rows.len())?;
         let acc = accumulator_bytes(w, job.rows.len(), a, c)?;
         if v > c.vector_sram_bytes {
@@ -293,6 +332,21 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
                 .div_ceil(r.weight_read_elements_per_cycle) as u128;
             tile_latency += 2 * checked(&[m_rows(c), c.blen], "accumulator service")?
                 .div_ceil(r.accumulator_elements_per_cycle) as u128;
+            if let Some(pool) = &r.output_pool {
+                // A successful issue may visit every context plus all bounded
+                // slot/stage/band descriptors. Completion events can cause
+                // one additional scan each (load, writeback, retirement).
+                // Bound those scans per issued macro tile, including admission.
+                let visits = (pool.output_contexts as u128 * 64
+                    + c.weight_slots as u128 * 32
+                    + pool.operand_stages as u128 * 32
+                    + 128)
+                    .checked_mul(pool.scheduler_cycles as u128)
+                    .ok_or("pool scheduler bound overflow")?;
+                tile_latency = tile_latency
+                    .checked_add(visits)
+                    .ok_or("pool scheduler timing overflow")?;
+            }
         }
         let decode_cycles = checked(&[c.blen, c.mlen], "decode elements")?.div_ceil(lanes) as u128;
         let candidates: Vec<&Job> = if a.dispatch_policy == DispatchPolicy::WorkConserving {
@@ -467,15 +521,31 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         checked(&[m_rows(c), c.blen, c.mlen], "issued MACs per tile")?;
         if let Some(r) = &c.refinement {
             if r.m_rows == 0
-                || !(1..=2).contains(&r.active_n_tiles)
-                || r.active_n_tiles > c.weight_slots
+                || !(1..=3).contains(&r.active_n_tiles)
+                || (r.output_pool.is_none() && r.active_n_tiles > c.weight_slots)
                 || r.weight_read_elements_per_cycle == 0
                 || r.accumulator_elements_per_cycle == 0
                 || a.matrix_timing != MatrixTiming::Pipelined
             {
-                return Err("refinement needs positive token/port dimensions, one or two active N tiles, and pipelined timing".into());
+                return Err("refinement needs positive token/port dimensions, one to three active N tiles, and pipelined timing".into());
             }
-            let latch = checked(&[r.active_n_tiles, c.blen, c.mlen, 2], "operand latches")?;
+            let stages = if let Some(pool) = &r.output_pool {
+                if r.active_n_tiles != 2
+                    || !(1..=256).contains(&pool.output_contexts)
+                    || !(1..=2).contains(&pool.operand_stages)
+                    || pool.operand_stages > c.weight_slots
+                    || pool.scheduler_cycles == 0
+                {
+                    return Err("output pool requires active_n_tiles=2, 1..256 output contexts, 1..2 operand stages and positive scheduler_cycles".into());
+                }
+                pool.scheduler_cycles
+                    .checked_mul(a.clock_period_ps)
+                    .ok_or("pool scheduler duration overflow")?;
+                pool.operand_stages
+            } else {
+                r.active_n_tiles
+            };
+            let latch = checked(&[stages, c.blen, c.mlen, 2], "operand latches")?;
             if r.operand_latch_bytes < latch {
                 return Err(format!("core {} needs {latch} operand latch bytes", c.id));
             }
@@ -483,8 +553,19 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
         if a.mac_pipeline_cycles > u32::MAX as u64 {
             return Err("mac_pipeline_cycles exceeds supported range".into());
         }
-        if !(2..=4).contains(&c.weight_slots) {
-            return Err("weight_slots must be 2, 3 or 4".into());
+        let minimum_slots = if c
+            .refinement
+            .as_ref()
+            .is_some_and(|r| r.output_pool.is_some())
+        {
+            1
+        } else {
+            2
+        };
+        if !(minimum_slots..=4).contains(&c.weight_slots) {
+            return Err(
+                "legacy weight_slots must be 2..4; output-pool weight_slots must be 1..4".into(),
+            );
         }
         let need = weight_slot_bytes(c)?
             .checked_mul(c.weight_slots)
@@ -551,6 +632,9 @@ struct CoreState {
     weight_peak: AtomicUsize,
     weight_port: Semaphore,
     accumulator_port: Semaphore,
+    /// Reset only between fully drained projections; observer storage is not
+    /// used by the scheduler and contributes no additional capacity or timing.
+    projection_observed: Mutex<ProjectionMetrics>,
 }
 
 impl CoreState {
@@ -586,8 +670,17 @@ impl CoreState {
                 refinement: c.refinement.as_ref().map(|r| RefinementReport {
                     m_rows: r.m_rows,
                     operand_latch_reserved_bytes: r.operand_latch_bytes,
+                    output_pool: r.output_pool.as_ref().map(|p| OutputPoolReport {
+                        contexts_capacity: p.output_contexts,
+                        operand_stages_capacity: p.operand_stages,
+                        control_reserved_bytes: refined_context_bytes(1, c).unwrap(),
+                        pending_result_reserved_bytes: refined_result_bytes(1, c).unwrap(),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 }),
+                tile_loads: TileLoadStats::default(),
+                projections: Vec::new(),
             }),
             slots: AtomicUsize::new(0),
             slots_peak: AtomicUsize::new(0),
@@ -599,6 +692,7 @@ impl CoreState {
             ),
             weight_port: Semaphore::new(1),
             accumulator_port: Semaphore::new(1),
+            projection_observed: Mutex::new(ProjectionMetrics::default()),
         }
     }
 }
@@ -619,6 +713,9 @@ impl SlotReservation {
         );
         core.slots_peak.fetch_max(slots, Ordering::SeqCst);
         core.weight_peak.fetch_max(occupied, Ordering::SeqCst);
+        let mut observed = core.projection_observed.lock().unwrap();
+        observed.weight_slots_peak = observed.weight_slots_peak.max(slots);
+        drop(observed);
         Self { core, bytes }
     }
 }
@@ -971,6 +1068,7 @@ async fn load_tile(
     reservation: SlotReservation,
     demand: Option<Arc<TileDemand>>,
 ) -> Result<WeightTile, String> {
+    let load_start = Executor::current().now().as_picos();
     let c = &core.config;
     let nr = c.blen.min(region.rows - tile.n);
     let kr = c.mlen.min(region.cols - tile.k);
@@ -1088,10 +1186,27 @@ async fn load_tile(
             values[row * c.mlen + k] = value;
         }
     }
+    let elapsed = Executor::current().now().as_picos() - load_start;
+    record_load(&mut core.report.lock().unwrap().tile_loads, elapsed);
+    record_load(
+        &mut core.projection_observed.lock().unwrap().tile_loads,
+        elapsed,
+    );
     Ok(WeightTile {
         values,
         _reservation: reservation,
     })
+}
+
+fn record_load(stats: &mut TileLoadStats, elapsed: u64) {
+    stats.count += 1;
+    stats.total_ps += elapsed;
+    stats.min_ps = if stats.count == 1 {
+        elapsed
+    } else {
+        stats.min_ps.min(elapsed)
+    };
+    stats.max_ps = stats.max_ps.max(elapsed);
 }
 
 /// One finite local port. Reads and writes contend on the same resource. This
@@ -1199,7 +1314,7 @@ impl RefinedOutput {
 }
 
 /// Normal V2: fixed physical P×R operands, independent temporal token extent,
-/// finite ports and at most two independent output-column groups. Numerical
+/// finite ports and up to three independent output-column groups. Numerical
 /// updates retain ascending global K; the feedback latency remains analytical.
 #[allow(clippy::too_many_arguments)] // Explicitly separate the three owned data buffers.
 async fn refined_gemm(
@@ -1246,6 +1361,8 @@ async fn refined_gemm(
         detail.output_contexts_peak = detail
             .output_contexts_peak
             .max(active * m.div_ceil(r.m_rows));
+        let mut observed = core.projection_observed.lock().unwrap();
+        observed.contexts_peak = active * m.div_ceil(r.m_rows);
     }
     loop {
         for group in &mut groups {
@@ -1406,6 +1523,14 @@ async fn gemm(
     a: &Architecture,
     shared: &Arc<Shared>,
 ) -> Result<(), String> {
+    if core
+        .config
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.output_pool.is_some())
+    {
+        return output_pool::gemm(input, output, accumulator, m, region, core, a, shared).await;
+    }
     if core.config.refinement.is_some() {
         return refined_gemm(input, output, accumulator, m, region, core, a, shared).await;
     }
@@ -1504,6 +1629,97 @@ async fn gemm(
     Ok(())
 }
 
+fn projection_counters(report: &CoreReport) -> ProjectionMetrics {
+    let mut metrics = ProjectionMetrics {
+        useful_macs: report.useful_macs,
+        issued_macs: report.issued_macs,
+        compute_busy_ps: report.compute_busy_ps,
+        accumulator_dependency_stall_ps: report.accumulator_dependency_stall_ps,
+        pipeline_drain_ps: report.pipeline_drain_ps,
+        weight_ready_wait_ps: report.weight_ready_wait_ps,
+        vector_wait_ps: report.vector_wait_ps,
+        hbm_read_bytes: report.hbm_read_bytes,
+        ..Default::default()
+    };
+    if let Some(r) = &report.refinement {
+        metrics.weight_port_busy_ps = r.weight_port_busy_ps;
+        metrics.weight_port_wait_ps = r.weight_port_wait_ps;
+        metrics.accumulator_port_busy_ps = r.accumulator_port_busy_ps;
+        metrics.accumulator_port_wait_ps = r.accumulator_port_wait_ps;
+        metrics.output_finalize_elapsed_ps = r.output_finalize_elapsed_ps;
+        if let Some(pool) = &r.output_pool {
+            metrics.scheduler_busy_ps = pool.scheduler_busy_ps;
+            metrics.scheduler_visits = pool.scheduler_visits;
+            metrics.band_admissions = pool.band_admissions;
+            metrics.tile_admissions = pool.tile_admissions;
+            metrics.context_updates = pool.context_updates;
+        }
+    }
+    metrics
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn projection_gemm(
+    job: &Job,
+    projection: &str,
+    input: &[bf16],
+    output: &mut [bf16],
+    accumulator: &mut [f32],
+    m: usize,
+    region: &MatrixRegion,
+    core: &Arc<CoreState>,
+    a: &Architecture,
+    shared: &Arc<Shared>,
+) -> Result<(), String> {
+    // The core runs one projection at a time. Reset observer state only at this
+    // boundary, after every preceding load and writeback has been drained.
+    assert_eq!(core.slots.load(Ordering::SeqCst), 0);
+    *core.projection_observed.lock().unwrap() = ProjectionMetrics::default();
+    let before = projection_counters(&core.report.lock().unwrap());
+    let start_ps = Executor::current().now().as_picos();
+    gemm(input, output, accumulator, m, region, core, a, shared).await?;
+    assert_eq!(core.slots.load(Ordering::SeqCst), 0);
+    let end_ps = Executor::current().now().as_picos();
+    let mut report = core.report.lock().unwrap();
+    let after = projection_counters(&report);
+    let mut metrics = core.projection_observed.lock().unwrap().clone();
+    macro_rules! delta {
+        ($($field:ident),* $(,)?) => { $(metrics.$field = after.$field - before.$field;)* };
+    }
+    delta!(
+        useful_macs,
+        issued_macs,
+        compute_busy_ps,
+        accumulator_dependency_stall_ps,
+        pipeline_drain_ps,
+        weight_ready_wait_ps,
+        vector_wait_ps,
+        hbm_read_bytes,
+        weight_port_busy_ps,
+        weight_port_wait_ps,
+        accumulator_port_busy_ps,
+        accumulator_port_wait_ps,
+        output_finalize_elapsed_ps,
+        scheduler_busy_ps,
+        scheduler_visits,
+        band_admissions,
+        tile_admissions,
+        context_updates
+    );
+    report.projections.push(ProjectionReport {
+        job: job.id,
+        expert: job.expert,
+        projection: projection.into(),
+        m,
+        n: region.rows,
+        k: region.cols,
+        start_ps,
+        end_ps,
+        metrics,
+    });
+    Ok(())
+}
+
 async fn run_core(
     core: Arc<CoreState>,
     queue: Vec<Job>,
@@ -1578,7 +1794,9 @@ async fn run_core(
             }
         }
         let expert = w.experts.iter().find(|x| x.id == job.expert).unwrap();
-        gemm(
+        projection_gemm(
+            &job,
+            "gate",
             &x,
             &mut gate,
             &mut accumulator,
@@ -1589,7 +1807,9 @@ async fn run_core(
             &shared,
         )
         .await?;
-        gemm(
+        projection_gemm(
+            &job,
+            "up",
             &x,
             &mut up,
             &mut accumulator,
@@ -1609,7 +1829,9 @@ async fn run_core(
                 return Err("SwiGLU produced non-finite BF16".into());
             }
         }
-        gemm(
+        projection_gemm(
+            &job,
+            "down",
             &z,
             &mut output,
             &mut accumulator,

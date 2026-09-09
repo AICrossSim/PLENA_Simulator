@@ -16,4 +16,6 @@ pub use engine::{execute, run, validate};
 pub use types::*;
 
 #[cfg(test)]
+mod output_pool_tests;
+#[cfg(test)]
 mod tests;

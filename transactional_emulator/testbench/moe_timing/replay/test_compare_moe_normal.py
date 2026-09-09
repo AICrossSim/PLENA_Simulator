@@ -273,6 +273,166 @@ class ComparisonEvidenceTests(unittest.TestCase):
         if summary.exists():
             self.assertIsNot(compare.read_json(summary).get("all_gates_passed"), True)
 
+    def enable_output_pool(self):
+        """A complete small accounting report, exercised through the executable.
+
+        These synthetic times test rejection of false evidence; they are not
+        measurements. Numerical behavior is checked by the Rust tests.
+        """
+        for path, arch in zip(self.arch_paths, self.architectures):
+            arch["schema_version"] = 2
+            for core in arch["cores"]:
+                core["accumulator_bytes"] = 8192 // len(arch["cores"])
+                core["refinement"] = dict(
+                    m_rows=1, tail_policy="valid_rows", active_n_tiles=2,
+                    weight_read_elements_per_cycle=32 // len(arch["cores"]),
+                    accumulator_elements_per_cycle=32 // len(arch["cores"]),
+                    operand_latch_bytes=4 * core["blen"] * core["mlen"],
+                    output_pool=dict(output_contexts=4, operand_stages=2, scheduler_cycles=1),
+                )
+            self.write(path, arch)
+            result = self.reports[arch["name"]]["result"]
+            result["total_ps"] = 12_000
+            for observed, core in zip(result["cores"], arch["cores"]):
+                p, r = core["blen"], core["mlen"]
+                jobs = [j for j in result["job_completions"] if j["core"] == core["id"]]
+                projections = []
+                for index, job in enumerate(jobs):
+                    job.update(start_ps=index * 4000, compute_done_ps=index * 4000 + 3100,
+                               output_copied_ps=index * 4000 + 3200)
+                    for i, name in enumerate(("gate", "up", "down")):
+                        bands = (8 + p - 1) // p
+                        loads = bands * ((8 + r - 1) // r)
+                        visits = bands + loads + loads * job["rows"]
+                        metrics = dict(
+                            useful_macs=job["rows"] * 64, issued_macs=job["rows"] * 64,
+                            compute_busy_ps=10, accumulator_dependency_stall_ps=0, pipeline_drain_ps=10,
+                            weight_ready_wait_ps=0, vector_wait_ps=0, hbm_read_bytes=64,
+                            weight_port_busy_ps=20, weight_port_wait_ps=0, accumulator_port_busy_ps=20,
+                            accumulator_port_wait_ps=0, output_finalize_elapsed_ps=30,
+                            scheduler_busy_ps=visits * 10, scheduler_visits=visits, band_admissions=bands,
+                            tile_admissions=loads, context_updates=loads * job["rows"], weight_slots_peak=2,
+                            contexts_peak=4, operand_stages_peak=2, pending_contexts_peak=2,
+                            tile_loads=dict(count=loads, total_ps=loads * 100, min_ps=100, max_ps=100),
+                        )
+                        projections.append(dict(job=job["job"], expert=job["expert"], projection=name,
+                                                m=job["rows"], n=8, k=8, start_ps=job["start_ps"] + i * 1000,
+                                                end_ps=job["start_ps"] + (i + 1) * 1000, metrics=metrics))
+                observed["projections"] = projections
+                observed["tile_loads"] = dict(
+                    count=sum(e["metrics"]["tile_loads"]["count"] for e in projections),
+                    total_ps=sum(e["metrics"]["tile_loads"]["total_ps"] for e in projections), min_ps=100, max_ps=100,
+                )
+                for field in ("useful_macs", "issued_macs", "compute_busy_ps", "accumulator_dependency_stall_ps",
+                              "pipeline_drain_ps", "weight_ready_wait_ps", "vector_wait_ps", "hbm_read_bytes"):
+                    observed[field] = sum(e["metrics"][field] for e in projections)
+                latch = 4 * p * r
+                pipeline = p * ((r - 1).bit_length() + arch["mac_pipeline_cycles"]) * 4
+                pending = 4 * p * 4
+                observed["pipeline_register_bytes"] = pipeline
+                observed["weight_sram_peak_bytes"] = 2 * p * (r // 8) * 25 + latch
+                observed["accumulator_peak_bytes"] = max(j["rows"] for j in jobs) * 8 * 4 + pipeline + 768 + pending
+                observed["refinement"] = dict(
+                    m_rows=1, operand_latch_reserved_bytes=latch, output_context_peak_bytes=768,
+                    pending_result_peak_bytes=pending, output_contexts_peak=4,
+                    finalized_elements=sum(j["rows"] for j in jobs) * 24,
+                    output_pool=dict(contexts_capacity=4, operand_stages_capacity=2, control_reserved_bytes=768,
+                                     pending_result_reserved_bytes=pending, contexts_peak=4,
+                                     operand_stages_peak=2, pending_contexts_peak=2),
+                )
+                for field in ("weight_port_busy_ps", "weight_port_wait_ps", "accumulator_port_busy_ps",
+                              "accumulator_port_wait_ps", "output_finalize_elapsed_ps"):
+                    observed["refinement"][field] = sum(e["metrics"][field] for e in projections)
+                for field in ("scheduler_busy_ps", "scheduler_visits", "band_admissions", "tile_admissions", "context_updates"):
+                    observed["refinement"]["output_pool"][field] = sum(e["metrics"][field] for e in projections)
+        self.write(self.root / "reports.json", self.reports)
+
+    def test_bounded_output_pool_reports_pass_all_comparison_gates(self):
+        self.enable_output_pool()
+        self.assertTrue(self.run_comparison()["all_gates_passed"])
+
+    def test_output_pool_cannot_omit_control_or_pending_storage(self):
+        self.enable_output_pool()
+        for field in ("control_reserved_bytes", "pending_result_reserved_bytes"):
+            with self.subTest(field=field):
+                self.scenario = {}
+                self.mutate(["result", "cores", 0, "refinement", "output_pool", field], 0)
+                self.rejected()
+
+    def test_output_pool_accumulator_must_include_the_actual_reservation(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "accumulator_peak_bytes"], 128)
+        self.rejected()
+
+    def test_output_pool_cannot_have_extra_unfunded_operand_stages(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "refinement", "output_pool", "operand_stages_peak"], 3)
+        self.rejected()
+
+    def test_output_pool_scheduler_cost_cannot_disappear(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "refinement", "output_pool", "scheduler_busy_ps"], 0)
+        self.rejected()
+
+    def test_output_pool_scheduler_cycles_must_be_positive(self):
+        self.enable_output_pool()
+        self.architectures[0]["cores"][0]["refinement"]["output_pool"]["scheduler_cycles"] = 0
+        self.write(self.arch_paths[0], self.architectures[0])
+        self.rejected()
+
+    def test_output_pool_requires_the_assigned_experts_complete_m_cohort(self):
+        self.enable_output_pool()
+        arch = self.architectures[0]
+        arch["cores"][0]["refinement"]["output_pool"]["output_contexts"] = 1
+        self.write(self.arch_paths[0], arch)
+        # Also update capacity metadata so rejection must include the assigned
+        # Me=2 cohort, not merely a stale manifest/report discrepancy.
+        self.reports["single"]["result"]["cores"][0]["refinement"]["output_pool"].update(
+            contexts_capacity=1, control_reserved_bytes=384, pending_result_reserved_bytes=16,
+            contexts_peak=1, pending_contexts_peak=1,
+        )
+        self.write(self.root / "reports.json", self.reports)
+        with self.assertRaisesRegex(ValueError, "whole M cohort"):
+            self.run_comparison()
+
+    def test_projection_cannot_read_weight_again_for_each_m_context(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "projections", 0, "metrics", "tile_loads", "count"], 4,
+                    architecture="single")
+        self.rejected()
+
+    def test_projection_port_busy_time_cannot_exceed_its_own_interval(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "projections", 0, "metrics", "accumulator_port_busy_ps"], 1001)
+        self.rejected()
+
+    def test_projection_load_distribution_must_reconcile_with_core(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "tile_loads", "total_ps"], 0)
+        self.rejected()
+
+    def test_projection_intervals_and_identities_cannot_overlap_or_repeat(self):
+        self.enable_output_pool()
+        self.mutate(["result", "cores", 0, "projections", 1, "start_ps"], 0)
+        self.rejected()
+
+    def test_projection_load_service_sum_can_exceed_elapsed_without_double_counting_time(self):
+        self.enable_output_pool()
+        for envelope in self.reports.values():
+            for core in envelope["result"]["cores"]:
+                for projection in core["projections"]:
+                    loads = projection["metrics"]["tile_loads"]
+                    loads.update(min_ps=900, max_ps=900, total_ps=loads["count"] * 900)
+                core["tile_loads"].update(min_ps=900, max_ps=900, total_ps=core["tile_loads"]["count"] * 900)
+        self.write(self.root / "reports.json", self.reports)
+        self.assertTrue(self.run_comparison()["all_gates_passed"])
+
+    def test_partially_refined_architecture_is_rejected(self):
+        self.enable_output_pool()
+        self.architectures[1]["cores"][1].pop("refinement")
+        self.write(self.arch_paths[1], self.architectures[1])
+        self.rejected()
+
     def test_complete_deterministic_reports_publish_speedup_and_hashes(self):
         summary = self.run_comparison()
         self.assertTrue(summary["all_gates_passed"])

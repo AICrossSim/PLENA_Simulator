@@ -143,6 +143,169 @@ def validate_native(envelope, architecture, channels):
         )
 
 
+def validate_refined_core(observed, core, architecture, workload, jobs, total_ps):
+    """Reconstruct charged storage; Q is output state, never free operand SRAM.
+
+    This checks the jobs actually assigned to a core. A work-conserving dispatch
+    may change assignment when Q changes the set of jobs that fit; passing these
+    gates alone does not establish an identical schedule in an A/B experiment.
+    """
+    config = core.get("refinement")
+    detail = observed.get("refinement")
+    if config is None:
+        require(detail is None, "unexpected refined timing report")
+        return
+    require(architecture["schema_version"] == 2 and detail is not None, "missing refined V2 report")
+    require(all(type(config[field]) is int and config[field] > 0 for field in (
+        "m_rows", "active_n_tiles", "weight_read_elements_per_cycle", "accumulator_elements_per_cycle"
+    )), "invalid refined dimensions or ports")
+    require(config["tail_policy"] in ("padded", "valid_rows"), "invalid M tail policy")
+    require(detail["m_rows"] == config["m_rows"], "reported M tile differs from configuration")
+    p, r, mt = core["blen"], core["mlen"], config["m_rows"]
+    slots = core.get("weight_slots", 2)
+    pool = config.get("output_pool")
+    pool_report = detail.get("output_pool")
+    if pool is not None:
+        require(all(type(pool[field]) is int and pool[field] > 0 for field in (
+            "output_contexts", "operand_stages", "scheduler_cycles"
+        )), "pool dimensions and scheduler cost must be positive integers")
+        require(pool["output_contexts"] <= 256 and pool["operand_stages"] <= 2 and config["active_n_tiles"] == 2,
+                "pool mode needs one or two stages and active_n_tiles=2")
+        require(type(slots) is int and 1 <= slots <= 4 and pool["operand_stages"] <= slots,
+                "pool stages exceed finite weight slots")
+        q, stages = pool["output_contexts"], pool["operand_stages"]
+        control = 128 * q + 64 * (slots + stages)
+        pending = q * mt * p * 4
+        require(pool_report is not None, "missing bounded output-pool report")
+        require(all(type(v) is int and v >= 0 for v in pool_report.values()), "invalid output-pool metric")
+        for field, expected in (("contexts_capacity", q), ("operand_stages_capacity", stages),
+                                ("control_reserved_bytes", control), ("pending_result_reserved_bytes", pending)):
+            require(pool_report[field] == expected, "output-pool reservation differs: " + field)
+        require(pool_report["contexts_peak"] <= q and pool_report["pending_contexts_peak"] <= pool_report["contexts_peak"],
+                "output or pending contexts exceed bounded pool")
+        require(pool_report["operand_stages_peak"] <= stages, "operand stages exceed physical latches")
+        require(pool_report["scheduler_busy_ps"] == pool_report["scheduler_visits"] * pool["scheduler_cycles"]
+                * architecture["clock_period_ps"], "output scheduler service is unaccounted")
+        require(pool_report["scheduler_busy_ps"] <= total_ps, "output scheduler occupancy exceeds run")
+        require(not jobs or pool_report["scheduler_visits"] > 0, "output scheduler has zero cost for useful work")
+        require(all((job["rows"] + mt - 1) // mt <= q for job in jobs),
+                "assigned expert does not fit its whole M cohort in output pool")
+    else:
+        require(pool_report is None, "unexpected output-pool report")
+        stages = config["active_n_tiles"]
+        require(type(slots) is int and 2 <= slots <= 4 and 1 <= stages <= 3 and stages <= slots,
+                "legacy N contexts exceed resident weight slots")
+    latch = config["operand_latch_bytes"]
+    require(type(latch) is int and latch >= stages * p * r * 2, "operand latches are underfunded")
+    require(slots * p * (r // 8) * 25 + latch <= core["weight_sram_bytes"],
+            "packed/decoded weight slots plus latches exceed SRAM")
+    require(detail["operand_latch_reserved_bytes"] == latch, "reported operand latch reservation differs")
+    require(observed["weight_sram_peak_bytes"] == observed["weight_slots_peak"] * p * (r // 8) * 25 + latch,
+            "weight peak omits packed scales, decoded operands or reserved latches")
+    pipeline = p * ((r - 1).bit_length() + architecture["mac_pipeline_cycles"]) * 4
+    require(observed["pipeline_register_bytes"] == pipeline, "pipeline register reservation differs")
+    expected_acc = expected_context = expected_pending = expected_contexts = 0
+    for job in jobs:
+        rows = job["rows"]
+        if pool is None:
+            contexts = stages * ((rows + mt - 1) // mt)
+            control, pending = 32 * contexts, stages * rows * p * 4
+        else:
+            contexts = q
+        expected_acc = max(expected_acc, rows * max(workload["input_dim"], workload["expert_hidden_dim"]) * 4
+                           + pipeline + control + pending)
+        expected_context = max(expected_context, control)
+        expected_pending = max(expected_pending, pending)
+        expected_contexts = max(expected_contexts, contexts)
+    require(observed["accumulator_peak_bytes"] == expected_acc,
+            "accumulator reservation omits output data, pipeline, contexts or pending results")
+    require(expected_acc <= core["accumulator_bytes"], "modeled output pool exceeds accumulator SRAM")
+    require(detail["output_context_peak_bytes"] == expected_context
+            and detail["pending_result_peak_bytes"] == expected_pending, "output state accounting differs")
+    require(detail["output_contexts_peak"] <= expected_contexts, "output-context peak exceeds reservation")
+    for field in ("weight_port_busy_ps", "accumulator_port_busy_ps", "output_finalize_elapsed_ps"):
+        require(type(detail[field]) is int and 0 <= detail[field] <= total_ps,
+                "refined service occupancy exceeds elapsed run: " + field)
+    require(detail["finalized_elements"] == sum(job["rows"] for job in jobs)
+            * (2 * workload["expert_hidden_dim"] + workload["input_dim"]), "final output drain is incomplete")
+    if pool is not None or "projections" in observed:
+        validate_projection_reports(observed, core, architecture, workload, jobs, total_ps)
+
+
+def validate_projection_reports(observed, core, architecture, workload, jobs, total_ps):
+    """Projection intervals are disjoint per core; individual waits may overlap.
+
+    Tile-load sums include concurrent requests and must not be interpreted as
+    an additive share of wall time. Each serialized port has its own bound.
+    """
+    projections = observed["projections"]
+    expected = {(job["job"], name): job for job in jobs for name in ("gate", "up", "down")}
+    identities = [(entry["job"], entry["projection"]) for entry in projections]
+    require(len(identities) == len(set(identities)) and set(identities) == set(expected),
+            "missing or duplicate projection service record")
+    last_end = 0
+    config = core["refinement"]
+    pool = config.get("output_pool")
+    for entry in projections:
+        job = expected[(entry["job"], entry["projection"])]
+        n, k = workload["expert_hidden_dim"], workload["input_dim"]
+        if entry["projection"] == "down":
+            n, k = k, n
+        require((entry["expert"], entry["m"], entry["n"], entry["k"]) == (job["expert"], job["rows"], n, k),
+                "projection dimensions differ from completed expert")
+        require(all(type(entry[field]) is int for field in ("start_ps", "end_ps")) and
+                job["start_ps"] <= entry["start_ps"] <= entry["end_ps"] <= job["compute_done_ps"]
+                and last_end <= entry["start_ps"], "projection service intervals overlap or escape their job")
+        last_end = entry["end_ps"]
+        elapsed = entry["end_ps"] - entry["start_ps"]
+        metrics = entry["metrics"]
+        require(all(type(v) is int and v >= 0 for key, v in metrics.items() if key != "tile_loads"),
+                "invalid projection counter")
+        require(metrics["useful_macs"] == job["rows"] * n * k and metrics["issued_macs"] >= metrics["useful_macs"],
+                "projection MAC count differs from matrix dimensions")
+        for field in ("compute_busy_ps", "weight_port_busy_ps", "accumulator_port_busy_ps", "scheduler_busy_ps",
+                      "output_finalize_elapsed_ps"):
+            require(metrics[field] <= elapsed, "projection port occupancy exceeds interval: " + field)
+        loads = metrics["tile_loads"]
+        count = ((n + core["blen"] - 1) // core["blen"]) * ((k + core["mlen"] - 1) // core["mlen"])
+        require(all(type(v) is int and v >= 0 for v in loads.values()) and loads["count"] == count,
+                "weight load count must be one per (N,K) tile across all M rows")
+        require(0 <= loads["min_ps"] <= loads["max_ps"] <= elapsed
+                and count * loads["min_ps"] <= loads["total_ps"] <= count * loads["max_ps"],
+                "invalid tile-load service distribution")
+        require(metrics["weight_slots_peak"] <= core.get("weight_slots", 2), "projection exceeds weight slots")
+        if pool is not None:
+            require(metrics["contexts_peak"] <= pool["output_contexts"]
+                    and metrics["pending_contexts_peak"] <= metrics["contexts_peak"]
+                    and metrics["operand_stages_peak"] <= pool["operand_stages"], "projection exceeds finite pool")
+            require(metrics["tile_admissions"] == count, "pool tile admission/load counts differ")
+            require(metrics["band_admissions"] == (n + core["blen"] - 1) // core["blen"],
+                    "pool must admit each N band exactly once")
+            require(metrics["context_updates"] == count * ((job["rows"] + config["m_rows"] - 1) // config["m_rows"]),
+                    "pool did not execute all M contexts in each K tile")
+            require(metrics["scheduler_visits"] > 0 and metrics["scheduler_busy_ps"]
+                    == metrics["scheduler_visits"] * pool["scheduler_cycles"] * architecture["clock_period_ps"],
+                    "projection scheduler service differs")
+    for field in ("useful_macs", "issued_macs", "compute_busy_ps", "hbm_read_bytes",
+                  "accumulator_dependency_stall_ps", "pipeline_drain_ps", "weight_ready_wait_ps"):
+        require(sum(e["metrics"][field] for e in projections) == observed[field],
+                "projection/core totals differ: " + field)
+    for field in ("weight_port_busy_ps", "weight_port_wait_ps", "accumulator_port_busy_ps", "accumulator_port_wait_ps",
+                  "output_finalize_elapsed_ps"):
+        require(sum(e["metrics"][field] for e in projections) == observed["refinement"][field],
+                "projection/refinement totals differ: " + field)
+    if pool is not None:
+        for field in ("scheduler_busy_ps", "scheduler_visits", "band_admissions", "tile_admissions", "context_updates"):
+            require(sum(e["metrics"][field] for e in projections) == observed["refinement"]["output_pool"][field],
+                    "projection/output-pool totals differ: " + field)
+    if pool is not None or "tile_loads" in observed:
+        loads = [e["metrics"]["tile_loads"] for e in projections]
+        expected_loads = dict(count=sum(v["count"] for v in loads), total_ps=sum(v["total_ps"] for v in loads),
+                              min_ps=min((v["min_ps"] for v in loads), default=0),
+                              max_ps=max((v["max_ps"] for v in loads), default=0))
+        require(observed["tile_loads"] == expected_loads, "projection/core tile-load distributions differ")
+
+
 def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_channels=8):
     result = envelope["result"]
     require(result.get("numerical_execution", True) is True, "timing-only output is not numerical evidence")
@@ -293,6 +456,9 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
             == rows_per_core[core["id"]] * 3 * workload["input_dim"] * workload["expert_hidden_dim"],
             "per-core useful MACs differ from completed jobs",
         )
+    for observed, core in zip(result["cores"], architecture["cores"]):
+        validate_refined_core(observed, core, architecture, workload,
+                              [job for job in jobs if job["core"] == core["id"]], result["total_ps"])
     require(
         result["hbm_read_bytes"] % (32 if architecture.get("dma") else 64) == 0,
         "HBM request bytes must match transfer granularity",
@@ -370,6 +536,9 @@ def _run_comparison(
         for a in architectures
     ]
     require(len(set(activation_totals)) == 1, "comparison requires equal total activation supply")
+    for a in architectures:
+        modes = [c.get("refinement") is not None for c in a["cores"]]
+        require(all(modes) or not any(modes), "all cores in an architecture must use the same refinement mode")
     refined = [all(c.get("refinement") is not None for c in a["cores"]) for a in architectures]
     require(all(refined) or not any(refined), "compare legacy and refined timing in separate experiments")
     if all(refined):

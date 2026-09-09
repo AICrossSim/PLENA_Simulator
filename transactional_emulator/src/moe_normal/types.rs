@@ -70,7 +70,8 @@ pub struct Workload {
 #[serde(deny_unknown_fields)]
 pub struct CoreConfig {
     pub id: String,
-    /// Physical M and N tile dimensions. V0 retains square tiles.
+    /// Physical output lanes P. The legacy mapping also uses BLEN for its
+    /// temporal M extent; refinement supplies m_rows independently.
     pub blen: usize,
     /// Physical K tile dimension; a multiple of local MX block size 8.
     pub mlen: usize,
@@ -106,7 +107,8 @@ pub enum TailPolicy {
 pub struct CoreRefinement {
     pub m_rows: usize,
     pub tail_policy: TailPolicy,
-    /// At most two independent N tiles; each always owns a demand weight slot.
+    /// Legacy path: one to three resident N tiles. Pool mode requires 2 here;
+    /// only output_pool controls its independent context/stage capacities.
     pub active_n_tiles: usize,
     /// Shared decoded-SRAM read/write port; BF16 elements per cycle.
     pub weight_read_elements_per_cycle: usize,
@@ -114,6 +116,20 @@ pub struct CoreRefinement {
     pub accumulator_elements_per_cycle: usize,
     /// Stationary BF16 operands, charged inside weight_sram_bytes, not extra SRAM.
     pub operand_latch_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_pool: Option<OutputPoolConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OutputPoolConfig {
+    /// Total (temporal M block, N band) records. An N band reserves all its
+    /// ceil(Me / m_rows) records together, preserving one weight load per K.
+    pub output_contexts: usize,
+    /// Independently owned BF16 operand latches (1 or 2).
+    pub operand_stages: usize,
+    /// Nonzero cost of each bounded scheduler descriptor visit/admission.
+    pub scheduler_cycles: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -219,6 +235,9 @@ pub struct CoreReport {
     pub cache_port_busy_ps: u64,
     pub cache_peak_bytes: usize,
     pub refinement: Option<RefinementReport>,
+    pub tile_loads: TileLoadStats,
+    /// Observational records; not architectural queues or on-chip storage.
+    pub projections: Vec<ProjectionReport>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -236,6 +255,71 @@ pub struct RefinementReport {
     pub output_contexts_peak: usize,
     pub finalized_elements: u64,
     pub output_finalize_elapsed_ps: u64,
+    pub output_pool: Option<OutputPoolReport>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct OutputPoolReport {
+    pub contexts_capacity: usize,
+    pub operand_stages_capacity: usize,
+    pub control_reserved_bytes: usize,
+    pub pending_result_reserved_bytes: usize,
+    pub scheduler_busy_ps: u64,
+    pub scheduler_visits: u64,
+    pub band_admissions: u64,
+    pub tile_admissions: u64,
+    pub context_updates: u64,
+    pub contexts_peak: usize,
+    pub operand_stages_peak: usize,
+    pub pending_contexts_peak: usize,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct TileLoadStats {
+    pub count: u64,
+    pub total_ps: u64,
+    pub min_ps: u64,
+    pub max_ps: u64,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct ProjectionMetrics {
+    pub useful_macs: u64,
+    pub issued_macs: u64,
+    pub compute_busy_ps: u64,
+    pub accumulator_dependency_stall_ps: u64,
+    pub pipeline_drain_ps: u64,
+    pub weight_ready_wait_ps: u64,
+    pub vector_wait_ps: u64,
+    pub hbm_read_bytes: u64,
+    pub weight_port_busy_ps: u64,
+    pub weight_port_wait_ps: u64,
+    pub accumulator_port_busy_ps: u64,
+    pub accumulator_port_wait_ps: u64,
+    pub output_finalize_elapsed_ps: u64,
+    pub scheduler_busy_ps: u64,
+    pub scheduler_visits: u64,
+    pub band_admissions: u64,
+    pub tile_admissions: u64,
+    pub context_updates: u64,
+    pub weight_slots_peak: usize,
+    pub contexts_peak: usize,
+    pub operand_stages_peak: usize,
+    pub pending_contexts_peak: usize,
+    pub tile_loads: TileLoadStats,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProjectionReport {
+    pub job: usize,
+    pub expert: usize,
+    pub projection: String,
+    pub m: usize,
+    pub n: usize,
+    pub k: usize,
+    pub start_ps: u64,
+    pub end_ps: u64,
+    pub metrics: ProjectionMetrics,
 }
 
 #[derive(Clone, Debug, Serialize)]
