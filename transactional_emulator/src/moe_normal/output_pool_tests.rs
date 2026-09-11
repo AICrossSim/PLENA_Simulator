@@ -306,3 +306,74 @@ async fn pool_projection_service_records_reconcile_without_adding_overlapping_wa
         assert!(last_end <= report.total_ps);
     }
 }
+
+#[tokio::test]
+async fn diagnostic_factors_preserve_values_work_and_frozen_job_ownership() {
+    let (w, bytes, dense) = fixture();
+    for pooled in [false, true] {
+        let mut a = if pooled {
+            pool_architecture(8, 2)
+        } else {
+            refined_architecture(2)
+        };
+        a.dispatch_policy = DispatchPolicy::WorkConserving;
+        let base = simulate(w.clone(), a.clone(), &bytes).await;
+        let mut order = vec![Vec::new(); a.cores.len()];
+        let mut completions: Vec<_> = base.job_completions.iter().collect();
+        completions.sort_by_key(|j| j.start_ps);
+        for job in completions {
+            let core = a.cores.iter().position(|c| c.id == job.core).unwrap();
+            order[core].push(job.job);
+        }
+        a.diagnostic.fixed_job_order = Some(order.clone());
+        for variant in 0..8 {
+            let mut candidate = a.clone();
+            let d = &mut candidate.diagnostic;
+            match variant {
+                1 => d.mac_speedup = 2,
+                2 => d.activation_speedup = 2,
+                3 => d.weight_port_speedup = 2,
+                4 => d.accumulator_speedup = 2,
+                5 => d.scheduler_speedup = 2,
+                6 => d.vector_speedup = 2,
+                7 => {
+                    d.mac_speedup = 2;
+                    d.activation_speedup = 2;
+                    d.accumulator_speedup = 2;
+                }
+                _ => {}
+            }
+            let result = simulate(w.clone(), candidate, &bytes).await;
+            assert_eq!(result.output_bf16, reference(&w, &dense));
+            assert_eq!(result.useful_macs, base.useful_macs);
+            assert_eq!(result.issued_macs, base.issued_macs);
+            assert_eq!(result.hbm_read_bytes, base.hbm_read_bytes);
+            for (index, core) in a.cores.iter().enumerate() {
+                let mut jobs: Vec<_> = result
+                    .job_completions
+                    .iter()
+                    .filter(|j| j.core == core.id)
+                    .collect();
+                jobs.sort_by_key(|j| j.start_ps);
+                assert_eq!(jobs.iter().map(|j| j.job).collect::<Vec<_>>(), order[index]);
+            }
+            if variant == 6 {
+                // Faster decode must not accidentally accelerate the weight SRAM port.
+                for (b, c) in base.cores.iter().zip(&result.cores) {
+                    assert_eq!(
+                        b.refinement.as_ref().unwrap().weight_port_busy_ps,
+                        c.refinement.as_ref().unwrap().weight_port_busy_ps
+                    );
+                }
+            }
+        }
+        for bad in [
+            vec![vec![], vec![]],
+            vec![vec![0, 0], vec![1, 2]],
+            vec![vec![99], vec![]],
+        ] {
+            a.diagnostic.fixed_job_order = Some(bad);
+            assert!(validate(&w, &a, bytes.len() as u64).is_err());
+        }
+    }
+}

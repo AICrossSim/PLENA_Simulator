@@ -178,6 +178,8 @@ fn default_dispatch_cycles() -> u64 {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Architecture {
+    #[serde(default)]
+    pub diagnostic: DiagnosticConfig,
     pub schema_version: u32,
     pub name: String,
     pub cores: Vec<CoreConfig>,
@@ -206,6 +208,40 @@ pub struct Architecture {
     pub matrix_timing: MatrixTiming,
     #[serde(default)]
     pub dma: Option<DmaConfig>,
+}
+
+/// Explicit counterfactual timing; capacities, arithmetic and shape do not change.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DiagnosticConfig {
+    pub mac_speedup: u64,
+    pub activation_speedup: u64,
+    pub weight_port_speedup: u64,
+    pub accumulator_speedup: u64,
+    pub scheduler_speedup: u64,
+    pub dma_speedup: u64,
+    pub vector_speedup: u64,
+    pub hbm_profile: ramulator::config::hbm2::HbmDiagnostic,
+    pub ideal_hbm: bool,
+    /// Job IDs in execution order per core, frozen from a baseline execution.
+    pub fixed_job_order: Option<Vec<Vec<usize>>>,
+}
+
+impl Default for DiagnosticConfig {
+    fn default() -> Self {
+        Self {
+            mac_speedup: 1,
+            activation_speedup: 1,
+            weight_port_speedup: 1,
+            accumulator_speedup: 1,
+            scheduler_speedup: 1,
+            dma_speedup: 1,
+            vector_speedup: 1,
+            hbm_profile: ramulator::config::hbm2::HbmDiagnostic::Native,
+            ideal_hbm: false,
+            fixed_job_order: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

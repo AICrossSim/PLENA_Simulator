@@ -33,6 +33,17 @@ struct Opts {
     max_hbm_bytes: u64,
 }
 
+// Oracle removes DRAM and its native ingress only. Upstream DMA, decode,
+// SRAM, scheduling and numerical memory contents are still exercised.
+struct IdealTiming;
+impl memory::MemoryTimingModel for IdealTiming {
+    async fn read(&self, _: u64) {}
+    async fn write(&self, _: u64) {}
+    fn supports_sector_reads(&self) -> bool {
+        true
+    }
+}
+
 fn sha256_file(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let mut stream = std::fs::File::open(path)?;
     let mut digest = Sha256::new();
@@ -136,25 +147,51 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
     }
     // Match the existing runner's native-model lifetime: the process owns this
     // one HBM model until exit, after the executor drains all memory requests.
-    let native = ramulator::Ramulator::hbm2_preset(opts.hbm_channels as usize)?.with_issue_policy(
-        architecture
-            .dma
-            .as_ref()
-            .map(|d| d.issue_policy)
-            .unwrap_or_default(),
-        runtime::Duration::from_picos(architecture.clock_period_ps),
-    );
-    let native_observer = native.clone();
+    let diagnostic = architecture.diagnostic.clone();
     let library_path = PathBuf::from(ramulator::raw::Ramulator::library_path()).canonicalize()?;
     let library_sha256 = sha256_file(&library_path)?;
-    let hbm: Arc<dyn memory::ErasedMemoryModel> = Arc::new(memory::WithStats::new(
-        memory::WithTiming::new(ManuallyDrop::new(native), backing),
-    ));
+    let (hbm, native_observer): (Arc<dyn memory::ErasedMemoryModel>, _) = if diagnostic.ideal_hbm {
+        (
+            Arc::new(memory::WithStats::new(memory::WithTiming::new(
+                IdealTiming,
+                backing,
+            ))),
+            None,
+        )
+    } else {
+        let native = ramulator::Ramulator::hbm2_diagnostic(
+            opts.hbm_channels as usize,
+            diagnostic.hbm_profile,
+        )?
+        .with_issue_policy(
+            architecture
+                .dma
+                .as_ref()
+                .map(|d| d.issue_policy)
+                .unwrap_or_default(),
+            runtime::Duration::from_picos(
+                architecture
+                    .clock_period_ps
+                    .div_ceil(diagnostic.dma_speedup),
+            ),
+        );
+        let observer = native.clone();
+        (
+            Arc::new(memory::WithStats::new(memory::WithTiming::new(
+                ManuallyDrop::new(native),
+                backing,
+            ))),
+            Some(observer),
+        )
+    };
     let report = moe_normal::run(workload, architecture, hbm, image_len)
         .await
         .map_err(std::io::Error::other)?;
-    let native_telemetry = native_observer.telemetry();
-    if native_telemetry["native_pending"] != 0 {
+    let native_telemetry = native_observer.as_ref().map(|n| n.telemetry());
+    if native_telemetry
+        .as_ref()
+        .is_some_and(|t| t["native_pending"] != 0)
+    {
         return Err("native requests not drained".into());
     }
     if sha256_file(&library_path)? != library_sha256 {
@@ -162,7 +199,8 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
     }
     let envelope = json!({
         "schema_version": 1,
-        "evidence_level": "fixed_route_numerical_moe_with_ramulator_and_analytical_core_timing",
+        "evidence_level": "fixed_route_numerical_moe_with_explicit_counterfactual_service_diagnostics",
+        "diagnostic": diagnostic,
         "provenance": {
             "workload_path": workload_path,
             "workload_sha256": format!("{:x}", Sha256::digest(&workload_bytes)),
@@ -179,7 +217,7 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
             "native_library_sha256": library_sha256,
             "executable_sha256": sha256_file(&std::env::current_exe()?)?,
         },
-        "memory_model": {"name": "Ramulator HBM2 preset", "channels": opts.hbm_channels, "upper_burst_bytes": 64, "calibration": native_telemetry},
+        "memory_model": {"name": if diagnostic.ideal_hbm { "ideal_memory_timing_oracle" } else { "Ramulator HBM2 with explicit timing profile" }, "channels": opts.hbm_channels, "upper_burst_bytes": 64, "calibration": native_telemetry},
         "workload_manifest": workload_json,
         "architecture_manifest": architecture_json,
         "result": report,

@@ -40,7 +40,7 @@ async fn visit(core: &CoreState, a: &Architecture) {
         .as_ref()
         .unwrap()
         .scheduler_cycles;
-    let ps = cycles * a.clock_period_ps;
+    let ps = (cycles * a.clock_period_ps).div_ceil(a.diagnostic.scheduler_speedup);
     Executor::current()
         .resolve_at(Duration::from_picos(ps))
         .await;
@@ -368,11 +368,8 @@ pub(super) async fn gemm(
             TailPolicy::Padded => r.m_rows,
             TailPolicy::ValidRows => mr,
         };
-        let supply = c.activation_elements_per_cycle.unwrap_or(c.mlen);
-        let service =
-            issue_rows.max((issue_rows * c.mlen).div_ceil(supply)) as u64 * a.clock_period_ps;
-        let result_time =
-            ex.now() + Duration::from_picos(service + extra_cycles(a, c) * a.clock_period_ps);
+        let service = issue_service_ps(a, c, issue_rows);
+        let result_time = ex.now() + Duration::from_picos(service + feedback_ps(a, c));
         let context = &mut band.contexts[mi];
         assert!(context.ready.swap(false, Ordering::SeqCst));
         context.next_k += c.mlen;

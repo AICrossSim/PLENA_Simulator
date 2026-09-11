@@ -154,6 +154,7 @@ pub(super) fn fixture() -> (Workload, Vec<u8>, Vec<DenseExpert>) {
 
 pub(super) fn architecture() -> Architecture {
     Architecture {
+        diagnostic: DiagnosticConfig::default(),
         schema_version: 1,
         name: "dual_normal".into(),
         cores: vec![

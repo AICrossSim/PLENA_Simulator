@@ -88,6 +88,19 @@ fn service_cycles(a: &Architecture, c: &CoreConfig) -> u64 {
     }
 }
 
+// Counterfactual service factors leave shapes, storage and the global clock fixed.
+fn issue_service_ps(a: &Architecture, c: &CoreConfig, rows: usize) -> u64 {
+    let mac = (rows as u64 * a.clock_period_ps).div_ceil(a.diagnostic.mac_speedup);
+    let supply = c.activation_elements_per_cycle.unwrap_or(c.mlen);
+    let activation = ((rows * c.mlen).div_ceil(supply) as u64 * a.clock_period_ps)
+        .div_ceil(a.diagnostic.activation_speedup);
+    mac.max(activation)
+}
+
+fn feedback_ps(a: &Architecture, c: &CoreConfig) -> u64 {
+    (extra_cycles(a, c) * a.clock_period_ps).div_ceil(a.diagnostic.mac_speedup)
+}
+
 fn pipeline_bytes(a: &Architecture, c: &CoreConfig) -> Result<usize, String> {
     checked(
         &[c.blen, extra_cycles(a, c) as usize, 4],
@@ -254,13 +267,33 @@ fn plan(w: &Workload, a: &Architecture) -> Result<Plan, String> {
         return Err("ready-job descriptors exceed dispatch_queue_bytes".into());
     }
     let mut queues = vec![Vec::new(); a.cores.len()];
+    let mut placement = BTreeMap::new();
+    if let Some(order) = &a.diagnostic.fixed_job_order {
+        if order.len() != a.cores.len() {
+            return Err("fixed_job_order must list every core".into());
+        }
+        for (core, ids) in order.iter().enumerate() {
+            for (rank, &id) in ids.iter().enumerate() {
+                if id >= jobs.len() || placement.insert(id, (core, rank)).is_some() {
+                    return Err("fixed_job_order has duplicate or out-of-range job".into());
+                }
+            }
+        }
+        if placement.len() != jobs.len() {
+            return Err("fixed_job_order must include every job exactly once".into());
+        }
+    }
     for job in jobs {
         let mut target = if job.rows.len() >= a.dispatch_threshold {
             a.large_core
         } else {
             a.small_core
         };
-        if a.dispatch_policy == DispatchPolicy::WorkConserving
+        if let Some(&(core, _)) = placement.get(&job.id) {
+            target = core;
+        }
+        if a.diagnostic.fixed_job_order.is_none()
+            && a.dispatch_policy == DispatchPolicy::WorkConserving
             && !job_fits(w, a, &a.cores[target], &job)
         {
             target = a
@@ -300,6 +333,11 @@ fn plan(w: &Workload, a: &Architecture) -> Result<Plan, String> {
             ));
         }
         queues[target].push(job);
+    }
+    if a.diagnostic.fixed_job_order.is_some() {
+        for queue in &mut queues {
+            queue.sort_by_key(|job| placement[&job.id].1);
+        }
     }
     Ok(Plan {
         queues,
@@ -432,6 +470,27 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
 /// spawning work. Out-of-range MemoryBacked reads must never silently turn to 0.
 pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), String> {
     super::weight_bank::validate_contract(w)?;
+    let d = &a.diagnostic;
+    let factors = [
+        d.mac_speedup,
+        d.activation_speedup,
+        d.weight_port_speedup,
+        d.accumulator_speedup,
+        d.scheduler_speedup,
+        d.dma_speedup,
+        d.vector_speedup,
+    ];
+    if factors.iter().any(|x| !(1..=64).contains(x)) {
+        return Err("diagnostic speedups must be integers in 1..=64".into());
+    }
+    if factors.iter().any(|&x| x != 1)
+        && (a.schema_version != 2 || a.matrix_timing != MatrixTiming::Pipelined)
+    {
+        return Err("service diagnostics require V2 pipelined cores".into());
+    }
+    if d.ideal_hbm && d.hbm_profile != ramulator::config::hbm2::HbmDiagnostic::Native {
+        return Err("ideal_hbm cannot be combined with a native HBM timing profile".into());
+    }
     if !(1..=2).contains(&a.schema_version)
         || a.cores
             .iter()
@@ -624,6 +683,8 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
 
 struct CoreState {
     cache: ReadCache,
+    diagnostic: DiagnosticConfig,
+    clock: u64,
     config: CoreConfig,
     report: Mutex<CoreReport>,
     slots: AtomicUsize,
@@ -641,6 +702,8 @@ impl CoreState {
     fn new(c: &CoreConfig, a: &Architecture) -> Self {
         Self {
             cache: ReadCache::new(c.read_cache_bytes, a.clock_period_ps),
+            diagnostic: a.diagnostic.clone(),
+            clock: a.clock_period_ps,
             config: c.clone(),
             report: Mutex::new(CoreReport {
                 id: c.id.clone(),
@@ -1158,7 +1221,7 @@ async fn load_tile(
     if core.config.refinement.is_some() {
         // Includes writing padded zeros; the same local SRAM port later reads
         // decoded operands into the separately reserved stationary latches.
-        refined_port_work(&core, true, elements, shared.vector.clock).await;
+        refined_port_work(&core, true, elements, core.clock).await;
     }
     let packed = Arc::try_unwrap(packed)
         .map_err(|_| "DMA buffer retained after completion")?
@@ -1222,7 +1285,12 @@ async fn refined_port_work(core: &CoreState, weight: bool, elements: usize, cloc
     let begin = ex.now().as_picos();
     let _permit = port.acquire().await.unwrap();
     let wait = ex.now().as_picos() - begin;
-    let busy = elements.div_ceil(rate) as u64 * clock;
+    let factor = if weight {
+        core.diagnostic.weight_port_speedup
+    } else {
+        core.diagnostic.accumulator_speedup
+    };
+    let busy = (elements.div_ceil(rate) as u64 * clock).div_ceil(factor);
     ex.resolve_at(Duration::from_picos(busy)).await;
     let mut report = core.report.lock().unwrap();
     let report = report.refinement.as_mut().unwrap();
@@ -1449,11 +1517,8 @@ async fn refined_gemm(
             TailPolicy::Padded => r.m_rows,
             TailPolicy::ValidRows => mr,
         };
-        let supply = c.activation_elements_per_cycle.unwrap_or(c.mlen);
-        let service =
-            issue_rows.max((issue_rows * c.mlen).div_ceil(supply)) as u64 * a.clock_period_ps;
-        let result_time =
-            ex.now() + Duration::from_picos(service + extra_cycles(a, c) * a.clock_period_ps);
+        let service = issue_service_ps(a, c, issue_rows);
+        let result_time = ex.now() + Duration::from_picos(service + feedback_ps(a, c));
         g.feedback[mb].store(false, Ordering::SeqCst);
         let done = g.feedback[mb].clone();
         let completion_core = core.clone();
@@ -1731,7 +1796,9 @@ async fn run_core(
     loop {
         let job = {
             let _dispatch = shared.dispatcher.acquire().await.unwrap();
-            let selected = if a.dispatch_policy == DispatchPolicy::Threshold {
+            let selected = if a.dispatch_policy == DispatchPolicy::Threshold
+                || a.diagnostic.fixed_job_order.is_some()
+            {
                 private.next()
             } else {
                 let mut ready = shared.ready.lock().unwrap();
@@ -1754,7 +1821,8 @@ async fn run_core(
                 index.map(|index| ready.remove(index))
             };
             if selected.is_some() {
-                let duration = a.dispatch_cycles * a.clock_period_ps;
+                let duration = (a.dispatch_cycles * a.clock_period_ps)
+                    .div_ceil(a.diagnostic.scheduler_speedup);
                 shared.dispatcher_busy.fetch_add(duration, Ordering::SeqCst);
                 Executor::current()
                     .resolve_at(Duration::from_picos(duration))
@@ -1889,11 +1957,15 @@ pub async fn execute(
     let a = Arc::new(a);
     let queue_peak = plan.queues.iter().map(Vec::len).sum::<usize>() * 64;
     let shared = Arc::new(Shared {
-        ready: Mutex::new(if a.dispatch_policy == DispatchPolicy::WorkConserving {
-            plan.queues.iter().flatten().cloned().collect()
-        } else {
-            Vec::new()
-        }),
+        ready: Mutex::new(
+            if a.dispatch_policy == DispatchPolicy::WorkConserving
+                && a.diagnostic.fixed_job_order.is_none()
+            {
+                plan.queues.iter().flatten().cloned().collect()
+            } else {
+                Vec::new()
+            },
+        ),
         dispatcher: Semaphore::new(1),
         dispatcher_busy: AtomicU64::new(0),
         dma: Arc::new(Dma {
@@ -1914,7 +1986,7 @@ pub async fn execute(
             peak: AtomicUsize::new(0),
             bytes: AtomicU64::new(0),
             config: a.dma.clone(),
-            clock: a.clock_period_ps,
+            clock: a.clock_period_ps.div_ceil(a.diagnostic.dma_speedup),
             lookup: (0..4).map(|_| Semaphore::new(1)).collect(),
             copy: (0..8).map(|_| Semaphore::new(1)).collect(),
             lines: Mutex::new(BTreeMap::new()),
@@ -1935,7 +2007,7 @@ pub async fn execute(
         vector: Arc::new(VectorUnit {
             permit: Semaphore::new(1),
             lanes: a.vector_elements_per_cycle,
-            clock: a.clock_period_ps,
+            clock: a.clock_period_ps.div_ceil(a.diagnostic.vector_speedup),
             busy_ps: AtomicU64::new(0),
         }),
         reorder: Mutex::new(vec![bf16::ZERO; plan.output_rows * w.input_dim]),
