@@ -98,6 +98,7 @@ include = [
     "verification*",
     "compiler*",
     "transactional_emulator*",
+    "analytic_models*",
 ]
 exclude = [
     "*tests*",
@@ -105,6 +106,10 @@ exclude = [
     "*__pycache__*",
     "*.omc*",
 ]
+
+[tool.setuptools.package-data]
+# Calibration tables the area model loads at runtime (small CSV/JSON + licence).
+"analytic_models.area" = ["calibration/*"]
 
 [tool.setuptools.package-dir]
 "" = "."
