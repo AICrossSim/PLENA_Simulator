@@ -1,4 +1,7 @@
-"""End-to-end Matrix-SRAM L-Compute campaign for the two hybrid models.
+"""Historical packet-era Matrix-SRAM L-Compute campaign.
+
+Not the R3/v2 cycle model. New decode studies must use ``ltile_decode`` after
+``ltile_calibration``; preserve this entry point only for archived reproduction.
 
 This campaign is intentionally independent from the older Vector-SRAM
 ``L_CFG`` experiments.  C is the executable single-base fixed-descriptor

@@ -1,4 +1,8 @@
-"""The KDA cost model, checked against the compiler's real instruction counts.
+"""Legacy KDA INSTRUCTION-COUNT regression; NOT a cycle-calibration gate.
+
+The recurrent cycle gate is now performance.ltile_calibration (R3 issue, ports,
+arithmetic, dependencies and DMA). Passing this file does not validate cycles,
+speedups, or the v2 recurrence numerical contract.
 
 Every other stage in `perf_model.py` is a hand-derived formula with nothing to
 check it against: the lowering it describes does not exist, so the formula can be

@@ -16,6 +16,11 @@ The PLENA Simulator provides three main components:
 
 ## Matrix SRAM L-Compute branch
 
+For the R3/v2 decode timing study, use the [finite-resource analytical model](doc/l_tile_analytic.md).
+It replaces packet-era recurrent pricing with Compiler-derived schedules and
+the audited DMA backend. The older campaign below is retained for historical
+reproduction; its packet latency and hardware-cost assumptions are not v2 results.
+
 This branch executes the prepared-coefficient Nemotron Mamba-2 and Kimi KDA
 decode recurrence through physical Matrix-SRAM banks. State, prepared fields
 and outputs use a uniform BF16 PLENA contract. Official GPU FP32 state remains
