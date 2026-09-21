@@ -25,6 +25,7 @@ mod pipeline_tests;
 mod registers;
 mod scalar_sram;
 mod scoreboard;
+mod v2;
 
 pub(crate) use access::Unit;
 pub(crate) use dispatch::TimingDriver;
@@ -45,6 +46,7 @@ pub(crate) struct Accelerator {
     reg_file: AcceleratorRegFile,
     scalar_sram: ScalarSram,
     loop_state: LoopState,
+    v2: v2::ReductionState,
 }
 
 impl Accelerator {
@@ -67,6 +69,7 @@ impl Accelerator {
             ),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
+            v2: v2::ReductionState::default(),
         }
     }
 

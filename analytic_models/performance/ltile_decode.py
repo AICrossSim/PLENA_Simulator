@@ -266,7 +266,16 @@ def capacity(name, workload, batch, context):
     )
 
 
-def run(evidence, output, backend, campaign_path, *, gate_path, platform=Platform()):
+def run(
+    evidence,
+    output,
+    backend,
+    campaign_path,
+    *,
+    gate_path,
+    platform=Platform(),
+    allow_uncalibrated_surrounding=False,
+):
     gate = json.loads(gate_path.read_text())
     if not gate.get("gate_passed"):
         raise RuntimeError("recurrent cycle/speedup calibration gate has not passed")
@@ -275,6 +284,12 @@ def run(evidence, output, backend, campaign_path, *, gate_path, platform=Platfor
     for name, digest in gate["predictor_sources"].items():
         if sha(Path(__file__).with_name(name)) != digest:
             raise ValueError(f"predictor changed since calibration: {name}")
+    if not allow_uncalibrated_surrounding:
+        raise RuntimeError(
+            "This composer has recurrence-only calibration; coefficient production and "
+            "surrounding operators are unvalidated. Explicitly request a conditional "
+            "estimate with allow_uncalibrated_surrounding=True. It is not a formal decode result."
+        )
     output.mkdir(parents=True, exist_ok=True)
     compiler = evidence / "E/compiler"
     models = workloads(compiler)
@@ -518,12 +533,17 @@ def run(evidence, output, backend, campaign_path, *, gate_path, platform=Platfor
         ]
         r["baseline_recurrence_and_materialization_fraction"] = optimized
         r["recurrence_and_materialization_amdahl_limit"] = 1 / (1 - optimized)
+    for row in all_rows:
+        row["result_status"] = "conditional_estimate"
+        row["full_layer_validated"] = False
     write_csv(output / "decode_all.csv", all_rows)
     write_csv(output / "decode_primary.csv", [r for r in all_rows if r["primary_dma"]])
     write_csv(output / "surrounding_stages.csv", stages)
     write_csv(output / "operator_coverage.csv", list(coverage.values()))
     write_csv(output / "capacity.csv", capacities)
     config = dict(
+        result_status="conditional_estimate",
+        full_layer_validated=False,
         platform=asdict(platform),
         recurrent=asdict(Machine()),
         timeline="serial stage composition; overlap only inside priced recurrent primitive",
@@ -563,6 +583,11 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     for arg in ("evidence", "output", "memory-binary", "memory-config", "memory-cache", "campaign", "gate"):
         p.add_argument("--" + arg, required=True, type=Path)
+    p.add_argument(
+        "--allow-uncalibrated-surrounding",
+        action="store_true",
+        help="export conditional estimates only; does not certify full-layer timing",
+    )
     args = p.parse_args()
     run(
         args.evidence.resolve(),
@@ -570,4 +595,5 @@ if __name__ == "__main__":
         DmaBackend(args.memory_binary, args.memory_config, args.memory_cache),
         args.campaign.resolve(),
         gate_path=args.gate,
+        allow_uncalibrated_surrounding=args.allow_uncalibrated_surrounding,
     )

@@ -32,6 +32,7 @@ class Machine:
     banks: int = 64
     bank_width: int = 32
     vector_width: int = 2048
+    vector_reciprocal_cycles: int = 2
     clock_hz: int = 1_000_000_000
 
     def __post_init__(self):
@@ -47,6 +48,7 @@ class Machine:
                 self.dot_ii,
                 self.dot_latency,
                 self.context_cycles,
+                self.vector_reciprocal_cycles,
                 self.clock_hz,
             )
             < 1
@@ -400,6 +402,11 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
         elif op in ("V_ADD_VV", "V_SUB_VV", "V_MUL_VV"):
             cost.sram += 3
             cost.arithmetic += 1
+        elif op == "V_RECI_V":
+            if int(args[2]) != 0:
+                raise ValueError("masked reciprocal needs a separate service contract")
+            cost.sram += 2
+            cost.arithmetic += machine.vector_reciprocal_cycles
         else:
             raise ValueError(f"unpriced opcode {op} at instruction {pc}")
         registers[0] = 0

@@ -33,6 +33,7 @@ pub(crate) struct VectorMachine {
     mask_unit: u32,
     packet_counters: PacketCounters,
     dot_accumulator: Option<Vec<f32>>,
+    pub(crate) update_lane: crate::ltile_v2::UpdateLane,
 }
 
 #[derive(Debug, Default)]
@@ -154,6 +155,7 @@ impl VectorMachine {
             mask_unit,
             packet_counters: PacketCounters::default(),
             dot_accumulator: None,
+            update_lane: crate::ltile_v2::UpdateLane::new(crate::ltile_v2::UpdateConfig::from_env()),
         }
     }
 
@@ -711,7 +713,60 @@ impl VectorMachine {
                 result[index] = a * dst[index] + b * src[source_index];
             }
         }
-        crate::timing::charge_arithmetic_cycles(2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+        // The v2 profile cannot obtain a hidden full-width FP32 affine unit
+        // for Mamba's dt*x / output skip. Share the bounded update lane bank.
+        // Legacy opcode 0 retains its arithmetic and RNE store (no SR draw).
+        // This old packet interface conservatively drains each L-sized chunk.
+        let cycles = if std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1") {
+            assert!(dst.len() <= self.update_lane.config.lanes as usize);
+            self.update_lane.config.packet_cycles(dst.len())
+        } else {
+            2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES
+        };
+        crate::timing::charge_arithmetic_cycles(cycles).await;
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
+    }
+
+    /// v2 fused delta update; separate from the legacy affine primitive.
+    pub(crate) async fn tile_delta_update(
+        &self,
+        destination: QuantTensor,
+        source: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let src = tensor_to_f32_vec(source.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        assert!(row_width > 0 && dst.len().is_multiple_of(row_width as usize));
+        let rows = dst.len() / row_width as usize;
+        assert!(src.len() == row_width as usize || src.len() == dst.len());
+        assert!(dst.len() <= self.update_lane.config.lanes as usize);
+        scale_layout.validate(coeff.len(), rows, scale_width, 2);
+        let result = dst
+            .iter()
+            .enumerate()
+            .map(|(index, &s)| {
+                let row = index / row_width as usize;
+                let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+                let source_index = if src.len() == row_width as usize {
+                    index % row_width as usize
+                } else {
+                    index
+                };
+                self.update_lane.update(
+                    index,
+                    s,
+                    coeff[coefficient],
+                    coeff[coefficient + 1],
+                    src[source_index],
+                )
+            })
+            .collect::<Vec<_>>();
+        crate::timing::charge_arithmetic_cycles(self.update_lane.config.packet_cycles(dst.len()))
+            .await;
         QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
     }
 
@@ -860,9 +915,11 @@ impl VectorMachine {
 
     pub(crate) async fn reciprocal(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().reciprocal(), a.data_type());
             crate::timing::charge_arithmetic_cycles(*VECTOR_RECI_CYCLES).await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -878,6 +935,7 @@ impl VectorMachine {
             }
             let c = QuantTensor::quantize(result, a.data_type());
             crate::timing::charge_arithmetic_cycles(*VECTOR_RECI_CYCLES).await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         }
     }

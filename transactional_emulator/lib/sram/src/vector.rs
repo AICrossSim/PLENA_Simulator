@@ -219,6 +219,26 @@ impl VectorSram {
         *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
     }
 
+    /// V2 bank-word write enable on the existing SRAM. No extra port or
+    /// capacity. The caller accounts for the selected bank words and port
+    /// occupancy; resolving this host byte array is not a modeled SRAM read.
+    pub async fn write_bank_words(&self, addr: u32, first: u32, tensor: QuantTensor) {
+        assert!(first.is_multiple_of(self.bank_width()));
+        let data = self.quant_tensor_to_bytes(&tensor);
+        let bytes_per_element = usize::from(self.fp_type.size_in_bits()) / 8;
+        assert!(data
+            .len()
+            .is_multiple_of(self.bank_width() as usize * bytes_per_element));
+        let start = first as usize * bytes_per_element;
+        assert!(start + data.len() <= self.vlen as usize * bytes_per_element);
+        let row = addr_to_cell(addr, self.vlen, self.depth);
+        let mut guard = self.rows[row].lock().await;
+        let old = guard.resolve_with(|t| self.quant_tensor_to_bytes(&t)).await;
+        let mut bytes = old.clone();
+        bytes[start..start + data.len()].copy_from_slice(&data);
+        *guard = Cell::Ready(bytes);
+    }
+
     /// Write a vector to the SRAM at the given address as integers.
     ///
     /// The address must be a multiple of vlen (in element units).

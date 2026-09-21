@@ -671,7 +671,10 @@ async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
                         // DOT_REDUCE requires one source tile per output tile.
                         continue;
                     }
-                    let is_scale = matches!(primitive, op::LTilePrimitive::ScaleAccum);
+                    let is_scale = matches!(
+                        primitive,
+                        op::LTilePrimitive::ScaleAccum | op::LTilePrimitive::DeltaUpdate
+                    );
                     let dst_rows = if is_dot { 1 } else { 2 };
                     let src_rows = if is_dot { 2 } else { 1 };
                     let src_tiles = if shared_source { 1 } else { tiles };
@@ -770,7 +773,8 @@ async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
                         for row in 0..dst_rows {
                             for col in 0..cols {
                                 let value = match primitive {
-                                    op::LTilePrimitive::ScaleAccum => {
+                                    op::LTilePrimitive::ScaleAccum
+                                    | op::LTilePrimitive::DeltaUpdate => {
                                         0.5 + (tile + row + 1) as f32 * source_value(tile, 0, col)
                                     }
                                     op::LTilePrimitive::OuterUpdate => {
@@ -783,6 +787,7 @@ async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
                                             })
                                             .sum::<f32>()
                                     }
+                                    _ => unreachable!("legacy coefficient fixture"),
                                 };
                                 expected.push(value);
                             }
@@ -827,6 +832,11 @@ async fn l_tile_dot_reduce_preserves_coefficient_layout_across_packets() {
 #[tokio::test]
 async fn l_tile_outer_update_preserves_coefficient_layout_across_packets() {
     check_ltile_coefficient_packets(op::LTilePrimitive::OuterUpdate).await;
+}
+
+#[tokio::test]
+async fn l_tile_delta_update_preserves_coefficient_layout_across_packets() {
+    check_ltile_coefficient_packets(op::LTilePrimitive::DeltaUpdate).await;
 }
 
 async fn run_ltile_primitives(tile_skew: Option<u32>) -> LTileResult {

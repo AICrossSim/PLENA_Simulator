@@ -33,6 +33,7 @@ def build_program(
     broadcast=True,
     resident=True,
     diagnostic=False,
+    decay_is_delta=False,
 ):
     if kind not in ("mamba", "kda") or batch < 1 or tokens < 1:
         raise ValueError("invalid recurrent workload")
@@ -72,6 +73,7 @@ def build_program(
                     static_address_reuse=True,
                     pairwise_bf16_dot=True,
                     mamba_decay_row_invariant=kind == "mamba",
+                    decay_is_delta=decay_is_delta,
                 )
             )
         return "\n".join(programs), arena.size

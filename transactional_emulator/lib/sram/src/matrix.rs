@@ -1,5 +1,5 @@
 use quantize::{tensor_from_f32_slice, tensor_to_f32_vec, DataType, MxDataType, QuantTensor};
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::oneshot::{Receiver, Sender};
 use tokio::sync::Mutex;
@@ -11,7 +11,7 @@ use crate::{addr_to_cell, Cell};
 /// `tile_pitch_rows` is measured in physical rows inside each bank.  The
 /// arithmetic operation is deliberately absent: this structure describes
 /// placement only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MatrixLayout {
     pub rows: u32,
     pub cols: u32,
@@ -100,6 +100,9 @@ pub struct MatrixSram {
     rows_per_tile: u32,
     bank_rows: Vec<Vec<Mutex<Cell<Vec<u8>>>>>,
     packet_counters: MatrixPacketCounters,
+    // Host-only memoization of immutable layout proofs. No simulated cache,
+    // timing credit, data/tag storage, or skipped physical SRAM access.
+    validated_layouts: std::sync::Mutex<HashSet<(u32, MatrixLayout)>>,
 }
 
 impl MatrixSram {
@@ -185,6 +188,7 @@ impl MatrixSram {
             rows_per_tile,
             bank_rows,
             packet_counters: MatrixPacketCounters::default(),
+            validated_layouts: std::sync::Mutex::new(HashSet::new()),
         }
     }
 
@@ -1125,6 +1129,14 @@ impl MatrixSram {
     }
 
     fn validate_layout(&self, addr: u32, layout: MatrixLayout) {
+        if self
+            .validated_layouts
+            .lock()
+            .unwrap()
+            .contains(&(addr, layout))
+        {
+            return;
+        }
         assert!(layout.rows > 0 && layout.cols > 0 && layout.tile_count > 0);
         assert!(layout.cols.is_multiple_of(self.bank_width));
         assert!(layout.alpha < self.banks);
@@ -1164,6 +1176,10 @@ impl MatrixSram {
             final_row <= self.bank_rows[0].len() as u32,
             "Matrix view exceeds SRAM capacity"
         );
+        self.validated_layouts
+            .lock()
+            .unwrap()
+            .insert((addr, layout));
     }
 
     /// Check that several compiler-managed views can coexist in this SRAM.
@@ -1320,6 +1336,39 @@ mod tests {
 
     fn bf16_plain() -> MxDataType {
         MxDataType::Plain(DataType::Fp(FpType::BF16))
+    }
+
+    #[test]
+    fn phased_descriptor_equals_ordinary_bases_on_fixed_diagonal_wiring() {
+        let sram = MatrixSram::with_banks(2048, 256, 32, bf16_plain());
+        let mut words = 0;
+        for width in [64, 128] {
+            let packed = MatrixLayout {
+                rows: 128,
+                cols: width,
+                tile_count: 2048 / width,
+                tile_pitch_rows: 0,
+                alpha: 1,
+                tile_skew: width / 32,
+            };
+            let ordinary = MatrixLayout {
+                tile_count: 1,
+                tile_skew: 0,
+                ..packed
+            };
+            for head in 0..packed.tile_count {
+                for row in 0..128 {
+                    for col in (0..width).step_by(32) {
+                        assert_eq!(
+                            sram.physical_coord(0, packed, head, row, col),
+                            sram.physical_coord(head * width, ordinary, 0, row, col)
+                        );
+                        words += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(words, 16384); // 524,288 scalar positions including lanes.
     }
 
     fn tile(ty: MxDataType, vals: &[f32]) -> QuantTensor {

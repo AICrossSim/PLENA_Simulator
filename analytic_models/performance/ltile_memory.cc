@@ -46,15 +46,28 @@ int main(int argc,char **argv) {
     if(config.empty()||!trace) return 3;
     Memory memory{ramulator_new(config.c_str())};
     if(!memory.ram || ramulator_period(memory.ram)!=1.0f) return 4;
-    bool review=std::string(argv[3])=="review";
-    int window=review?1:std::stoi(argv[3]);
+    std::string service=argv[3];
+    bool review=service=="review";
+    unsigned read_window=0;
+    int window;
+    if(service.rfind("bounded:",0)==0) {
+        auto sep=service.find(':',8);
+        if(sep==std::string::npos) return 5;
+        read_window=std::stoul(service.substr(8,sep-8));
+        window=std::stoi(service.substr(sep+1));
+        if(read_window<1||read_window>64) return 5;
+    } else window=review?1:std::stoi(service);
     if(window<1||window>64) return 5;
     uint64_t delay=0,addr,size;
     char op;
     while(trace>>op>>addr>>size) {
         if(op=='d') { memory.now+=addr; delay+=addr; continue; }
         if(addr%64||size%64) return 6;
-        if(op=='r') memory.group(addr,size,false);
+        if(op=='r') {
+            uint64_t limit=read_window?64*read_window:size;
+            for(uint64_t off=0;off<size;off+=limit)
+                memory.group(addr+off,std::min(limit,size-off),false);
+        }
         else if(op=='w') {
             // The DMA splits each Matrix view into 4096-byte Vector rows.
             for(uint64_t row=0;row<size;row+=4096) {

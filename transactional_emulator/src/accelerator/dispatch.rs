@@ -8,7 +8,7 @@ use quantize::{MxDataType, QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec
 
 use crate::runtime_config::PERIOD;
 use crate::runtime_config::{
-    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+    MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
     SCALAR_INT_BASIC_CYCLES, STATE_TYPE, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE,
     VLEN,
@@ -50,30 +50,34 @@ struct MatrixViewBinaryArgs {
     pc: usize,
 }
 
-struct LTileExecArgs {
-    destination_register: u8,
-    source_register: u8,
-    scale_register: u8,
-    primitive: op::LTilePrimitive,
-    source_axis: op::LTileAxis,
-    scale_axis: op::LTileAxis,
+pub(super) struct LTileExecArgs {
+    pub destination_register: u8,
+    pub source_register: u8,
+    pub scale_register: u8,
+    pub primitive: op::LTilePrimitive,
+    pub source_axis: op::LTileAxis,
+    pub scale_axis: op::LTileAxis,
 }
 
 impl Accelerator {
     /// Resolve the V_* opcode mask.
     ///
-    /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
-    /// vector (mask = all-ones over `*HLEN` bits). Otherwise the per-head mask
+    /// When `rmask == 0`, the opcode operates on the entire VLEN vector.
+    /// HLEN is elements per mask group, not a bit count. Otherwise the mask
     /// stored in `reg_file.v_mask` is used directly.
     fn resolve_v_mask(&self, rmask: u8) -> u32 {
         if rmask == 0 {
-            (1 << *HLEN) - 1
+            u32::MAX
         } else {
             self.reg_file.v_mask()
         }
     }
 
-    fn resolve_matrix_view(&self, slot: Option<u8>, pc: usize) -> Option<MatrixViewDescriptor> {
+    pub(super) fn resolve_matrix_view(
+        &self,
+        slot: Option<u8>,
+        pc: usize,
+    ) -> Option<MatrixViewDescriptor> {
         slot.map(|slot| {
             self.reg_file.matrix_view(slot).unwrap_or_else(|error| {
                 tracing::error!(pc, slot, %error, "invalid Matrix-view consumer");
@@ -202,6 +206,19 @@ impl Accelerator {
     /// deterministic row/column walk; all bases, shapes and layouts remain
     /// compiler-visible architectural state. Matrix-view storage is BF16.
     async fn execute_l_tile(&mut self, args: LTileExecArgs, pc: usize) {
+        if matches!(
+            args.primitive,
+            op::LTilePrimitive::ReduceBegin
+                | op::LTilePrimitive::ReduceAcc
+                | op::LTilePrimitive::DecayReduceAcc
+                | op::LTilePrimitive::ReduceWrite
+                | op::LTilePrimitive::ResidualWrite
+        ) || (args.primitive == op::LTilePrimitive::DeltaUpdate
+            && std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1"))
+        {
+            self.execute_v2(args, pc).await;
+            return;
+        }
         let LTileExecArgs {
             destination_register,
             source_register,
@@ -246,7 +263,9 @@ impl Accelerator {
         };
 
         match primitive {
-            op::LTilePrimitive::ScaleAccum | op::LTilePrimitive::OuterUpdate => {
+            op::LTilePrimitive::ScaleAccum
+            | op::LTilePrimitive::OuterUpdate
+            | op::LTilePrimitive::DeltaUpdate => {
                 if source_line_width != destination.shape.cols {
                     panic!("row-wise L_TILE source/destination widths differ");
                 }
@@ -256,7 +275,20 @@ impl Accelerator {
                 if scale_line_count < destination.shape.rows {
                     panic!("L_TILE scale view has fewer logical lines than destination");
                 }
-                let tiles_per_packet = (self.v_machine.tile_size() / destination.shape.cols).max(1);
+                let bounded_v2_affine = primitive == op::LTilePrimitive::ScaleAccum
+                    && std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1");
+                let supply_width =
+                    if primitive == op::LTilePrimitive::DeltaUpdate || bounded_v2_affine {
+                        let lanes = self.v_machine.update_lane.config.lanes;
+                        assert!(
+                            destination.shape.cols <= lanes
+                                && lanes.is_multiple_of(destination.shape.cols)
+                        );
+                        lanes.min(self.v_machine.tile_size())
+                    } else {
+                        self.v_machine.tile_size()
+                    };
+                let tiles_per_packet = (supply_width / destination.shape.cols).max(1);
                 for row in 0..destination.shape.rows {
                     for first_tile in
                         (0..destination.shape.tile_count).step_by(tiles_per_packet as usize)
@@ -341,7 +373,19 @@ impl Accelerator {
                                     )
                                     .await
                             }
-                            op::LTilePrimitive::DotReduce => unreachable!(),
+                            op::LTilePrimitive::DeltaUpdate => {
+                                self.v_machine
+                                    .tile_delta_update(
+                                        dst_packet,
+                                        src_packet,
+                                        scale_packet,
+                                        destination.shape.cols,
+                                        scale_line_width,
+                                        scale_layout,
+                                    )
+                                    .await
+                            }
+                            _ => unreachable!(),
                         };
                         let service = self
                             .m_machine
@@ -429,6 +473,7 @@ impl Accelerator {
                     timing::charge_bank_cycles(service.service_cycles.max(1)).await;
                 }
             }
+            _ => unreachable!("v2 primitives dispatch before the legacy walker"),
         }
     }
 
@@ -468,9 +513,16 @@ impl Accelerator {
                         op,
                         op::Opcode::S_LUI_INT { .. }
                             | op::Opcode::S_ADDI_INT { .. }
+                            | op::Opcode::C_LOOP_START { .. }
+                            | op::Opcode::C_LOOP_END { .. }
                             | op::Opcode::V_DOT_RESET
                             | op::Opcode::V_DOT_ACC { .. }
                             | op::Opcode::V_DOT_WRITE { .. }
+                            | op::Opcode::V_RECI_V {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
                             | op::Opcode::L_TILE_CFG { .. }
                             | op::Opcode::L_TILE_EXEC { .. }
                             | op::Opcode::H_PREFETCH_V { .. }
@@ -1323,12 +1375,13 @@ impl Accelerator {
                         self.reg_file.read_gp(*rs1),
                         *rstride,
                     );
+                    let exact = std::env::var("PLENA_EXACT_VIEW_DMA").as_deref() == Ok("1");
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
                         region,
                         self.m_machine.mram.ty(),
-                        *VLEN,
-                        values.div_ceil(*VLEN),
+                        if exact { values } else { *VLEN },
+                        if exact { 1 } else { values.div_ceil(*VLEN) },
                         1,
                     );
                     let tensor = xfer.await.unwrap_or_else(|error| {

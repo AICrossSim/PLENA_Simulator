@@ -153,7 +153,31 @@ pub(crate) async fn run_from_cli() {
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
-    let dram = ramulator::Ramulator::hbm2_preset(8).unwrap();
+    let controllers = std::env::var("PLENA_HBM_CONTROLLERS")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("invalid HBM controller count")
+        })
+        .unwrap_or(8);
+    assert!(
+        controllers.is_power_of_two() && controllers <= 64,
+        "HBM controller count must be a power of two in 1..=64"
+    );
+    // This captured organization is 2 GiB/controller. Host backing overrides
+    // bound test RSS; they must not invent additional DRAM address capacity.
+    if std::env::var_os("PLENA_HBM_CONTROLLERS").is_some() {
+        assert!(
+            effective_hbm_size as u64 <= controllers as u64 * 2 * 1024u64.pow(3),
+            "HBM host allocation exceeds the selected DRAM organization"
+        );
+    }
+    tracing::info!(
+        controllers,
+        "HBM timing controllers (not physical stack count)"
+    );
+    let dram = ramulator::Ramulator::hbm2_preset(controllers).unwrap();
     assert_clock_relationship(&dram);
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(dram),
@@ -264,11 +288,21 @@ pub(crate) async fn run_from_cli() {
             "additional_dot_accumulator_bytes": if std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref() == Ok("1") { 4 * *VLEN } else { 0 },
             "experimental_dot_latency_assumption": "configured vector FP32 mul+add; reset and BF16 conversion one cycle each",
             "counters": counters,
+            "hbm_read_bytes": hbm.statistics().total_bytes_read,
+            "hbm_write_bytes": hbm.statistics().total_bytes_written,
+            "dma_write_window": std::env::var("PLENA_DMA_WRITE_WINDOW").ok(),
+            "exact_view_dma": std::env::var("PLENA_EXACT_VIEW_DMA").as_deref() == Ok("1"),
             "period_picos": period,
             "total_picos": elapsed.as_picos(),
             "dma_and_memory_wait_picos": elapsed.as_picos() - charged_picos,
             "scalar_and_control_cycles": counters.charged_cycles - counters.issue_cycles
-                - counters.bank_service_cycles - counters.arithmetic_cycles,
+                - counters.bank_service_cycles - counters.arithmetic_cycles - counters.dependency_cycles,
+            "v2": {
+                "lanes": accelerator.v2_config_report(),
+                "retirement": "serial instructions/DMA; resource reservations overlap micro-operations inside each v2 instruction",
+                "attribution": "exclusive elapsed cycles: bank union first, uncovered arithmetic pipeline occupancy second, remaining dependency/drain gaps third; not causal bottleneck fractions",
+                "feedback_wait": "sum of blocked launch delays; overlaps other resource activity, not an additive total component"
+            },
             "ordinary_bank_policy": "one single-ported all-bank VLEN row per cycle; binary two reads plus one write",
             "scope": "serial issue + bank + arithmetic + scalar/control + DMA/memory waits; no overlap credit",
         });

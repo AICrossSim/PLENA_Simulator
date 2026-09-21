@@ -2,6 +2,7 @@ mod accelerator;
 mod cli;
 mod dma;
 mod load_config;
+mod ltile_v2;
 mod matrix_core;
 mod matrix_machine;
 mod op;
@@ -9,6 +10,7 @@ mod runner;
 mod runtime_config;
 mod stage_profile;
 mod timing;
+mod v2_timing;
 mod vector_machine;
 
 use runtime::{Executor, Instant};

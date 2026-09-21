@@ -91,6 +91,17 @@ pub(crate) struct ExecutionCounters {
     pub issue_cycles: u64,
     pub bank_service_cycles: u64,
     pub arithmetic_cycles: u64,
+    pub dependency_cycles: u64,
+    pub v2_instructions: u64,
+    pub v2_matrix_reads: u64,
+    pub v2_matrix_writes: u64,
+    pub v2_matrix_words: u64,
+    pub v2_vector_reads: u64,
+    pub v2_vector_writes: u64,
+    pub v2_context_reads: u64,
+    pub v2_context_writes: u64,
+    pub v2_subchunk_launches: u64,
+    pub v2_feedback_wait: u64,
     pub charged_cycles: u64,
 }
 thread_local! {
@@ -139,6 +150,31 @@ pub(crate) async fn charge_ordinary_bank_cycles(cycles: u32) {
 }
 pub(crate) async fn charge_arithmetic_cycles(cycles: u32) {
     update_execution(|c| c.arithmetic_cycles += cycles as u64);
+    charge_cycles(cycles).await;
+}
+
+pub(crate) fn record_v2(
+    calendar: &crate::v2_timing::Calendar,
+    _bank: u64,
+    _arithmetic: u64,
+    _idle: u64,
+) {
+    update_execution(|c| {
+        c.v2_instructions += 1;
+        c.v2_matrix_reads += calendar.matrix_reads;
+        c.v2_matrix_writes += calendar.matrix_writes;
+        c.v2_matrix_words += calendar.matrix_words;
+        c.v2_vector_reads += calendar.vector_reads;
+        c.v2_vector_writes += calendar.vector_writes;
+        c.v2_context_reads += calendar.context_reads;
+        c.v2_context_writes += calendar.context_writes;
+        c.v2_subchunk_launches += calendar.launches;
+        c.v2_feedback_wait += calendar.feedback_wait;
+    });
+}
+
+pub(crate) async fn charge_dependency_cycles(cycles: u32) {
+    update_execution(|c| c.dependency_cycles += u64::from(cycles));
     charge_cycles(cycles).await;
 }
 

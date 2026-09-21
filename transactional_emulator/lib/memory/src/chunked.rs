@@ -39,8 +39,27 @@ pub async fn gather(
     total_len: usize,
     reads: Vec<ChunkRead>,
 ) -> Vec<u8> {
+    let window = std::env::var("PLENA_DMA_READ_WINDOW")
+        .ok()
+        .map(|v| v.parse::<usize>().expect("invalid DMA read window"));
+    gather_with_window(hbm, total_len, reads, window).await
+}
+
+/// Conservative finite-credit DMA: drain one batch before admitting the next.
+/// Each credit owns one 64-byte response slot and destination metadata. This
+/// is deliberately not a continuously replenished credit engine. None keeps
+/// the historical gather service for compatibility experiments.
+pub async fn gather_with_window(
+    hbm: &Arc<dyn ErasedMemoryModel>,
+    total_len: usize,
+    reads: Vec<ChunkRead>,
+    window: Option<usize>,
+) -> Vec<u8> {
+    if let Some(w) = window { assert!((1..=64).contains(&w)); }
     let mut out = vec![0u8; total_len];
-    let futures = reads.into_iter().map(|r| {
+    let batch = window.unwrap_or(reads.len().max(1));
+    for group in reads.chunks(batch) {
+    let futures = group.iter().map(|r| {
         // A single read cannot span more than the 64-byte block it lands in.
         debug_assert!(r.len <= 64, "ChunkRead::len {} exceeds 64", r.len);
         let hbm = hbm.clone();
@@ -57,6 +76,7 @@ pub async fn gather(
     });
     for (offset, data, n) in join_all(futures).await {
         out[offset..offset + n].copy_from_slice(&data[..n]);
+    }
     }
     out
 }
@@ -121,12 +141,98 @@ pub async fn write_unaligned(
     written
 }
 
+/// Bounded burst write for the shared DMA experiment. Full blocks require no
+/// read. Partial first/last blocks retain RMW and untouched neighbour bytes.
+/// Requests are issued deterministically; the memory model supplies queue
+/// backpressure. `window` is an explicit model assumption, not extra SRAM.
+pub async fn write_bursted(
+    hbm: &Arc<dyn ErasedMemoryModel>,
+    addr: u64,
+    total_len: usize,
+    src: &[u8],
+    window: usize,
+) -> usize {
+    assert!((1..=64).contains(&window));
+    let count = total_len.min(src.len());
+    if count == 0 {
+        return 0;
+    }
+    let start = addr / 64 * 64;
+    let end = addr + count as u64;
+    let blocks = ((end - start) as usize).div_ceil(64);
+    for first in (0..blocks).step_by(window) {
+        let requests = (first..(first + window).min(blocks)).map(|i| async move {
+            let base = start + (i * 64) as u64;
+            let lo = base.max(addr);
+            let hi = (base + 64).min(end);
+            let mut block = if lo == base && hi == base + 64 {
+                [0; 64]
+            } else {
+                hbm.read(base).await
+            };
+            block[(lo - base) as usize..(hi - base) as usize]
+                .copy_from_slice(&src[(lo - addr) as usize..(hi - addr) as usize]);
+            hbm.write(base, block).await;
+        });
+        join_all(requests).await;
+    }
+    count
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::MemoryBacked;
     use proptest::prelude::*;
     use std::sync::{Arc, Mutex};
+
+    #[tokio::test]
+    async fn bounded_gather_limits_responses_and_preserves_destination_tags() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        struct Outstanding {
+            active: AtomicUsize,
+            peak: AtomicUsize,
+        }
+        impl MemoryModel for Outstanding {
+            async fn read(&self, addr: u64) -> [u8; 64] {
+                let n = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+                self.peak.fetch_max(n, Ordering::SeqCst);
+                for _ in 0..(4 - (addr / 64) % 3) {
+                    tokio::task::yield_now().await;
+                }
+                self.active.fetch_sub(1, Ordering::SeqCst);
+                [addr as u8 / 64; 64]
+            }
+            async fn write(&self, _addr: u64, _data: [u8; 64]) {
+                panic!("gather must never issue writes")
+            }
+        }
+        let tracked = Arc::new(Outstanding { active: AtomicUsize::new(0), peak: AtomicUsize::new(0) });
+        let hbm: Arc<dyn ErasedMemoryModel> = tracked.clone();
+        let reads = (0..4).map(|i| ChunkRead { addr: i*64, dst_offset: (3-i) as usize*64, len:64 }).collect();
+        let out = gather_with_window(&hbm, 256, reads, Some(3)).await;
+        assert_eq!(tracked.peak.load(Ordering::SeqCst), 3);
+        assert_eq!(tracked.active.load(Ordering::SeqCst), 0);
+        for i in 0..4 { assert_eq!(&out[i*64..(i+1)*64], &[3-i as u8;64]); }
+    }
+
+    #[tokio::test]
+    async fn burst_write_preserves_edges_without_reading_full_blocks() {
+        for (addr, count, reads) in [(0, 256, 0), (3, 190, 128), (64, 64, 0), (65, 2, 64)] {
+            let backing = MemoryBacked::with_capacity(512);
+            backing.with_data(|b| b.fill(0xa5));
+            let stats = Arc::new(crate::WithStats::new(backing));
+            let hbm: Arc<dyn ErasedMemoryModel> = stats.clone();
+            let source = vec![0x37; count];
+            assert_eq!(write_bursted(&hbm, addr, count, &source, 16).await, count);
+            assert_eq!(stats.statistics().total_bytes_read, reads);
+            stats.model().with_data(|b| {
+                assert!(b[..addr as usize].iter().all(|&v| v == 0xa5));
+                assert_eq!(&b[addr as usize..addr as usize + count], &source);
+                assert!(b[addr as usize + count..].iter().all(|&v| v == 0xa5));
+            });
+        }
+    }
 
     /// A `MemoryBacked` HBM seeded by `init`, returned both as a typed handle
     /// (for inspection) and as the erased `Arc` the primitives consume.

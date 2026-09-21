@@ -446,13 +446,27 @@ pub(crate) async fn store_rows_to_hbm(
         // not be 64-aligned (sub-64 MLEN), and write_unaligned avoids
         // clobbering neighbouring bytes. For MLEN >= 64 (element_addr
         // 64-aligned, len a 64-multiple) this is equivalent to write_aligned.
-        let _ = memory::chunked::write_unaligned(
-            hbm,
-            element_addr,
-            len_in_bytes_per_store as usize,
-            &element_bytes,
-        )
-        .await;
+        let write_window = std::env::var("PLENA_DMA_WRITE_WINDOW")
+            .ok()
+            .map(|s| s.parse::<usize>().expect("invalid DMA window"));
+        if let Some(window) = write_window {
+            memory::chunked::write_bursted(
+                hbm,
+                element_addr,
+                len_in_bytes_per_store as usize,
+                &element_bytes,
+                window,
+            )
+            .await;
+        } else {
+            let _ = memory::chunked::write_unaligned(
+                hbm,
+                element_addr,
+                len_in_bytes_per_store as usize,
+                &element_bytes,
+            )
+            .await;
+        }
 
         // Write scale bytes to HBM (if Mx type). Handles unaligned addresses
         // and scales that span multiple 64-byte chunks via read-modify-write.

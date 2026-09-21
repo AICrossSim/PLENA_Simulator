@@ -24,6 +24,12 @@ pub enum LTilePrimitive {
     ScaleAccum,
     DotReduce,
     OuterUpdate,
+    DeltaUpdate,
+    ReduceBegin,
+    ReduceAcc,
+    DecayReduceAcc,
+    ReduceWrite,
+    ResidualWrite,
 }
 
 impl TryFrom<u8> for LTilePrimitive {
@@ -34,6 +40,12 @@ impl TryFrom<u8> for LTilePrimitive {
             0 => Ok(Self::ScaleAccum),
             1 => Ok(Self::DotReduce),
             2 => Ok(Self::OuterUpdate),
+            3 => Ok(Self::DeltaUpdate),
+            4 => Ok(Self::ReduceBegin),
+            5 => Ok(Self::ReduceAcc),
+            6 => Ok(Self::DecayReduceAcc),
+            7 => Ok(Self::ReduceWrite),
+            8 => Ok(Self::ResidualWrite),
             _ => Err(()),
         }
     }
@@ -1450,6 +1462,17 @@ mod tests {
 
     #[test]
     fn l_tile_forms_and_explicit_matrix_consumer_match_compiler_words() {
+        // Compiler encode_l_tile_exec(1,2,3,DELTA_UPDATE) => 0x00ccc87f.
+        assert!(matches!(
+            Opcode::decode(0x00cc_c87f),
+            Opcode::L_TILE_EXEC {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                primitive: LTilePrimitive::DeltaUpdate,
+                ..
+            }
+        ));
         match Opcode::decode(rform(0x3F, 7, 9, 2, 0, 1)) {
             Opcode::L_TILE_CFG {
                 shape,
