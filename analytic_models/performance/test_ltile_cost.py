@@ -12,6 +12,29 @@ from .ltile_decode import unique_prepared_bytes, run as decode_run
 from .ltile_program import build_program
 
 
+def test_sfu_drains_last_partial_subchunk_and_prices_both_sram_accesses():
+    machine = Machine(sfu_lanes=300, sfu_ii=2, vector_softplus_cycles=13)
+    cost = assembly_cost('V_SOFTPLUS_V gp1, gp2, 0\n', machine)
+    assert cost.sram == 2
+    assert cost.arithmetic == 6*2 + 13  # seven subchunks, no floor division
+    assert cost.issue == 1
+
+
+def test_sfu_does_not_silently_price_masked_execution():
+    with pytest.raises(ValueError, match='masked SFU'):
+        assembly_cost('V_SOFTPLUS_V gp1, gp2, 1\n')
+
+
+def test_sfu_legacy_reciprocal_contract_unchanged():
+    cost = assembly_cost('V_RECI_V gp1, gp2, 0\n')
+    assert (cost.issue, cost.sram, cost.arithmetic) == (1, 2, 2)
+
+
+def test_gate_cannot_inherit_one_cycle_whole_vector_sfu_by_accident():
+    with pytest.raises(ValueError, match='finite-width'):
+        assembly_cost('V_SOFTPLUS_V gp1, gp2, 0\n')
+
+
 def test_original_dma_is_not_optimized_window_one():
     transfers = {("read", 4096): 1, ("write", 4096): 1}
     original = dma_features(transfers, "review")

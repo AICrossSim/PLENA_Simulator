@@ -33,6 +33,12 @@ class Machine:
     bank_width: int = 32
     vector_width: int = 2048
     vector_reciprocal_cycles: int = 2
+    vector_exp_cycles: int = 1
+    vector_softplus_cycles: int = 2
+    # None retains legacy whole-vector service. With finite lanes these are
+    # per-subchunk latencies; callers must supply a documented hardware profile.
+    sfu_lanes: int | None = None
+    sfu_ii: int = 1
     clock_hz: int = 1_000_000_000
 
     def __post_init__(self):
@@ -49,6 +55,9 @@ class Machine:
                 self.dot_latency,
                 self.context_cycles,
                 self.vector_reciprocal_cycles,
+                self.vector_exp_cycles,
+                self.vector_softplus_cycles,
+                self.sfu_ii,
                 self.clock_hz,
             )
             < 1
@@ -56,6 +65,16 @@ class Machine:
             raise ValueError("resource service times must be positive")
         if (self.banks, self.bank_width, self.vector_width) != (64, 32, 2048):
             raise ValueError("only the audited 64 x 32 Matrix / 2048 Vector geometry is supported")
+        if self.sfu_lanes is not None and not 1 <= self.sfu_lanes <= self.vector_width:
+            raise ValueError("SFU lane count must fit the Vector row")
+
+    def sfu_cycles(self, opcode):
+        latency = {"V_RECI_V": self.vector_reciprocal_cycles,
+                   "V_EXP_V": self.vector_exp_cycles,
+                   "V_SOFTPLUS_V": self.vector_softplus_cycles}[opcode]
+        if self.sfu_lanes is None:
+            return latency
+        return (math.ceil(self.vector_width / self.sfu_lanes) - 1) * self.sfu_ii + latency
 
 
 @dataclass(frozen=True)
@@ -402,11 +421,13 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
         elif op in ("V_ADD_VV", "V_SUB_VV", "V_MUL_VV"):
             cost.sram += 3
             cost.arithmetic += 1
-        elif op == "V_RECI_V":
-            if int(args[2]) != 0:
-                raise ValueError("masked reciprocal needs a separate service contract")
+        elif op in ("V_RECI_V", "V_EXP_V", "V_SOFTPLUS_V"):
+            if len(args) != 3 or int(args[2]) != 0:
+                raise ValueError("masked SFU needs a separate service contract")
+            if op != "V_RECI_V" and machine.sfu_lanes is None:
+                raise ValueError("gate SFU requires an explicit finite-width service profile")
             cost.sram += 2
-            cost.arithmetic += machine.vector_reciprocal_cycles
+            cost.arithmetic += machine.sfu_cycles(op)
         else:
             raise ValueError(f"unpriced opcode {op} at instruction {pc}")
         registers[0] = 0

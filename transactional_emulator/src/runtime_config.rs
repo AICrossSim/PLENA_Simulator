@@ -29,6 +29,57 @@ pub(crate) static VECTOR_MAX_CYCLES: LazyLock<u32> = LazyLock::new(vector_max_cy
 pub(crate) static VECTOR_MIN_CYCLES: LazyLock<u32> = LazyLock::new(vector_max_cycles);
 pub(crate) static VECTOR_SUM_CYCLES: LazyLock<u32> = LazyLock::new(vector_sum_cycles);
 pub(crate) static VECTOR_SOFTPLUS_CYCLES: LazyLock<u32> = LazyLock::new(vector_softplus_cycles);
+
+/// Optional finite-width SFU service contract. This is an implementation
+/// candidate, not synthesis evidence. All five parameters are mandatory when
+/// enabled; never interpret a historical whole-vector latency as a measured
+/// per-lane latency. Instructions retire serially after the final subchunk.
+pub(crate) static VECTOR_SFU: LazyLock<Option<VectorSfu>> = LazyLock::new(|| {
+    let names = [
+        "PLENA_VECTOR_SFU_LANES",
+        "PLENA_VECTOR_SFU_II",
+        "PLENA_VECTOR_SFU_EXP_LATENCY",
+        "PLENA_VECTOR_SFU_SOFTPLUS_LATENCY",
+        "PLENA_VECTOR_SFU_RECI_LATENCY",
+    ];
+    let values = names.map(|name| std::env::var(name).ok());
+    if values.iter().all(Option::is_none) {
+        return None;
+    }
+    let values = std::array::from_fn::<_, 5, _>(|i| {
+        let value = values[i]
+            .as_ref()
+            .unwrap_or_else(|| panic!("{} required for finite SFU", names[i]));
+        let value = value.parse::<u32>().expect("SFU parameter must be uint32");
+        assert!(value > 0, "SFU parameter must be positive");
+        value
+    });
+    Some(VectorSfu {
+        lanes: values[0],
+        ii: values[1],
+        exp: values[2],
+        softplus: values[3],
+        reciprocal: values[4],
+    })
+});
+
+pub(crate) struct VectorSfu {
+    pub lanes: u32,
+    pub ii: u32,
+    pub exp: u32,
+    pub softplus: u32,
+    pub reciprocal: u32,
+}
+
+impl VectorSfu {
+    pub fn service(&self, elements: u32, latency: u32) -> u32 {
+        assert!(elements > 0 && self.lanes <= elements);
+        (elements.div_ceil(self.lanes) - 1)
+            .checked_mul(self.ii)
+            .and_then(|n| n.checked_add(latency))
+            .expect("SFU service overflow")
+    }
+}
 pub(crate) static SCALAR_FP_BASIC_CYCLES: LazyLock<u32> = LazyLock::new(scalar_fp_basic_cycles);
 pub(crate) static SCALAR_FP_EXP_CYCLES: LazyLock<u32> = LazyLock::new(scalar_fp_exp_cycles);
 pub(crate) static SCALAR_FP_SQRT_CYCLES: LazyLock<u32> = LazyLock::new(scalar_fp_sqrt_cycles);

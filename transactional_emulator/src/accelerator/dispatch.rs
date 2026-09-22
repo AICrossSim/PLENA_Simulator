@@ -523,6 +523,16 @@ impl Accelerator {
                                 lmask: 0,
                                 ..
                             }
+                            | op::Opcode::V_EXP_V {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::V_SOFTPLUS_V {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
                             | op::Opcode::L_TILE_CFG { .. }
                             | op::Opcode::L_TILE_EXEC { .. }
                             | op::Opcode::H_PREFETCH_V { .. }

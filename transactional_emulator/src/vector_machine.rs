@@ -840,13 +840,28 @@ impl VectorMachine {
     }
 
     pub(crate) async fn exp(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
+        if crate::timing::execution_counters().enabled {
+            assert!(
+                crate::runtime_config::VECTOR_SFU.is_some(),
+                "gate SFU requires an explicit finite-width service profile"
+            );
+        }
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
         // This matches what hardware exp units do (saturate instead of producing inf/NaN).
         let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
             let c = QuantTensor::quantize(clamped.exp(), a.data_type());
-            crate::timing::charge_arithmetic_cycles(*VECTOR_EXP_CYCLES).await;
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_EXP_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.exp)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         } else {
             let result = clamped.shallow_clone();
@@ -861,7 +876,15 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            crate::timing::charge_arithmetic_cycles(*VECTOR_EXP_CYCLES).await;
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_EXP_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.exp)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -878,10 +901,25 @@ impl VectorMachine {
     }
 
     pub(crate) async fn softplus(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
+        if crate::timing::execution_counters().enabled {
+            assert!(
+                crate::runtime_config::VECTOR_SFU.is_some(),
+                "gate SFU requires an explicit finite-width service profile"
+            );
+        }
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(Self::softplus_tensor(a.as_tensor()), a.data_type());
-            crate::timing::charge_arithmetic_cycles(*VECTOR_SOFTPLUS_CYCLES).await;
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_SOFTPLUS_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.softplus)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -896,7 +934,15 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            crate::timing::charge_arithmetic_cycles(*VECTOR_SOFTPLUS_CYCLES).await;
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_SOFTPLUS_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.softplus)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -918,7 +964,14 @@ impl VectorMachine {
         crate::timing::charge_ordinary_bank_cycles(1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().reciprocal(), a.data_type());
-            crate::timing::charge_arithmetic_cycles(*VECTOR_RECI_CYCLES).await;
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_RECI_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.reciprocal)
+                    }),
+            )
+            .await;
             crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         } else {
@@ -934,7 +987,14 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            crate::timing::charge_arithmetic_cycles(*VECTOR_RECI_CYCLES).await;
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_RECI_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.reciprocal)
+                    }),
+            )
+            .await;
             crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         }
