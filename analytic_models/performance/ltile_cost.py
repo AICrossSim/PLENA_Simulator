@@ -39,6 +39,7 @@ class Machine:
     # per-subchunk latencies; callers must supply a documented hardware profile.
     sfu_lanes: int | None = None
     sfu_ii: int = 1
+    reduction_tree_bf16: bool = False
     clock_hz: int = 1_000_000_000
 
     def __post_init__(self):
@@ -69,9 +70,11 @@ class Machine:
             raise ValueError("SFU lane count must fit the Vector row")
 
     def sfu_cycles(self, opcode):
-        latency = {"V_RECI_V": self.vector_reciprocal_cycles,
-                   "V_EXP_V": self.vector_exp_cycles,
-                   "V_SOFTPLUS_V": self.vector_softplus_cycles}[opcode]
+        latency = {
+            "V_RECI_V": self.vector_reciprocal_cycles,
+            "V_EXP_V": self.vector_exp_cycles,
+            "V_SOFTPLUS_V": self.vector_softplus_cycles,
+        }[opcode]
         if self.sfu_lanes is None:
             return latency
         return (math.ceil(self.vector_width / self.sfu_lanes) - 1) * self.sfu_ii + latency
@@ -328,7 +331,7 @@ class ProgramCost:
         )
 
 
-def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=False):
+def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=False, matrix_service=None):
     """Evaluate only instruction control/addresses, not model arithmetic."""
     code = []
     for raw in assembly.splitlines():
@@ -362,6 +365,10 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
             registers[gp(args[0])] = (int(args[1], 0) << 12) & 0xFFFFFFFF
         elif op == "S_ADDI_INT":
             registers[gp(args[0])] = (value(args[1]) + int(args[2], 0)) & 0xFFFFFFFF
+        elif op in ("S_SUB_FP", "S_ADD_FP", "S_MUL_FP", "S_LD_FP", "S_SQRT_FP", "S_RECI_FP"):
+            # The generated layer profile fixes scalar basic/sqrt/reci to one
+            # cycle. This is inherited latency, explicitly not RTL certification.
+            pass
         elif op == "C_LOOP_START":
             if int(args[1], 0) <= 0:
                 raise ValueError("loop must have a positive finite trip count")
@@ -418,6 +425,40 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
                     cost.transfers[("write", n)] += 1
             else:
                 cost.transfers[("read", length)] += 1
+        elif op == "V_RED_SUM":
+            if not machine.reduction_tree_bf16 or len(args) != 3 or args[0] == "f0" or int(args[2]) != 0:
+                raise ValueError("unpriced norm reduction contract")
+            cost.sram += 1
+            cost.arithmetic += 12  # 11 BF16 tree stages plus scalar merge
+        elif op == "V_SHFT_V":
+            cost.sram += 2
+            cost.arithmetic += 1
+        elif op == "V_MUL_VF":
+            if len(args) != 4 or int(args[3]) != 0:
+                raise ValueError("unpriced scalar-vector mask")
+            cost.sram += 2
+            cost.arithmetic += 1
+        elif op == "M_MV":
+            if matrix_service is None or len(args) != 4:
+                raise ValueError("M_MV requires explicit bounded Matrix service and view")
+            h = matrix_service
+            view = views[int(args[3])]
+            if view.heads != 1 or view.cols != 32 or view.rows > h.reduction_lanes:
+                raise ValueError("bounded M_MV requires one K-by-32 view")
+            cycles, words = bank_service(value(args[1]), view)
+            # Four output columns share one bank word. Re-read for each group;
+            # Matrix and Vector reads are conservatively serialized in Rust.
+            groups = 32 // h.edge
+            cost.sram += groups * (
+                max(cycles, math.ceil(words * 32 / h.matrix_read_elements)) + math.ceil(2048 / h.vector_read_elements)
+            )
+            array = 2 * (h.edge - 1) + (h.edge - 1) * max(h.mac_ii, h.mac_latency) + h.mac_latency
+            cost.arithmetic += groups * (array + int(math.log2(h.groups)) * h.tree_add_latency + h.tree_add_latency)
+        elif op == "M_MV_WO":
+            if matrix_service is None or len(args) != 2:
+                raise ValueError("Matrix writeout requires explicit bounded service")
+            h = matrix_service
+            cost.sram += math.ceil(2048 / h.vector_read_elements) + math.ceil(2048 / h.vector_write_elements)
         elif op in ("V_ADD_VV", "V_SUB_VV", "V_MUL_VV"):
             cost.sram += 3
             cost.arithmetic += 1

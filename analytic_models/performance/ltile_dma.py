@@ -13,6 +13,28 @@ from pathlib import Path
 import subprocess
 
 
+def prepare_backend(output):
+    """Build the memory-only reference in the repo's Nix development shell.
+
+    This explicit profile matches the runner's eight-controller HBM2 preset.
+    It does not select a new global hardware configuration or physical stack
+    count. The generated artifact records the exact compiler/config hashes.
+    """
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    source = Path(__file__).with_name("ltile_memory.cc")
+    profile = Path(__file__).with_name("profiles") / "hbm2_8controllers_1ghz.json"
+    binary = output / "ltile_memory"
+    command = ["c++", "-std=c++17", "-O2", str(source), "-lramulator", "-o", str(binary)]
+    subprocess.run(command, check=True)
+    config = output / "ramulator.json"
+    config.write_bytes(profile.read_bytes())
+    (output / "cache").mkdir()
+    manifest = dict(command=command, source_sha256=sha(source), binary_sha256=sha(binary), config_sha256=sha(config))
+    (output / "build.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -56,3 +78,12 @@ class DmaBackend:
         if (expected_read, expected_write) != (result["read_bytes"], result["write_bytes"]):
             raise AssertionError("DMA trace traffic differs from compiler transfer counts")
         return result
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build the pinned HBM2 timing reference in a fresh artifact directory")
+    parser.add_argument("--prepare", required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(prepare_backend(args.prepare), indent=2))

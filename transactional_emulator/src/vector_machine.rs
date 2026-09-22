@@ -462,6 +462,7 @@ impl VectorMachine {
         views: VectorOperandViews,
     ) {
         let a = self.read_view(vs1, views.source).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         if rmask == 0 {
             let scalar = f.tensor(self.tile_size);
             let c = QuantTensor::quantize(a.as_tensor() * scalar, a.data_type());
@@ -581,6 +582,7 @@ impl VectorMachine {
 
     pub(crate) async fn shift_scalar(&self, vd: u32, vs1: u32, shift: u32) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         let tensor = a.as_tensor();
         let len = tensor.size()[0];
         let shift_amount = shift as i64;
@@ -1025,6 +1027,28 @@ impl VectorMachine {
         vs1_view: Option<AffineView>,
     ) -> f32 {
         let a = self.read_view(vs1, vs1_view).await;
+        if crate::timing::execution_counters().enabled {
+            assert!(rmask == 0 && vs1_view.is_none());
+            assert_eq!(
+                std::env::var("PLENA_VECTOR_REDUCE_BF16_TREE").as_deref(),
+                Ok("1"),
+                "unified norm reduction needs explicit BF16 tree contract"
+            );
+            crate::timing::charge_bank_cycles(1).await;
+            let mut values = Vec::<f32>::try_from(a.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            assert!(values.len().is_power_of_two());
+            let stages = values.len().ilog2();
+            while values.len() > 1 {
+                values = values
+                    .chunks_exact(2)
+                    .map(|p| bf16::from_f32(p[0] + p[1]).to_f32())
+                    .collect();
+            }
+            // Registered BF16 add tree, one cycle per stage; this remains an
+            // explicit candidate latency until the existing tree is audited.
+            crate::timing::charge_arithmetic_cycles(stages + 1).await;
+            return f + values[0];
+        }
         crate::timing::charge_arithmetic_cycles(*VECTOR_SUM_CYCLES).await;
         if rmask == 0 {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();

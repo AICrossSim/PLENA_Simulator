@@ -508,6 +508,12 @@ impl Accelerator {
             let executed_pc = pc;
             let op = &ops[pc];
             if timing::execution_counters().enabled {
+                if matches!(op, op::Opcode::M_MV { .. } | op::Opcode::M_MV_WO { .. }) {
+                    assert!(
+                        crate::matrix_service::PROFILE.is_some(),
+                        "unified Matrix execution requires PLENA_MATRIX_SERVICE_PROFILE"
+                    );
+                }
                 assert!(
                     matches!(
                         op,
@@ -533,6 +539,25 @@ impl Accelerator {
                                 lmask: 0,
                                 ..
                             }
+                            | op::Opcode::V_SHFT_V { .. }
+                            | op::Opcode::S_SUB_FP { .. }
+                            | op::Opcode::S_ADD_FP { .. }
+                            | op::Opcode::S_MUL_FP { .. }
+                            | op::Opcode::S_SQRT_FP { .. }
+                            | op::Opcode::S_RECI_FP { .. }
+                            | op::Opcode::S_LD_FP { .. }
+                            | op::Opcode::V_RED_SUM {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::V_MUL_VF {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::M_MV { view: Some(_), .. }
+                            | op::Opcode::M_MV_WO { .. }
                             | op::Opcode::L_TILE_CFG { .. }
                             | op::Opcode::L_TILE_EXEC { .. }
                             | op::Opcode::H_PREFETCH_V { .. }

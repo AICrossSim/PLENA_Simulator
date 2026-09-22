@@ -73,7 +73,10 @@ def build_program(
                     static_address_reuse=True,
                     pairwise_bf16_dot=True,
                     mamba_decay_row_invariant=kind == "mamba",
-                    decay_is_delta=decay_is_delta,
+                    # Frozen E compilers predate the complement-decay option.
+                    # The original decay contract needs no additional keyword;
+                    # requesting the new contract still requires its real API.
+                    **({"decay_is_delta": True} if decay_is_delta else {}),
                 )
             )
         return "\n".join(programs), arena.size

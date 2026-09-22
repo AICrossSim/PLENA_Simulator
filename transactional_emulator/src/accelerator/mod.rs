@@ -73,6 +73,10 @@ impl Accelerator {
         }
     }
 
+    pub(crate) fn load_fpsram_from_bf16_bytes(&mut self, bytes: &[u8]) {
+        self.scalar_sram.load_fpsram_from_bf16_bytes(bytes);
+    }
+
     pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {
         self.scalar_sram.load_fpsram_from_f16_bytes(bytes);
     }

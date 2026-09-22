@@ -120,6 +120,10 @@ pub(crate) struct Opts {
     /// Path to FP SRAM contents for preloading.
     pub(crate) fpsram: PathBuf,
 
+    /// Interpret FP preload as little-endian BF16. Default keeps legacy FP16 files.
+    #[arg(long)]
+    pub(crate) fpsram_bf16: bool,
+
     #[arg(long)]
     /// Path to INT SRAM contents for preloading.
     pub(crate) intsram: Option<PathBuf>,

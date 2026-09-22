@@ -217,7 +217,11 @@ pub(crate) async fn run_from_cli() {
             opts.fpsram
         )
     });
-    accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
+    if opts.fpsram_bf16 {
+        accelerator.load_fpsram_from_bf16_bytes(&fpsram_data);
+    } else {
+        accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
+    }
 
     // - INT SRAM Preload
     if let Some(intsram_path) = opts.intsram {

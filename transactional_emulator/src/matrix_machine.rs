@@ -649,6 +649,10 @@ impl MatrixMachine {
         v_addr: u32,
         view: Option<MatrixViewDescriptor>,
     ) {
+        if let Some(profile) = crate::matrix_service::PROFILE.as_ref() {
+            self.bounded_mv(m_addr, v_addr, view, profile).await;
+            return;
+        }
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         tracing::debug!("======================== MV ==========================");
         tracing::debug!("m_addr = {:?}", m_addr);
@@ -675,6 +679,62 @@ impl MatrixMachine {
             .to_kind(tch::Kind::Float);
         let result = vec_f32.matmul(&mat_t_f32).squeeze_dim(0);
         self.v_accum += result;
+    }
+
+    async fn bounded_mv(
+        &mut self,
+        matrix_base: u32,
+        vector_base: u32,
+        view: Option<MatrixViewDescriptor>,
+        profile: &crate::matrix_service::MatrixService,
+    ) {
+        let view = view.expect("bounded M_MV requires an explicit rectangular view");
+        assert_eq!(view.shape.tile_count, 1);
+        assert_eq!(
+            view.shape.cols, self.blen,
+            "one M_MV owns BLEN output columns"
+        );
+        assert!(view.shape.rows <= profile.reduction_lanes && view.shape.rows <= self.mlen);
+        assert!(self.blen.is_multiple_of(profile.edge));
+        assert!(vector_base.is_multiple_of(self.mlen));
+        // No whole MLEN-square shadow tensor or hidden full weight latch.
+        // Each mini-array output group reads actual column packets; repeated
+        // bank words on a later group are read and charged again.
+        for col in (0..self.blen).step_by(profile.edge as usize) {
+            let columns = (col..col + profile.edge)
+                .map(|c| (0, c))
+                .collect::<Vec<_>>();
+            let (weights, service) = self
+                .mram
+                .read_layout_indexed_columns(matrix_base, view.layout(), &columns)
+                .await;
+            let words = service.bank_words * u64::from(self.mram.bank_width());
+            let port_cycles = words.div_ceil(u64::from(profile.matrix_read_elements));
+            crate::timing::charge_bank_cycles(service.service_cycles.max(port_cycles)).await;
+            let input = self.vram.read(vector_base).await;
+            crate::timing::charge_bank_cycles(u64::from(
+                self.mlen.div_ceil(profile.vector_read_elements),
+            ))
+            .await;
+            let input = Vec::<f32>::try_from(input.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            let weight =
+                Vec::<f32>::try_from(weights.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            let rows = view.shape.rows as usize;
+            let old = Vec::<f32>::try_from(&self.v_accum).unwrap();
+            let values = (0..profile.edge as usize)
+                .map(|j| {
+                    profile.column(
+                        &input[..rows],
+                        &weight[j * rows..(j + 1) * rows],
+                        old[col as usize + j],
+                    )
+                })
+                .collect::<Vec<_>>();
+            crate::timing::charge_arithmetic_cycles(profile.arithmetic_cycles()).await;
+            self.v_accum
+                .narrow(0, i64::from(col), i64::from(profile.edge))
+                .copy_(&Tensor::from_slice(&values));
+        }
     }
 
     pub(crate) async fn tmv(
@@ -713,7 +773,18 @@ impl MatrixMachine {
     pub(crate) async fn mv_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
-        self.core().compute(1).await;
+        if let Some(profile) = crate::matrix_service::PROFILE.as_ref() {
+            // Existing Vector SRAM writes a complete row: preserve all other
+            // columns through a charged read-modify-write, then reset only
+            // after the accepted write below.
+            crate::timing::charge_bank_cycles(u64::from(
+                self.mlen.div_ceil(profile.vector_read_elements)
+                    + self.mlen.div_ceil(profile.vector_write_elements),
+            ))
+            .await;
+        } else {
+            self.core().compute(1).await;
+        }
         let old = self.vram.read(vec_base).await;
         let new = old.as_tensor().contiguous();
         let source = self.v_accum.contiguous();
