@@ -260,9 +260,7 @@ def attention_core_case(root, runtime, memory):
     for source, temporary, destination in zip(logits, scratch, probabilities):
         text += lower_softmax_rows(source, temporary, destination, keys, mask)
     text += lower_batch_projection(pv, probabilities, outputs)
-    image, result = run_program(
-        root, runtime, memory, a, text, profile=profile, fp_constants=[-16384] + [0] * 31
-    )
+    image, result = run_program(root, runtime, memory, a, text, profile=profile, fp_constants=[-16384] + [0] * 31)
     for query, lb, pb, ob in zip(q, logits, probabilities, outputs):
         scores = reference(query, key, 256, profile.matrix)
         exponentials = exp(bf(scores - np.max(scores)))
@@ -277,8 +275,87 @@ def attention_core_case(root, runtime, memory):
         np.testing.assert_array_equal(read(image, pb, keys), probability)
         np.testing.assert_array_equal(read(image, ob, width), expected)
     return dict(
-        case=root.name, **result, status="passed", checked_values=b * (keys * 2 + width),
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=b * (keys * 2 + width),
         scope="connected prepared-Q/static-KV attention core; no host intermediate injection; no KV append/router/MLA claim",
+    )
+
+
+def expert_core_case(root, runtime, memory):
+    """Routed expert MLPs and combine, with fixed routing supplied as input.
+
+    Two tokens select experts [0,1] and [0,2]. Expert 0 shares panels across
+    both tokens; the other experts have distinct weights/private results.
+    This checks post-router execution and does not certify top-k selection.
+    """
+    from compiler.aten.plena.prepared_vector_recurrence import _Emitter
+
+    rng = np.random.default_rng(2401)
+    a = Arena()
+    profile = profile_for(memory)
+    hidden, intermediate = 64, 96
+    zero = a.add(np.zeros(2048))
+    x = bf(rng.normal(0, 0.2, (2, hidden)))
+    inputs = [a.add(np.pad(row, (0, 2048 - hidden))) for row in x]
+    output = [a.add(np.full(2048, 7), output=True) for _ in x]
+    selected = [(0, 1), (0,), (1,)]
+    contributions = [[], []]
+    references = [[], []]
+    text = ""
+    for tokens in selected:
+        up = bf(rng.normal(0, 0.2, (hidden, intermediate)))
+        down = bf(rng.normal(0, 0.2, (intermediate, hidden)))
+        up_base = a.add(up.reshape(hidden, -1, 32).transpose(1, 0, 2).copy())
+        down_base = a.add(down.reshape(intermediate, -1, 32).transpose(1, 0, 2).copy())
+        temp = [a.add(np.full(2048, 7), output=True) for _ in tokens]
+        result = [a.add(np.full(2048, 7), output=True) for _ in tokens]
+        source = [inputs[t] for t in tokens]
+        text += lower_batch_projection(
+            Projection(source[0], up_base, temp[0], zero, hidden, intermediate, 256), source, temp
+        )
+        e = _Emitter(2048, True)
+        for address in temp:
+            e.transfer(0, address)
+            e.address(1, 0)
+            e.address(2, 0)
+            e.lines.append("V_MAX_VF gp1, gp2, f0, 0")
+            e.binary("MUL", 0, 0, 0)
+            e.transfer(0, address, store=True)
+        text += "\n".join(e.lines) + "\n"
+        text += lower_batch_projection(
+            Projection(temp[0], down_base, result[0], zero, intermediate, hidden, 256), temp, result
+        )
+        for token, address in zip(tokens, result):
+            activation = bf(np.maximum(reference(x[token], up, 256, profile.matrix), 0) ** 2)
+            references[token].append(reference(activation, down, 256, profile.matrix))
+            contributions[token].append(address)
+    e = _Emitter(2048, True)
+    e.address(4, 0)
+    for addresses, destination in zip(contributions, output):
+        e.transfer(0, zero)
+        for slot, address in enumerate(addresses, 1):
+            e.transfer(1, address)
+            e.lines.append(f"S_LD_FP f1, gp4, {slot}")
+            e.address(1, 2048)
+            e.address(2, 2048)
+            e.lines.append("V_MUL_VF gp1, gp2, f1, 0")
+            e.binary("ADD", 0, 0, 1)
+        e.transfer(0, destination, store=True)
+    text += "\n".join(e.lines) + "\n"
+    image, result = run_program(
+        root, runtime, memory, a, text, profile=profile, fp_constants=[0, 0.25, 0.75] + [0] * 29
+    )
+    for values, address in zip(references, output):
+        expected = bf(bf(values[0] * 0.25) + bf(values[1] * 0.75))
+        np.testing.assert_array_equal(read(image, address, hidden), expected)
+    return dict(
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=2 * hidden,
+        scope="fixed-route shared/private expert projections, ReLU2 and weighted combine; no dynamic router claim",
     )
 
 
@@ -286,7 +363,7 @@ def main():
     p = argparse.ArgumentParser()
     for arg in ("output", "runtime", "memory-root"):
         p.add_argument("--" + arg, required=True, type=Path)
-    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention"))
+    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention", "experts"))
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     results = []
@@ -306,7 +383,14 @@ def main():
         ("softmax_tail_latency8", lambda d: softmax_case(d, args.runtime, args.memory_root, 2307, 8)),
     ]
     attention = [("attention_core_4096", lambda d: attention_core_case(d, args.runtime, args.memory_root))]
-    jobs = auxiliary if args.only == "auxiliary" else attention if args.only == "attention" else jobs + auxiliary + attention
+    experts = [("routed_expert_core", lambda d: expert_core_case(d, args.runtime, args.memory_root))]
+    groups = {
+        "all": jobs + auxiliary + attention + experts,
+        "auxiliary": auxiliary,
+        "attention": attention,
+        "experts": experts,
+    }
+    jobs = groups[args.only]
     for name, run in jobs:
         result = run(args.output / name)
         results.append(result)

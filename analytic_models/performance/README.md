@@ -19,6 +19,8 @@ Ramulator receives the ordered DMA addresses and intervening compute delays.
 `ltile_execution.price_program` joins the ledgers. No measured cycles are inputs
 to prediction. The Rust and Python memory implementations share Ramulator, so
 agreement verifies integration rather than independently validating DRAM.
+The exclusive total is `issue + scalar + sram + arithmetic + dependency + dma`.
+`frontend` is a convenience subtotal (`issue + scalar`), not an extra term.
 
 `ltile_layers` produces connected Mamba/KDA sublayers from shapes. Coefficient
 packing reuses repeated masks; the old recurrent ISA instead caches compact
@@ -86,6 +88,10 @@ Its `--only attention` case connects prepared-Q/static-KV QK, softmax and PV
 in a single program with no host writes between stages (two queries, 4K keys).
 This verifies the attention core, not incremental KV packing, query projection,
 RoPE, MLA, routing or a complete attention block.
+`--only experts` connects fixed-route expert up projection, ReLU², down
+projection and weighted combine for two tokens sharing one of three experts.
+Weights and activations flow through the program; dynamic router selection
+remains outside that test.
 Five archived real-weight sublayers can be independently repriced; optimized
 packing also requires a new numerical execution, not just a timing replay.
 
