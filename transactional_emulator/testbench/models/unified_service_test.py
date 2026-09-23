@@ -226,11 +226,67 @@ def vector_case(root, runtime, memory):
     )
 
 
+def attention_core_case(root, runtime, memory):
+    """Connect QK -> softmax -> PV without host writes between operators.
+
+    Queries are already scaled. Two query heads share one static KV group;
+    projection/RoPE and incremental KV packing are outside this core check.
+    Extra owned padding covers full Vector DMA reads of the final K tile.
+    """
+    rng = np.random.default_rng(739)
+    a = Arena()
+    profile = profile_for(memory)
+    b, keys, width = 2, 4096, 128
+    q = bf(rng.normal(0, 0.1, (b, width)))
+    key = bf(rng.normal(0, 0.2, (width, keys)))
+    value = bf(rng.normal(0, 0.2, (keys, width)))
+    zero = a.add(np.zeros(2048))
+    mask = a.add(np.ones(2048))
+    qk = Projection(0, 0, 0, zero, width, keys, 256)
+    pv = Projection(0, 0, 0, zero, keys, width, 256)
+
+    def weights(w):
+        return a.add(w.reshape(w.shape[0], -1, 32).transpose(1, 0, 2).copy())
+
+    queries = [a.add(np.pad(row, (0, qk.input_values - width))) for row in q]
+    key_base, value_base = weights(key), weights(value)
+    logits = [a.add(np.full(qk.output_values, 7), output=True) for _ in q]
+    scratch = [a.add(np.full(qk.output_values, 7), output=True) for _ in q]
+    probabilities = [a.add(np.zeros(pv.input_values), output=True) for _ in q]
+    outputs = [a.add(np.full(pv.output_values, 7), output=True) for _ in q]
+    qk = replace(qk, inputs=queries[0], weights=key_base, outputs=logits[0])
+    pv = replace(pv, inputs=probabilities[0], weights=value_base, outputs=outputs[0])
+    text = lower_batch_projection(qk, queries, logits)
+    for source, temporary, destination in zip(logits, scratch, probabilities):
+        text += lower_softmax_rows(source, temporary, destination, keys, mask)
+    text += lower_batch_projection(pv, probabilities, outputs)
+    image, result = run_program(
+        root, runtime, memory, a, text, profile=profile, fp_constants=[-16384] + [0] * 31
+    )
+    for query, lb, pb, ob in zip(q, logits, probabilities, outputs):
+        scores = reference(query, key, 256, profile.matrix)
+        exponentials = exp(bf(scores - np.max(scores)))
+        total = np.float32(0)
+        for row in exponentials.reshape(-1, 2048):
+            while len(row) > 1:
+                row = bf(row[::2] + row[1::2])
+            total = bf(total + row[0])[0]
+        probability = bf(exponentials * bf(1 / total))
+        expected = reference(probability, value, 256, profile.matrix)
+        np.testing.assert_array_equal(read(image, lb, keys), scores)
+        np.testing.assert_array_equal(read(image, pb, keys), probability)
+        np.testing.assert_array_equal(read(image, ob, width), expected)
+    return dict(
+        case=root.name, **result, status="passed", checked_values=b * (keys * 2 + width),
+        scope="connected prepared-Q/static-KV attention core; no host intermediate injection; no KV append/router/MLA claim",
+    )
+
+
 def main():
     p = argparse.ArgumentParser()
     for arg in ("output", "runtime", "memory-root"):
         p.add_argument("--" + arg, required=True, type=Path)
-    p.add_argument("--only", default="all", choices=("all", "auxiliary"))
+    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention"))
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     results = []
@@ -249,7 +305,8 @@ def main():
         ("softmax_4096", lambda d: softmax_case(d, args.runtime, args.memory_root, 4096, 4)),
         ("softmax_tail_latency8", lambda d: softmax_case(d, args.runtime, args.memory_root, 2307, 8)),
     ]
-    jobs = auxiliary if args.only == "auxiliary" else jobs + auxiliary
+    attention = [("attention_core_4096", lambda d: attention_core_case(d, args.runtime, args.memory_root))]
+    jobs = auxiliary if args.only == "auxiliary" else attention if args.only == "attention" else jobs + auxiliary + attention
     for name, run in jobs:
         result = run(args.output / name)
         results.append(result)

@@ -79,9 +79,13 @@ uncertain service assumptions without changing one comparison arm in isolation.
 
 ## Validation and limits
 
-Use `testbench.models.unified_service_test` for numerical machine-code checks
+Use `transactional_emulator.testbench.models.unified_service_test` for numerical machine-code checks
 of shared weight panels, private requests, K/N tails, coefficient packing,
 compact old-ISA broadcast, softmax, positive score normalization, dot and ReLU².
+Its `--only attention` case connects prepared-Q/static-KV QK, softmax and PV
+in a single program with no host writes between stages (two queries, 4K keys).
+This verifies the attention core, not incremental KV packing, query projection,
+RoPE, MLA, routing or a complete attention block.
 Five archived real-weight sublayers can be independently repriced; optimized
 packing also requires a new numerical execution, not just a timing replay.
 
