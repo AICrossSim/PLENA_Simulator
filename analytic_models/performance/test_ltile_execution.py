@@ -60,3 +60,41 @@ def test_operator_markers_do_not_change_instruction_work():
     assert plain.components() == marked.components()
     assert sum(s["total"] for s in marked.sections) == plain.total
     assert [s["name"] for s in marked.sections] == ["a", "b"]
+
+
+def test_decode_kv_write_is_inside_the_attention_extent():
+    from pathlib import Path
+    import os
+    from .ltile_decode import workloads
+    from .ltile_model import compose_peripheral
+    from .nemotron3_workload import WorkloadScenario, InferencePhase
+
+    root = Path(os.environ.get("PLENA_COMPILER_ROOT", Path(__file__).resolve().parents[2] / "PLENA_Compiler"))
+    w = workloads(root)["nemotron3"]
+
+    class Recorder:
+        profile = ExecutionProfile()
+
+        def __init__(self):
+            self.matrices, self.writes = [], []
+
+        def projection(self, b, k, n, weight):
+            self.matrices.append((b, k, n))
+            return {}
+
+        def vector(self, *args, **kwargs):
+            return {}
+
+        def kv_append(self, *args):
+            self.writes.append(args)
+            return {}
+
+    for context in (1, 4096, 32768):
+        recorder = Recorder()
+        report = w.build(WorkloadScenario(InferencePhase.DECODE, batch_size=2, context_length=context))
+        for name in ("attention_qkv_projection", "attention_qk_softmax_pv"):
+            stage = next(s for s in report.stages if s.name == name)
+            compose_peripheral(stage, w, 2, context, recorder, {})
+        assert recorder.writes[0][-1] == context - 1
+        assert recorder.matrices[-2][2] == context
+        assert recorder.matrices[-1][1] == context

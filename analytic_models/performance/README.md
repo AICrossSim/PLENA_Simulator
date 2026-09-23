@@ -71,6 +71,8 @@ batch step time, per-request rate, aggregate TPS, exclusive operator/cycle
 components, HBM traffic, tensor inventory and capacity. Nemotron uses archived
 B1 routes grouped into batches; context sweeps reuse those routes. Kimi routing
 is a min/max occupancy scenario. This is not new batched GPU capture.
+Context denotes the number of keys attended in the modeled step, including
+the current appended key. Its zero-based append position is `context - 1`.
 
 `--codec-lanes 128|256|512`, `--sfu-scale 1|2` and `--dma-window 1..64` expose
 uncertain service assumptions without changing one comparison arm in isolation.

@@ -275,7 +275,7 @@ def compose_peripheral(stage, w, b, context, services, occupancy):
                     a.num_kv_heads if hasattr(a, "moe") else 1,
                     a.head_dim if hasattr(a, "moe") else a.kv_lora_rank + a.qk_rope_head_dim,
                     a.head_dim if hasattr(a, "moe") else a.kv_lora_rank,
-                    context,
+                    context - 1,
                 ),
             )
         return terms
@@ -377,6 +377,7 @@ def run(args):
                 },
                 routing=route_meta,
                 composition="serial HBM-backed operators, no cross-operator overlap; within-layer memory history retained",
+                context_semantics="number of keys attended in this step, including the newly appended key; append index=context-1",
                 uncertainty="routing/KV packing are conservative finite budgets; sample address/phase sensitivity separately",
                 scope="decode analytical predictions; no task quality, complete RTL, TTFT, power or GPU comparison",
             ),
