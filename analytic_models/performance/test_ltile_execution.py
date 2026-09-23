@@ -51,6 +51,14 @@ def test_profile_changes_every_resource_identity():
         assert q.identity != p.identity
 
 
+def test_resident_projection_rejects_codec_overlapping_its_live_rows(tmp_path):
+    from .ltile_services import Services
+
+    profile = replace(ExecutionProfile(), codec=CodecResources(output_bytes=32768))
+    with pytest.raises(ValueError, match="reserved Vector"):
+        Services(tmp_path, profile, None, tmp_path / "cache")
+
+
 def test_operator_markers_do_not_change_instruction_work():
     asm = "S_LUI_INT gp1, 0\nS_ADDI_INT gp2, gp1, 64\n"
     plain = assembly_cost(asm, trace_memory=True)

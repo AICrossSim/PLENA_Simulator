@@ -10,7 +10,12 @@ from analytic_models.performance.ltile_platform import ExecutionProfile
 from transactional_emulator.testbench.aten.recurrent_gate_test import Arena, bf, digest, exp
 from transactional_emulator.testbench.aten.recurrent_conv_test import run_program, read
 from transactional_emulator.testbench.aten.matrix_projection_test import reference
-from compiler.aten.plena.isa_matrix_projection import Projection, lower_batch_projection
+from compiler.aten.plena.isa_matrix_projection import (
+    Projection,
+    lower_batch_projection,
+    lower_b1_projection,
+    lower_resident_projection,
+)
 from compiler.aten.plena.recurrent_coefficients import CompactCoefficientLoader, lower_bf16_gather, lower_softmax_rows
 from compiler.aten.plena.prepared_vector_recurrence import PreparedVectorGroup, lower_prepared_vector_recurrence
 from compiler.aten.plena.matrix_recurrence_lowering import NEMOTRON_MAMBA, KIMI_KDA
@@ -21,7 +26,7 @@ def profile_for(memory):
     return ExecutionProfile(hbm_controllers=len(config["memory_system"]["controllers"]))
 
 
-def matrix_case(root, runtime, memory, b, k, n):
+def matrix_case(root, runtime, memory, b, k, n, *, resident=False):
     rng = np.random.default_rng(3107 + b + k + n)
     arena = Arena()
     zero = arena.add(np.zeros(2048))
@@ -34,10 +39,17 @@ def matrix_case(root, runtime, memory, b, k, n):
     weights = arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
     outputs = [arena.add(np.full(spec.output_values, 7), output=True) for _ in xs]
     spec = replace(spec, inputs=inputs[0], weights=weights, outputs=outputs[0], zero=zero)
-    image, result = run_program(root, runtime, memory, arena, lower_batch_projection(spec, inputs, outputs), profile=h)
+    if resident:
+        assembly = lower_resident_projection(spec, inputs, outputs)
+    elif k <= 16384:
+        assembly = lower_batch_projection(spec, inputs, outputs)
+    else:
+        assembly = "".join(lower_b1_projection(replace(spec, inputs=x, outputs=y)) for x, y in zip(inputs, outputs))
+    image, result = run_program(root, runtime, memory, arena, assembly, profile=h)
     for x, address in zip(xs, outputs):
         if not np.array_equal(read(image, address, n), reference(x, w, 256, h.matrix)):
             raise AssertionError("shared-panel numerical mismatch")
+        np.testing.assert_array_equal(read(image, address + 2 * n, spec.output_values - n), 0)
     return dict(
         case=root.name,
         **result,
@@ -45,6 +57,44 @@ def matrix_case(root, runtime, memory, b, k, n):
         status="passed",
         scope="M_MV panel reuse, private requests, tail K/N, final writeback",
     )
+
+
+def cached_gather_case(root, runtime, memory):
+    """Repeated subsets, not only identical whole rows; cache pressure fallback."""
+    rng = np.random.default_rng(5819)
+    a = Arena()
+    zero = a.add(np.zeros(2048))
+    one = a.add(np.eye(1, 2048).ravel())
+    values = bf(rng.normal(0, 0.2, (3, 2048)))
+    bases = [a.add(x) for x in values]
+    mappings = []
+    # Row 0/1 share some contributions; row 1/2 share different ones.
+    for r in range(3):
+        row = [None] * 2048
+        for i in range(128):
+            row[2 * i] = (bases[0], (i % 16) if r < 2 else 16 + i % 16)
+            row[2 * i + 1] = (bases[1], (i % 32) if r > 0 else 32 + i % 32)
+        row[-1] = (bases[2], 2047 - r)
+        mappings.extend(row)
+    # Different repeat masks exhaust the static mask budget; fallback is real
+    # grouped ISA, not a host gather. The short final row also tests zero tail.
+    for i in range(60):
+        mappings.extend([(bases[2], i)] * (i + 2) + [None] * (2048 - i - 2))
+    mappings.extend([(bases[2], 2047), None, (bases[0], 0)])
+    outputs, text = [], []
+    for maps in (mappings[:6144], mappings[6144:]):
+        count = (len(maps) + 2047) // 2048 * 2048
+        dst = a.add(np.full(count, 7), output=True)
+        expected = np.zeros(count, np.float32)
+        for index, item in enumerate(maps):
+            if item is not None:
+                expected[index] = values[bases.index(item[0]), item[1]]
+        text.append(lower_bf16_gather(maps, dst, zero, one, strategy="cached"))
+        outputs.append((dst, expected))
+    image, result = run_program(root, runtime, memory, a, "".join(text), profile=profile_for(memory))
+    for dst, expected in outputs:
+        np.testing.assert_array_equal(read(image, dst, len(expected)), expected)
+    return dict(case=root.name, **result, status="passed", checked_values=sum(len(x) for _, x in outputs))
 
 
 def gather_case(root, runtime, memory, strategy="grouped"):
@@ -363,7 +413,7 @@ def main():
     p = argparse.ArgumentParser()
     for arg in ("output", "runtime", "memory-root"):
         p.add_argument("--" + arg, required=True, type=Path)
-    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention", "experts"))
+    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention", "experts", "resident"))
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     results = []
@@ -384,11 +434,19 @@ def main():
     ]
     attention = [("attention_core_4096", lambda d: attention_core_case(d, args.runtime, args.memory_root))]
     experts = [("routed_expert_core", lambda d: expert_core_case(d, args.runtime, args.memory_root))]
+    resident = [
+        (
+            f"resident_b{b}_k{k}_n{n}",
+            lambda d, b=b, k=k, n=n: matrix_case(d, args.runtime, args.memory_root, b, k, n, resident=True),
+        )
+        for b, k, n in ((1, 2688, 129), (2, 289, 2051), (16, 769, 65), (2, 16417, 33))
+    ] + [("gather_cached_subsets_and_pressure", lambda d: cached_gather_case(d, args.runtime, args.memory_root))]
     groups = {
-        "all": jobs + auxiliary + attention + experts,
+        "all": jobs + auxiliary + attention + experts + resident,
         "auxiliary": auxiliary,
         "attention": attention,
         "experts": experts,
+        "resident": resident,
     }
     jobs = groups[args.only]
     for name, run in jobs:

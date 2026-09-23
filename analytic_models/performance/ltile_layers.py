@@ -44,8 +44,17 @@ class Stage:
 
 
 class LayerPlan:
-    def __init__(self, compiler_root, *, gather="reference", arena=None, shared_weights=None):
+    def __init__(
+        self, compiler_root, *, gather="reference", projection_schedule="stream", arena=None, shared_weights=None
+    ):
         self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
+        if projection_schedule not in ("stream", "resident"):
+            raise ValueError("unknown projection schedule")
+        self.projection_schedule = projection_schedule
+        if projection_schedule == "resident":
+            from compiler.aten.plena.isa_matrix_projection import lower_resident_projection
+
+            self.lower_projection = lower_resident_projection
         self.arena = arena if arena is not None else ShapeArena()
         self.shared_weights = shared_weights if shared_weights is not None else {}
         self.stages = []
@@ -126,10 +135,25 @@ class LayerPlan:
         )
 
 
-def build_layer(kind, compiler_root, *, control="fsm", gather="reference", arena=None, shared_weights=None):
+def build_layer(
+    kind,
+    compiler_root,
+    *,
+    control="fsm",
+    gather="reference",
+    projection_schedule="stream",
+    arena=None,
+    shared_weights=None,
+):
     if kind not in ("mamba", "kda") or control not in ("old_isa", "row", "fsm"):
         raise ValueError("expected Mamba/KDA and matched row/FSM control")
-    p = LayerPlan(compiler_root, gather=gather, arena=arena, shared_weights=shared_weights)
+    p = LayerPlan(
+        compiler_root,
+        gather=gather,
+        projection_schedule=projection_schedule,
+        arena=arena,
+        shared_weights=shared_weights,
+    )
     c, a = p.c, p.arena
     if kind == "mamba":
         source, nw = a.add(4096), a.add(4096)
@@ -266,7 +290,7 @@ def build_layer(kind, compiler_root, *, control="fsm", gather="reference", arena
     return p
 
 
-def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped"):
+def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream"):
     """Compile batch stages with shared weight panels and private state.
 
     No B1 cycle multiplication. Matrix SRAM weights stay resident across
@@ -279,12 +303,20 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped"):
         raise ValueError("batch must be 1..16")
     arena, weights = ShapeArena(), {}
     plans = [
-        build_layer(kind, compiler_root, control=control, gather=gather, arena=arena, shared_weights=weights)
+        build_layer(
+            kind,
+            compiler_root,
+            control=control,
+            gather=gather,
+            projection_schedule=projection_schedule,
+            arena=arena,
+            shared_weights=weights,
+        )
         for _ in range(batch)
     ]
     if batch == 1:
         return plans[0]
-    from compiler.aten.plena.isa_matrix_projection import lower_batch_projection
+    from compiler.aten.plena.isa_matrix_projection import lower_batch_projection, lower_resident_projection
 
     result = plans[0]
     all_stages = [p.stages for p in plans]
@@ -296,7 +328,8 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped"):
         if s.matrix_shape:
             _, n, k = s.matrix_shape
             spec = result.Projection(s.input_base, s.weight_base, s.output_base, s.zero_base, k, n, 256)
-            text = lower_batch_projection(spec, [x.input_base for x in columns], [x.output_base for x in columns])
+            lower = lower_resident_projection if projection_schedule == "resident" else lower_batch_projection
+            text = lower(spec, [x.input_base for x in columns], [x.output_base for x in columns])
             result.stages.append(replace(s, assembly=text, matrix_shape=(batch, n, k)))
         else:
             result.stages.extend(replace(x, name=f"r{i}/{x.name}") for i, x in enumerate(columns))

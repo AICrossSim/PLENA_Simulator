@@ -23,9 +23,18 @@ The exclusive total is `issue + scalar + sram + arithmetic + dependency + dma`.
 `frontend` is a convenience subtotal (`issue + scalar`), not an extra term.
 
 `ltile_layers` produces connected Mamba/KDA sublayers from shapes. Coefficient
-packing reuses repeated masks; the old recurrent ISA instead caches compact
+packing reuses repeated masks, source rows and common output-row contributions;
+the old recurrent ISA instead caches compact
 coefficients and broadcasts using ordinary Vector instructions. Projections
-share Matrix weight panels across batch requests. These are legal, conservative
+share Matrix weight panels across batch requests. `lower_resident_projection`
+keeps one output row per request and a bounded cache of full input windows,
+then writes each completed output row once. It owns Vector rows 0..57;
+rows 58..63 are reserved for the 24 KiB weight decoder. Cache misses still DMA
+full owned windows; there is no assumed unaligned read or left shift. Panels
+that exceed Matrix capacity fall back to serial requests with weight rereads.
+This schedule is shared by all three comparison arms. Historical `stream`
+projection and `pattern` gather remain selectable through `build_layer` and
+`build_batch` for ablation and reproduction. These are legal, conservative
 compiled schedules, not a proof of globally optimal Matrix scheduling.
 
 The three comparisons are:
@@ -92,6 +101,10 @@ RoPE, MLA, routing or a complete attention block.
 projection and weighted combine for two tokens sharing one of three experts.
 Weights and activations flow through the program; dynamic router selection
 remains outside that test.
+`--only resident` checks cache misses at B16, K/N tails across output-row
+boundaries, oversized-panel fallback, and repeated gather subsets under cache
+pressure, through actual machine code. It compares all cost components and
+HBM transfers, not just arithmetic output.
 Five archived real-weight sublayers can be independently repriced; optimized
 packing also requires a new numerical execution, not just a timing replay.
 

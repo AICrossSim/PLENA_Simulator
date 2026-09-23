@@ -17,6 +17,8 @@ class Services:
     def __init__(self, compiler, profile, backend, cache):
         self.compiler = Path(compiler).resolve()
         self.profile = profile
+        if profile.codec.input_bytes + profile.codec.output_bytes > 6 * 4096:
+            raise ValueError("weight decoder exceeds the six reserved Vector SRAM rows")
         self.backend = backend
         self.cache = Path(cache)
         self.cache.mkdir(parents=True, exist_ok=True)
@@ -74,7 +76,9 @@ class Services:
             raise ValueError("unsupported weight contract")
 
         def generate():
-            plan = build_batch(kind, batch, self.compiler, control=control, gather="pattern")
+            plan = build_batch(
+                kind, batch, self.compiler, control=control, gather="cached", projection_schedule="resident"
+            )
             regions = (
                 {(s.weight_base, s.weight_bytes) for s in plan.stages if s.matrix_shape} if weight == "NVFP4" else set()
             )
@@ -86,14 +90,25 @@ class Services:
                     stages=[{k: v for k, v in asdict(s).items() if k != "assembly"} for s in plan.stages],
                     boundaries="input norm through recurrent output projection; excludes outer residual/MoE",
                     batch_mapping="shared Matrix weight panels; private input/output/state; serial request tiles",
+                    projection_workspace_bytes=58 * 4096,
+                    projection_reserved_codec_bytes=6 * 4096,
                     baseline="compact coefficients cached in existing Vector SRAM; ordinary BF16 row/tree instructions"
                     if control == "old_isa"
-                    else "pattern-reused software coefficient packing; fused update; BF16 tree",
+                    else "SRAM-reused software coefficient packing; fused update; BF16 tree",
                 ),
             )
 
         return self.cached(
-            dict(type="layer", kind=kind, batch=batch, control=control, weight=weight, gather="pattern"), generate
+            dict(
+                type="layer",
+                kind=kind,
+                batch=batch,
+                control=control,
+                weight=weight,
+                gather="cached",
+                projection_schedule="resident",
+            ),
+            generate,
         )
 
     def projection(self, batch, k, n, weight="BF16"):
@@ -101,8 +116,8 @@ class Services:
             raise ValueError("unsupported weight contract")
 
         def generate():
-            c, Projection, lower, _, _ = compiler_api(self.compiler)
-            from compiler.aten.plena.isa_matrix_projection import lower_batch_projection
+            _, Projection, _, _, _ = compiler_api(self.compiler)
+            from compiler.aten.plena.isa_matrix_projection import lower_resident_projection
 
             a = ShapeArena()
             zero = a.add(2048)
@@ -111,12 +126,7 @@ class Services:
             weights = a.add(spec.weight_bytes // 2)
             outputs = [a.add(spec.output_values) for _ in range(batch)]
             p = Projection(inputs[0], weights, outputs[0], zero, k, n, 256)
-            if batch > 1 and k <= 16384:
-                text = lower_batch_projection(p, inputs, outputs)
-            else:
-                from dataclasses import replace
-
-                text = "".join(lower(replace(p, inputs=x, outputs=y)) for x, y in zip(inputs, outputs))
+            text = lower_resident_projection(p, inputs, outputs)
             return (
                 "; @operator=projection\n" + text,
                 [(weights, p.weight_bytes)] if weight == "NVFP4" else [],
@@ -125,13 +135,13 @@ class Services:
                     hbm_allocated_bytes=a.size,
                     weight_bytes=p.weight_bytes,
                     matrix_capacity_bytes=self.profile.matrix.matrix_capacity_bytes,
-                    vector_live_bytes=8192
+                    vector_live_bytes=58 * 4096
                     + (self.profile.codec.input_bytes + self.profile.codec.output_bytes if weight == "NVFP4" else 0),
-                    mapping="existing M_MV; output32 panels, K256; batch shares a complete K panel when it fits",
+                    mapping="existing M_MV; output32 panels, K256; bounded input-window cache and private output rows; shared weight panels when they fit",
                 ),
             )
 
-        return self.cached(dict(type="projection", batch=batch, k=k, n=n, weight=weight), generate)
+        return self.cached(dict(type="projection", batch=batch, k=k, n=n, weight=weight, schedule="resident"), generate)
 
     def vector(self, kind, values, *, groups=1):
         """Compile actual norm/elementwise/gate programs including their DMA.
