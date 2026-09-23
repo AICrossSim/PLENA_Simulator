@@ -23,8 +23,10 @@ from transactional_emulator.testbench.aten.recurrent_gate_test import (
     sigmoid,
 )
 from compiler.aten.plena.recurrent_coefficients import GATE_CONSTANTS, ConvStep, lower_conv_steps
-from analytic_models.performance.ltile_cost import Machine, assembly_cost
+from analytic_models.performance.ltile_cost import Machine
 from analytic_models.performance.ltile_dma import DmaBackend
+from analytic_models.performance.ltile_platform import ExecutionProfile
+from analytic_models.performance.ltile_execution import price_program
 
 
 def read_image(path):
@@ -46,11 +48,20 @@ def run_program(
     fp_constants=None,
     recheck_only=False,
     references=None,
+    profile=None,
 ):
     """Run one connected program; no host writes after execution starts."""
-    machine = machine or Machine(
-        sfu_lanes=32, vector_exp_cycles=8, vector_softplus_cycles=16, vector_reciprocal_cycles=8
+    machine = (
+        machine
+        or (profile.machine if profile else None)
+        or Machine(sfu_lanes=32, vector_exp_cycles=8, vector_softplus_cycles=16, vector_reciprocal_cycles=8)
     )
+    if profile is None:
+        profile = ExecutionProfile(machine=machine, **({"matrix": matrix_service} if matrix_service else {}))
+    elif profile.machine != machine or (matrix_service is not None and profile.matrix != matrix_service):
+        raise ValueError("runner arguments differ from the common execution profile")
+    elif matrix_service is None:
+        matrix_service = profile.matrix
     output = output.resolve()
     if recheck_only:
         # Re-evaluate reference/diagnostic metrics without pretending to rerun
@@ -59,11 +70,18 @@ def run_program(
         if not result_path.exists():
             result_path = output / "execution_result.json"
         result = json.loads(result_path.read_text())
+        profile_path = output / "execution_profile.json"
+        if profile_path.exists() and json.loads(profile_path.read_text()) != asdict(profile):
+            raise ValueError("cannot reuse a different execution profile")
+        if not profile_path.exists() and (
+            profile.dma.service != "bounded:32:32" or profile.state_rounding != "rn" or profile.hbm_controllers != 8
+        ):
+            raise ValueError("legacy execution only certifies bounded:32:32 / RN")
         if (output / "generated_asm_code.asm").read_text() != assembly:
             raise ValueError("cannot reuse execution with a different program")
         if read_image(output / "hbm_for_behave_sim.bin") != arena.data:
             raise ValueError("cannot reuse execution with different initial HBM")
-        if result["runtime_sha256"] != digest(runtime) or result["machine"] != asdict(machine):
+        if result["runtime_sha256"] != digest(runtime) or Machine(**result["machine"]) != machine:
             raise ValueError("cannot reuse a different runtime or service contract")
         if result["program_sha256"] != digest(output / "generated_machine_code.mem"):
             raise ValueError("cannot reuse modified machine code")
@@ -83,10 +101,14 @@ def run_program(
         arena.verify_guards(image)
         return image, result
     output.mkdir(parents=True, exist_ok=False)
-    cost = assembly_cost(assembly, machine, trace_memory=True, matrix_service=matrix_service)
-    memory = DmaBackend(memory_root / "ltile_memory", memory_root / "ramulator.json", memory_root / "cache").price(
-        cost, "bounded:32:32"
+    cost, priced = price_program(
+        assembly,
+        profile,
+        DmaBackend(memory_root / "ltile_memory", memory_root / "ramulator.json", memory_root / "cache"),
+        matrix=matrix_service is not None,
     )
+    memory = priced["memory"]
+    (output / "execution_profile.json").write_text(json.dumps(asdict(profile), indent=2) + "\n")
     predicted = cost.components()
     (output / "prediction.json").write_text(json.dumps(predicted, indent=2))
     asm = output / "generated_asm_code.asm"
@@ -101,36 +123,25 @@ def run_program(
     if fp_constants is not None:
         (output / "fp_sram.bin").write_bytes((bf(fp_constants).view(np.uint32) >> 16).astype("<u2").tobytes())
     _write_settings(output, MatrixSramPoint())
+    import re
+
+    settings = output / "plena_settings.toml"
+    content, count = re.subn(
+        r"(\[TRANSACTIONAL\.LATENCY\.VECTOR_MAX_CYCLES\]\s*)dc_lib_en = \d+\s*dc_lib_dis = \d+",
+        lambda m: m[1] + f"dc_lib_en = {machine.vector_max_cycles}\ndc_lib_dis = {machine.vector_max_cycles}",
+        settings.read_text(),
+    )
+    if count != 1:
+        raise ValueError("missing transactional max-reduction latency setting")
+    settings.write_text(content)
     env = dict(
         os.environ,
-        PLENA_UNIFIED_SERIAL_TIMING="1",
-        PLENA_DMA_READ_WINDOW="32",
-        PLENA_DMA_WRITE_WINDOW="32",
-        PLENA_EXACT_VIEW_DMA="1",
         OMP_NUM_THREADS="1",
         MKL_NUM_THREADS="1",
         OPENBLAS_NUM_THREADS="1",
         RUST_LOG="warn,transactional_emulator=info",
-        PLENA_VECTOR_SFU_LANES=str(machine.sfu_lanes),
-        PLENA_VECTOR_SFU_II=str(machine.sfu_ii),
-        PLENA_VECTOR_SFU_EXP_LATENCY=str(machine.vector_exp_cycles),
-        PLENA_VECTOR_SFU_SOFTPLUS_LATENCY=str(machine.vector_softplus_cycles),
-        PLENA_VECTOR_SFU_RECI_LATENCY=str(machine.vector_reciprocal_cycles),
     )
-    env.update(
-        PLENA_V2_STREAM_ENGINE="1",
-        PLENA_V2_UPDATE_LANES=str(machine.lanes),
-        PLENA_V2_UPDATE_INTERVAL=str(machine.update_ii),
-        PLENA_V2_UPDATE_LATENCY=str(machine.update_latency),
-        PLENA_V2_DOT=machine.dot,
-        PLENA_V2_DOT_LATENCY=str(machine.dot_latency),
-        PLENA_V2_DOT_II=str(machine.dot_ii),
-        PLENA_V2_SRAM_PORT=str(machine.sram_cycles),
-        PLENA_V2_CONTEXT_PORT=str(machine.context_cycles),
-        PLENA_V2_STATE_ROUNDING="rn",
-    )
-    if machine.reduction_tree_bf16:
-        env["PLENA_VECTOR_REDUCE_BF16_TREE"] = "1"
+    env.update(profile.runtime_environment())
     if matrix_service is not None:
         path = output / "matrix_profile.json"
         path.write_text(json.dumps(asdict(matrix_service), indent=2))

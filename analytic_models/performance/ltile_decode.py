@@ -1,4 +1,6 @@
-"""Decode-only composition with the calibrated R3 recurrent execution path.
+"""Decode entry point; use ``unified`` for the shared compiled operator model.
+
+The older R3 composer below is retained for historical reproduction only.
 
 Surrounding operators remain explicitly analytical. Their shared tiled service
 model is not promoted to a Rust-validated full-model execution. Capacity failures
@@ -580,6 +582,13 @@ def run(
 
 
 if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "unified":
+        from .ltile_model import main
+
+        main(sys.argv[2:])
+        raise SystemExit(0)
     p = argparse.ArgumentParser()
     for arg in ("evidence", "output", "memory-binary", "memory-config", "memory-cache", "campaign", "gate"):
         p.add_argument("--" + arg, required=True, type=Path)

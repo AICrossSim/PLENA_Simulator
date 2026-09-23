@@ -416,6 +416,7 @@ impl VectorMachine {
         rorder: op::VectorOrder,
     ) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         if rmask == 0 {
             if matches!(rorder, op::VectorOrder::Normal) {
                 let c = QuantTensor::quantize(a.as_tensor() - (f as f64), a.data_type());
@@ -534,6 +535,7 @@ impl VectorMachine {
 
     pub(crate) async fn max_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().clamp_min(f as f64), a.data_type());
             crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
@@ -1072,6 +1074,7 @@ impl VectorMachine {
 
     pub(crate) async fn reduce_max(&self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
         if rmask == 0 {
             let val: f32 = a.as_tensor().max().try_into().unwrap();

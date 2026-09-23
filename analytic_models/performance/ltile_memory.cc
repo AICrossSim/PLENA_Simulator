@@ -7,6 +7,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <sstream>
 
 extern "C" {
 void *ramulator_new(const char *);
@@ -59,9 +60,26 @@ int main(int argc,char **argv) {
     } else window=review?1:std::stoi(service);
     if(window<1||window>64) return 5;
     uint64_t delay=0,addr,size;
+    uint64_t start=0, delay_start=0, read_start=0, write_start=0;
+    std::ostringstream sections;
+    unsigned section_count=0;
+    bool marked=false;
+    auto finish_section=[&]() {
+        if(!marked) return;
+        if(section_count++) sections<<",";
+        sections<<"{\"total_cycles\":"<<memory.now-start
+            <<",\"dma_cycles\":"<<memory.now-start-(delay-delay_start)
+            <<",\"read_bytes\":"<<memory.reads-read_start
+            <<",\"write_bytes\":"<<memory.writes-write_start<<"}";
+    };
     char op;
     while(trace>>op>>addr>>size) {
         if(op=='d') { memory.now+=addr; delay+=addr; continue; }
+        if(op=='m') {
+            finish_section(); marked=true;
+            start=memory.now; delay_start=delay; read_start=memory.reads; write_start=memory.writes;
+            continue;
+        }
         if(addr%64||size%64) return 6;
         if(op=='r') {
             uint64_t limit=read_window?64*read_window:size;
@@ -80,8 +98,11 @@ int main(int argc,char **argv) {
             }
         } else return 7;
     }
+    finish_section();
     std::cout<<"{\"dma_cycles\":"<<memory.now-delay
              <<",\"total_cycles\":"<<memory.now
              <<",\"read_bytes\":"<<memory.reads
-             <<",\"write_bytes\":"<<memory.writes<<"}\n";
+             <<",\"write_bytes\":"<<memory.writes;
+    if(marked) std::cout<<",\"sections\":["<<sections.str()<<"]";
+    std::cout<<"}\n";
 }

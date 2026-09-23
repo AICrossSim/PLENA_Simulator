@@ -11,15 +11,18 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import uuid
 
 
-def prepare_backend(output):
+def prepare_backend(output, controllers=8):
     """Build the memory-only reference in the repo's Nix development shell.
 
     This explicit profile matches the runner's eight-controller HBM2 preset.
     It does not select a new global hardware configuration or physical stack
     count. The generated artifact records the exact compiler/config hashes.
     """
+    if controllers not in (1, 2, 4, 8, 16, 32, 64):
+        raise ValueError("unsupported HBM controller count")
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     source = Path(__file__).with_name("ltile_memory.cc")
@@ -28,7 +31,13 @@ def prepare_backend(output):
     command = ["c++", "-std=c++17", "-O2", str(source), "-lramulator", "-o", str(binary)]
     subprocess.run(command, check=True)
     config = output / "ramulator.json"
-    config.write_bytes(profile.read_bytes())
+    if controllers == 8:
+        config.write_bytes(profile.read_bytes())
+    else:
+        geometry = json.loads(profile.read_text())
+        preset = geometry["memory_system"]["controllers"][0]
+        geometry["memory_system"]["controllers"] = [preset for _ in range(controllers)]
+        config.write_text(json.dumps(geometry) + "\n")
     (output / "cache").mkdir()
     manifest = dict(command=command, source_sha256=sha(source), binary_sha256=sha(binary), config_sha256=sha(config))
     (output / "build.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -55,7 +64,8 @@ class DmaBackend:
         if output.exists():
             result = json.loads(output.read_text())
         else:
-            path = self.cache / f"{key}.trace"
+            unique = uuid.uuid4().hex
+            path = self.cache / f"{key}.{unique}.trace"
             path.write_text(trace)
             try:
                 run = subprocess.run(
@@ -65,7 +75,9 @@ class DmaBackend:
                     text=True,
                 )
                 result = dict(json.loads(run.stdout), **identity)
-                output.write_text(json.dumps(result, indent=2) + "\n")
+                temporary = self.cache / f"{key}.{unique}.tmp"
+                temporary.write_text(json.dumps(result, indent=2) + "\n")
+                temporary.replace(output)
             finally:
                 path.unlink(missing_ok=True)
         cost.dma = result["dma_cycles"]
@@ -77,6 +89,19 @@ class DmaBackend:
             expected_read += expected_write
         if (expected_read, expected_write) != (result["read_bytes"], result["write_bytes"]):
             raise AssertionError("DMA trace traffic differs from compiler transfer counts")
+        if cost.sections:
+            observed = result.get("sections", [])
+            if len(observed) != len(cost.sections):
+                raise ValueError("memory backend must support operator section markers")
+            for section, timing in zip(cost.sections, observed):
+                section["dma"] = timing["dma_cycles"]
+                section["total"] += timing["dma_cycles"]
+                section["hbm_read_bytes"] = timing["read_bytes"]
+                section["hbm_write_bytes"] = timing["write_bytes"]
+                if section["total"] != timing["total_cycles"]:
+                    raise AssertionError("operator ledger differs from memory trace")
+            if sum(s["total"] for s in cost.sections) != cost.total:
+                raise AssertionError("operator sections do not cover the entire program")
         return result
 
 
@@ -85,5 +110,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Build the pinned HBM2 timing reference in a fresh artifact directory")
     parser.add_argument("--prepare", required=True, type=Path)
+    parser.add_argument("--controllers", type=int, default=8)
     args = parser.parse_args()
-    print(json.dumps(prepare_backend(args.prepare), indent=2))
+    print(json.dumps(prepare_backend(args.prepare, args.controllers), indent=2))

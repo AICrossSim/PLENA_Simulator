@@ -124,26 +124,7 @@ def load_weight(f, name):
     return bf(w).T.copy()
 
 
-def decode_nvfp4(packed, scales, global_scale):
-    """Linear block16 E4M3 scales; low nibble first (FlashInfer fp4Op.cpp).
-
-    No hardware decoder is claimed. Preserve the source's FP32 order:
-    scale32 = block_scale32 * global_scale32; output32 = E2M1 * scale32.
-    """
-    packed = np.asarray(packed)
-    scales = np.asarray(scales, dtype=np.float32)
-    if packed.dtype != np.uint8 or packed.ndim != 2 or packed.shape[1] % 8:
-        raise ValueError("expected a packed NVFP4 matrix with complete block16 scales")
-    if scales.shape != (packed.shape[0], packed.shape[1] // 8):
-        raise ValueError("NVFP4 scale shape differs from block16")
-    if not np.isfinite(scales).all() or not np.isfinite(global_scale):
-        raise ValueError("non-finite weight scales")
-    table = np.array([0, 0.5, 1, 1.5, 2, 3, 4, 6, -0.0, -0.5, -1, -1.5, -2, -3, -4, -6], np.float32)
-    values = np.empty((packed.shape[0], packed.shape[1] * 2), np.float32)
-    values[:, ::2] = table[packed & 15]
-    values[:, 1::2] = table[packed >> 4]
-    values *= np.repeat(scales * np.float32(global_scale), 16, axis=1)
-    return values.T.copy()
+from analytic_models.performance.weight_codec import decode_nvfp4
 
 
 MAMBA_PREFIX = "backbone.layers.0."

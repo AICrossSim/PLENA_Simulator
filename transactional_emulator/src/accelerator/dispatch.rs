@@ -546,6 +546,17 @@ impl Accelerator {
                             | op::Opcode::S_SQRT_FP { .. }
                             | op::Opcode::S_RECI_FP { .. }
                             | op::Opcode::S_LD_FP { .. }
+                            | op::Opcode::V_RED_MAX {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::V_MAX_VF {
+                                rmask: 0,
+                                lmask: 0,
+                                ..
+                            }
+                            | op::Opcode::V_SUB_VF { rmask: 0, .. }
                             | op::Opcode::V_RED_SUM {
                                 rmask: 0,
                                 lmask: 0,

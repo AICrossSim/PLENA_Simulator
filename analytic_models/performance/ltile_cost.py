@@ -35,6 +35,7 @@ class Machine:
     vector_reciprocal_cycles: int = 2
     vector_exp_cycles: int = 1
     vector_softplus_cycles: int = 2
+    vector_max_cycles: int = 4
     # None retains legacy whole-vector service. With finite lanes these are
     # per-subchunk latencies; callers must supply a documented hardware profile.
     sfu_lanes: int | None = None
@@ -58,6 +59,7 @@ class Machine:
                 self.vector_reciprocal_cycles,
                 self.vector_exp_cycles,
                 self.vector_softplus_cycles,
+                self.vector_max_cycles,
                 self.sfu_ii,
                 self.clock_hz,
             )
@@ -313,6 +315,7 @@ class ProgramCost:
     accesses: Counter = field(default_factory=Counter)
     opcodes: Counter = field(default_factory=Counter)
     memory_trace: list = field(default_factory=list)
+    sections: list = field(default_factory=list)
 
     @property
     def total(self):
@@ -335,6 +338,9 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
     """Evaluate only instruction control/addresses, not model arithmetic."""
     code = []
     for raw in assembly.splitlines():
+        if raw.startswith("; @operator="):
+            code.append(("MARK", [raw.split("=", 1)[1].strip()]))
+            continue
         line = raw.split(";")[0].strip()
         if line:
             op, *args = re.split(r"[\s,]+", line)
@@ -346,8 +352,27 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
     reduction_rows = 0
     pc = 0
     traced_cycles = 0
+    section_start = None
+
+    def mark(name):
+        nonlocal section_start, traced_cycles
+        if trace_memory:
+            cost.memory_trace.append(("d", int(cost.total - traced_cycles), 0))
+            cost.memory_trace.append(("m", len(cost.sections), 0))
+            traced_cycles = cost.total
+        if section_start is not None:
+            label, before = section_start
+            cost.sections.append(dict(name=label, **{k: v - before[k] for k, v in cost.components().items()}))
+        section_start = (name, cost.components())
+
     while pc < len(code):
         op, args = code[pc]
+        if op == "MARK":
+            if loops:
+                raise ValueError("operator boundaries must be outside hardware loops")
+            mark(args[0])
+            pc += 1
+            continue
 
         def gp(s):
             if not s.startswith("gp"):
@@ -425,6 +450,11 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
                     cost.transfers[("write", n)] += 1
             else:
                 cost.transfers[("read", length)] += 1
+        elif op == "V_RED_MAX":
+            if len(args) != 3 or args[0] == "f0" or int(args[2]) != 0:
+                raise ValueError("unpriced masked max reduction")
+            cost.sram += 1
+            cost.arithmetic += machine.vector_max_cycles
         elif op == "V_RED_SUM":
             if not machine.reduction_tree_bf16 or len(args) != 3 or args[0] == "f0" or int(args[2]) != 0:
                 raise ValueError("unpriced norm reduction contract")
@@ -438,6 +468,16 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
                 raise ValueError("unpriced scalar-vector mask")
             cost.sram += 2
             cost.arithmetic += 1
+        elif op == "V_SUB_VF":
+            if len(args) != 5 or int(args[3]) != 0 or int(args[4]) != 0:
+                raise ValueError("unpriced scalar-vector subtract mask/order")
+            cost.sram += 2
+            cost.arithmetic += 1
+        elif op == "V_MAX_VF":
+            if len(args) != 4 or int(args[3]) != 0:
+                raise ValueError("unpriced max mask")
+            cost.sram += 2
+            cost.arithmetic += machine.vector_max_cycles
         elif op == "M_MV":
             if matrix_service is None or len(args) != 4:
                 raise ValueError("M_MV requires explicit bounded Matrix service and view")
@@ -477,6 +517,9 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
         raise ValueError("unterminated loop")
     if trace_memory:
         cost.memory_trace.append(("d", int(cost.total - traced_cycles), 0))
+    if section_start is not None:
+        label, before = section_start
+        cost.sections.append(dict(name=label, **{k: v - before[k] for k, v in cost.components().items()}))
     return cost
 
 

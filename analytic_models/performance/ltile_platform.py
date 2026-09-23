@@ -4,10 +4,13 @@ Memory capacity follows the actual Ramulator organization. Increasing capacity
 requires an explicit memory configuration, not a larger accounting constant.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 import math
+
+from .ltile_cost import Machine
+from .matrix_service import MatrixService
 from pathlib import Path
 
 
@@ -43,6 +46,89 @@ class DmaResources:
             self.read_response_bytes
             + self.write_staging_bytes
             + math.ceil((self.read_credits + self.write_credits) * self.tag_bits / 8)
+        )
+
+
+@dataclass(frozen=True)
+class CodecResources:
+    """Finite NVFP4 dequantization candidate, separate from weight storage.
+
+    Scale multiplication precedes value multiplication/conversion. No overlap
+    with Matrix execution is assumed. These are budgeted services, not PPA.
+    """
+
+    lanes: int = 256
+    ii: int = 1
+    latency: int = 6
+    scale_lanes: int = 16
+    scale_latency: int = 2
+    input_bytes: int = 8192
+    output_bytes: int = 16384
+
+    def __post_init__(self):
+        if any(type(v) is not int or v < 1 for v in asdict(self).values()):
+            raise ValueError("positive finite codec resources required")
+
+
+@dataclass(frozen=True)
+class ExecutionProfile:
+    """One execution contract shared by the layer runner and decode model."""
+
+    machine: Machine = field(
+        default_factory=lambda: Machine(
+            sfu_lanes=32,
+            vector_exp_cycles=8,
+            vector_softplus_cycles=16,
+            vector_reciprocal_cycles=8,
+            reduction_tree_bf16=True,
+        )
+    )
+    matrix: MatrixService = field(default_factory=MatrixService)
+    dma: DmaResources = field(default_factory=DmaResources)
+    codec: CodecResources = field(default_factory=CodecResources)
+    state_rounding: str = "rn"
+    delta: str = "bf16_rational_from_log"
+    scheduling: str = "serial_retirement"
+    hbm_controllers: int = 8
+
+    def __post_init__(self):
+        if self.hbm_controllers not in (1, 2, 4, 8, 16, 32, 64):
+            raise ValueError("power-of-two HBM controller count up to 64 required")
+        if self.state_rounding not in ("rn", "sr"):
+            raise ValueError("unknown state rounding")
+        if self.delta != "bf16_rational_from_log" or self.scheduling != "serial_retirement":
+            raise ValueError("unvalidated arithmetic or scheduling contract")
+        if self.matrix.matrix_capacity_bytes != 1024**2 or self.matrix.vector_capacity_bytes != 256 * 1024:
+            raise ValueError("connected ISA geometry requires 1 MiB Matrix / 256 KiB Vector")
+
+    @property
+    def identity(self):
+        return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
+
+    def runtime_environment(self):
+        m = self.machine
+        return dict(
+            PLENA_HBM_CONTROLLERS=str(self.hbm_controllers),
+            PLENA_UNIFIED_SERIAL_TIMING="1",
+            PLENA_EXACT_VIEW_DMA="1",
+            PLENA_DMA_READ_WINDOW=str(self.dma.read_credits),
+            PLENA_DMA_WRITE_WINDOW=str(self.dma.write_credits),
+            PLENA_VECTOR_SFU_LANES=str(m.sfu_lanes or m.vector_width),
+            PLENA_VECTOR_SFU_II=str(m.sfu_ii),
+            PLENA_VECTOR_SFU_EXP_LATENCY=str(m.vector_exp_cycles),
+            PLENA_VECTOR_SFU_SOFTPLUS_LATENCY=str(m.vector_softplus_cycles),
+            PLENA_VECTOR_SFU_RECI_LATENCY=str(m.vector_reciprocal_cycles),
+            PLENA_VECTOR_REDUCE_BF16_TREE="1" if m.reduction_tree_bf16 else "0",
+            PLENA_V2_STREAM_ENGINE="1",
+            PLENA_V2_UPDATE_LANES=str(m.lanes),
+            PLENA_V2_UPDATE_INTERVAL=str(m.update_ii),
+            PLENA_V2_UPDATE_LATENCY=str(m.update_latency),
+            PLENA_V2_DOT=m.dot,
+            PLENA_V2_DOT_LATENCY=str(m.dot_latency),
+            PLENA_V2_DOT_II=str(m.dot_ii),
+            PLENA_V2_SRAM_PORT=str(m.sram_cycles),
+            PLENA_V2_CONTEXT_PORT=str(m.context_cycles),
+            PLENA_V2_STATE_ROUNDING=self.state_rounding,
         )
 
 
