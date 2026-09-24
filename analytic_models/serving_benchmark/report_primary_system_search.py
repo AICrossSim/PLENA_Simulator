@@ -1,9 +1,10 @@
-"""Re-score the primary 90k/8k PLENA Pareto sets against measured A100 data."""
+"""Compose the primary 90k/8k PLENA DSE trials with measured A100 data."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import json
 import math
 import statistics
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .phases import enrich_phase_ttft_semantics
+from .prefill_idle_power import PrefillIdlePowerEstimator
 from .system_metrics import (
     disaggregated_pipeline_metrics,
     select_system_output_endpoints,
@@ -23,6 +25,7 @@ INPUT_TOKENS = 90_000
 OUTPUT_TOKENS = 8_000
 TOTAL_TOKENS_PER_REQUEST = INPUT_TOKENS + OUTPUT_TOKENS
 INTERCONNECT_ENERGY_PJ_PER_BIT = 8.0
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _p95(values: Sequence[float]) -> float | None:
@@ -38,7 +41,8 @@ def _read_json(path: Path) -> Any:
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="") as handle:
+    handle = gzip.open(path, "rt", newline="") if path.suffix == ".gz" else path.open(newline="")
+    with handle:
         return list(csv.DictReader(handle))
 
 
@@ -64,6 +68,105 @@ def _find_gpu_row(rows: Iterable[Mapping[str, Any]], *, tp: int, local_batch: in
     if len(matches) != 1:
         raise ValueError(f"expected one TP{tp}/B{local_batch} row, found {len(matches)}")
     return matches[0]
+
+
+def _finite_optional(value: Any) -> float | None:
+    if value is None:
+        return None
+    numeric = float(value)
+    return numeric if math.isfinite(numeric) else None
+
+
+def _find_fixed_batch_ttft_row(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    model: str,
+    input_tokens: int,
+    tp: int,
+    local_batch: int,
+) -> dict[str, Any] | None:
+    matches = [
+        dict(row)
+        for row in rows
+        if str(row["model"]) == model
+        and int(row["input_tokens"]) == input_tokens
+        and int(row["output_tokens"]) == 1
+        and int(row["tensor_parallel_size"]) == tp
+        and int(row["local_batch_size"]) == local_batch
+        and str(row.get("validation_status")) in {"pass", "warning"}
+    ]
+    if len(matches) > 1:
+        raise ValueError(
+            f"expected at most one fixed-batch TTFT row for "
+            f"{model}/{input_tokens}/TP{tp}/B{local_batch}, found {len(matches)}"
+        )
+    return matches[0] if matches else None
+
+
+def _fixed_batch_ttft_evidence(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    if row is None:
+        return {
+            "scheduler_admitted_ttft_exact_or_proxy_s": None,
+            "scheduler_admitted_ttft_source": "unavailable_no_matching_fixed_batch_audit_point",
+            "scheduler_admitted_ttft_fidelity": "unavailable",
+            "fixed_batch_request_visible_median_ttft_s": None,
+            "fixed_batch_request_visible_p95_ttft_s": None,
+            "fixed_batch_first_token_barrier_s": None,
+            "fixed_batch_ttft_point_id": None,
+            "fixed_batch_ttft_validation_status": "unavailable",
+        }
+
+    admitted = _finite_optional(row.get("median_scheduler_admitted_ttft_best_available_s"))
+    source = str(row.get("scheduler_admitted_ttft_sources") or "unavailable")
+    fidelity = str(row.get("scheduler_admitted_ttft_fidelities") or "unavailable")
+    if admitted is None:
+        source = "unavailable_fixed_batch_audit_rejected"
+        fidelity = "unavailable"
+    return {
+        "scheduler_admitted_ttft_exact_or_proxy_s": admitted,
+        "scheduler_admitted_ttft_source": source,
+        "scheduler_admitted_ttft_fidelity": fidelity,
+        "fixed_batch_request_visible_median_ttft_s": _finite_optional(
+            row.get("median_median_request_ttft_s")
+        ),
+        "fixed_batch_request_visible_p95_ttft_s": _finite_optional(
+            row.get("median_p95_request_ttft_s")
+        ),
+        "fixed_batch_first_token_barrier_s": _finite_optional(
+            row.get("median_batch_first_token_barrier_latency_s")
+        ),
+        "fixed_batch_ttft_point_id": str(row["point_id"]),
+        "fixed_batch_ttft_validation_status": str(row.get("validation_status")),
+    }
+
+
+def _annotate_fixed_batch_ttft(
+    topologies: Mapping[str, dict[str, Any]],
+    *,
+    audit_rows: Iterable[Mapping[str, Any]],
+    model: str,
+    input_tokens: int,
+    topology_shapes: Mapping[str, tuple[int, int]],
+) -> None:
+    if set(topologies) != set(topology_shapes):
+        raise ValueError("fixed-batch TTFT topology map does not match aggregate topologies")
+    audit_rows = list(audit_rows)
+    for topology, values in topologies.items():
+        tp, local_batch = topology_shapes[topology]
+        row = _find_fixed_batch_ttft_row(
+            audit_rows,
+            model=model,
+            input_tokens=input_tokens,
+            tp=tp,
+            local_batch=local_batch,
+        )
+        values["full_generation_scheduler_admitted_ttft_exact_or_proxy_s"] = values.get(
+            "scheduler_admitted_ttft_exact_or_proxy_s"
+        )
+        values["full_generation_scheduler_admitted_ttft_source"] = values.get(
+            "scheduler_admitted_ttft_source", "unavailable"
+        )
+        values.update(_fixed_batch_ttft_evidence(row))
 
 
 def _summary_row(path: Path) -> dict[str, Any]:
@@ -176,6 +279,7 @@ def reconstruct_replica_phase(rows: Sequence[Mapping[str, Any]], *, phase: str, 
 
     makespan = max(float(row[latency_key]) for row in rows)
     active_energy_j = math.fsum(float(row[energy_key]) / 1000.0 for row in rows)
+    idle_power_w = math.fsum(float(row["median_idle_total_board_power_w"]) for row in rows)
     idle_tail_energy_j = math.fsum(
         float(row["median_idle_total_board_power_w"]) * (makespan - float(row[latency_key])) for row in rows
     )
@@ -223,6 +327,7 @@ def reconstruct_replica_phase(rows: Sequence[Mapping[str, Any]], *, phase: str, 
         "energy_j": active_energy_j + idle_tail_energy_j,
         "active_energy_j": active_energy_j,
         "idle_tail_energy_j": idle_tail_energy_j,
+        "idle_power_w": idle_power_w,
         "first_decode_step_s": (
             max(float(row["median_first_decode_iteration_latency_s"]) for row in rows) if phase == "decode" else None
         ),
@@ -257,6 +362,12 @@ def _copies(row: Mapping[str, Any], count: int) -> list[dict[str, Any]]:
 def _gpu_topologies(measurement_root: Path) -> dict[str, dict[str, Any]]:
     screening_32b = _aggregate_rows(measurement_root / "screening_32b/aggregate.json")
     screening_235b = _aggregate_rows(measurement_root / "screening_235b/aggregate.json")
+    fixed_batch_ttft = [
+        dict(row)
+        for row in _read_json(
+            measurement_root / "fixed_batch_prefill_audit_v1/aggregate.json"
+        )["rows"]
+    ]
     followup = measurement_root / "topology_followup_v1"
 
     row32 = lambda tp, batch: _find_gpu_row(  # noqa: E731
@@ -322,6 +433,28 @@ def _gpu_topologies(measurement_root: Path) -> dict[str, dict[str, Any]]:
             fidelity="measured_replica_extrapolation_to_16_gpus",
         ),
     }
+    _annotate_fixed_batch_ttft(
+        aggregate_32,
+        audit_rows=fixed_batch_ttft,
+        model="qwen3-32b",
+        input_tokens=INPUT_TOKENS,
+        topology_shapes={
+            "TP1xDP8_B1": (1, 1),
+            "TP2xDP4_B2": (2, 2),
+            "TP4xDP2_B4": (4, 4),
+            "TP8xDP1_B8": (8, 8),
+        },
+    )
+    _annotate_fixed_batch_ttft(
+        aggregate_235,
+        audit_rows=fixed_batch_ttft,
+        model="qwen3-235b-a22b",
+        input_tokens=INPUT_TOKENS,
+        topology_shapes={
+            "TP4xDP4_B2": (4, 2),
+            "TP8xDP2_B4": (8, 4),
+        },
+    )
     decode_235 = {
         12: {
             "TP4xDP3_B3_3_2": reconstruct_replica_phase(
@@ -348,25 +481,30 @@ def _gpu_topologies(measurement_root: Path) -> dict[str, dict[str, Any]]:
     }
 
 
-def _aggregate_candidates(topologies: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _aggregate_candidates(
+    topologies: Mapping[str, Mapping[str, Any]],
+    *,
+    batch_size: int = BATCH_SIZE,
+    output_tokens_per_request: int = OUTPUT_TOKENS,
+) -> list[dict[str, Any]]:
     candidates = []
     for topology, values in topologies.items():
         latency = float(values["latency_s"])
         energy = float(values["energy_j"])
         global_batch = int(values["global_batch_size"])
-        if global_batch != BATCH_SIZE:
+        if global_batch != batch_size:
             raise ValueError(f"aggregated topology {topology} reconstructs batch {global_batch}")
-        global_output_tokens = global_batch * OUTPUT_TOKENS
+        global_output_tokens = global_batch * output_tokens_per_request
         candidates.append(
             {
                 "topology": topology,
                 **dict(values),
-                "throughput_requests_per_s": BATCH_SIZE / latency,
-                "throughput_per_watt_requests_per_j": BATCH_SIZE / energy,
+                "throughput_requests_per_s": batch_size / latency,
+                "throughput_per_watt_requests_per_j": batch_size / energy,
                 "output_tokens_per_s": global_output_tokens / latency,
                 "output_tokens_per_j": global_output_tokens / energy,
                 "energy_per_output_token_j": energy / global_output_tokens,
-                "energy_per_request_j": energy / BATCH_SIZE,
+                "energy_per_request_j": energy / batch_size,
                 "average_power_w": energy / latency,
                 "legacy_metric_alias": True,
             }
@@ -409,7 +547,10 @@ def _system_candidate(
     row: Mapping[str, str],
     *,
     model: str,
+    prefill_campaign: str,
     prefill_budget: int,
+    prefill_completed_trial_index: int,
+    prefill_static: Mapping[str, Any],
     decode_gpu_count: int,
     decode_topology: str,
     decode: Mapping[str, Any],
@@ -430,6 +571,8 @@ def _system_candidate(
         prefill_energy_j=prefill_energy_j,
         kv_handoff_energy_j=handoff_energy_j,
         decode_energy_j=float(decode["energy_j"]),
+        prefill_idle_power_w=float(prefill_static["idle_power_w"]),
+        decode_idle_power_w=float(decode["idle_power_w"]),
         e2e_latency_s=e2e_s,
         input_tokens_per_request=INPUT_TOKENS,
         output_tokens_per_request=OUTPUT_TOKENS,
@@ -441,7 +584,9 @@ def _system_candidate(
         **metrics,
         "model": model,
         "prefill_trial": int(row["trial"]),
+        "prefill_campaign": prefill_campaign,
         "prefill_budget_a100_equivalent": prefill_budget,
+        "prefill_completed_trial_index": prefill_completed_trial_index,
         "decode_gpu_count": decode_gpu_count,
         "system_split": f"P{prefill_budget}:D{decode_gpu_count}",
         "decode_topology": decode_topology,
@@ -472,6 +617,13 @@ def _system_candidate(
         "prefill_energy_j": prefill_energy_j,
         "kv_handoff_energy_j": handoff_energy_j,
         "decode_energy_j": float(decode["energy_j"]),
+        "prefill_logic_leakage_power_w": float(prefill_static["logic_leakage_power_w"]),
+        "prefill_sram_background_power_w": float(prefill_static["sram_background_power_w"]),
+        "prefill_hbm_background_power_w": float(prefill_static["hbm_background_power_w"]),
+        "prefill_sram_allocated_capacity_gb": float(prefill_static["sram_allocated_capacity_gb"]),
+        "prefill_area_reconstruction_error_mm2": float(prefill_static["area_reconstruction_error_mm2"]),
+        "prefill_area_reconstruction_validated": bool(prefill_static["area_reconstruction_validated"]),
+        "prefill_idle_power_scope": str(prefill_static["idle_power_scope"]),
         "projected_static_batch_request_ttft_s": metrics["plena_disaggregated_batch_admitted_ttft_s"],
         "projected_mean_request_tpot_s": decode.get("mean_request_tpot_s"),
         "projected_p95_request_tpot_s": decode.get(
@@ -508,25 +660,68 @@ def _select(
     candidates: Sequence[Mapping[str, Any]],
     *,
     aggregate_fastest: Mapping[str, Any],
-    rtl_only: bool,
 ) -> dict[str, Any]:
-    selected_rows = [dict(row) for row in candidates if not rtl_only or bool(row["rtl_validation_available"])]
-    trial_ids = {int(row["prefill_trial"]) for row in selected_rows}
+    selected_rows = [dict(row) for row in candidates]
     by_ratio = {
         str(ratio): select_system_output_endpoints(
             selected_rows,
             aggregated_e2e_s=float(aggregate_fastest["latency_s"]),
             max_e2e_ratio=ratio,
             minimum_accuracy=0.9,
-            prefill_pareto_trial_ids=trial_ids,
         )
         for ratio in (1.0, 1.25, 1.5)
     }
     return {
         "candidate_count": len(selected_rows),
-        "candidate_scope": "rtl_isa_encodable_r_le_8" if rtl_only else "r16_structural_included",
+        "candidate_source": "all_completed_budget_conditioned_stage2_trials",
+        "candidate_scope": "all_configured_softmax_row_widths_r_1_2_4_8_16",
         "sensitivity_by_e2e_ratio": by_ratio,
     }
+
+
+def _convergence_endpoint(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "prefill_campaign": str(row["prefill_campaign"]),
+        "prefill_trial": int(row["prefill_trial"]),
+        "prefill_completed_trial_index": int(row["prefill_completed_trial_index"]),
+        "system_split": str(row["system_split"]),
+        "decode_topology": str(row["decode_topology"]),
+        "output_tps": float(row["projected_pipeline_output_tokens_per_s"]),
+        "output_tokens_per_j": float(row["projected_output_tokens_per_j"]),
+        "e2e_latency_s": float(row["e2e_latency_s"]),
+    }
+
+
+def _search_convergence(
+    candidates: Sequence[Mapping[str, Any]],
+    *,
+    aggregate_fastest: Mapping[str, Any],
+    checkpoints: Sequence[int] = (2048, 4096, 8192, 12_288, 14_746, 16_384),
+) -> list[dict[str, Any]]:
+    snapshots = []
+    for checkpoint in checkpoints:
+        subset = [
+            row
+            for row in candidates
+            if int(row["prefill_completed_trial_index"]) <= checkpoint
+        ]
+        nominal = _select(
+            subset,
+            aggregate_fastest=aggregate_fastest,
+        )["sensitivity_by_e2e_ratio"]["1.25"]
+        snapshots.append(
+            {
+                "completed_trials_per_campaign": checkpoint,
+                "candidate_count": len(subset),
+                "maximum_output_tps": _convergence_endpoint(nominal["maximum_output_tps"]),
+                "maximum_output_tokens_per_j": _convergence_endpoint(
+                    nominal["maximum_output_tokens_per_j"]
+                ),
+            }
+        )
+    return snapshots
 
 
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -577,7 +772,7 @@ def _render_report(payload: Mapping[str, Any]) -> str:
         "",
         "## Semantics",
         "",
-        "This report combines the completed bank-aware PLENA prefill Pareto sets with",
+        "This report combines the completed bank-aware PLENA prefill DSE trials with",
         "the measured A100 W4A16/FP16-KV curves for `90k input / 8k output, batch 8`.",
         "The headline throughput metric is generated output tokens per second. Energy",
         "efficiency is output tokens per joule. Requests/s and requests/J are retained",
@@ -586,8 +781,8 @@ def _render_report(payload: Mapping[str, Any]) -> str:
         "Disaggregated values are an analytical fixed-batch pipeline envelope using an",
         "imported-KV A100 decode proxy. There is no real PLENA-to-A100 KV import, queueing",
         "simulation, or continuous-batching simulation. PLENA energy uses ideal",
-        "hierarchical clock gating. R16 is a structural extrapolation, so an ISA-encodable",
-        "R<=8 result is retained beside the main result.",
+        "hierarchical clock gating. All configured softmax row widths R=1,2,4,8,16",
+        "participate in the same system search.",
         "",
     ]
     for model, result in payload["models"].items():
@@ -601,17 +796,19 @@ def _render_report(payload: Mapping[str, Any]) -> str:
             [
                 f"## {model}",
                 "",
-                "### User-visible latency",
+                "### Latency",
                 "",
-                "| System | Objective | Median TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) | P95 TPOT (ms) | Full-batch E2E (s) |",
-                "|---|---|---:|---:|---:|---:|---:|",
-                f"| Aggregated A100 | Maximum output TPS | {_fmt_optional(fastest_gpu.get('median_request_visible_ttft_s'))} | {_fmt_optional(fastest_gpu.get('p95_request_visible_ttft_s'))} | {_fmt_optional(float(fastest_gpu['mean_request_tpot_s']) * 1000 if fastest_gpu.get('mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(fastest_gpu['conservative_p95_request_tpot_s']) * 1000 if fastest_gpu.get('conservative_p95_request_tpot_s') is not None else None)} | {fastest_gpu['latency_s']:.3f} |",
-                f"| Aggregated A100 | Maximum output tokens/J | {_fmt_optional(efficient_gpu.get('median_request_visible_ttft_s'))} | {_fmt_optional(efficient_gpu.get('p95_request_visible_ttft_s'))} | {_fmt_optional(float(efficient_gpu['mean_request_tpot_s']) * 1000 if efficient_gpu.get('mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(efficient_gpu['conservative_p95_request_tpot_s']) * 1000 if efficient_gpu.get('conservative_p95_request_tpot_s') is not None else None)} | {efficient_gpu['latency_s']:.3f} |",
-                f"| PLENA + A100 | Maximum output TPS | {fastest['projected_static_batch_request_ttft_s']:.3f} | {fastest['projected_static_batch_request_ttft_s']:.3f} | {_fmt_optional(float(fastest['projected_mean_request_tpot_s']) * 1000 if fastest.get('projected_mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(fastest['projected_p95_request_tpot_s']) * 1000 if fastest.get('projected_p95_request_tpot_s') is not None else None)} | {fastest['e2e_latency_s']:.3f} |",
-                f"| PLENA + A100 | Maximum output tokens/J | {efficient['projected_static_batch_request_ttft_s']:.3f} | {efficient['projected_static_batch_request_ttft_s']:.3f} | {_fmt_optional(float(efficient['projected_mean_request_tpot_s']) * 1000 if efficient.get('projected_mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(efficient['projected_p95_request_tpot_s']) * 1000 if efficient.get('projected_p95_request_tpot_s') is not None else None)} | {efficient['e2e_latency_s']:.3f} |",
+                "| System | Objective | Admitted/static TTFT (s) | TTFT evidence | Mean TPOT (ms) | P95 TPOT (ms) | Full-batch E2E (s) |",
+                "|---|---|---:|---|---:|---:|---:|",
+                f"| Aggregated A100 | Maximum output TPS | {_fmt_optional(fastest_gpu.get('scheduler_admitted_ttft_exact_or_proxy_s'))} | {fastest_gpu.get('scheduler_admitted_ttft_fidelity', 'unavailable')} | {_fmt_optional(float(fastest_gpu['mean_request_tpot_s']) * 1000 if fastest_gpu.get('mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(fastest_gpu['conservative_p95_request_tpot_s']) * 1000 if fastest_gpu.get('conservative_p95_request_tpot_s') is not None else None)} | {fastest_gpu['latency_s']:.3f} |",
+                f"| Aggregated A100 | Maximum output tokens/J | {_fmt_optional(efficient_gpu.get('scheduler_admitted_ttft_exact_or_proxy_s'))} | {efficient_gpu.get('scheduler_admitted_ttft_fidelity', 'unavailable')} | {_fmt_optional(float(efficient_gpu['mean_request_tpot_s']) * 1000 if efficient_gpu.get('mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(efficient_gpu['conservative_p95_request_tpot_s']) * 1000 if efficient_gpu.get('conservative_p95_request_tpot_s') is not None else None)} | {efficient_gpu['latency_s']:.3f} |",
+                f"| PLENA + A100 | Maximum output TPS | {fastest['projected_static_batch_request_ttft_s']:.3f} | analytical static-batch proxy | {_fmt_optional(float(fastest['projected_mean_request_tpot_s']) * 1000 if fastest.get('projected_mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(fastest['projected_p95_request_tpot_s']) * 1000 if fastest.get('projected_p95_request_tpot_s') is not None else None)} | {fastest['e2e_latency_s']:.3f} |",
+                f"| PLENA + A100 | Maximum output tokens/J | {efficient['projected_static_batch_request_ttft_s']:.3f} | analytical static-batch proxy | {_fmt_optional(float(efficient['projected_mean_request_tpot_s']) * 1000 if efficient.get('projected_mean_request_tpot_s') is not None else None)} | {_fmt_optional(float(efficient['projected_p95_request_tpot_s']) * 1000 if efficient.get('projected_p95_request_tpot_s') is not None else None)} | {efficient['e2e_latency_s']:.3f} |",
                 "",
-                "PLENA TTFT is a projected static-batch value. It is not an online scheduler",
-                "measurement and is therefore not used as a request-SLO selector.",
+                "A100 TTFT comes from the one-token fixed-batch audit and measures first",
+                "token minus scheduler admission, using a validated serial-staircase proxy",
+                "where exact vLLM admission timestamps are unavailable. PLENA TTFT is a",
+                "projected static-batch value. Neither value is an online request-SLO result.",
                 "",
                 "### Steady-state performance",
                 "",
@@ -624,12 +821,12 @@ def _render_report(payload: Mapping[str, Any]) -> str:
                 "",
                 "### Energy efficiency",
                 "",
-                "| System | Objective | Output tokens/J | Energy/output token (J) | Energy/request (kJ) | Average power (W) |",
-                "|---|---|---:|---:|---:|---:|",
-                f"| Aggregated A100 | Maximum output TPS | {fastest_gpu['output_tokens_per_j']:.6f} | {fastest_gpu['energy_per_output_token_j']:.6f} | {fastest_gpu['energy_per_request_j'] / 1000:.3f} | {fastest_gpu['average_power_w']:.2f} |",
-                f"| Aggregated A100 | Maximum output tokens/J | {efficient_gpu['output_tokens_per_j']:.6f} | {efficient_gpu['energy_per_output_token_j']:.6f} | {efficient_gpu['energy_per_request_j'] / 1000:.3f} | {efficient_gpu['average_power_w']:.2f} |",
-                f"| PLENA + A100 | Maximum output TPS | {fastest['projected_output_tokens_per_j']:.6f} | {fastest['energy_per_output_token_j']:.6f} | {fastest['energy_per_request_j'] / 1000:.3f} | {fastest['steady_state_average_system_power_w']:.2f} |",
-                f"| PLENA + A100 | Maximum output tokens/J | {efficient['projected_output_tokens_per_j']:.6f} | {efficient['energy_per_output_token_j']:.6f} | {efficient['energy_per_request_j'] / 1000:.3f} | {efficient['steady_state_average_system_power_w']:.2f} |",
+                "| System | Objective | Output tokens/J | Energy/output token (J) | Energy/request (kJ) | Pipeline idle (kJ) | Average power (W) |",
+                "|---|---|---:|---:|---:|---:|---:|",
+                f"| Aggregated A100 | Maximum output TPS | {fastest_gpu['output_tokens_per_j']:.6f} | {fastest_gpu['energy_per_output_token_j']:.6f} | {fastest_gpu['energy_per_request_j'] / 1000:.3f} | n/a | {fastest_gpu['average_power_w']:.2f} |",
+                f"| Aggregated A100 | Maximum output tokens/J | {efficient_gpu['output_tokens_per_j']:.6f} | {efficient_gpu['energy_per_output_token_j']:.6f} | {efficient_gpu['energy_per_request_j'] / 1000:.3f} | n/a | {efficient_gpu['average_power_w']:.2f} |",
+                f"| PLENA + A100 | Maximum output TPS | {fastest['projected_output_tokens_per_j']:.6f} | {fastest['energy_per_output_token_j']:.6f} | {fastest['energy_per_request_j'] / 1000:.3f} | {fastest['cross_stage_idle_energy_j'] / 1000:.3f} | {fastest['steady_state_average_system_power_w']:.2f} |",
+                f"| PLENA + A100 | Maximum output tokens/J | {efficient['projected_output_tokens_per_j']:.6f} | {efficient['energy_per_output_token_j']:.6f} | {efficient['energy_per_request_j'] / 1000:.3f} | {efficient['cross_stage_idle_energy_j'] / 1000:.3f} | {efficient['steady_state_average_system_power_w']:.2f} |",
                 "",
             ]
         )
@@ -644,12 +841,12 @@ def _render_report(payload: Mapping[str, Any]) -> str:
                 f"| Maximum output TPS | {output_tps_cmp['output_tps_speedup_x']:.3f}x | {output_tps_cmp['output_tokens_per_j_improvement_x']:.3f}x | {output_tps_cmp['energy_per_output_token_reduction_x']:.3f}x lower | {output_tps_cmp['e2e_latency_ratio_x']:.3f}x |",
                 f"| Maximum output tokens/J | {efficiency_cmp['output_tps_speedup_x']:.3f}x | {efficiency_cmp['output_tokens_per_j_improvement_x']:.3f}x | {efficiency_cmp['energy_per_output_token_reduction_x']:.3f}x lower | {efficiency_cmp['e2e_latency_ratio_x']:.3f}x |",
                 "",
-                "### Scheduler-admission diagnostic",
+                "### TTFT diagnostics",
                 "",
-                "| A100 objective | Scheduler-admitted TTFT exact/proxy (s) | Fidelity | Batch first-token barrier (s) |",
-                "|---|---:|---|---:|",
-                f"| Maximum output TPS | {_fmt_optional(fastest_gpu.get('scheduler_admitted_ttft_exact_or_proxy_s'))} | {fastest_gpu.get('scheduler_admitted_ttft_source', 'unavailable')} | {_fmt_optional(fastest_gpu.get('batch_first_token_barrier_s'))} |",
-                f"| Maximum output tokens/J | {_fmt_optional(efficient_gpu.get('scheduler_admitted_ttft_exact_or_proxy_s'))} | {efficient_gpu.get('scheduler_admitted_ttft_source', 'unavailable')} | {_fmt_optional(efficient_gpu.get('batch_first_token_barrier_s'))} |",
+                "| A100 objective | Fixed-batch admitted TTFT (s) | Source | Fixed-batch request-visible median (s) | Fixed-batch barrier (s) |",
+                "|---|---:|---|---:|---:|",
+                f"| Maximum output TPS | {_fmt_optional(fastest_gpu.get('scheduler_admitted_ttft_exact_or_proxy_s'))} | {fastest_gpu.get('scheduler_admitted_ttft_source', 'unavailable')} | {_fmt_optional(fastest_gpu.get('fixed_batch_request_visible_median_ttft_s'))} | {_fmt_optional(fastest_gpu.get('fixed_batch_first_token_barrier_s'))} |",
+                f"| Maximum output tokens/J | {_fmt_optional(efficient_gpu.get('scheduler_admitted_ttft_exact_or_proxy_s'))} | {efficient_gpu.get('scheduler_admitted_ttft_source', 'unavailable')} | {_fmt_optional(efficient_gpu.get('fixed_batch_request_visible_median_ttft_s'))} | {_fmt_optional(efficient_gpu.get('fixed_batch_first_token_barrier_s'))} |",
                 "",
                 "No disaggregated candidate satisfies the `1.0x` E2E bound. The complete",
                 "`1.0x/1.25x/1.5x` selector results are retained in the JSON artifact.",
@@ -661,8 +858,9 @@ def _render_report(payload: Mapping[str, Any]) -> str:
             "## Interpretation",
             "",
             "- Output TPS is `batch * output_tokens / max(prefill, handoff, decode)`.",
-            "- Output tokens/J includes PLENA prefill, KV handoff, A100 decode, and replica",
-            "  idle-tail energy. It is numerically TPS/W.",
+            "- Output tokens/J includes PLENA prefill, KV handoff, A100 decode, replica",
+            "  idle tails, and static energy while a non-bottleneck subsystem waits for the",
+            "  next steady-state batch. It is numerically TPS/W.",
             "- The 1.25x bound uses the fastest aggregated-A100 full-batch E2E result.",
             "- More than eight A100s and unmeasured replica combinations are labelled as",
             "  measured-replica extrapolations.",
@@ -688,12 +886,18 @@ def run_search(*, dse_root: Path, measurement_root: Path, output_dir: Path) -> d
         ),
     }
     payload: dict[str, Any] = {
-        "schema": "primary_90k8_system_search_v3",
+        "schema": "primary_90k8_system_search_v5",
         "workload": {"input_tokens": INPUT_TOKENS, "output_tokens": OUTPUT_TOKENS, "batch": BATCH_SIZE},
         "system_objectives": ["maximize_output_tps", "maximize_output_tokens_per_j"],
         "latency_constraint": "disaggregated_e2e <= ratio * fastest_aggregated_a100_e2e",
         "main_e2e_ratio": 1.25,
         "interconnect_energy_pj_per_bit": INTERCONNECT_ENERGY_PJ_PER_BIT,
+        "cross_stage_idle_energy": {
+            "accounted": True,
+            "prefill": "logic leakage plus SRAM and HBM background power",
+            "handoff": "zero; endpoint and link static power remain excluded",
+            "decode": "measured aggregate A100 idle board power",
+        },
         "models": {},
     }
     all_front_rows: list[dict[str, Any]] = []
@@ -701,36 +905,89 @@ def run_search(*, dse_root: Path, measurement_root: Path, output_dir: Path) -> d
         aggregate_rows = _aggregate_candidates(topology_data[model]["aggregate"])
         aggregate_endpoints = _aggregate_endpoints(aggregate_rows)
         system_candidates: list[dict[str, Any]] = []
+        stage2_pareto_keys: set[tuple[int, int]] = set()
+        campaign_candidate_counts: dict[str, Any] = {}
+        maximum_e2e_s = 1.5 * float(aggregate_endpoints["maximum_output_tps"]["latency_s"])
         for prefill_budget, decode_gpus, campaign in specs:
-            pareto_rows = _read_csv(dse_root / campaign / "pareto_trials.csv")
-            for row in pareto_rows:
-                for decode_topology, decode in topology_data[model]["decode"][decode_gpus].items():
+            campaign_dir = dse_root / campaign
+            stage2_pareto_keys.update(
+                (prefill_budget, int(row["trial"]))
+                for row in _read_csv(campaign_dir / "pareto_trials.csv")
+            )
+            completed_rows = [
+                row
+                for row in _read_csv(campaign_dir / "all_trials.csv.gz")
+                if row.get("state") == "complete"
+            ]
+            completed_rows.sort(key=lambda row: int(row["trial"]))
+            idle_power = PrefillIdlePowerEstimator.from_campaign(
+                campaign_dir,
+                repo_root=REPO_ROOT,
+            )
+            eligible_row_count = 0
+            maximum_area_reconstruction_error_mm2 = 0.0
+            candidate_count_before = len(system_candidates)
+            for completed_trial_index, row in enumerate(completed_rows, start=1):
+                prefill_s = float(row["prefill_latency_ms"]) / 1000.0
+                handoff_s = float(row["fp16_kv_handoff_latency_ms"]) / 1000.0
+                eligible_decodes = [
+                    (decode_topology, decode)
+                    for decode_topology, decode in topology_data[model]["decode"][decode_gpus].items()
+                    if prefill_s + handoff_s + float(decode["latency_s"]) <= maximum_e2e_s
+                ]
+                if not eligible_decodes:
+                    continue
+                eligible_row_count += 1
+                prefill_static = idle_power.estimate(row)
+                maximum_area_reconstruction_error_mm2 = max(
+                    maximum_area_reconstruction_error_mm2,
+                    abs(float(prefill_static["area_reconstruction_error_mm2"])),
+                )
+                for decode_topology, decode in eligible_decodes:
                     system_candidates.append(
                         _system_candidate(
                             row,
                             model=model,
+                            prefill_campaign=campaign,
                             prefill_budget=prefill_budget,
+                            prefill_completed_trial_index=completed_trial_index,
+                            prefill_static=prefill_static,
                             decode_gpu_count=decode_gpus,
                             decode_topology=decode_topology,
                             decode=decode,
                         )
                     )
+            campaign_candidate_counts[campaign] = {
+                "completed_stage2_trials": len(completed_rows),
+                "trials_with_a_1p5x_eligible_decode_topology": eligible_row_count,
+                "system_candidates_through_1p5x_prefilter": len(system_candidates) - candidate_count_before,
+                "distinct_reconstructed_area_configurations": idle_power.cached_area_configuration_count,
+                "maximum_area_reconstruction_error_mm2": maximum_area_reconstruction_error_mm2,
+            }
         main = _select(
             system_candidates,
             aggregate_fastest=aggregate_endpoints["maximum_output_tps"],
-            rtl_only=False,
         )
-        rtl = _select(
-            system_candidates,
+        stage2_pareto_only_shadow = _select(
+            [
+                row
+                for row in system_candidates
+                if (int(row["prefill_budget_a100_equivalent"]), int(row["prefill_trial"]))
+                in stage2_pareto_keys
+            ],
             aggregate_fastest=aggregate_endpoints["maximum_output_tps"],
-            rtl_only=True,
         )
         nominal = main["sensitivity_by_e2e_ratio"]["1.25"]
         result = {
             "aggregate_gpu": {"candidates": aggregate_rows, "endpoints": aggregate_endpoints},
             "system_candidate_count": len(system_candidates),
+            "campaign_candidate_counts": campaign_candidate_counts,
             "main": main,
-            "rtl_encodable": rtl,
+            "stage2_two_objective_pareto_restriction_shadow": stage2_pareto_only_shadow,
+            "search_convergence_by_completed_trials_per_campaign": _search_convergence(
+                system_candidates,
+                aggregate_fastest=aggregate_endpoints["maximum_output_tps"],
+            ),
             "comparisons": {
                 "maximum_output_tps_vs_gpu": _comparison(
                     nominal["maximum_output_tps"],
@@ -741,61 +998,45 @@ def run_search(*, dse_root: Path, measurement_root: Path, output_dir: Path) -> d
                     aggregate_endpoints["maximum_output_tokens_per_j"],
                 ),
             },
-            "rtl_comparisons": {
-                "maximum_output_tps_vs_gpu": _comparison(
-                    rtl["sensitivity_by_e2e_ratio"]["1.25"]["maximum_output_tps"],
-                    aggregate_endpoints["maximum_output_tps"],
-                ),
-                "maximum_output_tokens_per_j_vs_gpu": _comparison(
-                    rtl["sensitivity_by_e2e_ratio"]["1.25"]["maximum_output_tokens_per_j"],
-                    aggregate_endpoints["maximum_output_tokens_per_j"],
-                ),
-            },
         }
         payload["models"][model] = result
-        for scope in ("main", "rtl_encodable"):
-            for row in result[scope]["sensitivity_by_e2e_ratio"]["1.25"]["pareto"]:
-                all_front_rows.append({"selection_scope": scope, **row})
+        for row in result["main"]["sensitivity_by_e2e_ratio"]["1.25"]["pareto"]:
+            all_front_rows.append({"selection_scope": "all_r_tiers", **row})
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    legacy_path = output_dir / "primary_90k8_system_search_v2_results.json"
-    if legacy_path.is_file():
-        legacy = _read_json(legacy_path)
-        migration_audit: dict[str, Any] = {"status": "pass", "models": {}}
-        endpoint_names = (
-            ("maximum_throughput", "maximum_output_tps"),
-            ("maximum_throughput_per_watt", "maximum_output_tokens_per_j"),
-        )
+    prior_path = output_dir / "primary_90k8_system_search_v4_results.json"
+    if prior_path.is_file():
+        prior = _read_json(prior_path)
+        correction_audit: dict[str, Any] = {"status": "informational", "models": {}}
+        endpoint_names = ("maximum_output_tps", "maximum_output_tokens_per_j")
         for model, result in payload["models"].items():
             model_audit: dict[str, Any] = {}
-            for old_name, new_name in endpoint_names:
-                old_row = legacy["models"][model]["main"]["sensitivity_by_e2e_ratio"]["1.25"][old_name]
-                new_row = result["main"]["sensitivity_by_e2e_ratio"]["1.25"][new_name]
+            for endpoint_name in endpoint_names:
+                old_row = prior["models"][model]["main"]["sensitivity_by_e2e_ratio"]["1.25"][endpoint_name]
+                new_row = result["main"]["sensitivity_by_e2e_ratio"]["1.25"][endpoint_name]
                 old_identity = _endpoint_identity(old_row)
                 new_identity = _endpoint_identity(new_row)
-                if old_identity != new_identity:
-                    raise ValueError(f"metric migration changed {model} {new_name}: {old_identity} != {new_identity}")
-                model_audit[new_name] = {
-                    "legacy_identity": old_identity,
-                    "v3_identity": new_identity,
-                    "unchanged": True,
+                model_audit[endpoint_name] = {
+                    "v4_identity": old_identity,
+                    "v5_identity": new_identity,
+                    "identity_changed": old_identity != new_identity,
+                    "v4_output_tokens_per_j": float(old_row["projected_output_tokens_per_j"]),
+                    "v5_output_tokens_per_j": float(new_row["projected_output_tokens_per_j"]),
+                    "v5_cross_stage_idle_energy_j": float(new_row["cross_stage_idle_energy_j"]),
                 }
-            migration_audit["models"][model] = model_audit
-        payload["legacy_v2_endpoint_identity_audit"] = migration_audit
-    (output_dir / "primary_90k8_system_search_v3_results.json").write_text(
+            correction_audit["models"][model] = model_audit
+        payload["v4_ttft_source_correction_audit"] = correction_audit
+    (output_dir / "primary_90k8_system_search_v5_results.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n"
     )
-    _write_csv(output_dir / "primary_90k8_system_search_v3_pareto.csv", all_front_rows)
-    _write_csv(output_dir / "system_output_tps_efficiency_pareto.csv", all_front_rows)
-    (output_dir / "system_selector_endpoints_v2.json").write_text(
+    _write_csv(output_dir / "primary_90k8_system_search_v5_pareto.csv", all_front_rows)
+    _write_csv(output_dir / "system_output_tps_efficiency_pareto_v5.csv", all_front_rows)
+    (output_dir / "system_selector_endpoints_v4.json").write_text(
         json.dumps(
             {
-                "schema": "system_selector_endpoints_v2",
+                "schema": "system_selector_endpoints_v4",
                 "models": {
-                    model: {
-                        "main": result["main"]["sensitivity_by_e2e_ratio"],
-                        "rtl_encodable": result["rtl_encodable"]["sensitivity_by_e2e_ratio"],
-                    }
+                    model: {"main": result["main"]["sensitivity_by_e2e_ratio"]}
                     for model, result in payload["models"].items()
                 },
             },
@@ -804,7 +1045,7 @@ def run_search(*, dse_root: Path, measurement_root: Path, output_dir: Path) -> d
         )
         + "\n"
     )
-    (output_dir / "primary_90k8_system_search_v3.md").write_text(_render_report(payload))
+    (output_dir / "primary_90k8_system_search_v5.md").write_text(_render_report(payload))
     return payload
 
 

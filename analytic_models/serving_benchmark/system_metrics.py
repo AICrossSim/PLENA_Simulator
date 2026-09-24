@@ -96,6 +96,9 @@ def disaggregated_pipeline_metrics(
     prefill_energy_j: float,
     kv_handoff_energy_j: float,
     decode_energy_j: float,
+    prefill_idle_power_w: float = 0.0,
+    kv_handoff_idle_power_w: float = 0.0,
+    decode_idle_power_w: float = 0.0,
     e2e_latency_s: float | None = None,
     input_tokens_per_request: int | None = None,
     output_tokens_per_request: int | None = None,
@@ -122,6 +125,8 @@ def disaggregated_pipeline_metrics(
         raise ValueError("pipeline stage intervals must be nonnegative")
     if min(prefill_energy_j, kv_handoff_energy_j, decode_energy_j) < 0:
         raise ValueError("pipeline stage energies must be nonnegative")
+    if min(prefill_idle_power_w, kv_handoff_idle_power_w, decode_idle_power_w) < 0:
+        raise ValueError("pipeline stage idle powers must be nonnegative")
     if request_ttft_s is not None:
         if request_ttft_semantics not in TTFT_SEMANTICS:
             raise ValueError("request TTFT requires an explicit supported semantic")
@@ -135,7 +140,19 @@ def disaggregated_pipeline_metrics(
         kv_handoff_interval_s,
         decode_interval_s,
     )
-    system_energy = math.fsum((prefill_energy_j, kv_handoff_energy_j, decode_energy_j))
+    active_stage_energy = math.fsum((prefill_energy_j, kv_handoff_energy_j, decode_energy_j))
+    stage_idle_durations = {
+        "prefill": service_interval - prefill_interval_s,
+        "kv_handoff": service_interval - kv_handoff_interval_s,
+        "decode": service_interval - decode_interval_s,
+    }
+    stage_idle_energies = {
+        "prefill": stage_idle_durations["prefill"] * prefill_idle_power_w,
+        "kv_handoff": stage_idle_durations["kv_handoff"] * kv_handoff_idle_power_w,
+        "decode": stage_idle_durations["decode"] * decode_idle_power_w,
+    }
+    cross_stage_idle_energy = math.fsum(stage_idle_energies.values())
+    system_energy = active_stage_energy + cross_stage_idle_energy
     throughput = batch_size / service_interval
     energy_per_request = system_energy / batch_size
     output_tokens = _batch_tokens(batch_size, output_tokens_per_request)
@@ -155,7 +172,7 @@ def disaggregated_pipeline_metrics(
         bool(request_ttft_s <= ttft_slo_s and request_tpot_s <= tpot_slo_s) if slo_complete and slo_observed else None
     )
     return {
-        "metric_schema": "fixed-batch-serving-metrics-v3",
+        "metric_schema": "fixed-batch-serving-metrics-v4",
         "fidelity": "analytical_fixed_batch_pipeline_envelope",
         "prefill_interval_s": prefill_interval_s,
         "plena_batch_admitted_prefill_ttft_s": prefill_interval_s,
@@ -190,11 +207,26 @@ def disaggregated_pipeline_metrics(
         "total_tokens_per_j": (total_tokens / system_energy if total_tokens is not None else None),
         "e2e_latency_s": e2e_latency_s,
         "system_energy_j": system_energy,
+        "steady_state_system_energy_per_batch_j": system_energy,
+        "active_stage_energy_j": active_stage_energy,
+        "cross_stage_idle_energy_j": cross_stage_idle_energy,
+        "prefill_cross_stage_idle_energy_j": stage_idle_energies["prefill"],
+        "kv_handoff_cross_stage_idle_energy_j": stage_idle_energies["kv_handoff"],
+        "decode_cross_stage_idle_energy_j": stage_idle_energies["decode"],
+        "prefill_cross_stage_idle_duration_s": stage_idle_durations["prefill"],
+        "kv_handoff_cross_stage_idle_duration_s": stage_idle_durations["kv_handoff"],
+        "decode_cross_stage_idle_duration_s": stage_idle_durations["decode"],
+        "prefill_idle_power_w": prefill_idle_power_w,
+        "kv_handoff_idle_power_w": kv_handoff_idle_power_w,
+        "decode_idle_power_w": decode_idle_power_w,
+        "cross_stage_idle_energy_accounted": True,
         "energy_per_request_j": energy_per_request,
         "steady_state_average_system_power_w": system_energy / service_interval,
         "average_pipeline_power_w": system_energy / service_interval,
         "single_batch_average_system_power_w": (
-            system_energy / e2e_latency_s if e2e_latency_s is not None and e2e_latency_s > 0 else None
+            active_stage_energy / e2e_latency_s
+            if e2e_latency_s is not None and e2e_latency_s > 0
+            else None
         ),
         "throughput_per_watt_requests_per_j": batch_size / system_energy,
         "energy_per_token_j": system_energy / total_tokens if total_tokens else None,
@@ -313,29 +345,9 @@ def system_output_tps_efficiency_pareto(
         candidate["system_selector_prefill_pareto_only"] = prefill_pareto_trial_ids is not None
         feasible.append(candidate)
 
-    front: list[dict[str, Any]] = []
-    for index, candidate in enumerate(feasible):
-        output_tps = float(candidate["projected_pipeline_output_tokens_per_s"])
-        efficiency = float(candidate["projected_output_tokens_per_j"])
-        dominated = False
-        for other_index, other in enumerate(feasible):
-            if index == other_index:
-                continue
-            other_output_tps = float(other["projected_pipeline_output_tokens_per_s"])
-            other_efficiency = float(other["projected_output_tokens_per_j"])
-            if (
-                other_output_tps >= output_tps
-                and other_efficiency >= efficiency
-                and (other_output_tps > output_tps or other_efficiency > efficiency)
-            ):
-                dominated = True
-                break
-        if not dominated:
-            front.append(candidate)
-
-    # Collapse exact objective duplicates deterministically.
+    # Collapse exact objective duplicates before the Pareto scan.
     unique: dict[tuple[float, float], dict[str, Any]] = {}
-    for candidate in front:
+    for candidate in feasible:
         key = (
             float(candidate["projected_pipeline_output_tokens_per_s"]),
             float(candidate["projected_output_tokens_per_j"]),
@@ -343,7 +355,10 @@ def system_output_tps_efficiency_pareto(
         incumbent = unique.get(key)
         if incumbent is None or _system_tie_key(candidate) < _system_tie_key(incumbent):
             unique[key] = candidate
-    return sorted(
+
+    # Sorting throughput high-to-low reduces the two-objective Pareto test to
+    # a linear scan over the best efficiency seen at a higher throughput.
+    ordered = sorted(
         unique.values(),
         key=lambda candidate: (
             -float(candidate["projected_pipeline_output_tokens_per_s"]),
@@ -351,6 +366,24 @@ def system_output_tps_efficiency_pareto(
             _system_tie_key(candidate),
         ),
     )
+    front: list[dict[str, Any]] = []
+    best_efficiency = -math.inf
+    index = 0
+    while index < len(ordered):
+        output_tps = float(ordered[index]["projected_pipeline_output_tokens_per_s"])
+        group_end = index + 1
+        while (
+            group_end < len(ordered)
+            and float(ordered[group_end]["projected_pipeline_output_tokens_per_s"]) == output_tps
+        ):
+            group_end += 1
+        candidate = ordered[index]
+        efficiency = float(candidate["projected_output_tokens_per_j"])
+        if efficiency > best_efficiency:
+            front.append(candidate)
+        best_efficiency = max(best_efficiency, efficiency)
+        index = group_end
+    return front
 
 
 def system_throughput_efficiency_pareto(

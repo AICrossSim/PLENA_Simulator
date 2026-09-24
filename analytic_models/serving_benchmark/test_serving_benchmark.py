@@ -785,6 +785,30 @@ def test_system_metrics_separate_throughput_from_slo_goodput() -> None:
     assert projected["plena_throughput_equivalent_prefill_interval_s"] == pytest.approx(70.0 / 8)
 
 
+def test_disaggregated_pipeline_charges_cross_stage_idle_static_energy() -> None:
+    projected = disaggregated_pipeline_metrics(
+        batch_size=8,
+        prefill_interval_s=70.0,
+        kv_handoff_interval_s=0.1,
+        decode_interval_s=250.0,
+        prefill_energy_j=100_000.0,
+        kv_handoff_energy_j=100.0,
+        decode_energy_j=500_000.0,
+        prefill_idle_power_w=20.0,
+        kv_handoff_idle_power_w=0.0,
+        decode_idle_power_w=100.0,
+        e2e_latency_s=320.1,
+        output_tokens_per_request=8_000,
+    )
+
+    assert projected["prefill_cross_stage_idle_duration_s"] == pytest.approx(180.0)
+    assert projected["decode_cross_stage_idle_duration_s"] == pytest.approx(0.0)
+    assert projected["cross_stage_idle_energy_j"] == pytest.approx(3_600.0)
+    assert projected["active_stage_energy_j"] == pytest.approx(600_100.0)
+    assert projected["system_energy_j"] == pytest.approx(603_700.0)
+    assert projected["single_batch_average_system_power_w"] == pytest.approx(600_100.0 / 320.1)
+
+
 def test_goodput_rejects_non_request_visible_ttft_semantics() -> None:
     arguments = {
         "batch_size": 8,
@@ -947,6 +971,44 @@ def test_canonical_output_token_selector_matches_fixed_workload_request_aliases(
     assert endpoints["maximum_output_tps"]["prefill_trial"] == 1
     assert endpoints["maximum_output_tokens_per_j"]["prefill_trial"] == 2
     assert selected is not None and selected["prefill_trial"] == 2
+
+
+def test_system_output_pareto_removes_lower_efficiency_at_equal_throughput() -> None:
+    base = {
+        "accuracy": 0.92,
+        "area_constraint_satisfied": True,
+        "hbm_constraint_satisfied": True,
+        "e2e_latency_s": 100.0,
+        "energy_per_request_j": 1.0,
+        "aggregate_area_mm2": 1.0,
+    }
+    candidates = [
+        {
+            **base,
+            "prefill_trial": 1,
+            "projected_pipeline_output_tokens_per_s": 10.0,
+            "projected_output_tokens_per_j": 4.0,
+        },
+        {
+            **base,
+            "prefill_trial": 2,
+            "projected_pipeline_output_tokens_per_s": 10.0,
+            "projected_output_tokens_per_j": 3.0,
+        },
+        {
+            **base,
+            "prefill_trial": 3,
+            "projected_pipeline_output_tokens_per_s": 9.0,
+            "projected_output_tokens_per_j": 5.0,
+        },
+    ]
+
+    front = system_output_tps_efficiency_pareto(
+        candidates,
+        aggregated_e2e_s=100.0,
+    )
+
+    assert [row["prefill_trial"] for row in front] == [1, 3]
 
 
 def test_system_selector_writes_nominal_and_sensitivity_artifacts(tmp_path) -> None:
