@@ -26,7 +26,10 @@ def _row(model: str, arm: str, lanes: int, latency: float, area: float) -> dict:
         "pv_compute_count": 4,
         "hbm_physical_read_bytes": 5,
         "hbm_physical_write_bytes": 6,
+        "hbm_read_requests": 7,
+        "hbm_write_requests": 8,
         "layer_dma_manifest_hash": "sha256:test",
+        "vector_sram_logical_bits": 9,
     }
 
 

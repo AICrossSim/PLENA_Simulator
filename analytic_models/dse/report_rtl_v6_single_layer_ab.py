@@ -572,10 +572,14 @@ def _evaluate_actual(model: ModelCase, arm: Arm, settings: Path, baseline_area: 
     )
     opcodes = _opcode_rows(trace)
     packed_attention = dict(trace.metadata.get("packed_attention") or {})
+    native_layout = dict(trace.metadata.get("native_layout") or {})
+    vector_banking = dict(area["vector_sram_banking"])
     categories = _category_cycles(report)
     row = {
         "model": model.key,
         "model_label": model.label,
+        "chip_count": 1,
+        "num_layers": 1,
         "arm": arm.key,
         "arm_label": arm.label,
         "row_lanes": arm.row_lanes,
@@ -599,12 +603,53 @@ def _evaluate_actual(model: ModelCase, arm: Arm, settings: Path, baseline_area: 
         "pv_vector_add_ops": int(opcodes.get("V_ADD_VV", 0)),
         "qk_compute_count": int(packed_attention.get("qk_compute_count", 0)),
         "pv_compute_count": int(packed_attention.get("pv_compute_count", 0)),
+        "physical_rows": int(native_layout.get("physical_rows", 0)),
+        "logical_active_rows": int(native_layout.get("logical_active_rows", 0)),
+        "layout_row_utilization": float(native_layout.get("row_utilization", 0.0)),
+        "softmax_row_groups": int(packed_attention.get("softmax_row_groups", 0)),
+        "softmax_full_group_count": int(
+            packed_attention.get("softmax_full_group_count", 0)
+        ),
+        "softmax_tail_group_count": int(
+            packed_attention.get("softmax_tail_group_count", 0)
+        ),
+        "softmax_row_lane_utilization": float(
+            packed_attention.get("softmax_row_lane_utilization", 0.0)
+        ),
+        # One active row lane maps to one statically selected score bank. This
+        # is row-group bank utilization, not whole-SRAM port utilization.
+        "softmax_group_bank_utilization": float(
+            packed_attention.get("softmax_row_lane_utilization", 0.0)
+        ),
+        "softmax_rows_per_issue": int(
+            packed_attention.get("softmax_rows_per_issue", 1)
+        ),
+        "softmax_score_bank_count": int(
+            packed_attention.get("softmax_score_bank_count", 1)
+        ),
+        "softmax_read_width_bits_per_issue": int(
+            packed_attention.get("softmax_read_width_bits_per_issue", 0)
+        ),
+        "softmax_state_reads": int(packed_attention.get("softmax_state_reads", 0)),
+        "softmax_state_writes": int(packed_attention.get("softmax_state_writes", 0)),
+        "softmax_state_bank_entries": int(
+            packed_attention.get("softmax_state_bank_entries", 0)
+        ),
+        "bank_conflict_fallbacks": int(
+            packed_attention.get("bank_conflict_fallbacks", 0)
+        ),
+        "vector_sram_logical_bits": int(vector_banking["logical_bits"]),
+        "vector_sram_physical_bank_count": int(
+            vector_banking["physical_bank_count"]
+        ),
         "qk_matrix_ops": int(opcodes.get("M_BTMM", 0)),
         "pv_matrix_ops": int(opcodes.get("M_BMM_WO", 0)),
         "packed_pv_matrix_ops": int(opcodes.get("M_MM_WO_PACKED_ACC", 0)),
         "layer_dma_manifest_hash": _layer_dma_digest(trace),
         "hbm_physical_read_bytes": int(timing["hbm_read_bytes"]),
         "hbm_physical_write_bytes": int(timing["hbm_write_bytes"]),
+        "hbm_read_requests": int(timing["hbm_read_requests"]),
+        "hbm_write_requests": int(timing["hbm_write_requests"]),
         "area": area,
         "power_fidelity": power.get("rtl_v6_power_calibration_status", "not_applicable"),
         "stage_compute_latency_ns": timing["stage_compute_latency_ns"],
@@ -684,6 +729,20 @@ def _project_high_r(
         for opcode, cycles in opcodes.items():
             categories[_opcode_category(opcode)] += cycles
     row = dict(base)
+    base_group_count = int(base.get("softmax_row_groups", 0))
+    projected_active_rows = round(
+        base_group_count
+        * int(base["row_lanes"])
+        * float(base.get("softmax_row_lane_utilization", 0.0))
+    )
+    projected_group_count = math.ceil(projected_active_rows / row_lanes)
+    projected_tail_rows = projected_active_rows % row_lanes
+    projected_utilization = (
+        projected_active_rows / (projected_group_count * row_lanes)
+        if projected_group_count
+        else 0.0
+    )
+    vector_banking = dict(area["vector_sram_banking"])
     row.update(
         {
             "arm": f"combined_r{row_lanes}",
@@ -706,6 +765,22 @@ def _project_high_r(
             "area_budget_fraction": float(area["budget_fraction"]),
             "area": area,
             "power_fidelity": "power_structural_extrapolation",
+            "softmax_row_groups": projected_group_count,
+            "softmax_full_group_count": projected_active_rows // row_lanes,
+            "softmax_tail_group_count": int(projected_tail_rows != 0),
+            "softmax_row_lane_utilization": projected_utilization,
+            "softmax_group_bank_utilization": projected_utilization,
+            "softmax_rows_per_issue": row_lanes,
+            "softmax_score_bank_count": row_lanes,
+            "softmax_read_width_bits_per_issue": int(
+                base.get("softmax_read_width_bits_per_issue", 0)
+            )
+            * row_lanes
+            // 8,
+            "vector_sram_logical_bits": int(vector_banking["logical_bits"]),
+            "vector_sram_physical_bank_count": int(
+                vector_banking["physical_bank_count"]
+            ),
             "stage_compute_latency_ns": stage_compute,
             "stage_roofline_latency_ns": stage_roofline,
             "stage_opcode_cycles": projected_opcode_cycles,
@@ -771,7 +846,10 @@ def _validate_actual_invariants(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "pv_compute_count",
             "hbm_physical_read_bytes",
             "hbm_physical_write_bytes",
+            "hbm_read_requests",
+            "hbm_write_requests",
             "layer_dma_manifest_hash",
+            "vector_sram_logical_bits",
         )
         drift = {
             field: sorted({row[field] for row in members}, key=str)
