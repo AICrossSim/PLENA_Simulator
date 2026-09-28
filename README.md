@@ -230,3 +230,8 @@ PLENA_Simulator/
 ├── plena_settings.toml      # Main configuration file
 └── justfile                 # Command shortcuts
 ```
+
+
+## Heterogeneous MoE dispatch research
+
+This branch includes an isolated, reproducible [MoE dispatch research prototype](research/moe_dispatch/README.md). It compares 6 / 3+3 / 4+2 cores with explicit private-memory plans and analytical execution; it does not replace the production ISA or native HBM backend.

@@ -1,0 +1,50 @@
+{
+  "matrix__real_b16__33__g4__dynamic__base": {
+    "latency_ms": 3.537016,
+    "report_sha256": "eae1614b70d00d185c10b27ad8caab390be92dc49a2466b859e012ebf880f174"
+  },
+  "matrix__real_b16__42__g4__dynamic__base": {
+    "latency_ms": 3.379115,
+    "report_sha256": "d76ab0c4e2f93f1aa6613aa2bfd0c9b3ffb1d6d9ee63b6849c59f040776144d6"
+  },
+  "matrix__real_b16__6__g4__dynamic__base": {
+    "latency_ms": 3.402242,
+    "report_sha256": "26ef8260b409bc729460ddb1f4c49c4e9c4dd64b07b91aed319d412680844380"
+  },
+  "matrix__real_b2__33__g4__dynamic__base": {
+    "latency_ms": 1.2467,
+    "report_sha256": "e70d23bc766145a55c5c2e9d2e8a8c8cf4724ead062bbbcfe1101ced55f50740"
+  },
+  "matrix__real_b2__42__g4__dynamic__base": {
+    "latency_ms": 1.246672,
+    "report_sha256": "9161e7491524a138b467804a6807794296bec85b8a2a1e7aea295d9e1faf9410"
+  },
+  "matrix__real_b2__6__g4__dynamic__base": {
+    "latency_ms": 1.248675,
+    "report_sha256": "848feb745c5d0e65cfc9d8aeffd57eed85d0acee5b078264d49f29b15c588f9c"
+  },
+  "matrix__real_b4__33__g4__dynamic__base": {
+    "latency_ms": 1.476915,
+    "report_sha256": "92eb4ae13423dcf0c4196961050cbee8cfede9d64826f4fa569e643d923af48a"
+  },
+  "matrix__real_b4__42__g4__dynamic__base": {
+    "latency_ms": 1.509512,
+    "report_sha256": "a01103d0a20a4833dba1eb223337161d904c6b9e10ecc01a8ab602309f560bfd"
+  },
+  "matrix__real_b4__6__g4__dynamic__base": {
+    "latency_ms": 1.391709,
+    "report_sha256": "c0308886a693ba4dfb0bfe1d5a91716460f82e289b1e4fe5e9720757423702be"
+  },
+  "matrix__real_b8__33__g4__dynamic__base": {
+    "latency_ms": 2.095387,
+    "report_sha256": "cde438c6d73b3795dfa340485158ce7dce1351934c19e44f1ff1e39513219705"
+  },
+  "matrix__real_b8__42__g4__dynamic__base": {
+    "latency_ms": 1.867423,
+    "report_sha256": "3f4f20d4ab94c2410028b87c575050e77f10308addda89ec8073cc93c561e337"
+  },
+  "matrix__real_b8__6__g4__dynamic__base": {
+    "latency_ms": 2.039253,
+    "report_sha256": "474ea1c3e840e9b8fffb4ba0c4b778ba9ef614659442bdd97565a397dae556e1"
+  }
+}

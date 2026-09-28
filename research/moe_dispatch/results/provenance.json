@@ -1,0 +1,29 @@
+{
+  "architecture_best.csv": {
+    "original_csv_sha256": "d1a18f4344e8b61098d6a22da27f2a80bd107e1af17402ea99fabeccc6275fd6",
+    "projection": "selected columns; all numerical values unchanged",
+    "rows": 12
+  },
+  "b8_ablation.csv": {
+    "original_csv_sha256": "779f7b78e7c12a72d44da9b1641ae7fde6b13fd0f19d4a4d16d92f3056ef0c5c",
+    "projection": "selected columns; all numerical values unchanged",
+    "rows": 9
+  },
+  "default_dynamic.csv": {
+    "original_csv_sha256": "0c34173c530f758da419e66c911ef47c7ce60e9db86ce6595b21334c5262575a",
+    "projection": "selected columns; all numerical values unchanged",
+    "rows": 12
+  },
+  "historical_runs": {
+    "main_points": 351,
+    "main_repeats": 702,
+    "trace_points": 9,
+    "trace_repeats": 18
+  },
+  "scope": "Imported historical analytical results, 2026-09-28; not native HBM or full-model measurements. Reproduction checks are separate.",
+  "sensitivity_key.csv": {
+    "original_csv_sha256": "ffc18f4c9eb33f9787239ad24c9ae8c93e8f13b672e2e7ea2ab4906add8aaef9",
+    "projection": "selected columns; all numerical values unchanged",
+    "rows": 18
+  }
+}
