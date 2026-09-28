@@ -100,7 +100,8 @@ Synthetic checks and analytical sweeps work without them.
 
 ## Projection mapping and reduction study
 
-The next projection study separates two changes. Both keep the recurrent
+The [completed 120-case study](../artifacts/projection_pipeline/projection_study/README.md)
+separates two changes. Both keep the recurrent
 arithmetic, SRAM capacities, DMA credits and BF16 K256 rounding contract fixed.
 
 **Compiler-only K/N panel tiling.** `projection_n_panel_tile=1/2/4/8` selects
@@ -179,8 +180,15 @@ candidates. The standalone protocol probe is not evidence of zero-cost overlap.
 
 ## Publication checks
 
-The Rust workspace passed 328 tests, formatting and clippy across all targets.
-The analytical Python suite passed 268 tests with nine explicit skips. The new
+The current projection study passed 329 Rust workspace tests, formatting and
+clippy across all targets, and 276 analytical Python tests with nine explicit
+skips. Its 24 representative machine-code cases made 53,637 exact
+output-value comparisons against an independent reference and matched all seven cycle components. Compiler tests
+focused on the affected interfaces passed 111 cases. These are implementation
+checks, not integrated RTL timing or long-chain model quality acceptance.
+
+The earlier publication checkpoint passed 328 Rust tests and 268 analytical
+Python tests with nine explicit skips. Its
 portable campaign reproduced Mamba B1 at 3,063,999 baseline and 2,909,800 batch
 cycles. These checks do not replace the archived full-shape numerical campaign
 or change its one-token scope. Compiler-wide legacy failures are recorded in

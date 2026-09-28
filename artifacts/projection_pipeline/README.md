@@ -1,5 +1,11 @@
 # Recurrent sublayer results, 2026-09-28
 
+The subsequent [120-case projection study](projection_study/README.md) compares
+Compiler panel reuse and fixed Matrix reduction segments against the **After**
+configuration below. Its Mamba/KDA B1–B16 tables include stage breakdowns,
+machine validation and explicit hardware assumptions. The two comparisons
+have different baselines; neither is a best-proven original-PLENA result.
+
 This is a compact export of the completed projection campaign. Numeric CSV
 fields are unchanged; local result paths are made relative. `manifest.json`
 records original and exported hashes. Raw HBM images, weights, build products,
