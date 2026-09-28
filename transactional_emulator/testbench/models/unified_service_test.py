@@ -27,7 +27,7 @@ def profile_for(memory):
     return ExecutionProfile(hbm_controllers=len(config["memory_system"]["controllers"]))
 
 
-def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=None):
+def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=None, n_panel_tile=1):
     rng = np.random.default_rng(3107 + b + k + n)
     arena = Arena()
     zero = arena.add(np.zeros(2048))
@@ -43,7 +43,9 @@ def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=
     if compact_tile is not None:
         h = replace(h, projection_schedule="batch" if compact_tile == 4 else "compact")
         h = replace(h, matrix=replace(h.matrix, weight_replay=True))
-        assembly = lower_compact_projection(spec, inputs, outputs, batch_tile=compact_tile)
+        assembly = lower_compact_projection(
+            spec, inputs, outputs, batch_tile=compact_tile, n_panel_tile=n_panel_tile
+        )
     elif resident:
         assembly = lower_resident_projection(spec, inputs, outputs)
     elif k <= 16384:
@@ -58,6 +60,7 @@ def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=
     return dict(
         case=root.name,
         **result,
+        dimensions=dict(batch=b, k=k, n=n, batch_tile=compact_tile, n_panel_tile=n_panel_tile),
         checked_values=b * n,
         status="passed",
         scope=("M_MM.P replay/slicing, distinct private requests, tail K/N, BF16 partial sums"
@@ -419,7 +422,10 @@ def main():
     p = argparse.ArgumentParser()
     for arg in ("output", "runtime", "memory-root"):
         p.add_argument("--" + arg, required=True, type=Path)
-    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention", "experts", "resident", "projection"))
+    p.add_argument(
+        "--only", default="all",
+        choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel"),
+    )
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     results = []
@@ -456,13 +462,32 @@ def main():
         )
         for b in (1, 2, 4, 8, 16) for tile in (1, 4)
     ]
+    # N=289 spans more than one group even with eight resident N32 panels.
+    # K=2305 crosses an aligned input row and ends with a masked K256 tile.
+    # The pressure case owns 16 * ceil(6145/2048) = 64 input rows, exceeding
+    # the 58-row allocation before private outputs and streaming inputs.
+    panel_shapes = [
+        (b, 2305, 289, 4, panels)
+        for b, panels in ((1, 2), (2, 4), (4, 8), (8, 4), (16, 8))
+    ] + [(2, 2305, 97, 1, 4), (16, 6145, 289, 4, 8), (2, 257, 2051, 4, 8)]
+    panel = [
+        (
+            f"panel_b{b}_k{k}_n{n}_tile{tile}_panels{panels}",
+            lambda d, b=b, k=k, n=n, tile=tile, panels=panels: matrix_case(
+                d, args.runtime, args.memory_root, b, k, n,
+                compact_tile=tile, n_panel_tile=panels,
+            ),
+        )
+        for b, k, n, tile, panels in panel_shapes
+    ]
     groups = {
-        "all": jobs + auxiliary + attention + experts + resident + projection,
+        "all": jobs + auxiliary + attention + experts + resident + projection + panel,
         "auxiliary": auxiliary,
         "attention": attention,
         "experts": experts,
         "resident": resident,
         "projection": projection,
+        "panel": panel,
     }
     jobs = groups[args.only]
     for name, run in jobs:

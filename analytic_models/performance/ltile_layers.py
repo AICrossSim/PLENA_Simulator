@@ -46,7 +46,7 @@ class Stage:
 class LayerPlan:
     def __init__(
         self, compiler_root, *, gather="reference", projection_schedule="stream", arena=None, shared_weights=None,
-        vector_rows=58, gather_vector_rows=64,
+        vector_rows=58, gather_vector_rows=64, projection_n_panel_tile=1,
     ):
         self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
         if projection_schedule not in ("stream", "resident", "compact", "batch"):
@@ -65,7 +65,7 @@ class LayerPlan:
 
             self.lower_projection = partial(
                 lower_compact_projection, batch_tile=1 if projection_schedule == "compact" else 4,
-                vector_rows=vector_rows,
+                vector_rows=vector_rows, n_panel_tile=projection_n_panel_tile,
             )
         self.arena = arena if arena is not None else ShapeArena()
         self.shared_weights = shared_weights if shared_weights is not None else {}
@@ -161,6 +161,7 @@ def build_layer(
     native_coefficients=False,
     vector_rows=58,
     gather_vector_rows=64,
+    projection_n_panel_tile=1,
 ):
     if native_coefficients and control != "fsm":
         raise ValueError("native prototype requires FSM")
@@ -174,6 +175,7 @@ def build_layer(
         shared_weights=shared_weights,
         vector_rows=vector_rows,
         gather_vector_rows=gather_vector_rows,
+        projection_n_panel_tile=projection_n_panel_tile,
     )
     c, a = p.c, p.arena
     if kind == "mamba":
@@ -323,7 +325,7 @@ def build_layer(
 
 
 def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream", native_coefficients=False,
-                vector_rows=58, gather_vector_rows=64):
+                vector_rows=58, gather_vector_rows=64, projection_n_panel_tile=1):
     """Compile batch stages with shared weight panels and private state.
 
     No B1 cycle multiplication. Matrix SRAM weights stay resident across
@@ -347,6 +349,7 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
             native_coefficients=native_coefficients,
             vector_rows=vector_rows,
             gather_vector_rows=gather_vector_rows,
+            projection_n_panel_tile=projection_n_panel_tile,
         )
         for _ in range(batch)
     ]
@@ -371,6 +374,7 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
                     spec, [x.input_base for x in columns], [x.output_base for x in columns],
                     batch_tile=1 if projection_schedule == "compact" else 4,
                     vector_rows=vector_rows,
+                    n_panel_tile=projection_n_panel_tile,
                 )
             else:
                 lower = lower_resident_projection if projection_schedule == "resident" else lower_batch_projection

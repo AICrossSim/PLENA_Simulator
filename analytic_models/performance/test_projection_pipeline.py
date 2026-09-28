@@ -101,6 +101,21 @@ def test_profile_pins_schedule_and_capacities_and_refuses_fp32_mislabelling():
         matrix_cost(4, 32, 256, MatrixService(weight_replay=True))
 
 
+def test_panel_schedule_changes_provenance_without_changing_hardware():
+    baseline = ExecutionProfile(projection_schedule="batch")
+    for panels in (2, 4, 8):
+        tiled = replace(baseline, projection_n_panel_tile=panels)
+        assert tiled.identity != baseline.identity
+        assert tiled.matrix == baseline.matrix
+        assert tiled.machine == baseline.machine
+        assert tiled.runtime_environment() == baseline.runtime_environment()
+    for panels in (0, 3, 16, True):
+        with pytest.raises(ValueError, match="panel tile"):
+            replace(baseline, projection_n_panel_tile=panels)
+    with pytest.raises(ValueError, match="compact Matrix"):
+        ExecutionProfile(projection_n_panel_tile=2)
+
+
 @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
 @pytest.mark.parametrize("batch_tile", [1, 4])
 def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):

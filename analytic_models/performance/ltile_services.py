@@ -84,6 +84,7 @@ class Services:
                 native_coefficients=supply == "native",
                 vector_rows=self.profile.projection_vector_rows,
                 gather_vector_rows=self.profile.gather_vector_rows,
+                projection_n_panel_tile=self.profile.projection_n_panel_tile,
             )
             regions = (
                 {(s.weight_base, s.weight_bytes) for s in plan.stages if s.matrix_shape} if weight == "NVFP4" else set()
@@ -97,6 +98,7 @@ class Services:
                     boundaries="input norm through recurrent output projection; excludes outer residual/MoE",
                     batch_mapping="shared Matrix weight panels; private input/output/state; bounded request tiles",
                     projection_schedule=self.profile.projection_schedule,
+                    projection_n_panel_tile=self.profile.projection_n_panel_tile,
                     projection_resources=self.profile.matrix.projection_resources()
                     if self.profile.projection_schedule in ("compact", "batch") or self.profile.matrix.weight_replay
                     else None,
@@ -148,6 +150,7 @@ class Services:
                     p, inputs, outputs,
                     batch_tile=1 if self.profile.projection_schedule == "compact" else 4,
                     vector_rows=self.profile.projection_vector_rows,
+                    n_panel_tile=self.profile.projection_n_panel_tile,
                 )
             return (
                 "; @operator=projection\n" + text,

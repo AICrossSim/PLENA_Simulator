@@ -90,6 +90,7 @@ class ExecutionProfile:
     delta: str = "bf16_rational_from_log"
     scheduling: str = "serial_retirement"
     projection_schedule: str = "resident"
+    projection_n_panel_tile: int = 1
     projection_vector_rows: int = 58
     gather_vector_rows: int = 64
     hbm_controllers: int = 8
@@ -103,6 +104,10 @@ class ExecutionProfile:
             raise ValueError("unvalidated arithmetic or scheduling contract")
         if self.projection_schedule not in ("resident", "compact", "batch"):
             raise ValueError("unknown projection schedule")
+        if type(self.projection_n_panel_tile) is not int or self.projection_n_panel_tile not in (1, 2, 4, 8):
+            raise ValueError("projection N panel tile must be 1, 2, 4 or 8")
+        if self.projection_schedule == "resident" and self.projection_n_panel_tile != 1:
+            raise ValueError("N panel tiling requires the compact Matrix interface")
         if not 1 <= self.projection_vector_rows <= 58 or not 1 <= self.gather_vector_rows <= 64:
             raise ValueError("invalid projection/gather Vector workspace")
         if self.projection_schedule != "resident" and self.matrix.accumulator != "BF16":
