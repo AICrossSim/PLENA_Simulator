@@ -1,0 +1,99 @@
+{
+  "clock_hz": 1000000000,
+  "clock_status": "simulation assumption; not achieved integrated timing",
+  "matrix": {
+    "edge": 4,
+    "reduction_lanes": 1024,
+    "multipliers": 4096,
+    "cross_array_adders": 4080,
+    "accumulator": "BF16",
+    "arithmetic_changed_between_arms": false,
+    "proof": "11 independent Matrix oracle cases, 10 heterogeneous compiled executions; no integrated RTL/PPA"
+  },
+  "memory": {
+    "matrix_bytes": 1048576,
+    "matrix_banks": 64,
+    "bank_word_bf16": 32,
+    "bank_rows": 256,
+    "bank_ports": "1 read + 1 write",
+    "vector_bytes": 262144,
+    "vector_row_bf16": 2048,
+    "dma_read_credits": 32,
+    "dma_write_credits": 32,
+    "hbm_controllers": 16,
+    "read_response_buffer_bytes": 2048,
+    "write_staging_bytes": 2048,
+    "proof": "finite resource models and actual address traces; bounded-batch DMA candidate, not verified original RTL depth"
+  },
+  "projection": {
+    "active_requests": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "k_tile": 256,
+    "n_tile": 32,
+    "weight_replay_bytes": 16384,
+    "row_transfer_bytes": 4096,
+    "useful_inputs_bytes": 2048,
+    "output_hold_bytes": 256,
+    "payload_total_bytes": 22784,
+    "incremental_cell_area": null,
+    "retained_order": "BF16 per K256 dot and BF16 cross-K accumulation; no reassociation",
+    "interfaces": [
+      "M_MM.P function encoding",
+      "fixed 8-way K256 slice select",
+      "weight subgroup replay",
+      "request-private output read/modify/write"
+    ],
+    "proof": "10/10 full-shape compiled machine executions, 10/10 heterogeneous compiled Matrix cases, and 11 generic Matrix oracle cases passed. Full-shape outputs exactly match the same-arithmetic reference; all seven cycle counters and both HBM-byte counters match analytical predictions. Ordered opcodes/operands are identical in all ten Python/Rust program pairs. No integrated RTL/PPA.",
+    "latch_feed_element_limits": {
+      "weight_elements_per_cycle": 2048,
+      "input_elements_per_cycle": 2048,
+      "status": "explicit modeled local delivery limits inherited from profile throughput parameters; not a measured selector/broadcast timing result"
+    }
+  },
+  "recurrence": {
+    "lanes": 256,
+    "update_ii": 2,
+    "update_latency_cycles": 6,
+    "state": "BF16 RN",
+    "update_intermediates": "FP32",
+    "dot": "BF16 pairwise tree",
+    "changed_this_experiment": false,
+    "preexisting_payload_bytes": {
+      "state_staging": 2048,
+      "coefficient_sector": 4096,
+      "invariant_or_residual": 4096,
+      "result_slots": 2048,
+      "total": 12288
+    },
+    "existing_vector_tree_bytes": 32768,
+    "cost_scope": "Not included in the 22.25 KiB projection payload; lanes, pipeline registers, metadata and interconnect are additional. Result slots currently modeled by finite ready-time credits, not integrated RTL FIFO."
+  },
+  "handoff": {
+    "reserved_pool_bytes": 40960,
+    "from_existing_vector_sram": true,
+    "hbm_stores_removed": false,
+    "modes": [
+      "global reservation, projection workspace48rows",
+      "phase sharing, projection workspace58rows and retention invalidated at boundaries"
+    ],
+    "matrix_view_hbm_reads_bypassed": false,
+    "proof": "static liveness/compiler tests plus separate full machine cases"
+  },
+  "overlap": {
+    "production_enabled": false,
+    "protocol_probe": true,
+    "new_global_memory_calendar_in_production": false,
+    "required": [
+      "disjoint physical placement",
+      "separate in-flight engine context",
+      "captured tags and bounded credits",
+      "commit-time write visibility",
+      "global Matrix and Vector port arbitration"
+    ],
+    "proof": "Standalone toy numerical protocol with bounded host arrays, prescribed disjoint regions and global port reservations; no concurrent execution of actual MatrixSram/instruction engines. Main times remain serial."
+  }
+}

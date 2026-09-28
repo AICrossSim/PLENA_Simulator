@@ -7,6 +7,8 @@ mod matrix_core;
 mod matrix_machine;
 mod matrix_service;
 mod op;
+#[cfg(test)]
+mod projection_handoff_probe;
 mod runner;
 mod runtime_config;
 mod stage_profile;

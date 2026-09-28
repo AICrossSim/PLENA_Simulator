@@ -14,166 +14,20 @@ The PLENA Simulator provides three main components:
 - **Analytical Latency Model**: Provides fast estimation of PLENA's performance characteristics (TTFT, TPS) based on architectural parameters and instruction latencies for specified workloads.
 - **Utilization Model**: Analyzes the utilization of the systolic array based on architectural parameters and instruction latencies, computing attainable vs theoretical FLOPS.
 
-## Matrix SRAM L-Compute branch
+## Matrix SRAM recurrent sublayers
 
-For the R3/v2 decode timing study, use the [finite-resource analytical model](doc/l_tile_analytic.md).
-It replaces packet-era recurrent pricing with Compiler-derived schedules and
-the audited DMA backend. The older campaign below is retained for historical
-reproduction; its packet latency and hardware-cost assumptions are not v2 results.
+`feat/matrix-sram-lcompute` is the maintained research branch. It contains Rust
+execution and compiled Python timing for Mamba/KDA coefficient production,
+native recurrence and bounded projection mapping. `PLENA_Compiler` pins the
+matching Compiler commit. The older Draft PR branch remains separate.
 
-This branch executes the prepared-coefficient Nemotron Mamba-2 and Kimi KDA
-decode recurrence through physical Matrix-SRAM banks. State, prepared fields
-and outputs use a uniform BF16 PLENA contract. Official GPU FP32 state remains
-profiling and accuracy metadata; it is not used to widen the Matrix port. There
-is no cache, private state SRAM, `X_STATE`, command queue, runtime scheduler or
-new MAC array.
+- [Current progress, hardware contract and reproduction](doc/l_tile_projection.md)
+- [B1/2/4/8/16 sublayer results and provenance](artifacts/projection_pipeline/README.md)
+- [Analytical services and whole-model limitations](analytic_models/performance/README.md)
 
-The Rust simulator stores real `banks x rows x bank_width` cells. It checks
-aliasing, one-port bank service, row/column addressing, lane restoration,
-segment broadcast, reductions, explicit output writeback and recurrent state
-carried across four tokens. The Compiler emits the same view contract and
-canonical 32-bit instructions.
-
-```text
-L_TILE_CFG   slot, shape_reg, map_reg
-L_TILE_EXEC  dst, src, scale, primitive[, axis_mask]
-```
-
-One physical opcode (`0x3f`, named `L_TILE`) serves both forms. The historical
-Vector-stream `L_CFG` form at `funct1=0` remains executable only for reproducing
-the software baseline; official schedules never emit it and it is excluded
-from the pre-RTL handoff. The primitives are generic scale-accumulate, dot-reduce and
-outer-update; model names do not appear in the encoding or decoder. Viewed
-`H_PREFETCH_V`/`H_STORE_V` words use bit 31 plus a two-bit view slot. Legacy DMA
-words and their KV precision interpretation are unchanged.
-
-At `MLEN=2048`, `BLEN=32`, 64 banks, a 1 MiB BF16 Matrix SRAM and 1560 HBM
-bytes/cycle, the fresh formula-based B1 decode timeline is:
-
-| Model | Original A | Arlo B | Fixed single-base C | Phased D | D/A | D/B |
-|---|---:|---:|---:|---:|---:|---:|
-| Nemotron 3 | 4,055,638 | 3,110,614 | 2,193,397 | 2,014,641 | 2.0131x | 1.5440x |
-| Kimi K3 | 103,826,433 | 97,023,585 | 93,134,469 | 91,183,632 | 1.1387x | 1.0640x |
-
-The 2026-09-05 revision charges ordinary Vector MACs as VLEN-wide MUL plus
-ADD passes and includes Nemotron's final RMSNorm. Weight storage is checkpoint
-mixed NVFP4/BF16 for Nemotron and mixed MXFP4/BF16 for Kimi.
-
-`A` and `B` are one-cycle-per-issued-instruction proxies, not transactional
-Rust timings. `C` and `D` include explicit Matrix service, arithmetic and HBM
-terms. Consequently `D/A` and `D/B` are mainly multi-row utilization plus issue
-compression; they are not programmable-skew speedups.
-
-KDA decay/beta preparation is not hidden: B1 includes 5,107,104 ordinary
-elementwise operations and 1,702,368 exponentials across 69 layers, charged as
-the same 4,485 Vector cycles in every variant. This implements the official
-`decay = exp(lower_bound * sigmoid(rate * (gate + dt_bias)))` and
-`beta = sigmoid(beta_logit)` preparation before `L_TILE`.
-
-`C` is a constrained single-base executable descriptor, not the fair bank-only
-baseline. The fair `D'` control uses PLENA's fixed diagonal wiring and ordinary
-Compiler-selected per-tile base phases. It occupies the same physical cells as
-`D`, reaches zero bank stalls, and gives `D/D' = 1.00x` for both official BF16
-state packets. This branch therefore does **not** claim a programmable-skew
-bank speedup. `C -> D` is descriptor/chunk/issue and KDA-spill improvement.
-Ordinary Attention/MLA/MoE row and column service is unchanged at all base
-phases.
-
-Compiler-generated recurrence programs run through the assembler and Rust
-decoder for four consecutive tokens at official recurrence geometry. The test
-compares 524,288 Nemotron and 1,572,864 Kimi state values plus every head-group
-output. Fixed and compact-phased cases all pass; the largest relative-L2 error is
-0.0071 under BF16. Every output group has a distinct HBM destination.
-
-The numerical gate now enforces both elementwise tolerance and a 1% relative-L2
-budget, with an absolute RMS floor for near-zero references. General compact
-coefficients are tested across multiple single-tile packets and tails. High-level
-direct projection accepts only one output packet in an owned scratch tile;
-unsupported wider output is rejected. Mamba/KDA L-Tile wrappers accept B1 at
-the frozen 2048/32 geometry; a Rust B16 private-state wrapper remains pending.
-
-The separate long-sequence storage study reports BF16 output relative-L2 error
-of 0.000312 for Nemotron at 32K tokens and 0.017061 for Kimi at 2K tokens versus
-FP32 state. These are synthetic recurrence errors, not checkpoint-level
-language-quality results.
-
-All 23 Nemotron Mamba layers and all 69 Kimi KDA layers emit legal `L_TILE`
-instructions in the official 52/93-layer order. Whole-model cycles still come
-from an analytic timeline with official dimensions, GPU calibration and
-symbolic weights; ordinary layers are schedule markers.
-
-A published `AntonV/mamba2-130m-hf` checkpoint now supplies real weights to a
-connected 24-layer decode test. Every recurrent core is compiled and executed
-by Rust `L_TILE`; its output feeds the next layer. The projection, convolution,
-normalization, gate, residual and language-model head remain an explicit host
-BF16 implementation, so this is not an all-operation Rust checkpoint run and
-does not imply that real-weight Nemotron or Kimi has run end to end.
-
-The Rust emulator also executes complete synthetic S128 chunked prefill for
-Mamba-2 and KDA at reduced one-head, 64-wide geometry. Both tests use BF16 for
-HBM inputs, spills, state and SRAM, carry state across every chunk, read back
-all 128 outputs plus final state, and reach zero Matrix-view bank stalls. This
-is functional transactional prefill evidence, not a full-model TTFT or an
-`L_TILE` prefill speedup claim. See
-[the validation note](docs/REAL_CHECKPOINT_PREFILL_VALIDATION_ZH.md).
-
-The BF16 bank word is 512 bits, matching the reference port. Static overlap
-receives no credit: the one-MiB point is short by 45,312 bytes for a second
-Nemotron state group and 28,736 bytes for Kimi. No RTL or synthesis means no
-PPA, frequency, power, Token/J or silicon claim. The timing scoreboard still
-uses conservative logical extents for Matrix views; physical `Cell::Pending`
-state enforces correctness, but exact bank-word overlap timing is not claimed.
-The FP32 per-lane accumulator feedback (8 KiB of arithmetic state at VLEN=2048)
-also needs an explicit register/datapath mapping before RTL resource signoff.
-
-See [the pre-RTL freeze](docs/MATRIX_LCOMPUTE_PRE_RTL_FREEZE_ZH.md),
-[the full result report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md), and
-`artifacts/matrix_lcompute_e2e_v6/`. Run:
-
-```bash
-nix develop --no-write-lock-file --command \
-  just test-matrix-lcompute /absolute/path/to/PLENA_Compiler
-```
-
-The real-checkpoint Nemotron Agentic campaign is now imported separately. It
-replays all 93 length-sorted BFCL/GPQA/SWE groups at B1/B2/B4/B8/B16 for 32
-decode steps. Strict import validates all 140,921 routing events and uses exactly
-35,328 decode events; no route mismatch may fall back to an expert-count bound.
-The reconstructed route unions reduce the median active-expert count from the
-old maximum-distinct B16 bound of 96 to 49. Under the current strict-serial
-timeline, D (multi-row `L_TILE` plus compact compiler-phased views) is 1.5455x
-at B1 and 3.1918x at B16 over Arlo B. Under ideal resource overlap those endpoints
-are 1.0000x and 3.2758x, exposing where HBM hides the compute gain. Uniform MX8
-and BF16 weight-traffic sensitivities are reported separately. The strongest
-fixed D' bank control still matches the compact phased mapping at 1.00x, so the supported
-contribution is multi-row Matrix-SRAM recurrence, not an independent skew
-speedup. These are pre-RTL formula-timeline results with symbolic weights, not
-a PLENA silicon comparison with B200. See
-[the Agentic report](docs/MATRIX_LCOMPUTE_AGENTIC_RESULTS_ZH.md) and
-`artifacts/matrix_lcompute_agentic_v2/`.
-
-The current experiment uses the Nemotron checkpoint's NVFP4/BF16 weight policy;
-BF16 recurrence storage and prepared coefficients are separate from W/A/KV
-storage contracts. MX8 weight sensitivity now uses block8; block128 remains in
-the historical agentic v1 artifact. The B16 corrected MX8 endpoints are 2.5001x
-serial and 1.9996x ideal overlap. The NVFP4 and BF16 formula headline CSV is
-unchanged by that correction.
-
-[The precision and execution revision](docs/MATRIX_LCOMPUTE_PRECISION_EXECUTION_V2_ZH.md)
-adds exact phased checks, seeded state snapshots, and new packed ordinary-VV
-A/B execution controls against D in Rust. These are not the historical Arlo
-instruction census. The new controls include measured serial issue, DMA/memory
-wait, bank service and arithmetic, and require a shared numeric error budget
-before a comparison is qualified. Ordinary DMA selector 2 now correctly uses
-BF16 State rather than KV; old binaries using 2 as a KV alias must be
-reassembled with selector 1. The global precision defaults remain unchanged.
-
-Legacy GPU energy is explicitly labelled as an archived integral requiring
-recapture because the old sampler used unsorted samples and an inconsistent
-window. The immutable raw capture is preserved; the separately versioned
-[energy reanalysis](artifacts/gpu_energy_reanalysis_v1/README.md) is approximate.
-The maintained recorder and mock tests implement explicit batch windows and
-single-thread NVML sampling; no new GPU measurement was performed in this fix.
+These are pre-RTL candidate implementations. Sublayer evidence is distinct from
+whole-model analytical predictions. No integrated timing/PPA, long-chain quality
+acceptance, or speedup over the best untouched PLENA baseline is claimed.
 
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 
@@ -202,89 +56,19 @@ If you use this simulator in your research, please cite the following paper:
 
 ## Setup
 
-There are two ways to get a working environment. **Option A (Docker)** is the
-recommended path — you only need Docker installed, and it wraps the full toolchain
-in a reproducible container. **Option B (Nix)** runs directly on your machine if you
-prefer native development.
+Use the checked-in Nix environment. This branch does not bundle the historical
+Docker wrapper. Initialize submodules at their pinned commits; do not advance
+submodules to their remote branch tips when reproducing results.
 
-### Option A — Docker (recommended)
-
-You only need Docker installed (no Nix or direnv on the host). All commands run from
-the repository root. Your working tree is bind-mounted into the container at
-`/workspace`, so edits on the host are picked up live and build artifacts persist
-on the host.
-
-**Prerequisites:**
-
-- Docker Engine with the Compose plugin (`docker compose`)
-- (Optional) NVIDIA Container Toolkit for CUDA support
-
-**Build the image and open a shell:**
-
-```bash
-git submodule update --init --recursive   # once, on the host
-just docker-dev
+```sh
+git submodule update --init --recursive
+nix develop --no-write-lock-file
 ```
 
-**Run a test directly (no interactive shell needed):**
-
-```bash
-just docker-test test-aten-linear            # run a just recipe in Docker
-just docker-test test-aten-linear --mlen 128 # ...with args
-```
-
-The first emulator test compiles the Rust binary automatically (one-time, a few
-minutes); it persists on the host and later runs reuse it.
-
-**Common Docker commands** (see [`docker/README.md`](docker/README.md) for the full list):
-
-| Command | Description |
-|---------|-------------|
-| `just docker-dev` | Build, start, and enter the dev container |
-| `just docker-run <cmd>` | Run a command in the dev environment |
-| `just docker-test <recipe> [args...]` | Run a `just` recipe in Docker |
-| `just docker-down` | Stop containers |
-
-**CUDA support:**
-
-```bash
-docker compose -f docker/docker-compose.yml --profile cuda up -d dev-cuda
-docker compose -f docker/docker-compose.yml exec dev-cuda bash
-```
-
-> **Note:** The repository is bind-mounted from the host (owned by your host user)
-> while the container runs as `root`. The image marks `/workspace` as a git
-> `safe.directory` so Nix's flake evaluation doesn't fail with a dubious-ownership
-> error. If you build a custom image, preserve that setting.
-
-### Option B — Nix (native)
-
-**Prerequisites:**
-
-- `nix` package manager (with flakes enabled)
-- `direnv` for environment management
-
-```bash
-# Install direnv hook in your shell
-echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Installation:**
-
-```bash
-# Allow direnv to load the environment
-direnv allow
-
-# Enter the development environment
-nix develop
-
-# Update git submodules
-git submodule update --remote --merge
-```
-
-You are now in a shell with the full toolchain (Rust, Python 3.12, clang, cmake,
-etc.) and can run any of the `just` commands below directly.
+Nix with flakes enabled is required. Direnv is optional. The shell supplies
+Rust, Python, libtorch, Ramulator and the build tools. Follow
+[the current sublayer reproduction guide](doc/l_tile_projection.md) for CPU-only
+checks and analytical runs with temporary outputs outside the checkout.
 
 ---
 

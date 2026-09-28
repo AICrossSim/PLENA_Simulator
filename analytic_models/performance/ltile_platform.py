@@ -89,6 +89,9 @@ class ExecutionProfile:
     state_rounding: str = "rn"
     delta: str = "bf16_rational_from_log"
     scheduling: str = "serial_retirement"
+    projection_schedule: str = "resident"
+    projection_vector_rows: int = 58
+    gather_vector_rows: int = 64
     hbm_controllers: int = 8
 
     def __post_init__(self):
@@ -98,6 +101,12 @@ class ExecutionProfile:
             raise ValueError("unknown state rounding")
         if self.delta != "bf16_rational_from_log" or self.scheduling != "serial_retirement":
             raise ValueError("unvalidated arithmetic or scheduling contract")
+        if self.projection_schedule not in ("resident", "compact", "batch"):
+            raise ValueError("unknown projection schedule")
+        if not 1 <= self.projection_vector_rows <= 58 or not 1 <= self.gather_vector_rows <= 64:
+            raise ValueError("invalid projection/gather Vector workspace")
+        if self.projection_schedule != "resident" and self.matrix.accumulator != "BF16":
+            raise ValueError("compact projection requires BF16 partial sums")
         if self.matrix.matrix_capacity_bytes != 1024**2 or self.matrix.vector_capacity_bytes != 256 * 1024:
             raise ValueError("connected ISA geometry requires 1 MiB Matrix / 256 KiB Vector")
 
@@ -129,6 +138,8 @@ class ExecutionProfile:
             PLENA_V2_SRAM_PORT=str(m.sram_cycles),
             PLENA_V2_CONTEXT_PORT=str(m.context_cycles),
             PLENA_V2_STATE_ROUNDING=self.state_rounding,
+            PLENA_NATIVE_READ_WIDTH=str(m.native_read_width),
+            PLENA_NATIVE_RESULT_SLOTS=str(m.native_result_slots),
         )
 
 

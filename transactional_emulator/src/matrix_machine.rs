@@ -697,6 +697,11 @@ impl MatrixMachine {
         assert!(view.shape.rows <= profile.reduction_lanes && view.shape.rows <= self.mlen);
         assert!(self.blen.is_multiple_of(profile.edge));
         assert!(vector_base.is_multiple_of(self.mlen));
+        if profile.weight_replay {
+            self.replay_mv(matrix_base, vector_base, view, profile)
+                .await;
+            return;
+        }
         // No whole MLEN-square shadow tensor or hidden full weight latch.
         // Each mini-array output group reads actual column packets; repeated
         // bank words on a later group are read and charged again.
@@ -734,6 +739,213 @@ impl MatrixMachine {
             self.v_accum
                 .narrow(0, i64::from(col), i64::from(profile.edge))
                 .copy_(&Tensor::from_slice(&values));
+        }
+    }
+
+    fn validate_replay(
+        &self,
+        view: MatrixViewDescriptor,
+        profile: &crate::matrix_service::MatrixService,
+    ) {
+        assert_eq!(self.mlen, 2048, "bounded projection row latch is 2048 BF16");
+        assert_eq!(self.blen, 32);
+        assert_eq!(view.shape.tile_count, 1);
+        assert_eq!(view.shape.cols, 32);
+        assert!((1..=256).contains(&view.shape.rows));
+        assert!(view.shape.rows <= profile.reduction_lanes);
+        assert_eq!(
+            profile.accumulator, "BF16",
+            "panel contract preserves BF16 K-tile boundaries"
+        );
+        let bf16 = quantize::MxDataType::Plain(quantize::DataType::Fp(quantize::FpType::BF16));
+        assert_eq!(self.mram.ty(), bf16);
+        assert_eq!(self.vram.ty(), bf16);
+        assert_eq!(
+            profile.edge, 4,
+            "bounded panel implements four request rows"
+        );
+    }
+
+    async fn replay_weights(
+        &mut self,
+        base: u32,
+        view: MatrixViewDescriptor,
+        profile: &crate::matrix_service::MatrixService,
+    ) -> Vec<f32> {
+        let columns = (0..32).map(|c| (0, c)).collect::<Vec<_>>();
+        let (weights, service) = self
+            .mram
+            .read_layout_indexed_columns(base, view.layout(), &columns)
+            .await;
+        let port = (service.bank_words * u64::from(self.mram.bank_width()))
+            .div_ceil(u64::from(profile.matrix_read_elements));
+        crate::timing::charge_bank_cycles(service.service_cycles.max(port)).await;
+        // f32 is the host representation of the bounded BF16 latch, not a
+        // hardware FP32 weight store. SRAM has already rounded each element.
+        Vec::<f32>::try_from(weights.as_tensor().to_kind(tch::Kind::Float)).unwrap()
+    }
+
+    async fn replay_mv(
+        &mut self,
+        matrix: u32,
+        input: u32,
+        view: MatrixViewDescriptor,
+        profile: &crate::matrix_service::MatrixService,
+    ) {
+        self.validate_replay(view, profile);
+        let weights = self.replay_weights(matrix, view, profile).await;
+        let input = self.vram.read(input).await;
+        crate::timing::charge_bank_cycles(u64::from(
+            self.mlen.div_ceil(profile.vector_read_elements),
+        ))
+        .await;
+        let input = Vec::<f32>::try_from(input.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+        let rows = view.shape.rows as usize;
+        for col in (0..32).step_by(4) {
+            crate::timing::charge_bank_cycles(u64::from(
+                profile.replay_feed_cycles(view.shape.rows, 1),
+            ))
+            .await;
+            let old = Vec::<f32>::try_from(&self.v_accum).unwrap();
+            let values = (col..col + 4)
+                .map(|j| profile.column(&input[..rows], &weights[j * rows..(j + 1) * rows], old[j]))
+                .collect::<Vec<_>>();
+            crate::timing::charge_arithmetic_cycles(profile.arithmetic_cycles()).await;
+            self.v_accum
+                .narrow(0, col as i64, 4)
+                .copy_(&Tensor::from_slice(&values));
+        }
+    }
+
+    pub(crate) async fn projection_panel(
+        &mut self,
+        matrix: u32,
+        input: u32,
+        output: u32,
+        config: u32,
+        view: MatrixViewDescriptor,
+    ) {
+        let profile = crate::matrix_service::PROFILE
+            .as_ref()
+            .expect("M_MM.P requires an explicit Matrix service profile");
+        self.projection_panel_with_profile(matrix, input, output, config, view, profile)
+            .await;
+    }
+
+    async fn projection_panel_with_profile(
+        &mut self,
+        matrix: u32,
+        input: u32,
+        output: u32,
+        config: u32,
+        view: MatrixViewDescriptor,
+        profile: &crate::matrix_service::MatrixService,
+    ) {
+        self.validate_replay(view, profile);
+        let config = crate::matrix_service::ProjectionConfig::decode(config);
+        assert!(
+            input.is_multiple_of(256),
+            "panel input must select a fixed K256 slice"
+        );
+        assert!(
+            output.is_multiple_of(32),
+            "panel output must align to 32 elements"
+        );
+        let rows = view.shape.rows as usize;
+        let requests = config.requests as usize;
+        let mut input_addresses = Vec::new();
+        let mut output_addresses = Vec::new();
+        for request in 0..config.requests {
+            let src = input
+                .checked_add(request * config.input_stride)
+                .expect("input address overflow");
+            let dst = output
+                .checked_add(request * config.output_stride)
+                .expect("output address overflow");
+            assert!(
+                src % self.mlen + view.shape.rows <= self.mlen,
+                "input slice crosses SRAM row"
+            );
+            assert!(
+                dst % self.mlen + 32 <= self.mlen,
+                "output slice crosses SRAM row"
+            );
+            assert!(
+                (u64::from(src / self.mlen + 1) * u64::from(self.mlen) * 2)
+                    <= self.vram.size_in_bytes() as u64
+            );
+            assert!(
+                (u64::from(dst / self.mlen + 1) * u64::from(self.mlen) * 2)
+                    <= self.vram.size_in_bytes() as u64
+            );
+            input_addresses.push(src);
+            output_addresses.push(dst);
+        }
+        for &src in &input_addresses {
+            for &dst in &output_addresses {
+                assert!(
+                    src + view.shape.rows <= dst || dst + 32 <= src,
+                    "panel input and output slices must not overlap"
+                );
+            }
+        }
+        let weights = self.replay_weights(matrix, view, profile).await;
+        // One 4 KiB row transfer latch, retaining only the useful K256 slice
+        // in four 512-byte input slots. Refill and selection are serialized.
+        let mut inputs = Vec::with_capacity(requests);
+        for &src in &input_addresses {
+            let (row, offset) = multiple_and_offset(src, self.mlen);
+            let value = self.vram.read(row).await;
+            crate::timing::charge_bank_cycles(u64::from(
+                self.mlen.div_ceil(profile.vector_read_elements),
+            ))
+            .await;
+            let value = Vec::<f32>::try_from(value.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            inputs.push(value[offset as usize..offset as usize + rows].to_vec());
+        }
+        let mut sums = vec![vec![0_f32; 32]; requests]; // <=256 BF16 bytes
+        for col in (0..32).step_by(4) {
+            crate::timing::charge_bank_cycles(u64::from(
+                profile.replay_feed_cycles(view.shape.rows, config.requests),
+            ))
+            .await;
+            for request in 0..requests {
+                for j in col..col + 4 {
+                    sums[request][j] =
+                        profile.column(&inputs[request], &weights[j * rows..(j + 1) * rows], 0.0);
+                }
+            }
+            // Existing mini-array rows compute up to four requests together.
+            // The last previous-output merge is charged below at actual RMW.
+            crate::timing::charge_arithmetic_cycles(
+                profile.arithmetic_cycles() - profile.tree_add_latency,
+            )
+            .await;
+        }
+        for (request, &dst) in output_addresses.iter().enumerate() {
+            let (row, offset) = multiple_and_offset(dst, self.mlen);
+            let previous = self.vram.read(row).await;
+            crate::timing::charge_bank_cycles(u64::from(
+                self.mlen.div_ceil(profile.vector_read_elements),
+            ))
+            .await;
+            let mut values =
+                Vec::<f32>::try_from(previous.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            for j in 0..32 {
+                values[offset as usize + j] =
+                    profile.rounded(values[offset as usize + j] + sums[request][j]);
+            }
+            crate::timing::charge_arithmetic_cycles(8 * profile.tree_add_latency).await;
+            self.vram
+                .write(
+                    row,
+                    QuantTensor::quantize(Tensor::from_slice(&values), self.vram.ty()),
+                )
+                .await;
+            crate::timing::charge_bank_cycles(u64::from(
+                self.mlen.div_ceil(profile.vector_write_elements),
+            ))
+            .await;
         }
     }
 
@@ -1008,5 +1220,141 @@ mod tests {
                 .as_tensor()
                 .equal(&Tensor::from_slice(&[17.0f32, 41.0, 0.0, 0.0]))
         );
+    }
+    fn panel_profile(replay: bool) -> crate::matrix_service::MatrixService {
+        crate::matrix_service::MatrixService {
+            edge: 4,
+            reduction_lanes: 1024,
+            mac_latency: 3,
+            mac_ii: 1,
+            tree_add_latency: 2,
+            matrix_read_elements: 2048,
+            vector_read_elements: 2048,
+            vector_write_elements: 2048,
+            matrix_capacity_bytes: 1024 * 1024,
+            vector_capacity_bytes: 256 * 1024,
+            accumulator: "BF16".into(),
+            weight_replay: replay,
+        }
+    }
+
+    #[tokio::test]
+    async fn projection_panel_preserves_private_inputs_tails_and_output_row_neighbors() {
+        crate::timing::set_timing_mode(crate::timing::TimingMode::Serial);
+        crate::timing::reset_execution_counters(true);
+        let executor = Executor::new();
+        let mram = Arc::new(MatrixSram::new(2048, 256, bf16_plain()));
+        let vram = Arc::new(VectorSram::from_mx_type(2048, 64, bf16_plain()));
+        let rows = 13;
+        let view = MatrixViewDescriptor::projection_test_view(rows);
+        let weights = (0..rows * 32)
+            .map(|i| ((i * 7 % 29) as f32 - 14.0) / 16.0)
+            .collect::<Vec<_>>();
+        mram.write_layout_tile(0, view.layout(), 0, quant(&weights))
+            .await;
+        let mut inputs = vec![0_f32; 2048];
+        for request in 0..4 {
+            for k in 0..rows as usize {
+                inputs[256 + request * 256 + k] = ((k * 3 + request * 7) as f32 - 11.0) / 8.0;
+            }
+        }
+        vram.write(0, quant(&inputs)).await;
+        vram.write(2048, quant(&vec![7.0; 2048])).await;
+        let mut machine = MatrixMachine::new(mram.clone(), vram.clone(), 2048, 128, 32, 16);
+        executor.spawn(async move {
+            let profile = panel_profile(false);
+            // Four input slices and four output slices share physical rows.
+            // Execute twice: previous-output BF16 accumulation must be kept.
+            for _ in 0..2 {
+                machine
+                    .projection_panel_with_profile(
+                        0,
+                        256,
+                        2048 + 32,
+                        3 | (1 << 2) | (1 << 10),
+                        view,
+                        &profile,
+                    )
+                    .await;
+            }
+        });
+        executor.enter(Instant::ETERNITY).await;
+        let actual = Vec::<f32>::try_from(vram.read(2048).await.as_tensor()).unwrap();
+        let profile = panel_profile(false);
+        let mut expected = vec![7_f32; 2048];
+        for request in 0..4 {
+            for col in 0..32 {
+                let weight = (0..rows as usize)
+                    .map(|k| weights[k * 32 + col])
+                    .collect::<Vec<_>>();
+                let input = &inputs[256 + request * 256..256 + request * 256 + rows as usize];
+                let first = profile.column(input, &weight, 7.0);
+                expected[32 + request * 32 + col] = profile.column(input, &weight, first);
+            }
+        }
+        assert_eq!(actual, expected);
+        assert_eq!(mram.packet_counter_snapshot().packets, 2);
+        assert_eq!(
+            mram.packet_counter_snapshot().bank_words,
+            2 * u64::from(rows)
+        );
+        let counts = crate::timing::execution_counters();
+        assert_eq!(counts.bank_service_cycles, 2 * (1 + 4 + 8 * 2 + 4 * 2));
+        assert_eq!(
+            counts.arithmetic_cycles,
+            2 * u64::from(
+                8 * (profile.arithmetic_cycles() - profile.tree_add_latency)
+                    + 4 * 8 * profile.tree_add_latency
+            )
+        );
+        crate::timing::reset_execution_counters(false);
+    }
+
+    #[tokio::test]
+    async fn replay_reads_bank_words_once_and_matches_legacy_accumulation() {
+        crate::timing::set_timing_mode(crate::timing::TimingMode::Serial);
+        let executor = Executor::new();
+        let mram = Arc::new(MatrixSram::new(2048, 256, bf16_plain()));
+        let vram = Arc::new(VectorSram::from_mx_type(2048, 64, bf16_plain()));
+        let view = MatrixViewDescriptor::projection_test_view(256);
+        let weights = (0..256 * 32)
+            .map(|i| ((i * 5 % 61) as f32 - 30.0) / 32.0)
+            .collect::<Vec<_>>();
+        mram.write_layout_tile(0, view.layout(), 0, quant(&weights))
+            .await;
+        vram.write(
+            0,
+            quant(
+                &(0..2048)
+                    .map(|i| ((i * 3 % 43) as f32 - 21.0) / 16.0)
+                    .collect::<Vec<_>>(),
+            ),
+        )
+        .await;
+        let mut machine = MatrixMachine::new(mram.clone(), vram, 2048, 128, 32, 16);
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let results = observed.clone();
+        executor.spawn(async move {
+            for replay in [false, true] {
+                machine.v_accum = Tensor::full([32], 3.5, ACCUM_OPTS);
+                machine.mram.reset_packet_counters();
+                crate::timing::reset_execution_counters(true);
+                machine
+                    .bounded_mv(0, 0, Some(view), &panel_profile(replay))
+                    .await;
+                results.lock().unwrap().push((
+                    Vec::<f32>::try_from(&machine.v_accum).unwrap(),
+                    machine.mram.packet_counter_snapshot().bank_words,
+                    crate::timing::execution_counters().bank_service_cycles,
+                ));
+            }
+            crate::timing::reset_execution_counters(false);
+        });
+        executor.enter(Instant::ETERNITY).await;
+        let results = observed.lock().unwrap();
+        assert_eq!(results[0].0, results[1].0);
+        assert_eq!(results[0].1, 2048);
+        assert_eq!(results[1].1, 256);
+        assert_eq!((results[0].2, results[1].2), (40, 21));
     }
 }

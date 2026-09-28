@@ -257,6 +257,35 @@ pub(crate) fn op_access(
             }
             OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::M)])
         }
+        op::Opcode::M_MM_P {
+            rd, rs1, rs2, rs3, ..
+        } => {
+            let config = crate::matrix_service::ProjectionConfig::decode(gp(rs3));
+            let mut reads = vec![
+                Gp(rd),
+                Gp(rs1),
+                Gp(rs2),
+                Gp(rs3),
+                Resource::Cfg(Cfg::MatrixView),
+                matrix_tile_at(gp(rs1)),
+            ];
+            let mut writes = Vec::new();
+            // Full physical rows are fetched/RMW'd, even when logical slices
+            // share a row. Conservative aliases preserve the real port use.
+            for request in 0..config.requests {
+                reads.push(vector(
+                    row_base(gp(rs2) + request * config.input_stride),
+                    vector_tile,
+                ));
+                let output = vector(
+                    row_base(gp(rd) + request * config.output_stride),
+                    vector_tile,
+                );
+                reads.push(output);
+                writes.push(output);
+            }
+            OpAccess::new(Unit::Matrix, reads, writes)
+        }
         op::Opcode::M_BMM { rs1, rs2, view } | op::Opcode::M_BTMM { rs1, rs2, view } => {
             let mut reads = vec![
                 Gp(rs1),
@@ -705,6 +734,13 @@ pub(crate) fn op_access(
             Unit::Scalar,
             vec![Gp(value)],
             vec![Resource::Cfg(Cfg::LStream)],
+        ),
+        // Native execution is serial-only; serialize its descriptor writes
+        // with other view configuration and declare both GP operands.
+        op::Opcode::L_TILE_CCFG { low, high, .. } => OpAccess::new(
+            Unit::Scalar,
+            vec![Gp(low), Gp(high)],
+            vec![Resource::Cfg(Cfg::MatrixView)],
         ),
         op::Opcode::L_TILE_CFG { shape, mapping, .. } => OpAccess::new(
             Unit::Scalar,

@@ -30,6 +30,9 @@ pub enum LTilePrimitive {
     DecayReduceAcc,
     ReduceWrite,
     ResidualWrite,
+    NativeDeltaUpdate,
+    NativeReduceAcc,
+    NativeDecayReduceAcc,
 }
 
 impl TryFrom<u8> for LTilePrimitive {
@@ -46,6 +49,9 @@ impl TryFrom<u8> for LTilePrimitive {
             6 => Ok(Self::DecayReduceAcc),
             7 => Ok(Self::ReduceWrite),
             8 => Ok(Self::ResidualWrite),
+            9 => Ok(Self::NativeDeltaUpdate),
+            10 => Ok(Self::NativeReduceAcc),
+            11 => Ok(Self::NativeDecayReduceAcc),
             _ => Err(()),
         }
     }
@@ -76,6 +82,14 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
         view: Option<u8>,
+    },
+    /// Bounded BF16 panel GEMM; explicit outputs, view and compact input slices.
+    M_MM_P {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: u8,
+        view: u8,
     },
     M_TMM {
         rs1: u8,
@@ -439,6 +453,11 @@ pub enum Opcode {
         field: u8,
     },
     /// Atomically configure a packed Matrix-SRAM placement view.
+    L_TILE_CCFG {
+        low: u8,
+        high: u8,
+        slot: u8,
+    },
     L_TILE_CFG {
         shape: u8,
         mapping: u8,
@@ -577,6 +596,13 @@ impl Opcode {
                 rs1,
                 rs2,
                 view: Self::matrix_view_from(funct1),
+            },
+            0x01 if (8..=11).contains(&funct1) && instr >> 26 == 0 => Self::M_MM_P {
+                rd,
+                rs1,
+                rs2,
+                rs3,
+                view: funct1 & 3,
             },
             0x02 if funct1 <= 4 => Self::M_TMM {
                 rs1,
@@ -922,6 +948,17 @@ impl Opcode {
                     }
                 }
             }
+            0x3F if funct1 == 2 => {
+                if instr >> 26 != 0 || rs2 >= 3 || rs3 != 0 {
+                    Self::Invalid
+                } else {
+                    Self::L_TILE_CCFG {
+                        low: rd,
+                        high: rs1,
+                        slot: rs2,
+                    }
+                }
+            }
             0x3F if funct1 == 3 => {
                 if instr >> 28 != 0 {
                     tracing::error!(instr, "non-canonical L_TILE_EXEC encoding");
@@ -960,6 +997,32 @@ mod tests {
     /// opcode[0..6], rd[6..10], rs1[10..14], rs2[14..18], rs3[18..22], funct1[22..26].
     fn rform(opcode: u32, rd: u32, rs1: u32, rs2: u32, rs3: u32, funct1: u32) -> u32 {
         opcode | (rd << 6) | (rs1 << 10) | (rs2 << 14) | (rs3 << 18) | (funct1 << 22)
+    }
+
+    #[test]
+    fn projection_form_preserves_all_registers_and_rejects_other_subfunctions() {
+        for slot in 0..4 {
+            match Opcode::decode(rform(1, 2, 3, 4, 5, 8 | slot)) {
+                Opcode::M_MM_P {
+                    rd,
+                    rs1,
+                    rs2,
+                    rs3,
+                    view,
+                } => assert_eq!((rd, rs1, rs2, rs3, view), (2, 3, 4, 5, slot as u8)),
+                other => panic!("wrong projection decode {other:?}"),
+            }
+        }
+        assert!(matches!(
+            Opcode::decode(rform(1, 2, 3, 4, 5, 8) | (1 << 26)),
+            Opcode::Invalid
+        ));
+        for funct in [5, 6, 7, 12, 13, 14, 15] {
+            assert!(matches!(
+                Opcode::decode(rform(1, 2, 3, 4, 5, funct)),
+                Opcode::Invalid
+            ));
+        }
     }
 
     #[test]
@@ -1473,6 +1536,22 @@ mod tests {
                 ..
             }
         ));
+        assert!(matches!(
+            Opcode::decode(0x0080b73f),
+            Opcode::L_TILE_CCFG {
+                low: 12,
+                high: 13,
+                slot: 2
+            }
+        ));
+        for (number, primitive) in [
+            (9, LTilePrimitive::NativeDeltaUpdate),
+            (10, LTilePrimitive::NativeReduceAcc),
+            (11, LTilePrimitive::NativeDecayReduceAcc),
+        ] {
+            assert!(matches!(Opcode::decode(rform(0x3f, 1, 2, 3, number, 3)),
+                Opcode::L_TILE_EXEC { primitive: got, .. } if got == primitive));
+        }
         match Opcode::decode(rform(0x3F, 7, 9, 2, 0, 1)) {
             Opcode::L_TILE_CFG {
                 shape,
@@ -1482,7 +1561,7 @@ mod tests {
             other => panic!("expected L_TILE_CFG, got {other:?}"),
         }
         assert!(matches!(
-            Opcode::decode(rform(0x3F, 9, 2, 2, 0, 2)),
+            Opcode::decode(rform(0x3F, 9, 2, 3, 0, 2)),
             Opcode::Invalid
         ));
         match Opcode::decode(rform(0x09, 9, 5, 6, 0, 3)) {

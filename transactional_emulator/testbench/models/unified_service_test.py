@@ -14,6 +14,7 @@ from compiler.aten.plena.isa_matrix_projection import (
     Projection,
     lower_batch_projection,
     lower_b1_projection,
+    lower_compact_projection,
     lower_resident_projection,
 )
 from compiler.aten.plena.recurrent_coefficients import CompactCoefficientLoader, lower_bf16_gather, lower_softmax_rows
@@ -26,7 +27,7 @@ def profile_for(memory):
     return ExecutionProfile(hbm_controllers=len(config["memory_system"]["controllers"]))
 
 
-def matrix_case(root, runtime, memory, b, k, n, *, resident=False):
+def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=None):
     rng = np.random.default_rng(3107 + b + k + n)
     arena = Arena()
     zero = arena.add(np.zeros(2048))
@@ -39,7 +40,11 @@ def matrix_case(root, runtime, memory, b, k, n, *, resident=False):
     weights = arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
     outputs = [arena.add(np.full(spec.output_values, 7), output=True) for _ in xs]
     spec = replace(spec, inputs=inputs[0], weights=weights, outputs=outputs[0], zero=zero)
-    if resident:
+    if compact_tile is not None:
+        h = replace(h, projection_schedule="batch" if compact_tile == 4 else "compact")
+        h = replace(h, matrix=replace(h.matrix, weight_replay=True))
+        assembly = lower_compact_projection(spec, inputs, outputs, batch_tile=compact_tile)
+    elif resident:
         assembly = lower_resident_projection(spec, inputs, outputs)
     elif k <= 16384:
         assembly = lower_batch_projection(spec, inputs, outputs)
@@ -55,7 +60,8 @@ def matrix_case(root, runtime, memory, b, k, n, *, resident=False):
         **result,
         checked_values=b * n,
         status="passed",
-        scope="M_MV panel reuse, private requests, tail K/N, final writeback",
+        scope=("M_MM.P replay/slicing, distinct private requests, tail K/N, BF16 partial sums"
+               if compact_tile is not None else "M_MV panel reuse, private requests, tail K/N, final writeback"),
     )
 
 
@@ -413,7 +419,7 @@ def main():
     p = argparse.ArgumentParser()
     for arg in ("output", "runtime", "memory-root"):
         p.add_argument("--" + arg, required=True, type=Path)
-    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention", "experts", "resident"))
+    p.add_argument("--only", default="all", choices=("all", "auxiliary", "attention", "experts", "resident", "projection"))
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     results = []
@@ -441,12 +447,22 @@ def main():
         )
         for b, k, n in ((1, 2688, 129), (2, 289, 2051), (16, 769, 65), (2, 16417, 33))
     ] + [("gather_cached_subsets_and_pressure", lambda d: cached_gather_case(d, args.runtime, args.memory_root))]
+    projection = [
+        (
+            f"projection_b{b}_tile{tile}",
+            lambda d, b=b, tile=tile: matrix_case(
+                d, args.runtime, args.memory_root, b, 2305, 65, compact_tile=tile
+            ),
+        )
+        for b in (1, 2, 4, 8, 16) for tile in (1, 4)
+    ]
     groups = {
-        "all": jobs + auxiliary + attention + experts + resident,
+        "all": jobs + auxiliary + attention + experts + resident + projection,
         "auxiliary": auxiliary,
         "attention": attention,
         "experts": experts,
         "resident": resident,
+        "projection": projection,
     }
     jobs = groups[args.only]
     for name, run in jobs:

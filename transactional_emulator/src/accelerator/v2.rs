@@ -38,6 +38,15 @@ impl Accelerator {
         serde_json::json!({
             "L": c.lanes, "update_latency": c.latency, "update_II": c.interval,
             "dot": if tree() { "BF16_SRAM_tree" } else { "FP32_context" },
+            "native_coefficients": {
+                "descriptors": "3 x 64 bit; L_TILE form2, native primitives9..11",
+                "state_read_width": number("PLENA_NATIVE_READ_WIDTH", 512),
+                "result_slots": number("PLENA_NATIVE_RESULT_SLOTS", 4),
+                "sector_limit_bytes": 4096, "operand_latch_bytes": 4096,
+                "address_generation": "one coefficient word address/cycle",
+                "alignment_cycles": 1, "selection_cycles": 1,
+                "prefetch": "two bounded state slots, released only after last operand acceptance",
+            },
             "P": 2048, "allocated_context_bytes": if tree() { 0 } else { 8192 },
             "tree_rows": if tree() { 8 } else { 0 },
             "feedback_core_latency": number("PLENA_V2_DOT_LATENCY", 6),
@@ -156,7 +165,31 @@ impl Accelerator {
         let db = self.reg_file.read_gp(args.destination_register);
         let sb = self.reg_file.read_gp(args.source_register);
         let cb = self.reg_file.read_gp(args.scale_register);
-        let op = args.primitive;
+        let native = matches!(
+            args.primitive,
+            Op::NativeDeltaUpdate | Op::NativeReduceAcc | Op::NativeDecayReduceAcc
+        );
+        let op = match args.primitive {
+            Op::NativeDeltaUpdate => Op::DeltaUpdate,
+            Op::NativeReduceAcc => Op::ReduceAcc,
+            Op::NativeDecayReduceAcc => Op::DecayReduceAcc,
+            x => x,
+        };
+        if native {
+            assert_eq!(self.m_machine.mram.banks(), 64);
+            assert_eq!(self.m_machine.mram.bank_width(), 32);
+            assert_eq!(self.m_machine.mram.depth_rows(), 256);
+            assert_eq!(
+                self.m_machine.mram.ty(),
+                quantize::MxDataType::Plain(quantize::DataType::Fp(quantize::FpType::BF16))
+            );
+            if op == Op::DeltaUpdate {
+                assert_eq!(
+                    src.shape.rows, 1,
+                    "native UPDATE requires invariant outer operand"
+                );
+            }
+        }
         let config = self.v_machine.update_lane.config;
         let lanes = config.lanes as usize;
         let width = dst.shape.cols as usize;
@@ -300,12 +333,51 @@ impl Accelerator {
         // A fixed ring represents pipeline register credits, not a runtime
         // scheduling queue. Backpressure holds the input and does not advance
         // RNG. At most ceil(latency/II) subchunks can be in flight.
-        let mut credits = vec![0u64; latency.div_ceil(interval) as usize];
+        let mut credits = vec![
+            0u64;
+            if native {
+                number("PLENA_NATIVE_RESULT_SLOTS", 4) as usize
+            } else {
+                latency.div_ceil(interval) as usize
+            }
+        ];
         let mut launched = 0usize;
         let mut supply_ready = 0;
+        let read_width = if native {
+            number("PLENA_NATIVE_READ_WIDTH", 512) as usize
+        } else {
+            lanes
+        };
+        assert!(read_width >= lanes && read_width <= 2048 && read_width.is_multiple_of(lanes));
+        let wide_group = read_width / width;
+        let mut sector = None;
+        // x/residual is invariant throughout UPDATE. Explicit 4 KiB operand
+        // latch, loaded through the real shared SRAM port, not a free input.
+        let (outer_latch, outer_ready) = if native && op == Op::DeltaUpdate {
+            let lines: Vec<_> = (0..heads).map(|h| (h as u32, 0)).collect();
+            self.v2_read(sb, src, &lines, 0, &mut clock).await
+        } else {
+            (Vec::new(), 0)
+        };
         for row in 0..rows {
+            if native && row % 32 == 0 {
+                let fields: &[usize] = if op == Op::ReduceAcc { &[2] } else { &[0, 1] };
+                sector = Some(
+                    self.native_sector(
+                        fields,
+                        row,
+                        rows,
+                        heads as u32,
+                        row_ready.max(supply_ready),
+                        &mut clock,
+                    )
+                    .await,
+                );
+            }
+            let mut input_slots = std::collections::VecDeque::new();
+            let mut next_input = 0;
             // Compact scalars occupy <=128 B, held for this logical row only.
-            let (compact, compact_ready) = if coeff.broadcast_minor() {
+            let (compact, compact_ready) = if !native && coeff.broadcast_minor() {
                 self.v2_read(
                     cb,
                     coeff,
@@ -327,16 +399,49 @@ impl Accelerator {
                 let source_lines = (first..last)
                     .map(|h| (h as u32, if src.shape.rows == 1 { 0 } else { row }))
                     .collect::<Vec<_>>();
-                let (state, mut ready) = self
-                    .v2_read(
+                let (state, mut ready) = if native {
+                    if first % wide_group == 0 {
+                        if first > 0 {
+                            input_slots.pop_front();
+                        }
+                        // Two W-wide slots. Refill only after the previous
+                        // slot's last lane group has accepted its operands.
+                        while input_slots.len() < 2 && next_input < heads {
+                            let lines: Vec<_> = (next_input..(next_input + wide_group).min(heads))
+                                .map(|h| (h as u32, row))
+                                .collect();
+                            let (values, ready) = self
+                                .v2_read(
+                                    if reducing { sb } else { db },
+                                    if reducing { src } else { dst },
+                                    &lines,
+                                    row_ready.max(supply_ready),
+                                    &mut clock,
+                                )
+                                .await;
+                            input_slots.push_back((next_input, values, ready + 1));
+                            next_input += wide_group;
+                        }
+                    }
+                    let (wide_first, wide_state, wide_ready) = input_slots.front().unwrap();
+                    let start = (first - wide_first) * width;
+                    (
+                        wide_state[start..start + (last - first) * width].to_vec(),
+                        (*wide_ready).max(operands_at),
+                    )
+                } else {
+                    self.v2_read(
                         if reducing { sb } else { db },
                         if reducing { src } else { dst },
                         &state_lines,
                         operands_at,
                         &mut clock,
                     )
-                    .await;
-                let (scalars, scalar_ready) = if compact.is_empty() {
+                    .await
+                };
+                let (scalars, scalar_ready) = if native {
+                    (Vec::new(), sector.as_ref().unwrap().ready)
+                } else if compact.is_empty() {
                     let mut slice = coeff;
                     slice.shape.rows = 1;
                     slice.shape.cols = (2 * (last - first) * width) as u32;
@@ -350,7 +455,12 @@ impl Accelerator {
                     (Vec::new(), compact_ready)
                 };
                 ready = ready.max(scalar_ready);
-                let (outer, source_ready) = if op == Op::DeltaUpdate {
+                let (outer, source_ready) = if native && op == Op::DeltaUpdate {
+                    (
+                        outer_latch[first * width..last * width].to_vec(),
+                        outer_ready,
+                    )
+                } else if op == Op::DeltaUpdate {
                     self.v2_read(sb, src, &source_lines, operands_at, &mut clock)
                         .await
                 } else {
@@ -360,7 +470,17 @@ impl Accelerator {
                 let mut values = Vec::with_capacity(state.len());
                 for (i, &s) in state.iter().enumerate() {
                     let h = first + i / width;
-                    let (a, b) = if compact.is_empty() {
+                    let (a, b) = if native {
+                        let s = sector.as_ref().unwrap();
+                        (
+                            s.value(0, row, h as u32),
+                            if op == Op::ReduceAcc {
+                                0.0
+                            } else {
+                                s.value(1, row, h as u32)
+                            },
+                        )
+                    } else if compact.is_empty() {
                         let local = i / width * 2 * width + i % width;
                         (scalars[local], scalars[local + width])
                     } else {

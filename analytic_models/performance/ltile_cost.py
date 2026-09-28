@@ -42,8 +42,14 @@ class Machine:
     sfu_ii: int = 1
     reduction_tree_bf16: bool = False
     clock_hz: int = 1_000_000_000
+    native_read_width: int = 512
+    native_result_slots: int = 4
 
     def __post_init__(self):
+        if self.native_read_width not in (256, 512, 2048) or self.native_result_slots not in (1, 2, 4, 8):
+            raise ValueError("native supply requires bounded width/credits")
+        if self.native_read_width < self.lanes:
+            raise ValueError("native read width must cover a lane subgroup")
         if self.lanes not in (128, 256, 512):
             raise ValueError("validated lane search is 128/256/512")
         if self.dot not in ("tree", "fp32"):
@@ -175,9 +181,24 @@ class Schedule:
 
 
 @lru_cache(maxsize=32768)
-def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows):
+def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows, native_views=()):
     """Shape-derived stage schedule; arithmetic values do not enter timing."""
     m = machine
+    native = op in (9, 10, 11)
+    if native:
+        if len(native_views) != 3:
+            raise ValueError("native execution requires coefficient configurations")
+        from .ltile_access import CoefficientView
+        fields = (2,) if op == 10 else (0, 1)
+        cv = [CoefficientView.unpack(native_views[i]) for i in fields]
+        if any(not ((v.row_stride == 0 and v.head_stride in (0, 1)) or
+                    (v.row_stride == 1 and v.head_stride in (0, 128) and v.base % 32 == 0)) for v in cv):
+            raise ValueError("unsupported native sector geometry")
+        if any(v.heads != dst.heads for v in cv):
+            raise ValueError("coefficient head count differs")
+        op = {9: 3, 10: 5, 11: 6}[op]
+        if op == 3 and src.rows != 1:
+            raise ValueError("native UPDATE requires invariant outer operand")
     width, heads = dst.cols, dst.heads
     if width > m.lanes or m.lanes % width:
         raise ValueError("partial head subgroups are outside this contract")
@@ -251,13 +272,27 @@ def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows):
         else m.dot_latency + (m.update_latency if op == 6 else 0)
     )
     interval = m.update_ii if op == 3 else m.dot_ii
-    credits = [0] * math.ceil(latency / interval)
+    credits = [0] * (m.native_result_slots if native else math.ceil(latency / interval))
     feedback = [0] * math.ceil(heads * width / m.lanes)
     supply = row_ready = launches = 0
+    wide_group = m.native_read_width // width if native else group
+    outer_ready = matrix(sb, src, [(h, 0) for h in range(heads)], 0) if native and op == 3 else 0
+    sector_ready = 0
     for row in range(rows):
+        slots = []
+        next_input = 0
+        if native and row % 32 == 0:
+            words = {v.location(r, h)[0] for v in cv for h in range(heads)
+                     for r in range(row, min(row+32, rows))}
+            if len(words) > 64:
+                raise ValueError("sector exceeds 4 KiB staging")
+            banks = Counter(bank for bank, _ in words)
+            sector_ready = c.reserve("matrix", max(row_ready, supply) + len(words),
+                max(banks.values()) * m.sram_cycles, "matrix_reads", len(words)) + 1
+            c.finish = max(c.finish, sector_ready)
         compact_ready = (
             matrix(cb, coeff, [(0, 0 if coeff.rows == 1 else row)], max(row_ready, supply))
-            if coeff.broadcast
+            if coeff.broadcast and not native
             else row_ready
         )
         leaves_ready = row_ready
@@ -266,17 +301,29 @@ def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows):
             chunk, slot = first * width // m.lanes, launches % len(credits)
             operands_ready = max(row_ready, supply, credits[slot])
             lines = tuple((h, row) for h in range(first, last))
-            ready = matrix(sb if reducing else db, src if reducing else dst, lines, operands_ready)
-            if coeff.broadcast:
-                scalar_ready = compact_ready
+            if native:
+                if first % wide_group == 0:
+                    if first > 0:
+                        slots.pop(0)
+                    while len(slots) < 2 and next_input < heads:
+                        packet = [(h, row) for h in range(next_input, min(heads, next_input+wide_group))]
+                        end = matrix(sb if reducing else db, src if reducing else dst, packet, max(row_ready, supply))
+                        slots.append(end + 1)
+                        next_input += wide_group
+                ready = max(slots[0], operands_ready)
+                scalar_ready = sector_ready
             else:
+                ready = matrix(sb if reducing else db, src if reducing else dst, lines, operands_ready)
+            if not native and coeff.broadcast:
+                scalar_ready = compact_ready
+            elif not native:
                 sliced = View(1, 2 * (last - first) * width, 1, coeff.pitch, coeff.phase, False)
                 offset = row * math.ceil(coeff.cols / 2048) * 2048 + 2 * first * width
                 scalar_ready = matrix(cb + offset, sliced, [(0, 0)], operands_ready)
             ready = max(ready, scalar_ready)
             if op == 3:
                 sources = tuple((h, 0 if src.rows == 1 else row) for h in range(first, last))
-                ready = max(ready, matrix(sb, src, sources, operands_ready))
+                ready = max(ready, outer_ready if native else matrix(sb, src, sources, operands_ready))
                 done = c.compute(ready, m.update_latency, m.update_ii)
                 credits[slot] = matrix(db, dst, lines, done, True)
             elif m.dot == "tree":
@@ -334,8 +381,27 @@ class ProgramCost:
         )
 
 
-def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=False, matrix_service=None):
-    """Evaluate only instruction control/addresses, not model arithmetic."""
+def assembly_cost(
+    assembly: str, machine: Machine = Machine(), *, trace_memory=False,
+    matrix_service=None, max_instructions=10_000_000,
+):
+    """Evaluate instruction control/addresses, not model arithmetic.
+
+    Hardware loops expose their remaining count through their GP register,
+    matching Rust LoopState. This predictor accepts structured loops with
+    distinct, nonzero active counters and no body mutation of those counters.
+    More general counter mutation/outer-loop jumps are rejected, not priced as
+    an independent fixed trip count. ``max_instructions`` bounds interpreter
+    work; it is an analysis safety limit, not an added hardware cycle cost.
+    """
+    if type(max_instructions) is not int or max_instructions < 1:
+        raise ValueError("max_instructions must be a positive integer")
+
+    def gp(s):
+        if not re.fullmatch(r"gp(?:[0-9]|1[0-5])", s):
+            raise ValueError(f"expected GP register gp0..gp15, got {s}")
+        return int(s[2:])
+
     code = []
     for raw in assembly.splitlines():
         if raw.startswith("; @operator="):
@@ -345,9 +411,36 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
         if line:
             op, *args = re.split(r"[\s,]+", line)
             code.append((op, args))
+    # Validate the entire loop structure before interpreting any transfers.
+    # Rust allows END to find a non-innermost matching register; that behavior
+    # is deliberately outside this bounded structured-program contract.
+    loop_structure = []
+    for op, args in code:
+        if op == "C_LOOP_START":
+            if len(args) != 2:
+                raise ValueError("C_LOOP_START requires a register and trip count")
+            counter = gp(args[0])
+            if counter == 0 or counter in loop_structure:
+                raise ValueError("loop requires a distinct nonzero active counter")
+            if not 1 <= int(args[1], 0) < (1 << 22):
+                raise ValueError("loop trip count must fit the positive 22-bit immediate")
+            loop_structure.append(counter)
+        elif op == "C_LOOP_END":
+            if len(args) != 1 or not loop_structure:
+                raise ValueError("C_LOOP_END requires a matching C_LOOP_START")
+            if gp(args[0]) != loop_structure[-1]:
+                raise ValueError("C_LOOP_END must match the innermost loop counter")
+            loop_structure.pop()
+        elif op in ("S_LUI_INT", "S_ADDI_INT", "S_ADD_INT") and args and gp(args[0]) in loop_structure:
+            raise ValueError("loop body must not mutate an active counter")
+        elif op == "MARK" and loop_structure:
+            raise ValueError("operator boundaries must be outside hardware loops")
+    if loop_structure:
+        raise ValueError("unterminated loop")
     cost = ProgramCost()
     registers = [0] * 16
     views = {}
+    native_views = [None, None, None]
     loops = []
     reduction_rows = 0
     pc = 0
@@ -374,14 +467,11 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
             pc += 1
             continue
 
-        def gp(s):
-            if not s.startswith("gp"):
-                raise ValueError(f"expected GP register, got {s}")
-            return int(s[2:])
-
         def value(s):
             return registers[gp(s)]
 
+        if cost.issue >= max_instructions:
+            raise ValueError("analytical execution exceeds max_instructions")
         cost.issue += 1
         cost.opcodes[op] += 1
         if op.startswith("S_") or op.startswith("C_"):
@@ -390,20 +480,30 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
             registers[gp(args[0])] = (int(args[1], 0) << 12) & 0xFFFFFFFF
         elif op == "S_ADDI_INT":
             registers[gp(args[0])] = (value(args[1]) + int(args[2], 0)) & 0xFFFFFFFF
+        elif op == "S_ADD_INT":
+            registers[gp(args[0])] = (value(args[1]) + value(args[2])) & 0xFFFFFFFF
         elif op in ("S_SUB_FP", "S_ADD_FP", "S_MUL_FP", "S_LD_FP", "S_SQRT_FP", "S_RECI_FP"):
             # The generated layer profile fixes scalar basic/sqrt/reci to one
             # cycle. This is inherited latency, explicitly not RTL certification.
             pass
         elif op == "C_LOOP_START":
-            if int(args[1], 0) <= 0:
-                raise ValueError("loop must have a positive finite trip count")
-            loops.append([pc + 1, int(args[1], 0)])
+            counter = gp(args[0])
+            registers[counter] = int(args[1], 0)
+            loops.append((pc + 1, counter))
         elif op == "C_LOOP_END":
-            loops[-1][1] -= 1
-            if loops[-1][1]:
+            counter = gp(args[0])
+            if registers[counter] > 1:
+                registers[counter] -= 1
                 pc = loops[-1][0]
                 continue
+            registers[counter] = 0
             loops.pop()
+        elif op == "L_TILE_CCFG":
+            slot = int(args[0])
+            if not 0 <= slot < 3:
+                raise ValueError("invalid coefficient slot")
+            native_views[slot] = value(args[1]) | value(args[2]) << 32
+            cost.scalar += 1
         elif op == "L_TILE_CFG":
             views[int(args[0])] = View.decode(value(args[1]), value(args[2]))
             cost.scalar += 1
@@ -419,6 +519,7 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
                 value(args[1]),
                 value(args[2]),
                 reduction_rows,
+                tuple(native_views) if primitive >= 9 else (),
             )
             cost.sram += bank
             cost.arithmetic += arith
@@ -486,6 +587,17 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
             if view.heads != 1 or view.cols != 32 or view.rows > h.reduction_lanes:
                 raise ValueError("bounded M_MV requires one K-by-32 view")
             cycles, words = bank_service(value(args[1]), view)
+            if h.weight_replay:
+                if value(args[2]) % 2048:
+                    raise ValueError("replayed M_MV needs an aligned Vector row")
+                if value(args[1]) % 32 or (value(args[1]) // 2048 + view.rows) * 4096 > h.matrix_capacity_bytes:
+                    raise ValueError("replayed M_MV view exceeds Matrix SRAM")
+                replay = h.replay_cost(view.rows, 1, cycles, words, partial_writeback=False)
+                cost.sram += replay["sram"]
+                cost.arithmetic += replay["arithmetic"]
+                cost.accesses.update({k: v for k, v in replay.items() if k not in ("sram", "arithmetic")})
+                pc += 1
+                continue
             # Four output columns share one bank word. Re-read for each group;
             # Matrix and Vector reads are conservatively serialized in Rust.
             groups = 32 // h.edge
@@ -494,6 +606,39 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
             )
             array = 2 * (h.edge - 1) + (h.edge - 1) * max(h.mac_ii, h.mac_latency) + h.mac_latency
             cost.arithmetic += groups * (array + int(math.log2(h.groups)) * h.tree_add_latency + h.tree_add_latency)
+        elif op == "M_MM.P":
+            if matrix_service is None or len(args) != 5:
+                raise ValueError("M_MM.P requires an explicit bounded Matrix service")
+            h = matrix_service
+            slot = int(args[4], 0)
+            if not 0 <= slot < 4 or slot not in views:
+                raise ValueError("M_MM.P requires a configured view slot")
+            view = views[slot]
+            cfg = value(args[3])
+            rows = (cfg & 3) + 1
+            input_stride = ((cfg >> 2) & 255) * 256
+            output_stride = ((cfg >> 10) & 255) * 32
+            if cfg >> 18 or input_stride == 0 or output_stride == 0:
+                raise ValueError("reserved or zero-stride M_MM.P configuration")
+            if view.heads != 1 or view.cols != 32 or not 1 <= view.rows <= 256:
+                raise ValueError("M_MM.P requires one K<=256 by 32 view")
+            if value(args[1]) % 32 or (value(args[1]) // 2048 + view.rows) * 4096 > h.matrix_capacity_bytes:
+                raise ValueError("M_MM.P view exceeds Matrix SRAM")
+            source, destination = value(args[2]), value(args[0])
+            inputs = [source + i * input_stride for i in range(rows)]
+            outputs = [destination + i * output_stride for i in range(rows)]
+            limit = h.vector_capacity_bytes // 2
+            if any(x % 256 or x % 2048 + view.rows > 2048 or x // 2048 * 2048 + 2048 > limit for x in inputs):
+                raise ValueError("M_MM.P input slice is unaligned or outside Vector SRAM")
+            if any(x % 32 or x + 32 > limit for x in outputs):
+                raise ValueError("M_MM.P output is unaligned or outside Vector SRAM")
+            if any(o < i + view.rows and i < o + 32 for o in outputs for i in inputs):
+                raise ValueError("M_MM.P input and output slices overlap")
+            cycles, words = bank_service(value(args[1]), view)
+            replay = h.replay_cost(view.rows, rows, cycles, words, partial_writeback=True)
+            cost.sram += replay["sram"]
+            cost.arithmetic += replay["arithmetic"]
+            cost.accesses.update({k: v for k, v in replay.items() if k not in ("sram", "arithmetic")})
         elif op == "M_MV_WO":
             if matrix_service is None or len(args) != 2:
                 raise ValueError("Matrix writeout requires explicit bounded service")

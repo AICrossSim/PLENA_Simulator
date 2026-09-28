@@ -66,6 +66,14 @@ pub(crate) struct MatrixViewDescriptor {
 }
 
 impl MatrixViewDescriptor {
+    #[cfg(test)]
+    pub(crate) fn projection_test_view(rows: u32) -> Self {
+        Self::unpack((rows - 1) | (31 << 12), rows)
+            .unwrap()
+            .validate(64, 32)
+            .unwrap()
+    }
+
     fn unpack(shape_word: u32, map_word: u32) -> Result<Self, String> {
         Ok(Self {
             shape: MatrixViewShape::unpack(shape_word),

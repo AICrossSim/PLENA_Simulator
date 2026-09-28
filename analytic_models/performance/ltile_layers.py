@@ -45,16 +45,28 @@ class Stage:
 
 class LayerPlan:
     def __init__(
-        self, compiler_root, *, gather="reference", projection_schedule="stream", arena=None, shared_weights=None
+        self, compiler_root, *, gather="reference", projection_schedule="stream", arena=None, shared_weights=None,
+        vector_rows=58, gather_vector_rows=64,
     ):
         self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
-        if projection_schedule not in ("stream", "resident"):
+        if projection_schedule not in ("stream", "resident", "compact", "batch"):
             raise ValueError("unknown projection schedule")
         self.projection_schedule = projection_schedule
+        self.vector_rows = vector_rows
+        self.gather_vector_rows = gather_vector_rows
         if projection_schedule == "resident":
+            from functools import partial
             from compiler.aten.plena.isa_matrix_projection import lower_resident_projection
 
-            self.lower_projection = lower_resident_projection
+            self.lower_projection = partial(lower_resident_projection, vector_rows=vector_rows)
+        elif projection_schedule in ("compact", "batch"):
+            from functools import partial
+            from compiler.aten.plena.isa_matrix_projection import lower_compact_projection
+
+            self.lower_projection = partial(
+                lower_compact_projection, batch_tile=1 if projection_schedule == "compact" else 4,
+                vector_rows=vector_rows,
+            )
         self.arena = arena if arena is not None else ShapeArena()
         self.shared_weights = shared_weights if shared_weights is not None else {}
         self.stages = []
@@ -105,6 +117,8 @@ class LayerPlan:
     def gather(self, name, mapping):
         out = self.output(len(mapping))
         kwargs = {} if self.gather_mode == "reference" else {"strategy": self.gather_mode}
+        if self.gather_vector_rows != 64:
+            kwargs["vector_rows"] = self.gather_vector_rows
         self.emit(name, self.c.lower_bf16_gather(mapping, out, self.zero, self.onehot, **kwargs))
         return out
 
@@ -144,7 +158,12 @@ def build_layer(
     projection_schedule="stream",
     arena=None,
     shared_weights=None,
+    native_coefficients=False,
+    vector_rows=58,
+    gather_vector_rows=64,
 ):
+    if native_coefficients and control != "fsm":
+        raise ValueError("native prototype requires FSM")
     if kind not in ("mamba", "kda") or control not in ("old_isa", "row", "fsm"):
         raise ValueError("expected Mamba/KDA and matched row/FSM control")
     p = LayerPlan(
@@ -153,6 +172,8 @@ def build_layer(
         projection_schedule=projection_schedule,
         arena=arena,
         shared_weights=shared_weights,
+        vector_rows=vector_rows,
+        gather_vector_rows=gather_vector_rows,
     )
     c, a = p.c, p.arena
     if kind == "mamba":
@@ -191,8 +212,10 @@ def build_layer(
                 for h in heads:
                     update.extend([lane(delta, h), lane(conv, 4096 + h // 8 * 128 + row)])
                     dot.extend([lane(conv, 5120 + h // 8 * 128 + row), None])
-            u = p.gather(f"pack_update_{group}", update)
-            d = p.gather(f"pack_dot_{group}", dot)
+            # Keep historical fixture addresses stable. Native execution never
+            # reads/writes these reserved HBM holes; no packing cost is hidden.
+            u = p.output(len(update)) if native_coefficients else p.gather(f"pack_update_{group}", update)
+            d = p.output(len(dot)) if native_coefficients else p.gather(f"pack_dot_{group}", dot)
             scalar = p.gather(f"pack_dt_{group}", [s for h in heads for s in (None, lane(dt, h))])
             skip = p.gather(f"pack_skip_{group}", [s for h in heads for s in (lane(onebase, 0), lane(skipbase, h))])
             state = a.add(32 * 128 * 64)
@@ -205,6 +228,12 @@ def build_layer(
                 skip=skip,
                 output=raw + group * 4096,
             )
+            if native_coefficients:
+                memory["native"] = [
+                    (delta, group*32, 1, 0, 0),
+                    (conv + 8192, group*512, 128, 1, 3),
+                    (conv + 8192, 1024 + group*512, 128, 1, 3),
+                ]
             p.emit(f"recurrence_{group}", "\n".join(p.lower_group(p.Options(kind, control), memory).lines) + "\n")
         silu, gated = p.output(4096), p.output(4096)
         p.emit(
@@ -262,10 +291,10 @@ def build_layer(
                 p.old_group(kind, group, dict(value=conv["v"] + group * 4096, output=raw + group * 4096), mapping)
                 continue
             indices = [h * 128 + r for r in range(128) for h in heads]
-            update = p.gather(
-                f"pack_update_{group}", [s for i in indices for s in (lane(delta, i), lane(vectors["k"], i))]
-            )
-            dot = p.gather(f"pack_dot_{group}", [s for i in indices for s in (lane(vectors["q"], i), None)])
+            umap = [s for i in indices for s in (lane(delta, i), lane(vectors["k"], i))]
+            dmap = [s for i in indices for s in (lane(vectors["q"], i), None)]
+            update = p.output(len(umap)) if native_coefficients else p.gather(f"pack_update_{group}", umap)
+            dot = p.output(len(dmap)) if native_coefficients else p.gather(f"pack_dot_{group}", dmap)
             scalar = p.gather(f"pack_beta_{group}", [s for h in heads for s in (lane(beta[0], h), None)])
             state = a.add(16 * 128 * 128)
             memory = dict(
@@ -276,6 +305,9 @@ def build_layer(
                 scalar=scalar,
                 output=raw + group * 4096,
             )
+            if native_coefficients:
+                memory["native"] = [(base + group*4096, 0, 128, 1, 0)
+                    for base in (delta, vectors["k"], vectors["q"])]
             p.emit(f"recurrence_{group}", "\n".join(p.lower_group(p.Options(kind, control), memory).lines) + "\n")
         rms = p.output(12288)
         p.emit("output_rms", c.lower_l2norm_rows(c.L2NormRows(raw, rms, 12288, p.masks, p.zero, 5, 6)))
@@ -290,7 +322,8 @@ def build_layer(
     return p
 
 
-def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream"):
+def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream", native_coefficients=False,
+                vector_rows=58, gather_vector_rows=64):
     """Compile batch stages with shared weight panels and private state.
 
     No B1 cycle multiplication. Matrix SRAM weights stay resident across
@@ -311,6 +344,9 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
             projection_schedule=projection_schedule,
             arena=arena,
             shared_weights=weights,
+            native_coefficients=native_coefficients,
+            vector_rows=vector_rows,
+            gather_vector_rows=gather_vector_rows,
         )
         for _ in range(batch)
     ]
@@ -328,8 +364,18 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
         if s.matrix_shape:
             _, n, k = s.matrix_shape
             spec = result.Projection(s.input_base, s.weight_base, s.output_base, s.zero_base, k, n, 256)
-            lower = lower_resident_projection if projection_schedule == "resident" else lower_batch_projection
-            text = lower(spec, [x.input_base for x in columns], [x.output_base for x in columns])
+            if projection_schedule in ("compact", "batch"):
+                from compiler.aten.plena.isa_matrix_projection import lower_compact_projection
+
+                text = lower_compact_projection(
+                    spec, [x.input_base for x in columns], [x.output_base for x in columns],
+                    batch_tile=1 if projection_schedule == "compact" else 4,
+                    vector_rows=vector_rows,
+                )
+            else:
+                lower = lower_resident_projection if projection_schedule == "resident" else lower_batch_projection
+                kwargs = {"vector_rows": vector_rows} if projection_schedule == "resident" else {}
+                text = lower(spec, [x.input_base for x in columns], [x.output_base for x in columns], **kwargs)
             result.stages.append(replace(s, assembly=text, matrix_shape=(batch, n, k)))
         else:
             result.stages.extend(replace(x, name=f"r{i}/{x.name}") for i, x in enumerate(columns))

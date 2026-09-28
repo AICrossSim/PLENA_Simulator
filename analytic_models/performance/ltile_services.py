@@ -10,7 +10,6 @@ from .ltile_layers import build_batch, compiler_api
 from .ltile_program import ShapeArena
 from .ltile_execution import price_program
 from .ltile_dma import sha
-from .ltile_cost import ProgramCost
 
 
 class Services:
@@ -27,6 +26,7 @@ class Services:
             here / name
             for name in (
                 "ltile_cost.py",
+                "ltile_access.py",
                 "ltile_dma.py",
                 "ltile_program.py",
                 "ltile_execution.py",
@@ -41,6 +41,7 @@ class Services:
             self.compiler / "aten/plena" / name
             for name in (
                 "ltile_v2.py",
+                "ltile_native.py",
                 "isa_matrix_projection.py",
                 "recurrent_coefficients.py",
                 "prepared_vector_recurrence.py",
@@ -71,13 +72,18 @@ class Services:
         print(json.dumps(dict(operator=spec, cycles=cost.total)), flush=True)
         return result
 
-    def layer(self, kind, batch, control, weight="BF16"):
+    def layer(self, kind, batch, control, weight="BF16", *, supply="packed"):
         if weight not in ("BF16", "NVFP4"):
             raise ValueError("unsupported weight contract")
+        if supply not in ("packed", "native") or (supply == "native" and control != "fsm"):
+            raise ValueError("native coefficient supply requires the resident FSM interface")
 
         def generate():
             plan = build_batch(
-                kind, batch, self.compiler, control=control, gather="cached", projection_schedule="resident"
+                kind, batch, self.compiler, control=control, gather="cached", projection_schedule=self.profile.projection_schedule,
+                native_coefficients=supply == "native",
+                vector_rows=self.profile.projection_vector_rows,
+                gather_vector_rows=self.profile.gather_vector_rows,
             )
             regions = (
                 {(s.weight_base, s.weight_bytes) for s in plan.stages if s.matrix_shape} if weight == "NVFP4" else set()
@@ -89,12 +95,18 @@ class Services:
                     hbm_allocated_bytes=plan.arena.size,
                     stages=[{k: v for k, v in asdict(s).items() if k != "assembly"} for s in plan.stages],
                     boundaries="input norm through recurrent output projection; excludes outer residual/MoE",
-                    batch_mapping="shared Matrix weight panels; private input/output/state; serial request tiles",
-                    projection_workspace_bytes=58 * 4096,
+                    batch_mapping="shared Matrix weight panels; private input/output/state; bounded request tiles",
+                    projection_schedule=self.profile.projection_schedule,
+                    projection_resources=self.profile.matrix.projection_resources()
+                    if self.profile.projection_schedule in ("compact", "batch") or self.profile.matrix.weight_replay
+                    else None,
+                    projection_workspace_bytes=self.profile.projection_vector_rows * 4096,
                     projection_reserved_codec_bytes=6 * 4096,
+                    coefficient_supply=supply,
                     baseline="compact coefficients cached in existing Vector SRAM; ordinary BF16 row/tree instructions"
                     if control == "old_isa"
-                    else "SRAM-reused software coefficient packing; fused update; BF16 tree",
+                    else ("native coefficient descriptors; bounded sector/state/result buffers; fused update; BF16 tree"
+                          if supply == "native" else "SRAM-reused software coefficient packing; fused update; BF16 tree"),
                 ),
             )
 
@@ -106,7 +118,8 @@ class Services:
                 control=control,
                 weight=weight,
                 gather="cached",
-                projection_schedule="resident",
+                projection_schedule=self.profile.projection_schedule,
+                coefficient_supply=supply,
             ),
             generate,
         )
@@ -126,7 +139,16 @@ class Services:
             weights = a.add(spec.weight_bytes // 2)
             outputs = [a.add(spec.output_values) for _ in range(batch)]
             p = Projection(inputs[0], weights, outputs[0], zero, k, n, 256)
-            text = lower_resident_projection(p, inputs, outputs)
+            if self.profile.projection_schedule == "resident":
+                text = lower_resident_projection(p, inputs, outputs, vector_rows=self.profile.projection_vector_rows)
+            else:
+                from compiler.aten.plena.isa_matrix_projection import lower_compact_projection
+
+                text = lower_compact_projection(
+                    p, inputs, outputs,
+                    batch_tile=1 if self.profile.projection_schedule == "compact" else 4,
+                    vector_rows=self.profile.projection_vector_rows,
+                )
             return (
                 "; @operator=projection\n" + text,
                 [(weights, p.weight_bytes)] if weight == "NVFP4" else [],
@@ -135,13 +157,20 @@ class Services:
                     hbm_allocated_bytes=a.size,
                     weight_bytes=p.weight_bytes,
                     matrix_capacity_bytes=self.profile.matrix.matrix_capacity_bytes,
-                    vector_live_bytes=58 * 4096
+                    vector_live_bytes=self.profile.projection_vector_rows * 4096
                     + (self.profile.codec.input_bytes + self.profile.codec.output_bytes if weight == "NVFP4" else 0),
-                    mapping="existing M_MV; output32 panels, K256; bounded input-window cache and private output rows; shared weight panels when they fit",
+                    mapping=(
+                        "existing M_MV; output32 panels, K256; bounded input-window cache; shared weight panels"
+                        if self.profile.projection_schedule == "resident"
+                        else "M_MM.P; K256/output32; aligned compact input rows; finite replay; masked tails; bounded request tiles"
+                    ),
+                    projection_resources=self.profile.matrix.projection_resources()
+                    if self.profile.projection_schedule != "resident" or self.profile.matrix.weight_replay
+                    else None,
                 ),
             )
 
-        return self.cached(dict(type="projection", batch=batch, k=k, n=n, weight=weight, schedule="resident"), generate)
+        return self.cached(dict(type="projection", batch=batch, k=k, n=n, weight=weight, schedule=self.profile.projection_schedule), generate)
 
     def vector(self, kind, values, *, groups=1):
         """Compile actual norm/elementwise/gate programs including their DMA.
@@ -229,42 +258,40 @@ class Services:
         return self.cached(dict(type="vector", kind=kind, values=values, groups=groups), generate)
 
     def kv_append(self, batch, heads, key_dim, value_dim, context):
-        """Finite masked word RMW for packed K; contiguous words for packed V.
+        """Actual old-ISA append to packed K/V, shared by all comparison arms.
 
-        Memory service is executed, while 12 serial issue/port/ALU cycles per
-        masked word are an explicit orchestration budget. No free append or
-        free layout conversion. K/V live in separate packed allocations.
+        Preserves whole owned Vector rows using immutable compile-time masks.
+        Only the new values are gathered; no invented masked-word opcode.
+        Allocations are local service addresses, not a whole-model address map.
         """
-        cost = ProgramCost()
-        base = 64
-        for _ in range(batch * heads):
-            for r in range(key_dim):
-                address = base + (context // 32 * key_dim + r) * 64
-                cost.memory_trace.extend([("d", 4, 0), ("r", address, 64), ("d", 8, 0), ("w", address, 64)])
-                cost.transfers["read", 64] += 1
-                cost.transfers["write", 64] += 1
-                cost.issue += 4
-                cost.scalar += 2
-                cost.sram += 4
-                cost.arithmetic += 2
-            base += ((context + 32) // 32) * key_dim * 64 + 4096
-            for c in range((value_dim + 31) // 32):
-                address = base + (c * (context + 32) + context) * 64
-                cost.memory_trace.extend([("d", 6, 0), ("w", address, 64)])
-                cost.transfers["write", 64] += 1
-                cost.issue += 2
-                cost.scalar += 1
-                cost.sram += 2
-                cost.arithmetic += 1
-            base += ((value_dim + 31) // 32) * (context + 32) * 64 + 4096
-        self.backend.price(cost, self.profile.dma.service)
-        return dict(
-            components=cost.components(),
-            hbm_read_bytes=sum(n * c for (d, n), c in cost.transfers.items() if d == "read"),
-            hbm_write_bytes=sum(n * c for (d, n), c in cost.transfers.items() if d == "write"),
-            metadata=dict(
-                validation="Ramulator memory + finite masked-word orchestration budget",
-                input_buffer_bytes=4096,
-                word_buffer_bytes=64,
-            ),
-        )
+        if min(batch, heads, key_dim, value_dim) < 1 or context < 0:
+            raise ValueError("invalid KV append shape")
+
+        def generate():
+            c, _, _, _, _ = compiler_api(self.compiler)
+            a = ShapeArena()
+            zero, one_hot, scratch = (a.add(2048) for _ in range(3))
+            code = []
+            for request in range(batch * heads):
+                for k, n, column in ((key_dim, context + 1, True), (context + 1, value_dim, False)):
+                    packed = ((k + 31)//32*32) * ((n + 31)//32*32)
+                    base = a.add(((packed + 2047)//2048 + 1)*2048)
+                    source = a.add(((k if column else n) + 2047)//2048*2048)
+                    masks = {}
+                    constants = {}
+                    for row, edits in c.packed_append_edits(k,n,column=column).items():
+                        pattern = tuple(edits)
+                        if pattern not in constants:
+                            constants[pattern] = a.add(2048)
+                        masks[row] = constants[pattern]
+                    code.append(c.lower_packed_matrix_append(
+                        base,k,n,source,zero,one_hot,scratch,column=column,keep_masks=masks))
+            return "; @operator=kv_append\n" + "".join(code), [], dict(
+                validation="compiled gather + masked Vector RMW; connected Rust numerical checks",
+                hbm_allocated_bytes=a.size, vector_live_bytes=64*4096,
+                constants="BF16 keep masks: ones except updated lanes; immutable shape metadata",
+                precision="finite BF16; zero-sign preservation not guaranteed",
+            )
+
+        return self.cached(dict(type="kv_append",batch=batch,heads=heads,key_dim=key_dim,
+                                value_dim=value_dim,context=context,schedule="masked_vector_rmw"), generate)

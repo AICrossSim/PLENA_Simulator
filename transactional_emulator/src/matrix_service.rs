@@ -22,6 +22,9 @@ pub(crate) struct MatrixService {
     pub matrix_capacity_bytes: u32,
     pub vector_capacity_bytes: u32,
     pub accumulator: String,
+    /// Opt-in finite 16 KiB BF16 weight replay; legacy M_MV stays unchanged.
+    #[serde(default)]
+    pub weight_replay: bool,
 }
 
 pub(crate) static PROFILE: LazyLock<Option<MatrixService>> = LazyLock::new(|| {
@@ -56,6 +59,13 @@ impl MatrixService {
         let bytes = u64::from(self.edge) * u64::from(self.reduction_lanes) * 2;
         assert!(bytes <= u64::from(self.matrix_capacity_bytes));
         assert!(bytes + u64::from(self.edge).pow(2) * 2 <= u64::from(self.vector_capacity_bytes));
+    }
+
+    /// Serialized bounded-latch supply, charged separately from SRAM preload.
+    /// No arbitrary crossbar or extra SRAM port is assumed.
+    pub fn replay_feed_cycles(&self, rows: u32, requests: u32) -> u32 {
+        (rows * self.edge).div_ceil(self.matrix_read_elements)
+            + (rows * requests).div_ceil(self.vector_read_elements)
     }
 
     pub fn rounded(&self, value: f32) -> f32 {
@@ -102,6 +112,27 @@ impl MatrixService {
     }
 }
 
+/// M_MM.P bounded panel configuration. Strides are in element units after
+/// decoding; zero strides and reserved bits are rejected, not silently masked.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProjectionConfig {
+    pub requests: u32,
+    pub input_stride: u32,
+    pub output_stride: u32,
+}
+impl ProjectionConfig {
+    pub fn decode(value: u32) -> Self {
+        assert_eq!(value >> 18, 0, "M_MM.P reserved config bits must be zero");
+        let config = Self {
+            requests: (value & 3) + 1,
+            input_stride: ((value >> 2) & 255) * 256,
+            output_stride: ((value >> 10) & 255) * 32,
+        };
+        assert!(config.input_stride > 0 && config.output_stride > 0);
+        config
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,8 +149,26 @@ mod tests {
             matrix_capacity_bytes: 1024,
             vector_capacity_bytes: 1024,
             accumulator: "BF16".into(),
+            weight_replay: false,
         }
     }
+    #[test]
+    fn projection_config_decodes_units_and_rejects_reserved_or_zero_stride() {
+        let config = ProjectionConfig::decode(3 | (8 << 2) | (64 << 10));
+        assert_eq!(
+            (config.requests, config.input_stride, config.output_stride),
+            (4, 2048, 2048)
+        );
+        for invalid in [
+            0,
+            3 | (8 << 2),
+            3 | (64 << 10),
+            (1 << 18) | (8 << 2) | (64 << 10),
+        ] {
+            assert!(std::panic::catch_unwind(|| ProjectionConfig::decode(invalid)).is_err());
+        }
+    }
+
     #[test]
     fn tails_and_cross_instruction_accumulation() {
         let h = hardware();

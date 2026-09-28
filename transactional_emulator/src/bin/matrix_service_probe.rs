@@ -19,6 +19,8 @@ struct Hardware {
     matrix_capacity_bytes: usize,
     vector_capacity_bytes: usize,
     accumulator: String,
+    #[serde(default)]
+    weight_replay: bool,
 }
 
 #[derive(Deserialize)]
@@ -57,6 +59,10 @@ fn rounded(value: f32, fp32: bool) -> f32 {
 
 fn execute(r: Request) -> Counters {
     let h = &r.hardware;
+    assert!(
+        !h.weight_replay,
+        "generic Matrix probe does not implement projection replay"
+    );
     let e = h.edge;
     assert!((1..=16).contains(&e) && h.reduction_lanes > 0);
     assert!(h.reduction_lanes.is_multiple_of(e));

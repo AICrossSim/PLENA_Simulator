@@ -1,0 +1,25 @@
+{
+  "new_mapping_vs_previous_same_arithmetic": {
+    "comparison": "bitwise comparison of every active HBM allocation, including output and state",
+    "expected_rel_l2": 0.0,
+    "status": "consult each completed results/machine/*/result.json; no acceptance inferred for unfinished runs"
+  },
+  "inputs": {
+    "mamba": "real Nemotron layer 0 weights and hidden input; checkpoint NVFP4 decoded offline to BF16",
+    "kda": "real Kimi first KDA sublayer weights and hidden input; checkpoint FP8 decoded offline to BF16",
+    "tokens_per_request": 1,
+    "full_shape_batch_requests": "repeated captured B1 input in request-private addresses",
+    "separate_heterogeneous_test": "checks/distinct_projection_machine.json, 10 machine programs with distinct inputs and K/N tails"
+  },
+  "historical_quality_diagnostics_NOT_new_measurements": {
+    "mamba_output_rel_l2_vs_independent_fp32_formula": 0.008101437297367361,
+    "kda_output_rel_l2_vs_native": 0.01947003944471339,
+    "comparability": "different references and arithmetic/activation quantization boundaries; not task accuracy and not directly comparable between models"
+  },
+  "not_claimed": [
+    "new 2048-token precision validation",
+    "unchanged complete-model task scores",
+    "runtime compressed-weight hardware decoding",
+    "Rust execution of all 52/93 layers"
+  ]
+}

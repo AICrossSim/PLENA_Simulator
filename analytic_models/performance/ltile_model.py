@@ -235,6 +235,11 @@ def compose_peripheral(stage, w, b, context, services, occupancy):
                 vec("mul", mid, count, experts, "moe")
             vec("copy", h if hasattr(a, "moe") else a.routed_expert_hidden_size, count, experts, "moe_dispatch")
         return terms
+    if n == "mla_q_low_rank_projection":
+        mat(h, a.q_lora_rank)
+        vec("norm", a.q_lora_rank, category="norm")
+        mat(a.q_lora_rank, a.kda.num_heads * (a.qk_nope_head_dim + a.qk_rope_head_dim))
+        return terms
     specs = linear_shapes(n, a)
     if specs:
         cat = "output_head" if n == "lm_head" else "moe" if "moe" in n or "ffn" in n else "projection"
@@ -269,7 +274,7 @@ def compose_peripheral(stage, w, b, context, services, occupancy):
             count = 2 * a.num_kv_heads * a.head_dim if hasattr(a, "moe") else a.kv_lora_rank + a.qk_rope_head_dim
             vec("copy", count, category="kv_append")
             add(
-                "kv_pack_budget",
+                "kv_append",
                 services.kv_append(
                     b,
                     a.num_kv_heads if hasattr(a, "moe") else 1,
@@ -378,8 +383,10 @@ def run(args):
                 routing=route_meta,
                 composition="serial HBM-backed operators, no cross-operator overlap; within-layer memory history retained",
                 context_semantics="number of keys attended in this step, including the newly appended key; append index=context-1",
-                uncertainty="routing/KV packing are conservative finite budgets; sample address/phase sensitivity separately",
+                uncertainty="routing selection is a finite budget; KV append is compiled; sample address/phase sensitivity separately",
                 scope="decode analytical predictions; no task quality, complete RTL, TTFT, power or GPU comparison",
+                coefficient_supply=args.supply,
+                comparison="old_isa, packed row, packed FSM, and native FSM; row/native also changes supply and is not a pure FSM ablation",
             ),
             indent=2,
         )
@@ -413,7 +420,7 @@ def run(args):
                     WorkloadScenario(InferencePhase.DECODE, batch_size=b, context_length=context, moe_unique_experts=1)
                 )
                 for routing in scenarios:
-                    for control in ("old_isa", "row", "fsm"):
+                    for control in (("old_isa", "row", "fsm", "native") if args.supply == "native" else ("old_isa", "row", "fsm")):
                         ledger = Counter()
                         categories = Counter()
                         read = write = 0
@@ -434,7 +441,8 @@ def run(args):
                                     if kind == "mamba"
                                     else "BF16"
                                 )
-                                result = services.layer(kind, b, control, weight)
+                                result = services.layer(kind, b, "fsm" if control == "native" else control, weight,
+                                                        supply="native" if control == "native" else "packed")
                                 cats = {s["name"]: s["category"] for s in result["metadata"]["stages"]}
                                 terms = [
                                     (
@@ -475,6 +483,7 @@ def run(args):
                                         context=context,
                                         routing=routing,
                                         control=control,
+                                        coefficient_supply="native" if control == "native" else "packed",
                                         layer=stage.layer_id,
                                         stage=stage.name,
                                         category=category,
@@ -498,6 +507,7 @@ def run(args):
                                 context=context,
                                 routing=routing,
                                 control=control,
+                                coefficient_supply="native" if control == "native" else "packed",
                                 cycles_per_batch_step=total,
                                 ms_per_step=total / 1e6,
                                 aggregate_tokens_s=b * 1e9 / total,
@@ -530,8 +540,11 @@ def run(args):
         group = [r for r in tables if all(r[k] == row[k] for k in ("model", "batch", "context", "routing"))]
         base = next(r for r in group if r["control"] == "old_isa")
         matched = next(r for r in group if r["control"] == "row")
+        packed = next(r for r in group if r["control"] == "fsm")
         row["speedup_vs_old_recurrent_isa"] = base["cycles_per_batch_step"] / row["cycles_per_batch_step"]
         row["speedup_vs_matched_row"] = matched["cycles_per_batch_step"] / row["cycles_per_batch_step"]
+        row["speedup_vs_packed_fsm"] = packed["cycles_per_batch_step"] / row["cycles_per_batch_step"]
+        row["row_comparison_scope"] = "same arithmetic; supply also changes" if row["control"] == "native" else "packed supply"
         budget = base.get("routing_budget_cycles", 0) + base.get("kv_pack_budget_cycles", 0)
         # Remove/add the SAME uncertain orchestration costs in both arms.
         row["speedup_budget_0x"] = (base["cycles_per_batch_step"] - budget) / (row["cycles_per_batch_step"] - budget)
@@ -549,11 +562,11 @@ def run(args):
                 capacity_feasible_points=sum(r["capacity_feasible"] for r in tables),
                 limits=[
                     "independent-operator memory reset requires composition error validation",
-                    "KV append and router orchestration are named resource budgets",
+                    "router selection remains a named resource budget; KV append uses real instructions",
                     "Kimi routing is a boundary scenario; its full checkpoint is not executed",
                     "BF16 software updates and fused FP32 updates have different arithmetic",
                     "candidate codec throughput is not RTL-measured",
-                    "peripheral primitive timing calibrated; complete attention/MLA/MoE numerical composition and routing quality remain unvalidated",
+                    "representative connected attention/MLA/fixed-route MoE checked; full-shape global composition and router selection not executed",
                 ],
             ),
             indent=2,
@@ -574,6 +587,8 @@ def main(argv=None):
     p.add_argument("--dma-window", type=int, default=32)
     p.add_argument("--codec-lanes", type=int, choices=(128, 256, 512), default=256)
     p.add_argument("--sfu-scale", type=int, choices=(1, 2), default=1)
+    p.add_argument("--supply", choices=("native", "packed"), default="native",
+                   help="native adds the executed native-supply arm; packed preserves the historical three-arm graph")
     p.add_argument("--models", nargs="+", choices=("nemotron3", "kimi_k3"), default=["nemotron3", "kimi_k3"])
     p.add_argument("--batches", nargs="+", type=int, default=[1, 2, 4, 8, 16])
     p.add_argument("--contexts", nargs="+", type=int, default=[4096, 32768, 131072])

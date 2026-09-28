@@ -20,6 +20,7 @@ mod lstream;
 mod mview;
 #[cfg(test)]
 mod mview_recurrence_tests;
+mod native_coeff;
 #[cfg(test)]
 mod pipeline_tests;
 mod registers;
@@ -47,6 +48,7 @@ pub(crate) struct Accelerator {
     scalar_sram: ScalarSram,
     loop_state: LoopState,
     v2: v2::ReductionState,
+    native_coeff: [Option<native_coeff::CoefficientView>; 3],
 }
 
 impl Accelerator {
@@ -70,6 +72,7 @@ impl Accelerator {
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
             v2: v2::ReductionState::default(),
+            native_coeff: [None; 3],
         }
     }
 

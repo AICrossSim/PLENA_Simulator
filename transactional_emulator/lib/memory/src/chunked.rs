@@ -55,28 +55,30 @@ pub async fn gather_with_window(
     reads: Vec<ChunkRead>,
     window: Option<usize>,
 ) -> Vec<u8> {
-    if let Some(w) = window { assert!((1..=64).contains(&w)); }
+    if let Some(w) = window {
+        assert!((1..=64).contains(&w));
+    }
     let mut out = vec![0u8; total_len];
     let batch = window.unwrap_or(reads.len().max(1));
     for group in reads.chunks(batch) {
-    let futures = group.iter().map(|r| {
-        // A single read cannot span more than the 64-byte block it lands in.
-        debug_assert!(r.len <= 64, "ChunkRead::len {} exceeds 64", r.len);
-        let hbm = hbm.clone();
-        async move {
-            let aligned = (r.addr / 64) * 64;
-            let within = (r.addr % 64) as usize;
-            let block = hbm.read(aligned).await;
-            let end = std::cmp::min(within + r.len, 64);
-            let n = end - within;
-            let mut buf = [0u8; 64];
-            buf[..n].copy_from_slice(&block[within..end]);
-            (r.dst_offset, buf, n)
+        let futures = group.iter().map(|r| {
+            // A single read cannot span more than the 64-byte block it lands in.
+            debug_assert!(r.len <= 64, "ChunkRead::len {} exceeds 64", r.len);
+            let hbm = hbm.clone();
+            async move {
+                let aligned = (r.addr / 64) * 64;
+                let within = (r.addr % 64) as usize;
+                let block = hbm.read(aligned).await;
+                let end = std::cmp::min(within + r.len, 64);
+                let n = end - within;
+                let mut buf = [0u8; 64];
+                buf[..n].copy_from_slice(&block[within..end]);
+                (r.dst_offset, buf, n)
+            }
+        });
+        for (offset, data, n) in join_all(futures).await {
+            out[offset..offset + n].copy_from_slice(&data[..n]);
         }
-    });
-    for (offset, data, n) in join_all(futures).await {
-        out[offset..offset + n].copy_from_slice(&data[..n]);
-    }
     }
     out
 }
@@ -207,13 +209,24 @@ mod tests {
                 panic!("gather must never issue writes")
             }
         }
-        let tracked = Arc::new(Outstanding { active: AtomicUsize::new(0), peak: AtomicUsize::new(0) });
+        let tracked = Arc::new(Outstanding {
+            active: AtomicUsize::new(0),
+            peak: AtomicUsize::new(0),
+        });
         let hbm: Arc<dyn ErasedMemoryModel> = tracked.clone();
-        let reads = (0..4).map(|i| ChunkRead { addr: i*64, dst_offset: (3-i) as usize*64, len:64 }).collect();
+        let reads = (0..4)
+            .map(|i| ChunkRead {
+                addr: i * 64,
+                dst_offset: (3 - i) as usize * 64,
+                len: 64,
+            })
+            .collect();
         let out = gather_with_window(&hbm, 256, reads, Some(3)).await;
         assert_eq!(tracked.peak.load(Ordering::SeqCst), 3);
         assert_eq!(tracked.active.load(Ordering::SeqCst), 0);
-        for i in 0..4 { assert_eq!(&out[i*64..(i+1)*64], &[3-i as u8;64]); }
+        for i in 0..4 {
+            assert_eq!(&out[i * 64..(i + 1) * 64], &[3 - i as u8; 64]);
+        }
     }
 
     #[tokio::test]

@@ -213,6 +213,9 @@ impl Accelerator {
                 | op::LTilePrimitive::DecayReduceAcc
                 | op::LTilePrimitive::ReduceWrite
                 | op::LTilePrimitive::ResidualWrite
+                | op::LTilePrimitive::NativeDeltaUpdate
+                | op::LTilePrimitive::NativeReduceAcc
+                | op::LTilePrimitive::NativeDecayReduceAcc
         ) || (args.primitive == op::LTilePrimitive::DeltaUpdate
             && std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1"))
         {
@@ -508,7 +511,12 @@ impl Accelerator {
             let executed_pc = pc;
             let op = &ops[pc];
             if timing::execution_counters().enabled {
-                if matches!(op, op::Opcode::M_MV { .. } | op::Opcode::M_MV_WO { .. }) {
+                if matches!(
+                    op,
+                    op::Opcode::M_MV { .. }
+                        | op::Opcode::M_MV_WO { .. }
+                        | op::Opcode::M_MM_P { .. }
+                ) {
                     assert!(
                         crate::matrix_service::PROFILE.is_some(),
                         "unified Matrix execution requires PLENA_MATRIX_SERVICE_PROFILE"
@@ -567,9 +575,11 @@ impl Accelerator {
                                 lmask: 0,
                                 ..
                             }
+                            | op::Opcode::M_MM_P { .. }
                             | op::Opcode::M_MV { view: Some(_), .. }
                             | op::Opcode::M_MV_WO { .. }
                             | op::Opcode::L_TILE_CFG { .. }
+                            | op::Opcode::L_TILE_CCFG { .. }
                             | op::Opcode::L_TILE_EXEC { .. }
                             | op::Opcode::H_PREFETCH_V { .. }
                             | op::Opcode::H_STORE_V { .. }
@@ -718,6 +728,24 @@ impl Accelerator {
                         .mm_with_view(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
+                            view,
+                        )
+                        .await;
+                }
+                op::Opcode::M_MM_P {
+                    rd,
+                    rs1,
+                    rs2,
+                    rs3,
+                    view,
+                } => {
+                    let view = self.resolve_matrix_view(Some(*view), pc).unwrap();
+                    self.m_machine
+                        .projection_panel(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs3),
                             view,
                         )
                         .await;
@@ -1551,6 +1579,13 @@ impl Accelerator {
                         });
                     cycle!(1);
                 }
+                op::Opcode::L_TILE_CCFG { low, high, slot } => {
+                    let word = u64::from(self.reg_file.read_gp(*low))
+                        | (u64::from(self.reg_file.read_gp(*high)) << 32);
+                    self.native_coeff[*slot as usize] =
+                        Some(super::native_coeff::CoefficientView::unpack(word));
+                    cycle!(1);
+                }
                 op::Opcode::L_TILE_CFG {
                     shape,
                     mapping,
@@ -2181,6 +2216,7 @@ impl Accelerator {
 fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
     match op {
         op::Opcode::M_MM { .. }
+        | op::Opcode::M_MM_P { .. }
         | op::Opcode::M_TMM { .. }
         | op::Opcode::M_BMM { .. }
         | op::Opcode::M_BTMM { .. }
@@ -2245,6 +2281,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::L_CFG { .. }
         | op::Opcode::L_TILE_CFG { .. }
+        | op::Opcode::L_TILE_CCFG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
