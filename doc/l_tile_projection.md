@@ -98,6 +98,73 @@ HBM images. The small result archive does not contain model weights or raw HBM
 images, so it is not a self-contained substitute for those numerical fixtures.
 Synthetic checks and analytical sweeps work without them.
 
+## Projection mapping and reduction study
+
+The next projection study separates two changes. Both keep the recurrent
+arithmetic, SRAM capacities, DMA credits and BF16 K256 rounding contract fixed.
+
+**Compiler-only K/N panel tiling.** `projection_n_panel_tile=1/2/4/8` selects
+the number of N32 panels that share a K2048 input chunk. The Compiler retains
+one output row per request, loads each weight packet once, and reuses each
+uncached input chunk across the selected output panels. At most 64 K256xN32
+views occupy the existing 1 MiB Matrix SRAM. No additional hardware is needed
+relative to the existing M_MM.P candidate. The original schedule remains a
+candidate: larger panel groups can worsen DRAM locality when all inputs already
+fit. This full-SRAM projection schedule does not assume simultaneous resident
+recurrent state or concurrent projection/recurrence execution.
+
+**Fixed reduction segments.** `matrix.projection_segments=2/4` is a distinct
+hardware candidate, not a Compiler-only gain. A K256 packet uses only 64 of the
+256 four-by-four mini-arrays in the current K1024 reduction geometry. Fixed
+segments assign different N4 outputs to otherwise unused groups while sharing
+the input. Four segments produce N16 per wave instead of N4; an N32 packet
+therefore takes two waves instead of eight. The multiplier count remains 4096.
+The segment count is a static candidate implementation parameter. The same
+M_MM.P machine code runs on each candidate; this experiment does not implement
+a new instruction for arbitrary runtime switching between segment counts.
+
+Each segment keeps the original local accumulation and BF16 tree order. Its
+root is selected into the existing upper tree, with unused operands zeroed,
+and traverses the original upper levels serially. The model retains these
+zero-add rounding operations rather than substituting a different dot product.
+The final per-request BF16 output merge also remains unchanged.
+
+The candidate explicitly charges operand-latch bandwidth, two distribution
+cycles per wave, two selection and two collection cycles per root, and the
+serialized upper-tree arithmetic. It assumes no overlap between waves. Matrix
+bank reads, Vector input reads and output read-modify-write remain explicit.
+Four 4x4 BF16 roots require 128 bytes of new capture storage, plus unpriced
+tags, masks, selection, broadcast and control logic. Existing 16 KiB replay,
+4 KiB row transfer, 2 KiB compact inputs and 256-byte result storage remain;
+the common Matrix operand latches are a further 8 KiB on each input side.
+This is a capacity inventory, not an area or power result. The routing delay
+and its effect on the original full-width Matrix path still require RTL checks.
+
+This study does not establish a globally optimal Matrix architecture. The
+original PLENA paper already describes PE-local output stationarity and long-K
+accumulation. The local RTL checked at `2c5a5f4` uses a small MXINT/E6M5 test
+configuration and a fixed-point accumulator; it does not certify this BF16
+K1024 profile or bubble-free tile throughput. The default K256 BF16 execution
+contract is a controlled research reference, not the best proven original
+PLENA implementation. Long-K accumulation and projection precision therefore
+remain separate comparisons.
+
+WS, IS and OS need not be mutually exclusive hardware modes: weights are
+reused across requests in Matrix SRAM, inputs across output panels in Vector
+SRAM, and partial results within the Matrix/Vector execution contract. The
+Compiler selects bounded loops for the actual shape and effective batch;
+for MoE that is the expert's token count. A generic mode-switching network is
+not justified by this experiment.
+
+Relevant prior work includes [PLENA](https://arxiv.org/html/2509.09505v2),
+[LoopTree](https://arxiv.org/abs/2409.13625),
+[HLX](https://doi.org/10.1145/3725843.3756115), and
+[MAERI](https://anands09.github.io/papers/maeri_asplos2018.pdf).
+Tiling, hybrid support, fusion and segmented reduction alone are not new claims.
+The research question is whether a bounded mapping between batch-shared
+projection weights and request-private recurrent state improves the complete
+sublayer without expensive operand materialization or sacrificing weight reuse.
+
 ## Next work, not claimed as implemented
 
 1. Establish the best legal original Matrix and ordinary Vector baseline.

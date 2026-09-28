@@ -54,6 +54,42 @@ def test_batch_packet_shares_arithmetic_but_preserves_per_request_merges():
     assert one.accesses["matrix_bank_words"] == four.accesses["matrix_bank_words"] == 256
 
 
+@pytest.mark.parametrize("batch,segments,arithmetic,sram,dependency", [
+    (1, 1, 256, 23, 0), (1, 2, 144, 15, 40), (1, 4, 100, 13, 36),
+    (4, 1, 304, 32, 0), (4, 2, 192, 24, 40), (4, 4, 148, 24, 36),
+])
+def test_fixed_segments_charge_finite_supply_full_tree_and_serial_merges(
+    batch, segments, arithmetic, sram, dependency
+):
+    h = MatrixService(projection_segments=segments)
+    cost = assembly_cost(_packet(batch), matrix_service=h)
+    assert (cost.arithmetic, cost.sram, cost.dependency) == (arithmetic, sram, dependency)
+    assert cost.accesses["matrix_bank_words"] == 256
+    assert cost.accesses["vector_read_rows"] == 2 * batch
+    assert cost.accesses["vector_write_rows"] == batch
+    assert h.resources()["multipliers"] == 4096
+    if segments > 1:
+        assert h.projection_resources()["segment_root_hold_bytes"] == 32 * segments
+
+
+def test_segments_do_not_speed_legacy_mv_and_reject_unsupported_geometry():
+    prefix = _packet().rsplit("M_MM.P", 1)[0]
+    text = prefix + "M_MV 0, gp2, gp3, 0\nM_MV_WO gp1, 0\n"
+    for replay in (False, True):
+        baseline = assembly_cost(text, matrix_service=MatrixService(weight_replay=replay))
+        for segments in (2, 4):
+            candidate = assembly_cost(
+                text, matrix_service=MatrixService(weight_replay=replay, projection_segments=segments)
+            )
+            assert candidate.components() == baseline.components()
+            assert candidate.accesses == baseline.accesses
+    for segments in (0, 3, 8, True):
+        with pytest.raises(ValueError):
+            MatrixService(projection_segments=segments)
+    with pytest.raises(ValueError, match="K256"):
+        MatrixService(reduction_lanes=512, projection_segments=4)
+
+
 def test_narrow_ports_and_feedback_reduce_the_candidate_throughput():
     asm = _packet(4)
     h = MatrixService()

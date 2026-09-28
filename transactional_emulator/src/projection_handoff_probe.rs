@@ -78,6 +78,7 @@ fn hardware() -> MatrixService {
         vector_capacity_bytes: 262144,
         accumulator: "BF16".into(),
         weight_replay: true,
+        projection_segments: 1,
     }
 }
 fn weights(tag: Tag) -> Vec<f32> {

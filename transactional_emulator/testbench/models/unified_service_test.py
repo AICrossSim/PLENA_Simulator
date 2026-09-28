@@ -27,7 +27,10 @@ def profile_for(memory):
     return ExecutionProfile(hbm_controllers=len(config["memory_system"]["controllers"]))
 
 
-def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=None, n_panel_tile=1):
+def matrix_case(
+    root, runtime, memory, b, k, n, *, resident=False, compact_tile=None,
+    n_panel_tile=1, projection_segments=1,
+):
     rng = np.random.default_rng(3107 + b + k + n)
     arena = Arena()
     zero = arena.add(np.zeros(2048))
@@ -42,7 +45,9 @@ def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=
     spec = replace(spec, inputs=inputs[0], weights=weights, outputs=outputs[0], zero=zero)
     if compact_tile is not None:
         h = replace(h, projection_schedule="batch" if compact_tile == 4 else "compact")
-        h = replace(h, matrix=replace(h.matrix, weight_replay=True))
+        h = replace(h, matrix=replace(
+            h.matrix, weight_replay=True, projection_segments=projection_segments
+        ))
         assembly = lower_compact_projection(
             spec, inputs, outputs, batch_tile=compact_tile, n_panel_tile=n_panel_tile
         )
@@ -60,7 +65,10 @@ def matrix_case(root, runtime, memory, b, k, n, *, resident=False, compact_tile=
     return dict(
         case=root.name,
         **result,
-        dimensions=dict(batch=b, k=k, n=n, batch_tile=compact_tile, n_panel_tile=n_panel_tile),
+        dimensions=dict(
+            batch=b, k=k, n=n, batch_tile=compact_tile, n_panel_tile=n_panel_tile,
+            projection_segments=projection_segments,
+        ),
         checked_values=b * n,
         status="passed",
         scope=("M_MM.P replay/slicing, distinct private requests, tail K/N, BF16 partial sums"
@@ -426,7 +434,13 @@ def main():
         "--only", default="all",
         choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel"),
     )
+    p.add_argument("--segments", nargs="+", type=int, choices=(1, 2, 4), default=[1],
+                   help="Candidate M_MM.P segments for --only panel; default preserves the original path")
     args = p.parse_args()
+    if len(set(args.segments)) != len(args.segments):
+        p.error("--segments must not repeat values")
+    if args.segments != [1] and args.only not in ("panel", "all"):
+        p.error("--segments applies only to --only panel/all")
     args.output.mkdir(parents=True, exist_ok=True)
     results = []
     jobs = [
@@ -472,13 +486,15 @@ def main():
     ] + [(2, 2305, 97, 1, 4), (16, 6145, 289, 4, 8), (2, 257, 2051, 4, 8)]
     panel = [
         (
-            f"panel_b{b}_k{k}_n{n}_tile{tile}_panels{panels}",
-            lambda d, b=b, k=k, n=n, tile=tile, panels=panels: matrix_case(
+            f"panel_b{b}_k{k}_n{n}_tile{tile}_panels{panels}"
+            + (f"_s{segments}" if segments != 1 else ""),
+            lambda d, b=b, k=k, n=n, tile=tile, panels=panels, segments=segments: matrix_case(
                 d, args.runtime, args.memory_root, b, k, n,
-                compact_tile=tile, n_panel_tile=panels,
+                compact_tile=tile, n_panel_tile=panels, projection_segments=segments,
             ),
         )
         for b, k, n, tile, panels in panel_shapes
+        for segments in args.segments
     ]
     groups = {
         "all": jobs + auxiliary + attention + experts + resident + projection + panel,

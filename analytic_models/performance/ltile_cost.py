@@ -595,7 +595,7 @@ def assembly_cost(
                 replay = h.replay_cost(view.rows, 1, cycles, words, partial_writeback=False)
                 cost.sram += replay["sram"]
                 cost.arithmetic += replay["arithmetic"]
-                cost.accesses.update({k: v for k, v in replay.items() if k not in ("sram", "arithmetic")})
+                cost.accesses.update({k: v for k, v in replay.items() if k not in ("sram", "arithmetic", "dependency")})
                 pc += 1
                 continue
             # Four output columns share one bank word. Re-read for each group;
@@ -638,7 +638,8 @@ def assembly_cost(
             replay = h.replay_cost(view.rows, rows, cycles, words, partial_writeback=True)
             cost.sram += replay["sram"]
             cost.arithmetic += replay["arithmetic"]
-            cost.accesses.update({k: v for k, v in replay.items() if k not in ("sram", "arithmetic")})
+            cost.dependency += replay["dependency"]
+            cost.accesses.update({k: v for k, v in replay.items() if k not in ("sram", "arithmetic", "dependency")})
         elif op == "M_MV_WO":
             if matrix_service is None or len(args) != 2:
                 raise ValueError("Matrix writeout requires explicit bounded service")

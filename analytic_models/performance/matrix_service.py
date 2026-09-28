@@ -26,6 +26,9 @@ class MatrixService:
     # Opt-in local payload retention; the historical M_MV reread schedule is
     # unchanged by default. This is a candidate finite buffer, not free reuse.
     weight_replay: bool = False
+    # Candidate fixed partition of the existing reduction mini-arrays. This
+    # only changes M_MM.P; legacy M_MV retains its complete reduction path.
+    projection_segments: int = 1
 
     def __post_init__(self):
         integers = {k: v for k, v in asdict(self).items() if k not in ("accumulator", "weight_replay")}
@@ -39,6 +42,12 @@ class MatrixService:
             raise ValueError("explicit BF16 or FP32 accumulator required")
         if type(self.weight_replay) is not bool:
             raise ValueError("weight_replay must be an explicit boolean")
+        if self.projection_segments not in (1, 2, 4):
+            raise ValueError("projection_segments must be 1, 2 or 4")
+        if self.projection_segments > 1 and (
+            self.edge != 4 or self.reduction_lanes // self.projection_segments < 256
+        ):
+            raise ValueError("projection segments need four request rows and K256 capacity per segment")
         if self.operand_bytes > self.matrix_capacity_bytes:
             raise ValueError("weight tile exceeds Matrix SRAM")
         if self.operand_bytes + self.edge**2 * 2 > self.vector_capacity_bytes:
@@ -78,11 +87,10 @@ class MatrixService:
             + self.tree_add_latency
         )
 
-    @staticmethod
-    def projection_resources():
+    def projection_resources(self):
         # M_MM.P requires these finite resources even when legacy M_MV replay
         # is disabled. SRAM capacity is unchanged; these are local latches.
-        return dict(
+        resources = dict(
             weight_replay_bytes=256 * 32 * 2,
             vector_row_transfer_bytes=2048 * 2,
             compact_input_bytes=4 * 256 * 2,
@@ -90,6 +98,18 @@ class MatrixService:
             payload_bytes=256 * 32 * 2 + 2048 * 2 + 4 * 256 * 2 + 4 * 32 * 2,
             metadata_and_selection="additional; not included in payload bytes",
         )
+        if self.projection_segments > 1:
+            root_bytes = self.projection_segments * self.edge**2 * 2
+            resources.update(
+                projection_segments=self.projection_segments,
+                segment_root_hold_bytes=root_bytes,
+                payload_bytes=resources["payload_bytes"] + root_bytes,
+                segment_distribution_cycles_per_wave=2,
+                segment_root_select_cycles=2,
+                segment_collection_cycles=2,
+                segmentation_cost="fixed operand selection, root capture, tags/masks and upper-tree muxes; area unmeasured",
+            )
+        return resources
 
     def replay_cost(self, k, batch, matrix_cycles, bank_words, *, partial_writeback):
         """One bounded K-by-32 panel, including finite latch feed bandwidth.
@@ -105,23 +125,38 @@ class MatrixService:
         if self.accumulator != "BF16":
             raise ValueError("projection replay requires the BF16 accumulation contract")
         groups = 32 // self.edge
+        segments = self.projection_segments if partial_writeback else 1
+        if k > self.reduction_lanes // segments:
+            raise ValueError("projection K exceeds a segment's reduction capacity")
+        waves = groups // segments
         preload = max(matrix_cycles, ceil(bank_words * 32 / self.matrix_read_elements))
         inputs = batch * ceil(2048 / self.vector_read_elements)
-        feed = groups * (
-            ceil(k * self.edge / self.matrix_read_elements)
-            + ceil(batch * k / self.vector_read_elements)
+        feed = waves * (
+            ceil(segments * k * self.edge / self.matrix_read_elements)
+            + ceil(segments * batch * k / self.vector_read_elements)
         )
         write = batch * (
             ceil(2048 / self.vector_read_elements) + ceil(2048 / self.vector_write_elements)
         ) if partial_writeback else 0
+        arithmetic = groups * (
+            self.arithmetic_cycles() - self.tree_add_latency
+            + batch * self.tree_add_latency
+        ) if partial_writeback else groups * self.arithmetic_cycles()
+        if segments > 1:
+            array = 2 * (self.edge - 1) + (self.edge - 1) * max(self.mac_ii, self.mac_latency) + self.mac_latency
+            # Independent lower trees run together. Each root then traverses
+            # the old upper levels serially with +0, preserving every BF16
+            # rounding boundary of the complete numerical reduction.
+            arithmetic = waves * (
+                array + int(log2(self.groups // segments)) * self.tree_add_latency
+                + segments * int(log2(segments)) * self.tree_add_latency
+            ) + groups * batch * self.tree_add_latency
         return dict(
             sram=preload + inputs + feed + write,
             # The one full Vector-row latch serializes each request's final
             # BF16 partial merge. The array computes all active rows together.
-            arithmetic=groups * (
-                self.arithmetic_cycles() - self.tree_add_latency
-                + batch * self.tree_add_latency
-            ) if partial_writeback else groups * self.arithmetic_cycles(),
+            arithmetic=arithmetic,
+            dependency=waves * (2 + segments * (2 + 2)) if segments > 1 else 0,
             matrix_bank_words=bank_words,
             vector_read_rows=batch * (2 if partial_writeback else 1),
             vector_write_rows=batch if partial_writeback else 0,

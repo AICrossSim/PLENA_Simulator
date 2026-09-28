@@ -25,6 +25,13 @@ pub(crate) struct MatrixService {
     /// Opt-in finite 16 KiB BF16 weight replay; legacy M_MV stays unchanged.
     #[serde(default)]
     pub weight_replay: bool,
+    /// Fixed candidate partitions of existing mini-arrays, M_MM.P only.
+    #[serde(default = "one_segment")]
+    pub projection_segments: u32,
+}
+
+fn one_segment() -> u32 {
+    1
 }
 
 pub(crate) static PROFILE: LazyLock<Option<MatrixService>> = LazyLock::new(|| {
@@ -56,6 +63,11 @@ impl MatrixService {
             .all(|&n| n > 0)
         );
         assert!(matches!(self.accumulator.as_str(), "BF16" | "FP32"));
+        assert!(matches!(self.projection_segments, 1 | 2 | 4));
+        if self.projection_segments > 1 {
+            assert_eq!(self.edge, 4);
+            assert!(self.reduction_lanes / self.projection_segments >= 256);
+        }
         let bytes = u64::from(self.edge) * u64::from(self.reduction_lanes) * 2;
         assert!(bytes <= u64::from(self.matrix_capacity_bytes));
         assert!(bytes + u64::from(self.edge).pow(2) * 2 <= u64::from(self.vector_capacity_bytes));
@@ -66,6 +78,35 @@ impl MatrixService {
     pub fn replay_feed_cycles(&self, rows: u32, requests: u32) -> u32 {
         (rows * self.edge).div_ceil(self.matrix_read_elements)
             + (rows * requests).div_ceil(self.vector_read_elements)
+    }
+
+    pub fn projection_feed_cycles(&self, rows: u32, requests: u32) -> u32 {
+        assert!(rows <= self.reduction_lanes / self.projection_segments);
+        (self.projection_segments * rows * self.edge).div_ceil(self.matrix_read_elements)
+            + (self.projection_segments * rows * requests).div_ceil(self.vector_read_elements)
+    }
+
+    /// All segments run lower trees together; roots traverse the original
+    /// upper levels serially with +0. Previous-output merges are separate.
+    pub fn projection_arithmetic_cycles(&self) -> u32 {
+        let segments = self.projection_segments;
+        if segments == 1 {
+            return self.arithmetic_cycles() - self.tree_add_latency;
+        }
+        2 * (self.edge - 1)
+            + (self.edge - 1) * self.mac_ii.max(self.mac_latency)
+            + self.mac_latency
+            + (self.reduction_lanes / self.edge / segments).ilog2() * self.tree_add_latency
+            + segments * segments.ilog2() * self.tree_add_latency
+    }
+
+    /// Finite distribution, root selection and collection, without overlap.
+    pub fn projection_dependency_cycles(&self) -> u32 {
+        if self.projection_segments == 1 {
+            0
+        } else {
+            2 + self.projection_segments * (2 + 2)
+        }
     }
 
     pub fn rounded(&self, value: f32) -> f32 {
@@ -150,6 +191,7 @@ mod tests {
             vector_capacity_bytes: 1024,
             accumulator: "BF16".into(),
             weight_replay: false,
+            projection_segments: 1,
         }
     }
     #[test]
@@ -185,5 +227,38 @@ mod tests {
         let fast = h.arithmetic_cycles();
         h.mac_latency = 4;
         assert_eq!(h.arithmetic_cycles() - fast, 8);
+    }
+
+    #[test]
+    fn segmented_projection_retains_full_numerical_tree_and_serial_collection() {
+        let mut h = hardware();
+        h.reduction_lanes = 1024;
+        h.matrix_capacity_bytes = 1024 * 1024;
+        h.vector_capacity_bytes = 256 * 1024;
+        h.matrix_read_elements = 2048;
+        h.vector_read_elements = 2048;
+        h.vector_write_elements = 2048;
+        let x = (0..251)
+            .map(|i| (i as f32 - 123.0) / 64.0)
+            .collect::<Vec<_>>();
+        let w = (0..251)
+            .map(|i| ((i * 7 % 31) as f32 - 16.0) / 32.0)
+            .collect::<Vec<_>>();
+        let expected = h.column(&x, &w, 0.125).to_bits();
+        let expected_wave_cycles = [(1, 30, 0), (2, 32, 10), (4, 42, 18)];
+        for (segments, arithmetic, dependency) in expected_wave_cycles {
+            h.projection_segments = segments;
+            h.validate();
+            assert_eq!(h.projection_arithmetic_cycles(), arithmetic);
+            assert_eq!(h.projection_dependency_cycles(), dependency);
+            assert_eq!(h.column(&x, &w, 0.125).to_bits(), expected);
+            assert_eq!(h.arithmetic_cycles(), 32);
+        }
+        h.projection_segments = 4;
+        assert!(std::panic::catch_unwind(|| h.projection_feed_cycles(257, 4)).is_err());
+        for segments in [0, 3, 8] {
+            h.projection_segments = segments;
+            assert!(std::panic::catch_unwind(|| h.validate()).is_err());
+        }
     }
 }

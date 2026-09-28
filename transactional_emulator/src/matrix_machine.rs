@@ -843,6 +843,7 @@ impl MatrixMachine {
     ) {
         self.validate_replay(view, profile);
         let config = crate::matrix_service::ProjectionConfig::decode(config);
+        assert!(view.shape.rows <= profile.reduction_lanes / profile.projection_segments);
         assert!(
             input.is_multiple_of(256),
             "panel input must select a fixed K256 slice"
@@ -904,23 +905,24 @@ impl MatrixMachine {
             inputs.push(value[offset as usize..offset as usize + rows].to_vec());
         }
         let mut sums = vec![vec![0_f32; 32]; requests]; // <=256 BF16 bytes
-        for col in (0..32).step_by(4) {
+        let columns_per_wave = 4 * profile.projection_segments as usize;
+        for col in (0..32).step_by(columns_per_wave) {
             crate::timing::charge_bank_cycles(u64::from(
-                profile.replay_feed_cycles(view.shape.rows, config.requests),
+                profile.projection_feed_cycles(view.shape.rows, config.requests),
             ))
             .await;
             for request in 0..requests {
-                for j in col..col + 4 {
+                for j in col..col + columns_per_wave {
+                    // Keep the full old numerical tree, including zero upper
+                    // levels; segments change supply/scheduling, not rounding.
                     sums[request][j] =
                         profile.column(&inputs[request], &weights[j * rows..(j + 1) * rows], 0.0);
                 }
             }
             // Existing mini-array rows compute up to four requests together.
             // The last previous-output merge is charged below at actual RMW.
-            crate::timing::charge_arithmetic_cycles(
-                profile.arithmetic_cycles() - profile.tree_add_latency,
-            )
-            .await;
+            crate::timing::charge_arithmetic_cycles(profile.projection_arithmetic_cycles()).await;
+            crate::timing::charge_dependency_cycles(profile.projection_dependency_cycles()).await;
         }
         for (request, &dst) in output_addresses.iter().enumerate() {
             let (row, offset) = multiple_and_offset(dst, self.mlen);
@@ -1235,6 +1237,7 @@ mod tests {
             vector_capacity_bytes: 256 * 1024,
             accumulator: "BF16".into(),
             weight_replay: replay,
+            projection_segments: 1,
         }
     }
 
