@@ -230,3 +230,7 @@ PLENA_Simulator/
 ├── plena_settings.toml      # Main configuration file
 └── justfile                 # Command shortcuts
 ```
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
