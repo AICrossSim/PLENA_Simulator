@@ -122,7 +122,11 @@ fn independent_scalar_op() -> op::Opcode {
 }
 
 fn matrix_plus_scalars(scalars: usize) -> Vec<op::Opcode> {
-    let mut ops = vec![op::Opcode::M_MM { rs1: 1, rs2: 2 }];
+    let mut ops = vec![op::Opcode::M_MM {
+        rs1: 1,
+        rs2: 2,
+        view: None,
+    }];
     for _ in 0..scalars {
         ops.push(independent_scalar_op());
     }
@@ -188,6 +192,7 @@ async fn serialize_mode_reproduces_serial_cycle_counts() {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            view_mask: 0,
         });
         ops
     };
@@ -244,6 +249,7 @@ fn prefetch_program(independent: usize, dependent: bool) -> Vec<op::Opcode> {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            view_mask: 0,
         });
     }
     if dependent {
@@ -253,6 +259,7 @@ fn prefetch_program(independent: usize, dependent: bool) -> Vec<op::Opcode> {
             rs1: 4,
             rs2: 4,
             rmask: 0,
+            view_mask: 0,
         });
     }
     ops
@@ -354,6 +361,7 @@ fn store_program(independent: usize) -> Vec<op::Opcode> {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            view_mask: 0,
         },
     ];
     for _ in 0..independent {
@@ -362,6 +370,7 @@ fn store_program(independent: usize) -> Vec<op::Opcode> {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            view_mask: 0,
         });
     }
     ops
@@ -405,12 +414,21 @@ async fn async_store_overlaps_and_snapshots_against_war() {
 #[tokio::test]
 async fn back_to_back_matrix_ops_serialize_on_the_matrix_unit() {
     let ops = vec![
-        op::Opcode::M_MM { rs1: 1, rs2: 2 },
-        op::Opcode::M_MM { rs1: 1, rs2: 2 },
+        op::Opcode::M_MM {
+            rs1: 1,
+            rs2: 2,
+            view: None,
+        },
+        op::Opcode::M_MM {
+            rs1: 1,
+            rs2: 2,
+            view: None,
+        },
         op::Opcode::M_MM_WO {
             rd: 1,
             rstride: 0,
             imm: 0,
+            view: None,
         },
     ];
     let pipelined = run_program(ops, RunMode::Scoreboard, vec![]).await;

@@ -2,6 +2,8 @@
 
 use half::bf16;
 
+use super::matrix_view::{MatrixViewDescriptor, MatrixViewTable};
+
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
     gp_reg: [u32; 16],
@@ -21,10 +23,16 @@ pub(super) struct AcceleratorRegFile {
     /// `topk > 0` — the program would abort with "topk must be positive", which
     /// says nothing about the missing `C_SET_TOPK_REG`.
     topk_policy: Option<u32>,
+    mviews: MatrixViewTable,
 }
 
 impl AcceleratorRegFile {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
+        Self::new_with_matrix(16, 1)
+    }
+
+    pub(super) fn new_with_matrix(banks: u32, bank_width: u32) -> Self {
         Self {
             gp_reg: [0; 16],
             fp_reg: [bf16::ZERO; 8],
@@ -36,6 +44,7 @@ impl AcceleratorRegFile {
             bmm_scale: 0.25,
             v_mask: 0,
             topk_policy: None,
+            mviews: MatrixViewTable::new(banks, bank_width),
         }
     }
 
@@ -116,6 +125,23 @@ impl AcceleratorRegFile {
     pub(super) fn topk_policy(&self) -> Option<(usize, usize)> {
         self.topk_policy
             .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
+    }
+
+    pub(super) fn configure_mview(
+        &mut self,
+        slot: u8,
+        shape_register: u8,
+        map_register: u8,
+    ) -> Result<(), String> {
+        self.mviews.configure(
+            slot,
+            self.read_gp(shape_register),
+            self.read_gp(map_register),
+        )
+    }
+
+    pub(super) fn matrix_view(&self, slot: u8) -> Result<MatrixViewDescriptor, String> {
+        self.mviews.get(slot)
     }
 
     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP
