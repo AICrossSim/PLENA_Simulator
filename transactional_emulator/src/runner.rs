@@ -145,8 +145,10 @@ pub(crate) async fn run_from_cli() {
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
+    let dram = ramulator::Ramulator::hbm2_preset(8).unwrap();
+    assert_clock_relationship(&dram);
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(dram),
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
@@ -318,5 +320,41 @@ pub(crate) async fn run_from_cli() {
         memory_stats.total_bytes_read,
         memory_stats.total_bytes_written,
         utilization
+    );
+}
+
+/// State the accelerator clock and its relationship to the DRAM model's, at
+/// startup, instead of letting the two coincide silently.
+///
+/// `stage_profile.rs` already recorded the hazard: a cycle-domain comparison
+/// there "only held because the DRAM tCK happened to equal PERIOD; any preset or
+/// frequency change made it fail". Equal is what the HBM2 preset gives -- 2000
+/// MBPS is a 1 ns command clock, and `CLOCK_PERIOD_PS` defaults to 1000 -- but
+/// that is a property of this preset and this default, not of the design.
+///
+/// The relationship required is that the DRAM period is a whole multiple of the
+/// accelerator period, in either direction. Anything else means a DRAM tick and
+/// an accelerator cycle do not line up on any boundary, and every cycle count
+/// derived by dividing one by the other is off by a fraction nothing reports.
+fn assert_clock_relationship(dram: &ramulator::Ramulator) {
+    let accel_ps = crate::runtime_config::PERIOD.as_picos().max(1);
+    let dram_ps = dram.period().as_picos().max(1);
+    let (hi, lo) = if dram_ps >= accel_ps {
+        (dram_ps, accel_ps)
+    } else {
+        (accel_ps, dram_ps)
+    };
+    assert!(
+        hi % lo == 0,
+        "accelerator clock is {accel_ps} ps ({:.3} GHz, from CLOCK_PERIOD_PS) and the \
+         DRAM model's is {dram_ps} ps; neither divides the other, so ticks never line \
+         up and any cycle count derived from both is off by a fraction nothing reports",
+        1e3 / accel_ps as f64,
+    );
+    println!(
+        "Clock: {accel_ps} ps ({:.3} GHz) from CLOCK_PERIOD_PS -- an assumption, not a \
+         synthesised frequency. DRAM model: {dram_ps} ps ({}x).",
+        1e3 / accel_ps as f64,
+        hi / lo,
     );
 }

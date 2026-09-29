@@ -108,6 +108,19 @@ pub enum Opcode {
         rs2: u8,
         rmask: u8,
     },
+    /// `Vector[rd] += Vector[rs1] * fp_reg<rs2>` -- fused broadcast multiply-add.
+    ///
+    /// Unlike every other V-type op, `rd` is **read** as well as written. That
+    /// is the whole point: it collapses the `copy + multiply + add` triple that
+    /// a rank-1 state update or a state contraction otherwise costs, and by
+    /// removing the scratch row it lets a whole key sweep become one arithmetic
+    /// row progression -- which the compiler turns into a hardware loop.
+    V_FMA_VF {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
     V_MAX_VF {
         rd: u8,
         rs1: u8,
@@ -161,6 +174,20 @@ pub enum Opcode {
         rs1: u8,
         rmask: u8,
     },
+    /// `V_SOFTPLUS_V rd, rs1, rmask` — elementwise `log(1 + exp(x))` over one VLEN tile.
+    ///
+    /// Mamba/Mamba-2 needs `dt = softplus(dt_raw + dt_bias)` on the critical path of a
+    /// multiplicative recurrence, and the ISA has no logarithm, so there is no exact
+    /// software lowering. Evaluated as the range-safe identity
+    /// `softplus(x) = relu(x) + log1p(exp(-|x|))`, which is what the RTL is expected to
+    /// implement: it never evaluates `exp` on a positive argument, so it cannot overflow
+    /// for any finite input. `rmask` follows the usual masked-vector convention (0 = whole
+    /// tile, otherwise the per-head bitmask in `V_MASK`).
+    V_SOFTPLUS_V {
+        rd: u8,
+        rs1: u8,
+        rmask: u8,
+    },
     S_ADD_FP {
         rd: u8,
         rs1: u8,
@@ -204,6 +231,19 @@ pub enum Opcode {
         imm: u32,
     },
     S_MAP_V_FP {
+        rd: u8,
+        rs1: u8,
+        imm: u32,
+    },
+    /// `S_MAP_FP_V rd, rs1, imm` — the exact inverse of `S_MAP_V_FP`.
+    ///
+    /// Copies one VLEN-wide Vector SRAM row at `gp[rs1]` into VLEN consecutive FP_MEM
+    /// slots starting at `gp[rd] + imm`. Before this existed the only VRAM-to-scalar path
+    /// was `V_RED_SUM`/`V_RED_MAX`, which collapse the whole row, so extracting a single
+    /// lane cost a one-hot `V_MUL_VV` + `V_RED_SUM` + `S_ST_FP` triple. Mamba-2's chunked
+    /// scan needs one broadcast scalar per row (`cs_i`, `exp(cs_C - cs_t)`, `exp(cs_i)`),
+    /// which made that the dominant instruction cost of the whole kernel.
+    S_MAP_FP_V {
         rd: u8,
         rs1: u8,
         imm: u32,
@@ -524,6 +564,20 @@ impl Opcode {
             // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
             // masked vector ops above.
             0x38 => Self::C_SET_TOPK_REG { rd },
+            // Mamba / selective-SSM extensions. Encodings must stay in sync with
+            // PLENA_Compiler's doc/operation.svh and assembler/assembly_to_binary.py.
+            0x39 => Self::V_SOFTPLUS_V {
+                rd,
+                rs1,
+                rmask: rs3,
+            },
+            0x3A => Self::S_MAP_FP_V { rd, rs1, imm: imm2 },
+            0x3B => Self::V_FMA_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -785,6 +839,144 @@ mod tests {
     #[test]
     fn test_decode_break_is_unit() {
         assert!(matches!(Opcode::decode(0x34), Opcode::C_BREAK));
+    }
+
+    // ---------- Mamba / selective-SSM extensions ----------
+
+    #[test]
+    fn test_decode_v_softplus_v_reads_rmask_from_rs3() {
+        // rs3 (not rs2) carries rmask, matching every other masked vector op and the
+        // compiler's `_RMASK_VECTOR_OPS` encoding.
+        match Opcode::decode(rform(0x39, 1, 2, 0, 5, 0)) {
+            Opcode::V_SOFTPLUS_V { rd, rs1, rmask } => assert_eq!((rd, rs1, rmask), (1, 2, 5)),
+            other => panic!("expected V_SOFTPLUS_V, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_s_map_fp_v_imm2() {
+        // Same operand shape as its S_MAP_V_FP mirror: rd, rs1 and the 18-bit imm2.
+        match Opcode::decode(i2form(0x3A, 4, 5, 0x1F00F)) {
+            Opcode::S_MAP_FP_V { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (4, 5, 0x1F00F)),
+            other => panic!("expected S_MAP_FP_V, got {other:?}"),
+        }
+    }
+
+    /// Every opcode PLENA_Compiler declares must decode to something here.
+    ///
+    /// `decode` carries three separate comments saying encodings "must stay in
+    /// sync with PLENA_Compiler's doc/operation.svh". That was enforced by
+    /// author diligence alone -- exactly the arrangement that let the compiler's
+    /// FPRAM depth (1024) drift from the SystemVerilog's (512) unnoticed. The
+    /// submodule is checked out recursively in every CI job, so the header can
+    /// simply be read.
+    #[test]
+    fn every_compiler_opcode_decodes_to_something() {
+        let svh = include_str!("../../PLENA_Compiler/doc/operation.svh");
+
+        // Declared in the header but deliberately not modelled. A new entry is
+        // a decision to argue for in review, not a default.
+        const NOT_MODELLED: &[&str] = &[
+            // The sentinel. Invalid is precisely what it must decode to.
+            "INVALID_OPCODE",
+            // Declared by PLENA but never implemented, in RTL or here. The
+            // compiler knows and refuses to emit it -- see program_ssd.py's
+            // ssd_chunk_cumsum docstring: it "assembles silently and then
+            // decodes to Invalid, so emitting it is worse than not emitting
+            // it". Its PREFIX_SCAN_V_ELEMENT micro-op scans within a row, which
+            // under any head-on-lanes layout would cumsum across heads.
+            "V_PS_V",
+            // Likewise declared and unimplemented; nothing emits it.
+            "C_HADAMARD_TRANSFORM",
+        ];
+
+        let mut checked = 0;
+        for line in svh.lines() {
+            let line = line.trim();
+            if line.starts_with("//") {
+                continue;
+            }
+            let Some((name, rest)) = line.split_once('=') else {
+                continue;
+            };
+            let name = name.trim();
+            let Some(hex) = rest.trim().strip_prefix("6'h") else {
+                continue;
+            };
+            let hex: String = hex.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+            let Ok(opcode) = u32::from_str_radix(&hex, 16) else {
+                continue;
+            };
+            if NOT_MODELLED.contains(&name) {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                !matches!(
+                    Opcode::decode(rform(opcode, 0, 0, 0, 0, 0)),
+                    Opcode::Invalid
+                ),
+                "{name} = 6'h{opcode:02X} is declared in PLENA_Compiler's \
+                 doc/operation.svh but decodes to Invalid here"
+            );
+        }
+        assert!(
+            checked > 40,
+            "only {checked} opcodes parsed out of the header -- the parse broke, \
+             so this guard was passing vacuously"
+        );
+    }
+
+    #[test]
+    fn v_fma_vf_decodes_like_v_mul_vf() {
+        // Same R-type slots as V_MUL_VF; only the opcode field differs. rd is
+        // read as well as written, which no other V-type op does, but that is
+        // an execution property -- the encoding is unchanged.
+        match Opcode::decode(rform(0x3B, 3, 4, 2, 0, 0)) {
+            Opcode::V_FMA_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (3, 4, 2, 0));
+            }
+            other => panic!("expected V_FMA_VF, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x3B, 1, 2, 3, 5, 0)) {
+            Opcode::V_FMA_VF { rmask, .. } => assert_eq!(rmask, 5, "rs3 is the mask"),
+            other => panic!("expected V_FMA_VF, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_mamba_opcodes_do_not_collide_with_existing_encodings() {
+        // 0x39/0x3A/0x3B were free before this work (the previous maximum was
+        // C_SET_TOPK_REG = 0x38). Pin that they still decode to themselves and that
+        // the neighbouring slots are untouched.
+        assert!(matches!(
+            Opcode::decode(rform(0x38, 1, 0, 0, 0, 0)),
+            Opcode::C_SET_TOPK_REG { .. }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x39, 1, 2, 0, 0, 0)),
+            Opcode::V_SOFTPLUS_V { .. }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3A, 1, 2, 0, 0, 0)),
+            Opcode::S_MAP_FP_V { .. }
+        ));
+        // 0x3B went to V_FMA_VF, the one opcode the KDA/Mamba work adds. The
+        // boundary moves with it: 0x3C is the next free slot, and this assertion
+        // is what makes a silent collision with it fail the build.
+        assert!(matches!(
+            Opcode::decode(rform(0x3B, 1, 2, 0, 0, 0)),
+            Opcode::V_FMA_VF { .. }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3C, 0, 0, 0, 0, 0)),
+            Opcode::Invalid
+        ));
     }
 
     #[test]

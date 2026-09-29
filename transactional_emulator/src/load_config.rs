@@ -21,6 +21,17 @@ pub struct LatencyValue {
     pub dc_lib_dis: u32,
 }
 
+/// Fallback cost of `V_SOFTPLUS_V` when a settings file predates the Mamba ISA
+/// extension. Budgeted as exp + reciprocal-class work (`relu`, `abs`, `exp`,
+/// `log1p`, `add` in one pass) rather than aliased to the bare exp latency, which
+/// would understate a unit that also has to evaluate a logarithm.
+fn default_softplus_cycles() -> LatencyValue {
+    LatencyValue {
+        dc_lib_en: 2,
+        dc_lib_dis: 13,
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FpTypeConfig {
     pub sign: bool,
@@ -108,6 +119,19 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+    /// Accelerator clock period in picoseconds.
+    ///
+    /// Defaulted rather than required so that a TOML written before this field
+    /// existed still loads. The default is the value this was hard-coded to --
+    /// 1000 ps, 1 GHz -- and it is an assumption, not a measurement: no RTL has
+    /// been synthesised, so no critical path has set it. Every microsecond,
+    /// TPOT or token-per-joule figure derived here is a figure "assuming 1 GHz".
+    #[serde(rename = "CLOCK_PERIOD_PS", default = "default_clock_period_ps")]
+    pub clock_period_ps: ConfigValueUsize,
+}
+
+fn default_clock_period_ps() -> ConfigValueUsize {
+    ConfigValueUsize { value: 1000 }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -150,6 +174,11 @@ pub struct LatencySection {
     pub vector_max_cycles: LatencyValue,
     #[serde(rename = "VECTOR_SUM_CYCLES")]
     pub vector_sum_cycles: LatencyValue,
+    // V_SOFTPLUS_V. `default` so a settings file predating the Mamba ISA extension
+    // still parses instead of failing the whole config load; the default matches the
+    // fallback LatencySection below.
+    #[serde(rename = "VECTOR_SOFTPLUS_CYCLES", default = "default_softplus_cycles")]
+    pub vector_softplus_cycles: LatencyValue,
     #[serde(rename = "SCALAR_FP_LONGEST_OPERATE_CYCLES")]
     pub scalar_fp_longest_operate_cycles: LatencyValue,
     #[serde(rename = "SCALAR_FP_BASIC_CYCLES")]
@@ -181,6 +210,7 @@ impl Default for AcceleratorConfig {
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
                 max_loop_instructions: ConfigValueUsize { value: 10000 },
+                clock_period_ps: default_clock_period_ps(),
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -316,6 +346,7 @@ impl Default for AcceleratorConfig {
                     dc_lib_en: 8,
                     dc_lib_dis: 20,
                 },
+                vector_softplus_cycles: default_softplus_cycles(),
                 scalar_fp_longest_operate_cycles: LatencyValue {
                     dc_lib_en: 4,
                     dc_lib_dis: 4,
@@ -523,6 +554,15 @@ pub fn blen() -> u32 {
 // }
 
 // Latency accessor functions (automatically uses DC_EN setting from config)
+/// The accelerator clock period, in picoseconds.
+///
+/// Read from the active TOML rather than hard-coded, so that the assumption is
+/// visible in a file and can be changed without a rebuild. Clamped to at least
+/// one picosecond: a zero period would make every derived cycle count infinite.
+pub fn clock_period_ps() -> u64 {
+    CONFIG.config.clock_period_ps.value.max(1) as u64
+}
+
 pub fn systolic_processing_overhead() -> u32 {
     get_dc_lib_value(&CONFIG.latency.systolic_processing_overhead)
 }
@@ -553,6 +593,10 @@ pub fn vector_mul_cycles() -> u32 {
 
 pub fn vector_exp_cycles() -> u32 {
     get_dc_lib_value(&CONFIG.latency.vector_exp_cycles)
+}
+
+pub fn vector_softplus_cycles() -> u32 {
+    get_dc_lib_value(&CONFIG.latency.vector_softplus_cycles)
 }
 
 pub fn vector_reci_cycles() -> u32 {

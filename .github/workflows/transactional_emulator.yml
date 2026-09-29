@@ -33,7 +33,13 @@ jobs:
   rust-lint:
     runs-on: ubuntu-latest
     steps:
+      # Submodules: clippy compiles `--all-targets`, and one test guard reads the
+      # compiler's `doc/operation.svh` through `include_str!` to check that every
+      # opcode the compiler emits decodes here. Without the submodule that is a
+      # compile error, not a skipped test.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # Pinned: with `-D warnings`, a rolling channel reds unrelated PRs.
       - name: Install Rust toolchain
@@ -147,3 +153,24 @@ jobs:
       - name: Run emulator timing gates
         run: |
           nix develop --command bash -c "just test-timing-gates"
+
+      # Mamba-2 / selective SSM. Synthetic like the tests above -- no checkpoint,
+      # no HF libs. Inputs are drawn exactly representable in MX-FP8 so the
+      # reported error is the kernel's rather than the input quantisation's.
+      #
+      # All four cases are bit-exact (max absolute error 0.000000), so any
+      # regression shows up as a hard failure rather than as tolerance drift.
+      - name: Run Mamba-2 stage tests
+        run: |
+          nix develop --command bash -c "just test-mamba2-all"
+
+      # The chunked-SSD reference vs the plain recurrence, plus the cross-repo
+      # stage-marker contract. Pure torch.
+      - name: Run Mamba-2 reference cross-check
+        run: |
+          nix develop --command bash -c "just test-mamba2-reference"
+
+      # Bandwidth term + the two KV-cost bugs it exposed in the analytic model.
+      - name: Run analytic performance-model regression tests
+        run: |
+          nix develop --command bash -c "just test-perf-model"

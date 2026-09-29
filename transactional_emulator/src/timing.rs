@@ -59,7 +59,7 @@ pub(crate) async fn charge_cycles(cycles: u32) {
     match timing_mode() {
         TimingMode::Serial => {
             runtime::Executor::current()
-                .resolve_at(PERIOD * cycles)
+                .resolve_at(*PERIOD * cycles)
                 .await;
         }
         TimingMode::Scoreboard => {
@@ -95,7 +95,7 @@ mod tests {
             charge_cycles(3).await;
         });
         executor.enter(Instant::ETERNITY).await;
-        assert_eq!(executor.now(), Instant::INIT + PERIOD * 8u32);
+        assert_eq!(executor.now(), Instant::INIT + *PERIOD * 8u32);
     }
 
     #[tokio::test]

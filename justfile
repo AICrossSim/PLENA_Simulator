@@ -80,6 +80,55 @@ build-perf-model model batch="4" input_seq="2048" output_seq="1024":
         --config "$(pwd)/plena_settings.toml" \
         --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
+# Run the Mamba-2 (selective SSM) performance model.
+# just build-perf-model-mamba2 <model> [batch] [input_seq] [output_seq]
+build-perf-model-mamba2 model="mamba2-2.7b" batch="4" input_seq="2048" output_seq="1024":
+    python3 analytic_models/performance/mamba2_model.py \
+        --model {{model}} \
+        --batch-size {{batch}} \
+        --input-seq {{input_seq}} \
+        --output-seq {{output_seq}} \
+        --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
+
+# Same, but against a model config outside Model_Lib.
+# just build-perf-model-mamba2-path /path/to/mamba2-2.7b.json 1 2048 128
+build-perf-model-mamba2-path path batch="4" input_seq="2048" output_seq="1024":
+    python3 analytic_models/performance/mamba2_model.py \
+        --model-path {{path}} \
+        --batch-size {{batch}} \
+        --input-seq {{input_seq}} \
+        --output-seq {{output_seq}} \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
+
+# TTFT/TPS sweep for one model across several context lengths, JSON per point.
+# just latency-sweep llama-3.1-8b 1 128 "512 2048 8192"
+latency-sweep model batch="1" output_seq="128" contexts="512 2048 8192":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    script=analytic_models/performance/llama_model.py
+    case "{{model}}" in
+        mamba2*) script=analytic_models/performance/mamba2_model.py ;;
+        gpt-oss*) script=analytic_models/performance/gpt_oss_model.py ;;
+    esac
+    for ctx in {{contexts}}; do
+        python3 "$script" \
+            --model {{model}} \
+            --batch-size {{batch}} \
+            --input-seq "$ctx" \
+            --output-seq {{output_seq}} \
+            --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+            --config "$(pwd)/plena_settings.toml" \
+            --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json" \
+            --json --quiet
+    done
+
+# Bandwidth-model + KV-store-bugfix regression tests for the analytic perf model.
+test-perf-model:
+    python3 analytic_models/test_perf_model_bandwidth.py
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
@@ -200,6 +249,34 @@ test-moe-shared-all:
     just test-shared-moe-gated
     just test-shared-moe-deepseek-fused
     just test-router-policy-all
+
+# ==================== Mamba-2 / selective SSM ====================
+
+# Per-stage numerical checks of the Mamba-2 lowering against a float32 torch
+# golden. Fully synthetic -- no checkpoint, no HF libs. Cases:
+#   dt      softplus + clamp        (exercises V_SOFTPLUS_V)
+#   cumsum  a @ lower-tri ones      (the prefix-scan substitute; f32 accumulate)
+#   decay   exp(min(cs_i-cs_j,0))   (exercises S_MAP_FP_V and V_SUB_VF rorder=1)
+#   conv1d  causal depthwise k=4
+# NOTE: the emulator's V_EXP_V is libtorch's exact exp, not the RTL's fixed-point
+# model, so passing here bounds the lowering and not the silicon. See the module
+# docstring of mamba2_stage_test.py.
+test-mamba2-stage case="dt" *args:
+    python3 transactional_emulator/testbench/mamba2/mamba2_stage_test.py --case {{case}} {{args}}
+
+# Every Mamba-2 stage.
+test-mamba2-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for case in dt cumsum decay conv1d; do
+        echo "=== Mamba-2 stage: $case ==="
+        just test-mamba2-stage "$case"
+    done
+
+# The chunked-SSD reference vs the plain recurrence. Pure torch, no emulator:
+# this is what makes the chunked form usable as an intermediate golden at all.
+test-mamba2-reference:
+    python3 -m unittest compiler.aten.tests.test_mamba2_reference compiler.aten.tests.test_mamba_stage_contract -v
 
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:

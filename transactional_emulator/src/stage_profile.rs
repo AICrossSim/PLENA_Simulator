@@ -439,6 +439,36 @@ pub(crate) enum StageKind {
     /// difference is worth keeping: a large `Other` is a coverage problem, a
     /// large `NonMoe` is just an epilogue.
     NonMoe,
+    // Mamba-2 / selective-SSM stages. Mirrors MAMBA_STAGES in the compiler's
+    // aten/plena/program_mamba_common.py, and checked against it live by
+    // stage_marker_names_match_the_compiler_vocabulary, which reads both
+    // vocabularies out of the Python source rather than mirroring them.
+    MambaInProj,
+    MambaConv1d,
+    MambaDt,
+    MambaChunkCumsum,
+    MambaDecayMask,
+    MambaIntraChunk,
+    MambaStateUpdate,
+    MambaInterChunk,
+    MambaSkip,
+    MambaGatedNorm,
+    MambaOutProj,
+    MambaStateLoad,
+    MambaStateStore,
+    // KDA (Kimi Delta Attention) stages. Mirrors KDA_STAGES in the compiler's
+    // aten/plena/program_kda_common.py, checked live by
+    // stage_marker_names_match_the_kda_compiler_vocabulary.
+    KdaQkvProj,
+    KdaConv1d,
+    KdaNormalize,
+    KdaDecay,
+    KdaStateUpdate,
+    KdaReadout,
+    KdaGatedNorm,
+    KdaOutProj,
+    KdaStateLoad,
+    KdaStateStore,
     Other,
 }
 
@@ -459,6 +489,29 @@ impl StageKind {
         StageKind::SharedExpertActivation,
         StageKind::SharedExpertGate,
         StageKind::NonMoe,
+        StageKind::MambaInProj,
+        StageKind::MambaConv1d,
+        StageKind::MambaDt,
+        StageKind::MambaChunkCumsum,
+        StageKind::MambaDecayMask,
+        StageKind::MambaIntraChunk,
+        StageKind::MambaStateUpdate,
+        StageKind::MambaInterChunk,
+        StageKind::MambaSkip,
+        StageKind::MambaGatedNorm,
+        StageKind::MambaOutProj,
+        StageKind::MambaStateLoad,
+        StageKind::MambaStateStore,
+        StageKind::KdaQkvProj,
+        StageKind::KdaConv1d,
+        StageKind::KdaNormalize,
+        StageKind::KdaDecay,
+        StageKind::KdaStateUpdate,
+        StageKind::KdaReadout,
+        StageKind::KdaGatedNorm,
+        StageKind::KdaOutProj,
+        StageKind::KdaStateLoad,
+        StageKind::KdaStateStore,
         StageKind::Other,
     ];
 
@@ -479,29 +532,42 @@ impl StageKind {
             StageKind::SharedExpertActivation => "shared_expert_activation",
             StageKind::SharedExpertGate => "shared_expert_gate",
             StageKind::NonMoe => "non_moe",
+            StageKind::MambaInProj => "mamba_in_proj",
+            StageKind::MambaConv1d => "mamba_conv1d",
+            StageKind::MambaDt => "mamba_dt",
+            StageKind::MambaChunkCumsum => "mamba_chunk_cumsum",
+            StageKind::MambaDecayMask => "mamba_decay_mask",
+            StageKind::MambaIntraChunk => "mamba_intra_chunk",
+            StageKind::MambaStateUpdate => "mamba_state_update",
+            StageKind::MambaInterChunk => "mamba_inter_chunk",
+            StageKind::MambaSkip => "mamba_skip",
+            StageKind::MambaGatedNorm => "mamba_gated_norm",
+            StageKind::MambaOutProj => "mamba_out_proj",
+            StageKind::MambaStateLoad => "mamba_state_load",
+            StageKind::MambaStateStore => "mamba_state_store",
+            StageKind::KdaQkvProj => "kda_qkv_proj",
+            StageKind::KdaConv1d => "kda_conv1d",
+            StageKind::KdaNormalize => "kda_normalize",
+            StageKind::KdaDecay => "kda_decay",
+            StageKind::KdaStateUpdate => "kda_state_update",
+            StageKind::KdaReadout => "kda_readout",
+            StageKind::KdaGatedNorm => "kda_gated_norm",
+            StageKind::KdaOutProj => "kda_out_proj",
+            StageKind::KdaStateLoad => "kda_state_load",
+            StageKind::KdaStateStore => "kda_state_store",
             StageKind::Other => "other",
         }
     }
 
+    /// Position in `ALL`, derived rather than hand-written: a hand-maintained
+    /// match here is a second source of truth for the same ordering, and every
+    /// per-stage counter is indexed by it, so inserting a stage in the middle
+    /// would silently mis-attribute cycles.
     fn index(self) -> usize {
-        match self {
-            StageKind::ResidualSetup => 0,
-            StageKind::RouterTopk => 1,
-            StageKind::AccumulatorInit => 2,
-            StageKind::Gather => 3,
-            StageKind::ExpertWeightAddress => 4,
-            StageKind::ExpertWeightPrefetch => 5,
-            StageKind::ExpertProjection => 6,
-            StageKind::ExpertActivation => 7,
-            StageKind::ExpertBias => 8,
-            StageKind::ExpertRouteWeight => 9,
-            StageKind::ScatterCombine => 10,
-            StageKind::SharedExpertProjection => 11,
-            StageKind::SharedExpertActivation => 12,
-            StageKind::SharedExpertGate => 13,
-            StageKind::NonMoe => 14,
-            StageKind::Other => 15,
-        }
+        StageKind::ALL
+            .iter()
+            .position(|stage| *stage == self)
+            .expect("every StageKind variant must appear in ALL")
     }
 
     /// Resolve the name carried by a `; @stage=<name>` marker.
@@ -517,7 +583,7 @@ impl StageKind {
 }
 
 /// Number of `StageKind` variants, including `Other`.
-const STAGE_COUNT: usize = 16;
+const STAGE_COUNT: usize = 39;
 
 /// Comment prefix carrying an explicit stage attribution, emitted by the
 /// compiler's `moe_stage_marker`. Kept in sync by
@@ -1799,6 +1865,10 @@ M_MM gp1, gp2, gp3
     /// gitlink. Normally the two agree and this is the vocabulary at the pin,
     /// but a dirty or deliberately-checked-out submodule is read as it stands.
     const COMPILER_MOE_STAGES_PATH: &str = "../PLENA_Compiler/aten/plena/program_routed_moe.py";
+    /// The Mamba-2 substrate declares its own vocabulary in its own module, so the
+    /// guard has to read both. Same extractor, different symbol.
+    const COMPILER_MAMBA_STAGES_PATH: &str = "../PLENA_Compiler/aten/plena/program_mamba_common.py";
+    const COMPILER_KDA_STAGES_PATH: &str = "../PLENA_Compiler/aten/plena/program_kda_common.py";
 
     /// Recover `MOE_STAGES` from Python source using Python's own parser.
     ///
@@ -1814,15 +1884,18 @@ import json
 import sys
 
 
+SYMBOL = sys.argv[1] if len(sys.argv) > 1 else SYMBOL
+
+
 def _declaration(tree):
     for node in tree.body:
         if isinstance(node, ast.AnnAssign):
             target = node.target
-            if isinstance(target, ast.Name) and target.id == "MOE_STAGES" and node.value is not None:
+            if isinstance(target, ast.Name) and target.id == SYMBOL and node.value is not None:
                 return node.value
         elif isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "MOE_STAGES":
+                if isinstance(target, ast.Name) and target.id == SYMBOL:
                     return node.value
     return None
 
@@ -1841,7 +1914,7 @@ def _stages(node):
         raise ValueError("unsupported call in MOE_STAGES: " + ast.dump(node))
     value = ast.literal_eval(node)
     if isinstance(value, (str, bytes)):
-        raise ValueError("MOE_STAGES is a scalar, not a collection of stage names")
+        raise ValueError(f"{SYMBOL} is a scalar, not a collection of stage names")
     stages = set()
     for item in value:
         if not isinstance(item, str):
@@ -1914,11 +1987,21 @@ else:
     /// node. Callers that have already checked [`python3_available`] can treat
     /// any `Err` as a real parse failure rather than a toolchain problem.
     fn try_parse_moe_stages(source: &str) -> Result<Vec<String>, String> {
+        parse_stage_set(source, "MOE_STAGES")
+    }
+
+    /// Run [`MOE_STAGES_EXTRACTOR`] over `source`, recovering `symbol`.
+    ///
+    /// Generic over the symbol because the vocabulary lives in two modules: the
+    /// routed-MoE substrate declares `MOE_STAGES` and the Mamba-2 substrate
+    /// declares `MAMBA_STAGES`, and both feed one `StageKind`.
+    fn parse_stage_set(source: &str, symbol: &str) -> Result<Vec<String>, String> {
         use std::io::Write as _;
 
         let mut child = std::process::Command::new("python3")
             .arg("-c")
             .arg(MOE_STAGES_EXTRACTOR)
+            .arg(symbol)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -2008,7 +2091,60 @@ else:
 
         let source = std::fs::read_to_string(&path)
             .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-        Some(parse_moe_stages(&source))
+        let mut stages = parse_moe_stages(&source);
+
+        // The Mamba-2 substrate carries a second vocabulary in a second module.
+        // Both feed one StageKind, so the guard has to union them -- otherwise
+        // every Mamba variant reads as "a stage no compiler marker produces".
+        let mamba_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMPILER_MAMBA_STAGES_PATH);
+        if mamba_path.try_exists().unwrap_or(false) {
+            let mamba_source = std::fs::read_to_string(&mamba_path)
+                .unwrap_or_else(|err| panic!("cannot read {}: {err}", mamba_path.display()));
+            stages.extend(
+                parse_stage_set(&mamba_source, "MAMBA_STAGES").unwrap_or_else(|err| {
+                    panic!("cannot recover MAMBA_STAGES from the source:\n{err}")
+                }),
+            );
+        } else {
+            assert!(
+                prerequisites_may_be_missing(),
+                "the Mamba stage-vocabulary guard cannot run in CI: {} is not readable",
+                mamba_path.display()
+            );
+            eprintln!(
+                "skipping the Mamba half of the stage-vocabulary guard: {} is not readable",
+                mamba_path.display()
+            );
+        }
+
+        // ...and a third for KDA. Same reason as Mamba: one StageKind is fed by
+        // several compiler modules, so the union has to include every one of
+        // them or the extra variants read as "a stage no compiler marker
+        // produces". Adding the StageKind variants without extending this is
+        // what broke the guard when KDA landed.
+        let kda_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMPILER_KDA_STAGES_PATH);
+        if kda_path.try_exists().unwrap_or(false) {
+            let kda_source = std::fs::read_to_string(&kda_path)
+                .unwrap_or_else(|err| panic!("cannot read {}: {err}", kda_path.display()));
+            stages.extend(
+                parse_stage_set(&kda_source, "KDA_STAGES").unwrap_or_else(|err| {
+                    panic!("cannot recover KDA_STAGES from the source:\n{err}")
+                }),
+            );
+        } else {
+            assert!(
+                prerequisites_may_be_missing(),
+                "the KDA stage-vocabulary guard cannot run in CI: {} is not readable",
+                kda_path.display()
+            );
+            eprintln!(
+                "skipping the KDA half of the stage-vocabulary guard: {} is not readable",
+                kda_path.display()
+            );
+        }
+        Some(stages)
     }
 
     #[test]
