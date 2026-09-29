@@ -149,21 +149,55 @@ def test_the_known_call_sites_are_actually_scanned() -> None:
     )
 
 
-def test_every_guard_file_is_wired_into_ci() -> None:
-    """The torch-free guards under ``testbench/`` must all be named in the job.
+def _ci_workflow_text() -> str:
+    """The text of every workflow file under ``.github/workflows``, concatenated.
 
-    The workflow lists files individually, because most of ``testbench/`` needs
+    Reading only ``transactional_emulator.yml`` assumed it was the only workflow
+    that runs guards from this tree. That was true when written and is not a
+    property anything enforces: a second workflow running them is a wiring these
+    checks cannot see, so a correctly wired guard reads as unwired and the check
+    against silence becomes a source of it. Concatenating is deliberately
+    permissive -- the question is whether *some* job names the file, and which
+    one is not this check's business.
+    """
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.y*ml"))
+    assert workflows, f"no workflow files under {REPO_ROOT / '.github' / 'workflows'}; this would pass vacuously"
+    return "\n".join(path.read_text() for path in workflows)
+
+
+def test_the_workflow_scan_reads_every_workflow_file() -> None:
+    """Pins the scan to the whole directory, not one file in it.
+
+    Both checks below pass by finding nothing unwired, so narrowing what they
+    read makes them *more* likely to pass -- except for the guards named only in
+    the file that was dropped, which start reading as never run by CI. That is
+    not hypothetical: it is what reading only ``transactional_emulator.yml`` did
+    to two guards correctly wired into ``ci.yml``.
+    """
+    directory = REPO_ROOT / ".github" / "workflows"
+    present = sorted(directory.glob("*.y*ml"))
+    assert len(present) > 1, f"only {[path.name for path in present]} under {directory}; this would pass vacuously"
+
+    text = _ci_workflow_text()
+    unread = [path.name for path in present if path.read_text() not in text]
+    assert not unread, f"_ci_workflow_text() leaves these workflows unread: {unread}"
+
+
+def test_every_guard_file_is_wired_into_ci() -> None:
+    """The torch-free guards under ``testbench/`` must all be named by some job.
+
+    The workflows list files individually, because most of ``testbench/`` needs
     torch and a built emulator and cannot be collected. That makes it possible
     to add a guard here that CI never runs -- indistinguishable from not having
     written it.
 
-    Being *named* in the workflow is not the same as being *run* by it: this
+    Being *named* in a workflow is not the same as being *run* by it: this
     matches the workflow text, and a job whose trigger never fires would still
     satisfy it. And "does not import torch" is a proxy for "collectable in the
     pytest-only job" -- a guard that needs a built emulator binary but no torch
     would be forced into that job and fail there.
     """
-    workflow = (REPO_ROOT / ".github" / "workflows" / "transactional_emulator.yml").read_text()
+    workflow = _ci_workflow_text()
 
     torch_free: list[str] = []
     for path in sorted(TESTBENCH_DIR.rglob("test_*.py")):
@@ -180,6 +214,71 @@ def test_every_guard_file_is_wired_into_ci() -> None:
     assert not unwired, (
         "these torch-free guards are in the tree but the workflow does not name "
         "them, so CI never runs them:\n  " + "\n  ".join(unwired)
+    )
+
+
+def _justfile_recipes(text: str) -> dict[str, str]:
+    """Recipe name -> body, for the repo justfile.
+
+    A recipe starts at a non-indented ``name args...:`` line and runs to the next
+    one. Blank lines stay inside the current body, which just permits.
+    """
+    recipes: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if line[:1] not in ("", " ", "\t", "#") and ":" in line:
+            current = line.split(":", 1)[0].split()[0]
+            recipes.setdefault(current, [])
+        elif current is not None and (line.startswith((" ", "\t")) or not line.strip()):
+            recipes[current].append(line)
+        elif line.strip():
+            current = None
+    return {name: "\n".join(body) for name, body in recipes.items()}
+
+
+def test_every_guard_is_reachable_from_ci() -> None:
+    """Every guard file must be run by a job, directly or through a recipe.
+
+    The check above only covers torch-free guards, because those are the ones
+    that belong in the pytest-only job. A guard that *does* import torch is
+    exempt from it and is typically run through a justfile recipe instead -- so
+    nothing asserted those recipes were still invoked. Dropping one line from the
+    workflow silently retired every guard behind it, with all checks green.
+
+    Reachability, not execution: a recipe named in a job whose trigger never
+    fires still satisfies this. It closes the gap between "a file exists" and
+    "something in CI mentions a way to run it", which is where guards go quiet.
+    """
+    workflow = _ci_workflow_text()
+    recipes = _justfile_recipes((REPO_ROOT / "justfile").read_text())
+    assert recipes, "no justfile recipes parsed; this guard would pass vacuously"
+
+    def named_in(text: str, token: str) -> bool:
+        """`token` appears as a whole word, not as the prefix of a longer one.
+
+        A plain substring test passes on `just test-sliced-layer-builder-renamed`
+        for the recipe `test-sliced-layer-builder`, so renaming an invocation
+        without renaming the recipe would satisfy this guard while retiring the
+        job. `\\b` does not help -- a hyphen is a non-word character, so the
+        boundary matches mid-token.
+        """
+        return re.search(rf"{re.escape(token)}(?![\w-])", text) is not None
+
+    unreachable: list[str] = []
+    for path in sorted(TESTBENCH_DIR.rglob("test_*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        if named_in(workflow, path.name):
+            continue
+        owning = [name for name, body in recipes.items() if named_in(body, path.name)]
+        if any(named_in(workflow, name) for name in owning):
+            continue
+        how = f" (named by recipe(s) {owning}, none of which the workflow invokes)" if owning else ""
+        unreachable.append(f"{path.name}{how}")
+
+    assert not unreachable, (
+        "these guards are in the tree but no CI job names them or a recipe that "
+        "runs them:\n  " + "\n  ".join(unreachable)
     )
 
 

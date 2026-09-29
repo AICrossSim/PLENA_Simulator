@@ -184,6 +184,26 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
         or result.get("hbm_store_gate")
         or {}
     )
+    # The chain picks one gate, but the qwen replay reports two and both must
+    # hold. It lands on `zero_input_smoke_gate`, which compares an all-zero
+    # accumulator against an all-zero golden -- true for any routing at all, so
+    # it cannot fail on a routing fault. `functional_gate_passed` feeds
+    # `export_selected`'s filter and `_exit_code`'s tally, so leaving the router
+    # gate out means a run that routed to the wrong experts is averaged into the
+    # medians and counted as passing.
+    #
+    # Written as "a router failure is a failure" rather than an AND of the two,
+    # so it does not depend on the chain having found a gate: a result carrying a
+    # failed `router_gate` and nothing the chain recognises still reports False,
+    # instead of the None that `export_selected` keeps as unknown.
+    #
+    # Only an explicit False. Absent, or a `router_gate` that records the kind
+    # before the verdict, leaves the chain's answer alone -- runs from before
+    # routing moved on device have no `router_gate` at all, and calling those
+    # failures would invalidate the archive.
+    gate_passed = gate.get("passed")
+    if (result.get("router_gate") or {}).get("passed") is False:
+        gate_passed = False
     row = {
         "run_id": run_id,
         "build_dir": str(build_dir),
@@ -198,7 +218,7 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
         "cycle_accounting_status": profile.get("cycle_accounting_status"),
         "period_picos": profile.get("period_picos"),
         "physical_byte_status": profile.get("physical_byte_status"),
-        "functional_gate_passed": gate.get("passed"),
+        "functional_gate_passed": gate_passed,
         "result_path": bundle["result_path"],
         "stage_profile_path": bundle["stage_profile_path"],
         "run_stats_path": bundle["run_stats_path"],
