@@ -23,6 +23,17 @@ pub trait MemoryTimingModel: Send + Sync {
     /// We fix to 64-bytes to accomodate memory emulators.
     async fn read(&self, addr: u64);
 
+    /// Optional 32-byte sector reads; the default deliberately fetches a full line.
+    fn read_mask(&self, addr: u64, mask: u8) -> impl Future<Output = ()> + Send {
+        async move {
+            assert!((1..=3).contains(&mask));
+            self.read(addr).await;
+        }
+    }
+    fn supports_sector_reads(&self) -> bool {
+        false
+    }
+
     /// Write 64-bytes of memory.
     async fn write(&self, addr: u64);
 }
@@ -32,6 +43,12 @@ impl<T: MemoryTimingModel> MemoryTimingModel for ManuallyDrop<T> {
         T::read(self, addr).await
     }
 
+    async fn read_mask(&self, addr: u64, mask: u8) {
+        T::read_mask(self, addr, mask).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        T::supports_sector_reads(self)
+    }
     async fn write(&self, addr: u64) {
         T::write(self, addr).await
     }
@@ -41,6 +58,16 @@ impl<T: MemoryTimingModel> MemoryTimingModel for ManuallyDrop<T> {
 pub trait MemoryModel: Send + Sync {
     /// Read 64-bytes of memory.
     async fn read(&self, addr: u64) -> [u8; 64];
+
+    fn read_mask(&self, addr: u64, mask: u8) -> impl Future<Output = [u8; 64]> + Send {
+        async move {
+            assert!((1..=3).contains(&mask));
+            self.read(addr).await
+        }
+    }
+    fn supports_sector_reads(&self) -> bool {
+        false
+    }
 
     /// Write 64-bytes of memory.
     async fn write(&self, addr: u64, bytes: [u8; 64]);
@@ -54,12 +81,20 @@ pub trait MemoryModel: Send + Sync {
 #[async_trait::async_trait]
 pub trait ErasedMemoryModel: Send + Sync {
     async fn box_read(&self, addr: u64) -> [u8; 64];
+    async fn box_read_mask(&self, addr: u64, mask: u8) -> [u8; 64];
+    fn supports_sector_reads(&self) -> bool;
     async fn box_write(&self, addr: u64, bytes: [u8; 64]);
     fn statistics(&self) -> Option<Statistics>;
 }
 
 #[async_trait::async_trait]
 impl<T: MemoryModel> ErasedMemoryModel for T {
+    async fn box_read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        self.read_mask(addr, mask).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        MemoryModel::supports_sector_reads(self)
+    }
     async fn box_read(&self, addr: u64) -> [u8; 64] {
         self.read(addr).await
     }
@@ -74,6 +109,12 @@ impl<T: MemoryModel> ErasedMemoryModel for T {
 }
 
 impl MemoryModel for dyn ErasedMemoryModel {
+    async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        self.box_read_mask(addr, mask).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        ErasedMemoryModel::supports_sector_reads(self)
+    }
     async fn read(&self, addr: u64) -> [u8; 64] {
         self.box_read(addr).await
     }
@@ -164,6 +205,13 @@ impl<T, M> WithTiming<T, M> {
 }
 
 impl<T: MemoryTimingModel, M: MemoryModel> MemoryModel for WithTiming<T, M> {
+    async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        self.timing.read_mask(addr, mask).await;
+        self.data.read(addr).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        self.timing.supports_sector_reads()
+    }
     /// Read 64-bytes of memory.
     async fn read(&self, addr: u64) -> [u8; 64] {
         self.timing.read(addr).await;
@@ -205,6 +253,19 @@ impl<T> WithStats<T> {
 }
 
 impl<T: MemoryModel> MemoryModel for WithStats<T> {
+    async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        assert!((1..=3).contains(&mask));
+        let bytes = if self.model.supports_sector_reads() {
+            32 * u64::from(mask.count_ones())
+        } else {
+            64
+        };
+        self.statistics.lock().unwrap().total_bytes_read += bytes;
+        self.model.read_mask(addr, mask).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        self.model.supports_sector_reads()
+    }
     async fn read(&self, addr: u64) -> [u8; 64] {
         {
             let mut guard = self.statistics.lock().unwrap();
