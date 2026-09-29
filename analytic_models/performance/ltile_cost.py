@@ -383,7 +383,7 @@ class ProgramCost:
 
 def assembly_cost(
     assembly: str, machine: Machine = Machine(), *, trace_memory=False,
-    matrix_service=None, max_instructions=10_000_000,
+    matrix_service=None, max_instructions=100_000_000,
 ):
     """Evaluate instruction control/addresses, not model arithmetic.
 
@@ -393,6 +393,9 @@ def assembly_cost(
     More general counter mutation/outer-loop jumps are rejected, not priced as
     an independent fixed trip count. ``max_instructions`` bounds interpreter
     work; it is an analysis safety limit, not an added hardware cycle cost.
+    The default includes the legal B16 KDA ordinary-Vector program, which
+    exceeds ten million issued instructions. Explicit smaller limits still
+    fail closed and are useful when checking untrusted loop programs.
     """
     if type(max_instructions) is not int or max_instructions < 1:
         raise ValueError("max_instructions must be a positive integer")

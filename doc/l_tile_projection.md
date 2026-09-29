@@ -52,7 +52,7 @@ the unit tests and analytical sweep.
 git submodule update --init --recursive
 nix develop --no-write-lock-file
 export PLENA_COMPILER_ROOT="$PWD/PLENA_Compiler"
-export PYTHONPATH="$PWD:$PLENA_COMPILER_ROOT"
+export PYTHONPATH="$PWD:$PLENA_COMPILER_ROOT:$PYTHONPATH"
 export CARGO_TARGET_DIR=/tmp/plena-projection-target
 export RUN_ROOT=/tmp/plena-projection-run
 python -m pytest analytic_models/performance -q
@@ -85,8 +85,7 @@ one/four-request packets and no checkpoint:
 ```sh
 LD_LIBRARY_PATH="$LIBTORCH/lib:$LD_LIBRARY_PATH" \
   cargo build --release --manifest-path transactional_emulator/Cargo.toml
-LD_LIBRARY_PATH="$LIBTORCH/lib:$LD_LIBRARY_PATH" \
-  python -m transactional_emulator.testbench.models.unified_service_test \
+python -m transactional_emulator.testbench.models.unified_service_test \
     --runtime "$CARGO_TARGET_DIR/release/transactional_emulator" \
     --memory-root "$RUN_ROOT/memory16" --output "$RUN_ROOT/projection-check" --only projection
 ```
@@ -177,6 +176,36 @@ sublayer without expensive operand materialization or sacrificing weight reuse.
 
 WS/IS/OS template selection and direct producer-consumer handoff remain design
 candidates. The standalone protocol probe is not evidence of zero-cost overlap.
+
+## Per-projection selection and complete batch comparison
+
+The [2026-09-29 comparison](../artifacts/projection_pipeline/final_comparison/README.md)
+records four explicitly named arms for both recurrent sublayers at B1/2/4/8/16.
+The new `--tune-panels` policy generates four legal uniform Compiler programs,
+selects a panel schedule for each projection from their analytical stage costs,
+then recompiles and reprices the entire mixed program. Memory history can make
+the combination worse; in that case it retains the best uniform program.
+It does not add stage-wise minima or consume measured Rust timing as a prediction.
+Selections are included in the immutable execution profile and cache identity.
+
+```sh
+python -m analytic_models.performance.projection_campaign \
+  --memory-root "$RUN_ROOT/memory16" --output "$RUN_ROOT/tuned" \
+  --stages batch --segments 4 --tune-panels --workers 4
+python -m transactional_emulator.testbench.models.unified_service_test \
+  --only mixed --runtime "$CARGO_TARGET_DIR/release/transactional_emulator" \
+  --memory-root "$RUN_ROOT/memory16" --output "$RUN_ROOT/mixed-validation"
+```
+
+The machine runner scopes the pinned libtorch loader path to the Rust child;
+do not prepend that path to Python's environment. The five new dependent
+projection tests use distinct requests, different schedules in consecutive
+operators, K/N tails and B16 cache pressure. All 10,974 active output values
+match the independent reference exactly, and all seven cycle components match.
+The full analytical suite passed 282 tests with nine skips before raising the
+interpreter safety limit for the ordinary-Vector KDA B8/B16 programs. The
+affected interpreter/projection tests then passed 75 tests with six skips.
+The raised instruction limit changes no modeled hardware resource or cycle cost.
 
 ## Publication checks
 

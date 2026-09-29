@@ -49,6 +49,8 @@ def main(argv=None):
                         help="Fixed Matrix reduction segments; 2/4 are explicit hardware candidates")
     parser.add_argument("--panel-tiles", nargs="+", type=int, choices=(1, 2, 4, 8), default=[1],
                         help="Compiler N32 panel grouping; values above one require compact/batch stages")
+    parser.add_argument("--tune-panels", action="store_true",
+                        help="Search each projection's panel schedule and reprice the complete mixed program")
     parser.add_argument("--workers", type=int, choices=range(1, 9), default=1,
                         help="Maximum concurrently evaluated cases (default: 1)")
     parser.add_argument("--cache-root", type=Path,
@@ -68,6 +70,8 @@ def main(argv=None):
         parser.error("N panel grouping requires --stages compact and/or batch")
     if any(n != 1 for n in args.segments) and any(s not in ("compact", "batch") for s in args.stages):
         parser.error("segmented reduction requires --stages compact and/or batch")
+    if args.tune_panels and (args.panel_tiles != [1] or any(s not in ("compact", "batch") for s in args.stages)):
+        parser.error("--tune-panels requires default --panel-tiles and compact/batch stages")
     controllers = len(json.loads((memory / "ramulator.json").read_text())["memory_system"]["controllers"])
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -90,14 +94,19 @@ def main(argv=None):
         # implementations publish completed entries by UUID + atomic replace.
         case_backend = DmaBackend(memory / "ltile_memory", memory / "ramulator.json", cache / "memory")
         services = Services(compiler, profile, case_backend, cache / "services")
-        result = services.layer(
+        evaluate = services.tuned_layer if args.tune_panels else services.layer
+        result = evaluate(
             model, batch, args.control, "BF16", supply="native" if args.control == "fsm" else "packed"
         )
         case = dict(model=model, batch=batch, stage=stage, control=args.control,
-                    n_panel_tile=panel_tile, segments=segments)
+                    n_panel_tile=result["profile"]["projection_n_panel_tile"], segments=segments)
+        if args.tune_panels:
+            case.update(projection_selection="tuned", projection_panel_overrides=result["profile"]["projection_panel_overrides"])
         suffix = "" if panel_tile == 1 else f"_p{panel_tile}"
         if segments != 1:
             suffix += f"_s{segments}"
+        if args.tune_panels:
+            suffix += "_tuned"
         path = output / f"{model}_b{batch}_{stage}{suffix}.json"
         path.write_text(json.dumps(dict(case=case, **result), indent=2) + "\n")
         components = result["components"]
@@ -139,6 +148,7 @@ def main(argv=None):
         weight_format="BF16",
         control=args.control,
         reduction_segments=args.segments,
+        projection_panel_search=args.tune_panels,
         candidate_status="segmented service is an explicit finite resource hypothesis; integrated RTL not validated",
         memory=backend.identity,
         cases=records,

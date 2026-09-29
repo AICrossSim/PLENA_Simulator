@@ -71,7 +71,9 @@ def run_program(
             result_path = output / "execution_result.json"
         result = json.loads(result_path.read_text())
         profile_path = output / "execution_profile.json"
-        if profile_path.exists() and json.loads(profile_path.read_text()) != asdict(profile):
+        # JSON represents immutable stage-override tuples as lists. Compare
+        # the serialized contract rather than rejecting an identical profile.
+        if profile_path.exists() and json.loads(profile_path.read_text()) != json.loads(json.dumps(asdict(profile))):
             raise ValueError("cannot reuse a different execution profile")
         if not profile_path.exists() and (
             profile.dma.service != "bounded:32:32" or profile.state_rounding != "rn" or profile.hbm_controllers != 8
@@ -142,6 +144,11 @@ def run_program(
         RUST_LOG="warn,transactional_emulator=info",
     )
     env.update(profile.runtime_environment())
+    if os.environ.get("LIBTORCH"):
+        # The standalone Rust runtime needs its pinned C++ libtorch. Keep it
+        # out of the Python parent's loader path (libtorch_python may target
+        # another CPython ABI), and scope this override to the child process.
+        env["LD_LIBRARY_PATH"] = str(Path(os.environ["LIBTORCH"]) / "lib") + ":" + env.get("LD_LIBRARY_PATH", "")
     if matrix_service is not None:
         path = output / "matrix_profile.json"
         path.write_text(json.dumps(asdict(matrix_service), indent=2))

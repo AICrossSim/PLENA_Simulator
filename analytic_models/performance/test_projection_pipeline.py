@@ -152,6 +152,85 @@ def test_panel_schedule_changes_provenance_without_changing_hardware():
         ExecutionProfile(projection_n_panel_tile=2)
 
 
+def test_per_operator_projection_choices_are_versioned_and_fail_closed():
+    baseline = ExecutionProfile(projection_schedule="batch")
+    tuned = replace(baseline, projection_panel_overrides=(("output_projection", 8),))
+    assert tuned.identity != baseline.identity
+    assert tuned.runtime_environment() == baseline.runtime_environment()
+    assert tuned.matrix == baseline.matrix
+    assert replace(baseline, projection_panel_overrides=[["output_projection", 8]]) == tuned
+    for choices in ((("x", 3),), (("x", True),), (("", 1),), (("x", 1), ("x", 2))):
+        with pytest.raises(ValueError):
+            replace(baseline, projection_panel_overrides=choices)
+    with pytest.raises(ValueError, match="compact Matrix"):
+        ExecutionProfile(projection_panel_overrides=(("projection", 2),))
+
+
+@pytest.mark.parametrize("batch", [1, 4])
+def test_mixed_projection_lowering_preserves_other_stages_and_private_allocations(batch):
+    from dataclasses import asdict
+    from .ltile_layers import build_batch
+
+    root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+    kwargs = dict(control="fsm", gather="cached", projection_schedule="batch", native_coefficients=True)
+    original = build_batch("mamba", batch, root, **kwargs)
+    mixed = build_batch("mamba", batch, root, projection_panel_overrides=(("output_projection", 8),), **kwargs)
+    assert original.arena.size == mixed.arena.size
+    for before, after in zip(original.stages, mixed.stages, strict=True):
+        assert {k: v for k, v in asdict(before).items() if k != "assembly"} == {
+            k: v for k, v in asdict(after).items() if k != "assembly"
+        }
+        if before.name == "output_projection":
+            assert "n_panel_tile=8" in after.assembly
+            assert before.assembly != after.assembly
+        else:
+            assert before.assembly == after.assembly
+    with pytest.raises(ValueError, match="unknown projection stage"):
+        build_batch("mamba", 1, root, projection_panel_overrides=(("typo", 8),), **kwargs)
+
+
+@pytest.mark.parametrize("mixed_total,chosen", [(35, "mixed"), (150, "uniform")])
+def test_tuning_reprices_composition_and_keeps_uniform_fallback(tmp_path, monkeypatch, mixed_total, chosen):
+    from types import SimpleNamespace
+    from .ltile_services import Services
+
+    costs = {1: (50, 80), 2: (10, 100), 4: (90, 20), 8: (25, 50)}
+    stages = [{"name": "a", "matrix_shape": [1, 32, 256]},
+              {"name": "b", "matrix_shape": [1, 32, 256]},
+              {"name": "recurrence", "matrix_shape": []}]
+    def evaluate(service, *args, **kwargs):
+        overrides = dict(service.profile.projection_panel_overrides)
+        if overrides:
+            assert overrides == {"a": 2, "b": 4}
+            total, values = mixed_total, (10, 20)
+        else:
+            values = costs[service.profile.projection_n_panel_tile]
+            total = sum(values) + 5
+        return dict(metadata={"stages": stages},
+                    sections=[{"name": n, "total": v} for n, v in zip(("a", "b", "recurrence"), (*values, 5))],
+                    components={"total": total}, assembly_sha256=str(service.profile.projection_panel_overrides))
+    monkeypatch.setattr(Services, "layer", evaluate)
+    root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+    service = Services(root, ExecutionProfile(projection_schedule="batch"), SimpleNamespace(identity={}), tmp_path)
+    result = service.tuned_layer("mamba", 1, "fsm")
+    assert result["projection_search"]["selected"] == chosen
+    assert result["projection_search"]["best_uniform_panels"] == 8
+    assert result["components"]["total"] == min(mixed_total, 80)
+
+
+def test_projection_selection_rejects_missing_or_invalid_stage_costs():
+    from .ltile_services import select_projection_panels
+
+    stages = [{"name": "a", "matrix_shape": [1, 32, 256]}]
+    costs = {n: [{"name": "a", "total": 10}] for n in (1, 2, 4, 8)}
+    assert select_projection_panels(stages, costs) == {"a": 1}
+    for invalid in (float("nan"), float("inf"), -1):
+        with pytest.raises(ValueError, match="finite"):
+            select_projection_panels(stages, {**costs, 2: [{"name": "a", "total": invalid}]})
+    with pytest.raises(ValueError, match="stages differ"):
+        select_projection_panels(stages, {**costs, 2: []})
+
+
 @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
 @pytest.mark.parametrize("batch_tile", [1, 4])
 def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):

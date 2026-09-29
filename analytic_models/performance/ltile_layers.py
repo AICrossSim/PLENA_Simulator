@@ -325,7 +325,7 @@ def build_layer(
 
 
 def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream", native_coefficients=False,
-                vector_rows=58, gather_vector_rows=64, projection_n_panel_tile=1):
+                vector_rows=58, gather_vector_rows=64, projection_n_panel_tile=1, projection_panel_overrides=()):
     """Compile batch stages with shared weight panels and private state.
 
     No B1 cycle multiplication. Matrix SRAM weights stay resident across
@@ -336,6 +336,11 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
 
     if type(batch) is not int or not 1 <= batch <= 16:
         raise ValueError("batch must be 1..16")
+    overrides = dict(projection_panel_overrides)
+    if len(overrides) != len(projection_panel_overrides):
+        raise ValueError("duplicate projection stage override")
+    if overrides and projection_schedule not in ("compact", "batch"):
+        raise ValueError("projection overrides require compact/batch lowering")
     arena, weights = ShapeArena(), {}
     plans = [
         build_layer(
@@ -353,8 +358,17 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
         )
         for _ in range(batch)
     ]
+    names = {s.name for s in plans[0].stages if s.matrix_shape}
+    if overrides.keys() - names:
+        raise ValueError(f"unknown projection stage override: {sorted(overrides.keys() - names)}")
     if batch == 1:
-        return plans[0]
+        result = plans[0]
+        for index, s in enumerate(result.stages):
+            if s.name in overrides:
+                _, n, k = s.matrix_shape
+                spec = result.Projection(s.input_base, s.weight_base, s.output_base, s.zero_base, k, n, 256)
+                result.stages[index] = replace(s, assembly=result.lower_projection(spec, n_panel_tile=overrides[s.name]))
+        return result
     from compiler.aten.plena.isa_matrix_projection import lower_batch_projection, lower_resident_projection
 
     result = plans[0]
@@ -374,7 +388,7 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
                     spec, [x.input_base for x in columns], [x.output_base for x in columns],
                     batch_tile=1 if projection_schedule == "compact" else 4,
                     vector_rows=vector_rows,
-                    n_panel_tile=projection_n_panel_tile,
+                    n_panel_tile=overrides.get(s.name, projection_n_panel_tile),
                 )
             else:
                 lower = lower_resident_projection if projection_schedule == "resident" else lower_batch_projection

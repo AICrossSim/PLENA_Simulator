@@ -1,5 +1,10 @@
 # Recurrent sublayer results, 2026-09-28
 
+The [latest complete batch comparison](final_comparison/README.md) adds
+per-projection Compiler schedule selection and separates the historical
+Matrix+Vector mapping, matched-arithmetic Matrix reference, previous optimized
+path and latest candidate. It includes all stages at B1/2/4/8/16.
+
 The subsequent [120-case projection study](projection_study/README.md) compares
 Compiler panel reuse and fixed Matrix reduction segments against the **After**
 configuration below. Its Mamba/KDA B1–B16 tables include stage breakdowns,

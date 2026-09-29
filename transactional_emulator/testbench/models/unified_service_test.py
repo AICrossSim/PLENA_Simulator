@@ -76,6 +76,51 @@ def matrix_case(
     )
 
 
+def mixed_projection_case(root, runtime, memory, batch):
+    """Two dependent projections use different panel schedules in one program.
+
+    The second stage reads the first stage's actual committed HBM output.
+    Distinct requests, both K tails, and finite-cache pressure at B16 expose
+    lifetime/stride mistakes that isolated timing comparisons cannot detect.
+    """
+    rng = np.random.default_rng(9280 + batch)
+    arena = Arena()
+    zero = arena.add(np.zeros(2048))
+    k, hidden, n = (6145 if batch == 16 else 2305), 289, 65
+    h = profile_for(memory)
+    h = replace(h, projection_schedule="batch", matrix=replace(h.matrix, weight_replay=True, projection_segments=4),
+                projection_panel_overrides=(("first_projection", 8), ("second_projection", 2)))
+    first = Projection(0, 0, 0, zero, k, hidden, 256)
+    second = Projection(0, 0, 0, zero, hidden, n, 256)
+    xs = [bf(rng.normal(0, 0.2, k)) for _ in range(batch)]
+    inputs = [arena.add(np.pad(x, (0, first.input_values - k))) for x in xs]
+    weights = [bf(rng.normal(0, 0.1, shape)) for shape in ((k, hidden), (hidden, n))]
+
+    def pack(w):
+        padded = np.pad(w, ((0, (-w.shape[0]) % 32), (0, (-w.shape[1]) % 32)))
+        return arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
+
+    weight_bases = [pack(w) for w in weights]
+    middle_count = max(first.output_values, second.input_values)
+    middle = [arena.add(np.zeros(middle_count), output=True) for _ in xs]
+    outputs = [arena.add(np.full(second.output_values, 7), output=True) for _ in xs]
+    first = replace(first, inputs=inputs[0], weights=weight_bases[0], outputs=middle[0])
+    second = replace(second, inputs=middle[0], weights=weight_bases[1], outputs=outputs[0])
+    text = "; @operator=first_projection\n" + lower_compact_projection(first, inputs, middle, batch_tile=4, n_panel_tile=8)
+    text += "; @operator=second_projection\n" + lower_compact_projection(second, middle, outputs, batch_tile=4, n_panel_tile=2)
+    image, result = run_program(root, runtime, memory, arena, text, profile=h)
+    for x, mid, dst in zip(xs, middle, outputs):
+        expected_mid = reference(x, weights[0], 256, h.matrix)
+        expected_out = reference(expected_mid, weights[1], 256, h.matrix)
+        np.testing.assert_array_equal(read(image, mid, hidden), expected_mid)
+        np.testing.assert_array_equal(read(image, dst, n), expected_out)
+        np.testing.assert_array_equal(read(image, mid + hidden * 2, middle_count - hidden), 0)
+        np.testing.assert_array_equal(read(image, dst + n * 2, second.output_values - n), 0)
+    return dict(case=root.name, **result, status="passed", checked_values=batch * (hidden + n),
+                dimensions=dict(batch=batch, k=k, hidden=hidden, n=n, panel_tiles=[8, 2]),
+                scope="dependent BF16 projections with different Compiler panels; actual producer output consumed; no long-chain quality claim")
+
+
 def cached_gather_case(root, runtime, memory):
     """Repeated subsets, not only identical whole rows; cache pressure fallback."""
     rng = np.random.default_rng(5819)
@@ -432,7 +477,7 @@ def main():
         p.add_argument("--" + arg, required=True, type=Path)
     p.add_argument(
         "--only", default="all",
-        choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel"),
+        choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel", "mixed"),
     )
     p.add_argument("--segments", nargs="+", type=int, choices=(1, 2, 4), default=[1],
                    help="Candidate M_MM.P segments for --only panel; default preserves the original path")
@@ -496,14 +541,19 @@ def main():
         for b, k, n, tile, panels in panel_shapes
         for segments in args.segments
     ]
+    mixed = [
+        (f"mixed_projection_b{batch}", lambda d, b=batch: mixed_projection_case(d, args.runtime, args.memory_root, b))
+        for batch in (1, 2, 4, 8, 16)
+    ]
     groups = {
-        "all": jobs + auxiliary + attention + experts + resident + projection + panel,
+        "all": jobs + auxiliary + attention + experts + resident + projection + panel + mixed,
         "auxiliary": auxiliary,
         "attention": attention,
         "experts": experts,
         "resident": resident,
         "projection": projection,
         "panel": panel,
+        "mixed": mixed,
     }
     jobs = groups[args.only]
     for name, run in jobs:

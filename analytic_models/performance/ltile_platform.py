@@ -91,6 +91,9 @@ class ExecutionProfile:
     scheduling: str = "serial_retirement"
     projection_schedule: str = "resident"
     projection_n_panel_tile: int = 1
+    # Named projection stages may use different software loop nests. These
+    # choices affect the program/cache identity, never physical resources.
+    projection_panel_overrides: tuple = ()
     projection_vector_rows: int = 58
     gather_vector_rows: int = 64
     hbm_controllers: int = 8
@@ -108,6 +111,19 @@ class ExecutionProfile:
             raise ValueError("projection N panel tile must be 1, 2, 4 or 8")
         if self.projection_schedule == "resident" and self.projection_n_panel_tile != 1:
             raise ValueError("N panel tiling requires the compact Matrix interface")
+        overrides = self.projection_panel_overrides
+        if not isinstance(overrides, (tuple, list)) or any(
+            not isinstance(item, (tuple, list)) or len(item) != 2
+            or not isinstance(item[0], str) or not item[0]
+            or type(item[1]) is not int or item[1] not in (1, 2, 4, 8)
+            for item in overrides
+        ):
+            raise ValueError("projection overrides require named stages and legal panel tiles")
+        if len({item[0] for item in overrides}) != len(overrides):
+            raise ValueError("duplicate projection stage override")
+        if overrides and self.projection_schedule == "resident":
+            raise ValueError("projection overrides require the compact Matrix interface")
+        object.__setattr__(self, "projection_panel_overrides", tuple(sorted(tuple(item) for item in overrides)))
         if not 1 <= self.projection_vector_rows <= 58 or not 1 <= self.gather_vector_rows <= 64:
             raise ValueError("invalid projection/gather Vector workspace")
         if self.projection_schedule != "resident" and self.matrix.accumulator != "BF16":

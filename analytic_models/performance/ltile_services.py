@@ -1,6 +1,6 @@
 """Reusable compiled operator services and version-bound analytical cache."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
@@ -10,6 +10,26 @@ from .ltile_layers import build_batch, compiler_api
 from .ltile_program import ShapeArena
 from .ltile_execution import price_program
 from .ltile_dma import sha
+
+
+def select_projection_panels(stages, candidates):
+    """Rank only like-for-like stages; the caller must reprice their composition."""
+    if set(candidates) != {1, 2, 4, 8}:
+        raise ValueError("projection search requires the four legal panel schedules")
+    names = [s["name"] for s in stages]
+    if len(set(names)) != len(names):
+        raise ValueError("duplicate stage names")
+    sections = {}
+    for panels, costs in candidates.items():
+        sections[panels] = {s["name"]: s for s in costs}
+        if len(sections[panels]) != len(costs) or set(sections[panels]) != set(names):
+            raise ValueError("projection candidate stages differ")
+        if any(not isinstance(s["total"], (int, float)) or not 0 <= s["total"] < float("inf") for s in costs):
+            raise ValueError("projection costs must be finite and nonnegative")
+    return {
+        s["name"]: min(candidates, key=lambda n: (sections[n][s["name"]]["total"], n))
+        for s in stages if s["matrix_shape"]
+    }
 
 
 class Services:
@@ -85,6 +105,7 @@ class Services:
                 vector_rows=self.profile.projection_vector_rows,
                 gather_vector_rows=self.profile.gather_vector_rows,
                 projection_n_panel_tile=self.profile.projection_n_panel_tile,
+                projection_panel_overrides=self.profile.projection_panel_overrides,
             )
             regions = (
                 {(s.weight_base, s.weight_bytes) for s in plan.stages if s.matrix_shape} if weight == "NVFP4" else set()
@@ -99,6 +120,7 @@ class Services:
                     batch_mapping="shared Matrix weight panels; private input/output/state; bounded request tiles",
                     projection_schedule=self.profile.projection_schedule,
                     projection_n_panel_tile=self.profile.projection_n_panel_tile,
+                    projection_panel_overrides=dict(self.profile.projection_panel_overrides),
                     projection_resources=self.profile.matrix.projection_resources()
                     if self.profile.projection_schedule in ("compact", "batch") or self.profile.matrix.weight_replay
                     else None,
@@ -126,9 +148,56 @@ class Services:
             generate,
         )
 
+    def tuned_layer(self, kind, batch, control, weight="BF16", *, supply="packed"):
+        """Choose bounded per-projection loop nests, then reprice the program.
+
+        No Rust observations or saved speedup tables enter this search. Four
+        uniform compiled schedules provide local analytical candidates. Their
+        best individual stages form one mixed program, which is executed by
+        the memory model as a whole; stage times are never simply summed.
+        Keep the best uniform program if memory-history interactions make the
+        mixed program slower. This is offline compilation, not runtime logic.
+        """
+        if self.profile.projection_schedule not in ("compact", "batch"):
+            raise ValueError("projection tuning requires compact/batch lowering")
+        if self.profile.projection_panel_overrides:
+            raise ValueError("projection tuning starts from uniform candidate schedules")
+        variants = {}
+        for panels in (1, 2, 4, 8):
+            profile = replace(self.profile, projection_n_panel_tile=panels)
+            variants[panels] = Services(self.compiler, profile, self.backend, self.cache).layer(
+                kind, batch, control, weight, supply=supply,
+            )
+        reference = variants[1]["metadata"]["stages"]
+        if any(result["metadata"]["stages"] != reference for result in variants.values()):
+            raise ValueError("projection candidates changed stage contracts or HBM allocations")
+        choices = select_projection_panels(reference, {n: r["sections"] for n, r in variants.items()})
+        profile = replace(self.profile, projection_n_panel_tile=1, projection_panel_overrides=tuple(choices.items()))
+        mixed = Services(self.compiler, profile, self.backend, self.cache).layer(
+            kind, batch, control, weight, supply=supply,
+        )
+        uniform = min(variants, key=lambda n: (variants[n]["components"]["total"], n))
+        use_mixed = mixed["components"]["total"] < variants[uniform]["components"]["total"]
+        selected = dict(mixed if use_mixed else variants[uniform])
+        selected["projection_search"] = dict(
+            policy="per_operator_analytical_v1",
+            candidate_totals={str(n): r["components"]["total"] for n, r in variants.items()},
+            candidate_assembly_sha256={str(n): r["assembly_sha256"] for n, r in variants.items()},
+            mixed_panels=choices,
+            mixed_total=mixed["components"]["total"],
+            mixed_assembly_sha256=mixed["assembly_sha256"],
+            best_uniform_panels=uniform,
+            selected="mixed" if use_mixed else "uniform",
+            no_regression_guard="whole-program analytical total including memory service",
+        )
+        return selected
+
     def projection(self, batch, k, n, weight="BF16"):
         if weight not in ("BF16", "NVFP4"):
             raise ValueError("unsupported weight contract")
+        overrides = dict(self.profile.projection_panel_overrides)
+        if overrides.keys() - {"projection"}:
+            raise ValueError("standalone projection accepts only the projection stage override")
 
         def generate():
             _, Projection, _, _, _ = compiler_api(self.compiler)
@@ -150,7 +219,7 @@ class Services:
                     p, inputs, outputs,
                     batch_tile=1 if self.profile.projection_schedule == "compact" else 4,
                     vector_rows=self.profile.projection_vector_rows,
-                    n_panel_tile=self.profile.projection_n_panel_tile,
+                    n_panel_tile=overrides.get("projection", self.profile.projection_n_panel_tile),
                 )
             return (
                 "; @operator=projection\n" + text,
