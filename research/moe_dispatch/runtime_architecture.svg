@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="900" viewBox="0 0 1120 900">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6" fill="none" stroke="#34495e"/></marker>
+<style>text{font:16px sans-serif;fill:#172b4d} .title{font-size:23px;font-weight:bold}.small{font-size:13px}.box{fill:#f4f8fc;stroke:#456;stroke-width:1.5;rx:10}.data{fill:none;stroke:#34495e;stroke-width:2;marker-end:url(#arrow)}.ctrl{fill:none;stroke:#8865b5;stroke-width:2;stroke-dasharray:6 4;marker-end:url(#arrow)}</style></defs>
+<rect width="1120" height="900" fill="white"/>
+<text x="35" y="35" class="title">Bounded Current / Next runtime — M × N × K</text>
+<text x="35" y="60" class="small">Analytical model • solid: data • dashed: descriptors / control • 1 GHz model clock, not RTL</text>
+<rect x="35" y="80" width="310" height="65" class="box"/><text x="55" y="106">Compiler: shapes, addresses, layouts</text><text x="55" y="131" class="small">Private capacity checks; fixed inbox allocation</text>
+<rect x="390" y="80" width="335" height="65" class="box"/><text x="412" y="107">Already-routed expert descriptors</text><text x="412" y="131" class="small">task_id, expert_id, Me, input/output references</text>
+<rect x="780" y="80" width="305" height="65" class="box"/><text x="800" y="107">8-entry pending FIFO</text><text x="800" y="131" class="small">Full → upstream retains later tasks</text>
+<path d="M725 111 H780" class="ctrl"/><path d="M190 145 V205 H285" class="ctrl"/><path d="M930 145 V185 H795" class="ctrl"/>
+<rect x="285" y="166" width="510" height="108" class="box"/><text x="310" y="192">Dispatcher: capacity filter + estimated finish comparison</text><text x="310" y="219">Core 0: Current + Next     Core 1: Current + Next</text><text x="310" y="246" class="small">Atomic owner • no migration • Next ≤ 1 W tile • event-driven promotion</text>
+<rect x="35" y="305" width="280" height="83" class="box"/><text x="55" y="334">Shared HBM — BF16 weights</text><text x="55" y="358" class="small">256 B/ns; 64 ns fixed response</text><text x="55" y="377" class="small">Model only; no native channel / row timing</text>
+<rect x="390" y="305" width="695" height="83" class="box"/><text x="410" y="334">Current AGU + paused Next context → legal-request arbiter → DMA</text><text x="410" y="359" class="small">Latched valid/ready request • 256 × 32 B global credits • 8 KiB return capacity</text><text x="410" y="379" class="small">Credit returns only after W-SRAM landing; Current requests all subsequent tiles</text>
+<path d="M540 274 V305" class="ctrl"/><path d="M315 345 H390" class="data"/>
+<rect x="35" y="440" width="505" height="322" class="box"/><rect x="575" y="440" width="510" height="322" class="box"/>
+<text x="55" y="469">Core 0 — physical M = 4</text><text x="595" y="469">Core 1 — physical M = 2</text>
+<rect x="55" y="490" width="205" height="64" class="box"/><text x="70" y="516">Private W: 5 × 4 KiB</text><text x="70" y="541" class="small">4 current bands + ≤1 Next tile</text>
+<rect x="595" y="490" width="205" height="64" class="box"/><text x="610" y="516">Private W: 5 × 4 KiB</text><text x="610" y="541" class="small">4 current bands + ≤1 Next tile</text>
+<rect x="300" y="490" width="215" height="64" class="box"/><text x="315" y="516">X slots: 2 × 4 KiB</text><text x="315" y="541" class="small">Each [4,512] BF16</text>
+<rect x="840" y="490" width="220" height="64" class="box"/><text x="855" y="516">X slots: 2 × 2 KiB</text><text x="855" y="541" class="small">Each [2,512] BF16</text>
+<path d="M490 388 V412 H156 V490" class="data"/><path d="M920 388 V412 H697 V490" class="data"/>
+<rect x="150" y="590" width="275" height="55" class="box"/><text x="195" y="623">Array: 4 × 4 × 512</text>
+<rect x="690" y="590" width="275" height="55" class="box"/><text x="735" y="623">Array: 2 × 4 × 512</text>
+<path d="M156 554 V575 H225 V590" class="data"/><path d="M410 554 V575 H345 V590" class="data"/>
+<path d="M697 554 V575 H760 V590" class="data"/><path d="M947 554 V575 H895 V590" class="data"/>
+<rect x="55" y="680" width="460" height="62" class="box"/><text x="70" y="705">Private arena: X, Gate/Up/Z, FP32 accumulator</text><text x="70" y="729" class="small">~1.333 MiB incl. control / inbox / final output reservations</text>
+<rect x="595" y="680" width="465" height="62" class="box"/><text x="610" y="705">Private arena: X, Gate/Up/Z, FP32 accumulator</text><text x="610" y="729" class="small">~0.667 MiB incl. control / inbox / final output reservations</text>
+<path d="M287 645 V680" class="data"/><path d="M827 645 V680" class="data"/>
+<path d="M505 680 V565 H485 V554" class="data"/><path d="M1050 680 V565 H1030 V554" class="data"/>
+<rect x="250" y="810" width="620" height="57" class="box"/><text x="270" y="834">Finite, pre-reserved distributed inbox → ordered route combine</text><text x="270" y="856" class="small">Shared copy/vector service is charged; producer retires after inbox transfer</text>
+<path d="M287 742 V810" class="data"/><path d="M827 742 V810" class="data"/>
+<text x="36" y="888" class="small">Same mechanism for 6 and 3+3. No extra HBM bandwidth or free cross-core accumulator access.</text>
+</svg>

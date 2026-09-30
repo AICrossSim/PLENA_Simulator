@@ -2,11 +2,13 @@
 //! All times are 1 ns cycles. Numeric SRAM validation is a separate executable.
 #[allow(dead_code)]
 mod plan;
+mod runtime;
 use plan::{Issue, Projection, build_groups};
+use runtime::{DmaRequest, NextTask};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::{BTreeMap, BinaryHeap, VecDeque};
 
 fn ceil(a: usize, b: usize) -> usize {
     a.div_ceil(b)
@@ -27,6 +29,8 @@ struct Expert {
     f: usize,
     #[serde(default)]
     token_indices: Vec<usize>,
+    #[serde(default)]
+    weights: Value,
 }
 #[derive(Clone, Deserialize, Serialize)]
 struct Workload {
@@ -57,6 +61,13 @@ struct Config {
     vector_elements_per_ns: usize,
     dot_tail_ns: u64,
     record_trace: bool,
+    runtime_fsm: bool,
+    next_prefetch: bool,
+    dma_ready_after: u64,
+    dma_ready_period: u64,
+    dma_ready_cycles: u64,
+    max_cycles: u64,
+    no_progress_cycles: u64,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -72,11 +83,18 @@ impl Default for Config {
             ideal_hbm: false,
             ideal_onchip: false,
             control_cost: true,
-            window: 4,
+            window: 8,
             onchip_bytes_per_ns: 384,
             vector_elements_per_ns: 32,
             dot_tail_ns: 20,
             record_trace: false,
+            runtime_fsm: true,
+            next_prefetch: true,
+            dma_ready_after: 0,
+            dma_ready_period: 1,
+            dma_ready_cycles: 1,
+            max_cycles: 200_000_000,
+            no_progress_cycles: 1_000_000,
         }
     }
 }
@@ -141,9 +159,21 @@ struct Stats {
     prediction_actual_cycles: u64,
     front_states: BTreeMap<String, u64>,
     expert_completions: usize,
+    next_bindings: usize,
+    next_prefetch_tiles: usize,
+    next_ready_at_promotion: usize,
+    next_inflight_at_promotion: usize,
+    next_weight_wait_cycles: u64,
+    next_peak_bytes: usize,
+    dma_accepted: u64,
+    dma_landed: u64,
+    dma_backpressure_cycles: u64,
+    eligible_wait_max_cycles: u64,
 }
 #[derive(Clone)]
 struct Tile {
+    n_start: usize,
+    k_start: usize,
     nv: usize,
     kv: usize,
     slot: Option<usize>,
@@ -181,6 +211,8 @@ impl Run {
             let first = tiles.len();
             for t in group.tiles {
                 tiles.push(Tile {
+                    n_start: t.n_start,
+                    k_start: t.k_start,
                     nv: t.n_valid,
                     kv: t.k_valid,
                     slot: None,
@@ -235,6 +267,7 @@ struct Session {
     phase: usize,
     start: u64,
     predicted_duration: u64,
+    issues_at_start: u64,
 }
 struct Core {
     m: usize,
@@ -243,6 +276,10 @@ struct Core {
     xb: Banks,
     ab: Banks,
     session: Option<Session>,
+    next: Option<NextTask>,
+    incoming: Option<Tile>,
+    prefetch_promoted_at: Option<u64>,
+    dma_wait_since: Option<u64>,
     run: Option<Run>,
     xs: Vec<XSlot>,
     free_slots: Vec<usize>,
@@ -258,6 +295,8 @@ struct Core {
 }
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 enum Event {
+    RuntimeReturn(DmaRequest),
+    RuntimeAck(DmaRequest),
     Return(usize, usize, usize),
     Ack(usize, usize),
     Feed(usize, usize, usize, bool),
@@ -296,6 +335,16 @@ struct Sim {
     all_done_at: Option<u64>,
     combine_cycles: u64,
     unassigned_peak: usize,
+    pending: VecDeque<usize>,
+    input_cursor: usize,
+    pending_dma: Option<DmaRequest>,
+    outstanding_dma: BTreeMap<u64, DmaRequest>,
+    dma_serial: u64,
+    last_progress: u64,
+    runtime_decision_paid: bool,
+    promotion_pending: Vec<Option<u64>>,
+    input_backpressure_cycles: u64,
+    dispatch_audit: Vec<Value>, // Observer history, not a hardware task queue.
 }
 
 impl Sim {
@@ -509,6 +558,7 @@ impl Sim {
             phase: 0,
             start: self.now,
             predicted_duration: pred,
+            issues_at_start: self.cores[c].stats.issues,
         });
         let mut ready = self.now;
         let (dst, dstride) = self.allocation(c, "x");
@@ -528,9 +578,18 @@ impl Sim {
         }
         self.cores[c].blocked_until = ready;
         self.event(ready, Event::Begin(c, 0));
-        self.log(json!({"event":"commit_owner","cycle":self.now,"expert":x.id,"core":c,"split":split,"workspace":workspace,"predicted_duration":pred}));
+        let event = if self.cfg.runtime_fsm {
+            "current_start"
+        } else {
+            "commit_owner"
+        };
+        self.log(json!({"event":event,"cycle":self.now,"task":e,"expert":x.id,"core":c,"split":split,"workspace":workspace,"predicted_duration":pred}));
     }
     fn dispatch(&mut self) {
+        if self.cfg.runtime_fsm {
+            self.dispatch_runtime();
+            return;
+        }
         if !self.decision_needed || self.now < self.control_free || self.now < self.decision_after {
             return;
         }
@@ -687,6 +746,9 @@ impl Sim {
         self.decision_needed = true;
     }
     fn begin(&mut self, c: usize, phase: usize) {
+        if phase != 0 {
+            self.cores[c].prefetch_promoted_at = None;
+        }
         let s = self.cores[c].session.as_mut().unwrap();
         s.phase = phase;
         let ss = s.clone();
@@ -697,8 +759,35 @@ impl Sim {
             (ss.hn, e.f, ss.h0)
         };
         assert_eq!(self.cores[c].contexts, 0);
-        assert_eq!(self.cores[c].free_slots.len(), self.cores[c].wslots);
-        self.cores[c].run = Some(Run::new(e.m, n, k, start, self.cores[c].m, self.cfg.group));
+        let prefetched = if phase == 0 {
+            self.cores[c].incoming.take()
+        } else {
+            None
+        };
+        let next_occupied = self.cores[c]
+            .next
+            .as_ref()
+            .is_some_and(|v| v.first.is_some()) as usize;
+        assert_eq!(
+            self.cores[c].free_slots.len() + next_occupied + prefetched.is_some() as usize,
+            self.cores[c].wslots
+        );
+        let mut run = Run::new(e.m, n, k, start, self.cores[c].m, self.cfg.group);
+        if let Some(tile) = prefetched {
+            assert_eq!(
+                (tile.n_start, tile.k_start, tile.bytes),
+                (
+                    run.tiles[0].n_start,
+                    run.tiles[0].k_start,
+                    run.tiles[0].bytes
+                )
+            );
+            self.cores[c].live_tiles[tile.slot.unwrap()] = Some(0);
+            run.send_cursor = usize::from(tile.sent == tile.bytes);
+            run.admit = 1;
+            run.tiles[0] = tile;
+        }
+        self.cores[c].run = Some(run);
         self.cores[c].weight_cache = None;
         for x in &mut self.cores[c].xs {
             x.tag = None;
@@ -776,7 +865,10 @@ impl Sim {
         }
     }
     fn handle(&mut self, event: Event) {
+        self.last_progress = self.now;
         match event {
+            Event::RuntimeReturn(req) => self.return_runtime(req),
+            Event::RuntimeAck(req) => self.ack_runtime(req),
             Event::Return(c, t, offset) => {
                 let tile = &self.cores[c].run.as_ref().unwrap().tiles[t];
                 let slot = tile.slot.unwrap();
@@ -812,6 +904,9 @@ impl Sim {
                     let freed = tile.slot.take().unwrap();
                     self.cores[c].live_tiles[freed] = None;
                     self.cores[c].free_slots.push(freed);
+                    self.log(
+                        json!({"event":"weight_slot_free","cycle":self.now,"core":c,"slot":freed}),
+                    );
                 }
             }
             Event::Dot(c, i) => {
@@ -844,6 +939,11 @@ impl Sim {
                 let v = run.committed.entry((s.m_start, s.n_start)).or_default();
                 assert_eq!(*v, s.k_start / 512);
                 *v += 1;
+                if self.cfg.record_trace {
+                    let s = self.cores[c].session.as_ref().unwrap();
+                    self.log(json!({"event":"k_commit","cycle":self.now,"core":c,
+                        "task":s.e,"phase":s.phase,"issue":i}));
+                }
                 assert!(self.cores[c].contexts > 0);
                 self.cores[c].contexts -= 1;
             }
@@ -855,6 +955,7 @@ impl Sim {
             }
             Event::VectorDone(c) => {
                 let s = self.cores[c].session.as_ref().unwrap().clone();
+                self.log(json!({"event":"activation_done","cycle":self.now,"core":c,"task":s.e}));
                 if !s.split {
                     self.event(self.now, Event::Begin(c, 4));
                 } else {
@@ -887,6 +988,7 @@ impl Sim {
                 self.cores[c].stats.prediction_actual_cycles += self.now - s.start;
                 self.cores[c].stats.expert_completions += 1;
                 self.cores[c].run = None;
+                assert!(self.cores[c].incoming.is_none());
                 if s.split {
                     self.split_drained[s.e][c] = true;
                     if self.split_drained[s.e].iter().all(|v| *v) {
@@ -935,6 +1037,10 @@ impl Sim {
         }
     }
     fn hbm_issue(&mut self) {
+        if self.cfg.runtime_fsm {
+            self.issue_runtime();
+            return;
+        }
         let grants = if self.cfg.ideal_hbm {
             self.cfg.credits
         } else {
@@ -1075,6 +1181,13 @@ impl Sim {
                 busy_until: end,
             };
             self.cores[c].stats.x_stage_bytes += bytes as u64;
+            if self.cfg.record_trace {
+                let s = self.cores[c].session.as_ref().unwrap();
+                self.log(json!({"event":"x_stage","cycle":self.now,"ready_cycle":end,
+                    "core":c,"task":s.e,"phase":s.phase,"slot":slot,
+                    "m_start":spec.m_start,"m_valid":spec.m_valid,
+                    "k_start":spec.k_start,"k_valid":spec.k_valid}));
+            }
             let count = self.cores[c].xs.iter().filter(|x| x.tag.is_some()).count();
             self.cores[c].stats.x_peak_bytes = self.cores[c]
                 .stats
@@ -1171,6 +1284,9 @@ impl Sim {
             )
         };
         if !ready {
+            if self.cfg.runtime_fsm && tid == 0 && self.cores[c].prefetch_promoted_at.is_some() {
+                self.cores[c].stats.next_weight_wait_cycles += 1;
+            }
             return "weight_not_ready";
         }
         if previous != spec.k_start / 512 {
@@ -1216,6 +1332,16 @@ impl Sim {
             .contexts_peak
             .max(self.cores[c].contexts);
         self.cores[c].stats.issues += 1;
+        self.last_progress = self.now;
+        if self.cfg.record_trace {
+            let session = self.cores[c].session.as_ref().unwrap();
+            self.log(
+                json!({"event":"mac_issue","cycle":self.now,"core":c,"task":session.e,
+                "phase":session.phase,"issue":i,"tile":tid,"slot":slot,"x_slot":xs,
+                "m_start":spec.m_start,"m_valid":spec.m_valid,"n_start":spec.n_start,
+                "n_valid":spec.n_valid,"k_start":spec.k_start,"k_valid":spec.k_valid}),
+            );
+        }
         self.cores[c].stats.useful_macs += (spec.m_valid * spec.n_valid * spec.k_valid) as u64;
         self.cores[c].stats.issued_macs += (self.cores[c].m * 4 * 512) as u64;
         self.cores[c].run.as_mut().unwrap().pos += 1;
@@ -1224,12 +1350,46 @@ impl Sim {
         "issue"
     }
     fn new(w: Workload, cfg: Config) -> Self {
-        assert!(cfg.lanes.iter().sum::<usize>() == 6 && cfg.lanes.len() <= 2);
+        assert!(
+            matches!(cfg.lanes.as_slice(), [6] | [3, 3] | [4, 2]),
+            "unsupported spatial organization"
+        );
+        assert!(cfg.onchip_bytes_per_ns > 0 && cfg.vector_elements_per_ns > 0);
+        assert!(cfg.max_cycles > 0 && cfg.no_progress_cycles > 0);
+        assert!(matches!(
+            cfg.dispatch.as_str(),
+            "fixed" | "fifo" | "dynamic"
+        ));
+        assert!(matches!(cfg.arbiter.as_str(), "rr" | "urgency"));
+        assert!(w.hidden > 0 && w.batch > 0);
+        for (index, e) in w.experts.iter().enumerate() {
+            assert!(
+                e.m > 0 && e.h == w.hidden && e.f > 0,
+                "invalid expert geometry"
+            );
+            assert!(
+                e.m.checked_mul(e.h)
+                    .and_then(|n| n.checked_mul(e.f))
+                    .and_then(|n| n.checked_mul(6))
+                    .is_some(),
+                "expert geometry overflows"
+            );
+            assert!(e.token_indices.len() == e.m && e.token_indices.iter().all(|&t| t < w.batch));
+            assert!(
+                !w.experts[..index].iter().any(|other| other.id == e.id),
+                "duplicate expert id"
+            );
+        }
         assert!(
             matches!(cfg.group, 1 | 2 | 4)
                 && cfg.window > 0
+                && cfg.window <= 8
                 && cfg.hbm_bytes_per_ns >= 32
                 && cfg.credits > 0
+                && cfg.credits <= 256
+                && cfg.dma_ready_period > 0
+                && cfg.dma_ready_cycles > 0
+                && cfg.dma_ready_cycles <= cfg.dma_ready_period
         );
         let nc = cfg.lanes.len();
         let mut cores = vec![];
@@ -1259,6 +1419,10 @@ impl Sim {
                 xb: Banks::new(4 * m),
                 ab: Banks::new(2 * m),
                 session: None,
+                next: None,
+                incoming: None,
+                prefetch_promoted_at: None,
+                dma_wait_since: None,
                 run: None,
                 xs: (0..2)
                     .map(|_| XSlot {
@@ -1308,6 +1472,16 @@ impl Sim {
             all_done_at: None,
             combine_cycles: 0,
             unassigned_peak: 0,
+            pending: VecDeque::new(),
+            input_cursor: 0,
+            pending_dma: None,
+            outstanding_dma: BTreeMap::new(),
+            dma_serial: 0,
+            last_progress: 0,
+            runtime_decision_paid: false,
+            promotion_pending: vec![None; nc],
+            input_backpressure_cycles: 0,
+            dispatch_audit: vec![],
         };
         let mut load = vec![0u64; nc];
         for e in 0..ne {
@@ -1342,8 +1516,19 @@ impl Sim {
                 self.all_done_at = Some(self.now);
                 break;
             }
+            if self.cfg.runtime_fsm {
+                // Commit a completed control operation before another actor
+                // acquires the port. Its completion is not the port's next free time.
+                self.finish_runtime_promotions();
+            }
             self.dispatch();
+            if self.cfg.runtime_fsm {
+                self.promote_runtime();
+            }
             self.admit_weights();
+            if self.cfg.runtime_fsm {
+                self.admit_next_weights();
+            }
             self.hbm_issue();
             for c in 0..self.cores.len() {
                 let state = self.step_core(c);
@@ -1366,7 +1551,16 @@ impl Sim {
                 self.handle(e);
             }
             self.now += 1;
-            assert!(self.now < 200_000_000, "model progress timeout");
+            assert!(
+                self.now < self.cfg.max_cycles,
+                "model progress timeout: {}",
+                self.wait_snapshot()
+            );
+            assert!(
+                self.now.saturating_sub(self.last_progress) < self.cfg.no_progress_cycles,
+                "no progress: {}",
+                self.wait_snapshot()
+            );
         }
         let experts_done = self.now;
         let rows: usize = self.w.experts.iter().map(|e| e.m).sum();
@@ -1405,6 +1599,12 @@ impl Sim {
             assert_eq!(c.free_slots.len(), c.wslots);
             assert_eq!(c.contexts, 0);
             assert!(c.stats.workspace_peak_bytes <= c.capacity);
+            assert!(c.next.is_none() && c.incoming.is_none() && c.session.is_none());
+        }
+        assert!(self.outstanding_dma.is_empty() && self.pending_dma.is_none());
+        if self.cfg.runtime_fsm {
+            assert!(self.pending.is_empty() && self.input_cursor == self.w.experts.len());
+            assert_eq!(self.dma_serial * 32, weight);
         }
         json!({"schema":"plena_dispatch_analytical_v1","workload":self.w.id,"config":self.cfg,
    "scope":"routed MoE from resident inputs/routes to ordered combine; analytical HBM, not Ramulator; timing metadata, separate payload tests",
@@ -1412,6 +1612,10 @@ impl Sim {
    "useful_macs":useful,"issued_macs":self.cores.iter().map(|c|c.stats.issued_macs).sum::<u64>(),
    "weight_bytes":weight,"credit_peak":self.credit_peak,"dispatch_decisions":self.decisions,"deferrals":self.deferrals,
    "pending_window_peak":self.unassigned_peak,"drained":true,"ownership_k_order_capacity_checks":true,
+   "dma_transactions_accepted":self.dma_serial,"dma_transactions_landed":self.cores.iter().map(|c|c.stats.dma_landed).sum::<u64>(),
+   "dma_credit_bytes":32,"dma_return_capacity_bytes":8192,"input_backpressure_cycles":self.input_backpressure_cycles,
+   "dispatch_audit":self.dispatch_audit,
+   "control_accounting":self.w.engine_layout.get("control_accounting"),
    "numerical_validation":"separate address-payload tests; this timing run does not execute numerical tensors",
    "model_limitations":["HBM is aggregate bandwidth plus fixed response latency, not channel/row timing", "vector and copy phases are conservatively charged as read/service/write without overlap", "candidate scalar cost heuristic, not optimal dispatch", "timing/payload are separately verified, not a unified native emulator"],
    "cores":self.cores.iter().map(|c|json!({"m":c.m,"capacity":c.capacity,"reserved_input_result_control":c.reserved,"stats":c.stats,
@@ -1451,6 +1655,7 @@ mod tests {
                     h: 512,
                     f: 16,
                     token_indices: (0..m).collect(),
+                    weights: Value::Null,
                 })
                 .collect(),
         }
@@ -1461,6 +1666,7 @@ mod tests {
         let a = Sim::new(w.clone(), Config::default()).run();
         let mut cfg = Config::default();
         cfg.split = "forced".into();
+        cfg.runtime_fsm = false;
         let b = Sim::new(w, cfg).run();
         assert_eq!(a["weight_bytes"], b["weight_bytes"]);
         assert_eq!(a["useful_macs"], b["useful_macs"]);

@@ -121,6 +121,21 @@ def toy_workloads() -> list[dict[str, Any]]:
 
 def make_points(workloads: list[dict[str, Any]], suite: str, trace: bool) -> list[dict[str, Any]]:
     points = []
+    if suite == "runtime":
+        for w in workloads:
+            if w["batch"] not in (2, 4, 8, 16):
+                continue
+            for org, lanes in ORGANIZATIONS:
+                for mode, dispatch, prefetch in (
+                    ("baseline", "fifo", False), ("dispatch_only", "dynamic", False),
+                    ("prefetch_only", "fifo", True), ("both", "dynamic", True)):
+                    config = dict(BASE, lanes=lanes, group=4, dispatch=dispatch,
+                                  split="none", record_trace=trace, window=8,
+                                  runtime_fsm=True, next_prefetch=prefetch)
+                    points.append({"key": f"runtime__{w['id']}__{org}__{mode}",
+                                   "suite": suite, "organization": org, "mode": mode,
+                                   "condition": "base", "workload": w, "config": config})
+        return points
     selected = toy_workloads() if suite == "toy" else workloads
     if suite == "sensitivity":
         selected = [w for w in workloads if w["batch"] == 8]
@@ -137,7 +152,7 @@ def make_points(workloads: list[dict[str, Any]], suite: str, trace: bool) -> lis
                                        ("ideal_both", {"ideal_hbm": True, "ideal_onchip": True})]
                     for condition, overrides in conditions:
                         config = dict(BASE, lanes=lanes, group=group, dispatch=dispatch,
-                                      split=split, record_trace=trace, **overrides)
+                                      split=split, record_trace=trace, runtime_fsm=False, **overrides)
                         key = f"{suite}__{w['id']}__{org}__g{group}__{mode}__{condition}"
                         points.append({"key": key, "suite": suite, "organization": org,
                                        "mode": mode, "condition": condition,
@@ -216,6 +231,7 @@ def summary_row(item: dict[str, Any]) -> dict[str, Any]:
     row = {"point": p["key"], "point_hash": item["point_hash"], "suite": p["suite"],
            "workload": r["workload"], "batch": p["workload"]["batch"],
            "organization": p["organization"], "core_m": "+".join(map(str, cfg["lanes"])),
+           "mode": p["mode"],
            "n_tile": 4, "k_tile": 512, "group": cfg["group"],
            "dispatch": cfg["dispatch"], "split": cfg["split"], "condition": p["condition"],
            "hbm_bytes_per_ns": cfg["hbm_bytes_per_ns"], "hbm_latency_ns": cfg["hbm_latency_ns"],
@@ -234,6 +250,15 @@ def summary_row(item: dict[str, Any]) -> dict[str, Any]:
            "dispatch_decisions": r["dispatch_decisions"], "deferrals": r["deferrals"],
            "credit_peak": r["credit_peak"], "repeats_equal": True,
            "raw_report_sha256": item["report_sha256"], "raw_directory": str(item["directory"])}
+    row["latency_us"] = r["cycles"] / 1000
+    row["tile_issues"] = stat("issues")
+    row["hbm_read_bytes"] = r["weight_bytes"]
+    row["hbm_write_bytes"] = 0  # Results remain in the accounted on-chip inbox.
+    row["input_backpressure_cycles"] = r.get("input_backpressure_cycles", 0)
+    for key in ("dma_accepted", "dma_landed", "dma_backpressure_cycles", "next_bindings",
+                "next_prefetch_tiles", "next_ready_at_promotion", "next_inflight_at_promotion",
+                "next_weight_wait_cycles"):
+        row[key] = stat(key)
     for index in range(2):
         c = cores[index] if index < len(cores) else None
         for field, key in (("private_peak_bytes", "workspace_peak_bytes"),
@@ -274,7 +299,7 @@ def main() -> None:
     parser.add_argument("--workloads", type=Path, default=frontend.DEFAULT_WORKLOADS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
-    parser.add_argument("--suite", choices=("matrix", "toy", "sensitivity"), default="matrix")
+    parser.add_argument("--suite", choices=("runtime", "matrix", "toy", "sensitivity"), default="runtime")
     parser.add_argument("--pilot", action="store_true", help="matrix: B2 G4 (9 points); toy: Me4/2 G4; sensitivity: BW256/lat64")
     parser.add_argument("--filter", default="", help="regular expression on human-readable point key")
     parser.add_argument("--workers", type=int, default=1)

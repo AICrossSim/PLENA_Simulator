@@ -47,6 +47,8 @@ class AnalyticalEngineIntegrationTests(unittest.TestCase):
                "control_cost": True, "window": 4, "onchip_bytes_per_ns": 384,
                "vector_elements_per_ns": 32, "dot_tail_ns": 20, "record_trace": True}
         cfg.update(changes)
+        if cfg["split"] != "none":
+            cfg["runtime_fsm"] = False  # Frozen split diagnostic, outside Current/Next.
         workload = {**workload, "engine_layout": engine_layout(workload, lanes, cfg["group"])}
         with tempfile.TemporaryDirectory(prefix="plena-dispatch-engine-test-") as tmp:
             tmp = Path(tmp)
