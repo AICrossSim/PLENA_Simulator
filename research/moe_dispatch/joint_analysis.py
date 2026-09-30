@@ -34,6 +34,15 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def raw_directory(root,row):
+    """Resolve extracted archives locally; retain stored paths as provenance."""
+    recorded=Path(row['raw_directory'])
+    portable=root/'runs'/'points'/recorded.name
+    if portable.is_dir():
+        return portable
+    return recorded
+
+
 def verify(root,split):
     study.check_plan(root)
     policy_set='all' if split=='test' else 'pilot'
@@ -51,7 +60,7 @@ def verify(root,split):
     control_totals=set();joint_bytes=set();peak=[]
     for p in expected:
         row=indexed[p['key']]
-        directory=Path(row['raw_directory'])
+        directory=raw_directory(root,row)
         one=(directory/'report_repeat1.json').read_bytes()
         two=(directory/'report_repeat2.json').read_bytes()
         assert one==two, f'Repeat mismatch: {p["key"]}'
@@ -207,7 +216,7 @@ def order_diagnostic(root):
         if first is None:continue
         binaries=[]
         for r in (first,last):
-            directory=Path(r['raw_directory'])
+            directory=raw_directory(root,r)
             one=(directory/'report_repeat1.json').read_bytes()
             assert one==(directory/'report_repeat2.json').read_bytes()
             assert hashlib.sha256(one).hexdigest()==r['raw_report_sha256']
@@ -258,7 +267,7 @@ def report_zh(root,tab,conclusions,order):
     text=[f'# 联合派工控制器：{scope}','',
         '**这次实现的是固定硬件上的有限窗口派工：观察任务形状与资源状态，联合选择两核的下一项工作，在预取需要的时间附近提交归属，并用已完成任务校正时间估计。**', '',
         '三种组织都使用相同机制、同一 Shared-first 描述符输入规则和相同新增控制预算。主对比不拆专家；selected_tail_reference 单独保留上一轮冻结的尾专家拆分能力。', '',
-        '时间单位为 ms。范围是根据真实路由构造的完整 MoE FFN 分析模拟，包含 Gate/Up、激活、Down 和结果合并；不含 Router、整模型推理或原生 Ramulator。', '',
+        '时间单位为 ms，按统一1GHz换算（1周期＝1ns），不是实芯片时钟测量。范围是根据真实路由构造的完整 MoE FFN 分析模拟，包含 Gate/Up、激活、Down 和结果合并；不含 Router、整模型推理或原生 Ramulator。', '',
         '|预算|固定形状 M×4×512|B2|B4|B8|B16|相对同硬件 dynamic|相对同窗口 LPT/ECT|',
         '|---|---|---:|---:|---:|---:|---:|---:|']
     for s in tab['policy_summary']:
@@ -302,6 +311,16 @@ def main():
     run.write_json(dest/'resource_and_correctness.json',checks)
     run.write_json(dest/'conclusions.json',conclusions)
     if a.write_report:report_zh(dest,tab,conclusions,order)
+    policy_set='all' if a.scope=='test' else 'pilot'
+    run.write_json(dest/'analysis_receipt.json',dict(
+        scope=a.scope,analysis_script_sha256=sha(Path(__file__).resolve()),
+        runtime_binary_sha256=checks['binary_sha256'],
+        measured_source_bundle_sha256=checks['source_bundle_sha256'],
+        plan_sha256=sha(root/'plan.json'),
+        input_rows_sha256=sha(root/f'{a.scope}_shared_first_{policy_set}_rows.json'),
+        resource_checks_sha256=sha(dest/'resource_and_correctness.json'),
+        conclusions_sha256=sha(dest/'conclusions.json'),
+        note='Postprocessing-only validation/wording changes after timing freeze; no runtime parameters or raw inputs changed. Archive-local point directories are preferred; stored absolute paths remain provenance.'))
     print(json.dumps({k:v for k,v in conclusions.items() if k in ('scope','complete','organization')},indent=2))
 
 
