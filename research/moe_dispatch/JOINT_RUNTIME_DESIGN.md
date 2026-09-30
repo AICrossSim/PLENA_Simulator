@@ -105,6 +105,12 @@ All policies, including baselines, reserve the same additional bytes. Aggregate
 arena capacity and SRAM ports do not increase. Compiler reruns concrete address
 allocation, per-core fit checks and headroom accounting.
 
+The Compiler's `ownership_policy` metadata describes the joint capability when
+`joint_state_bytes=256`. Comparison policies reserve the same bytes but execute
+their own configured protocol. In particular, legacy FIFO/dynamic binding does
+not acquire a W slot atomically just because this metadata field is present;
+the runtime policy and its event trace determine actual behavior.
+
 At minimum charge scan 4+4*visible_tasks*cores cycles, two cycles per compared
 orientation, and four per committed task. Existing promotion, feedback, DMA,
 SRAM banking and operand service remain charged. No single-cycle or area/power

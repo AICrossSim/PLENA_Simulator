@@ -47,7 +47,7 @@ def verify(root,split):
     assert len(indexed)==len(rows)
     assert set(indexed)=={p['key'] for p in expected}, 'Missing/unexpected declared points'
     binaries=set();bundles=set();reports={};weight_by_workload=defaultdict(set)
-    mac_by_workload=defaultdict(set);x_by_point={};drained=0;repeat_checks=0
+    mac_by_workload=defaultdict(set);drained=0;repeat_checks=0
     control_totals=set();joint_bytes=set();peak=[]
     for p in expected:
         row=indexed[p['key']]
@@ -68,10 +68,15 @@ def verify(root,split):
         assert manifest['config_sha256']==sha(directory/'config.json')
         binaries.add(manifest['binary_sha256']);bundles.add(manifest['source_bundle_sha256'])
         assert cfg==p['config']
+        assert {k:v for k,v in w.items() if k!='engine_layout'}==p['workload']
+        assert w['engine_layout']['hardware']==p['resources']
+        assert w['engine_layout']['m_lanes']==cfg['lanes']
+        assert w['engine_layout']['group']==cfg['group']
         assert all(rep['config'].get(k)==v for k,v in cfg.items())
         assert rep['drained'] is True and rep['ownership_k_order_capacity_checks'] is True
         drained+=1
         assert rep['cycles']==row['latency_cycles_at_1ghz']
+        assert row['latency_ms']==rep['cycles']/1e6
         assert rep['dma_transactions_accepted']==rep['dma_transactions_landed']
         assert rep['dma_transactions_accepted']*32==rep['weight_bytes']
         assert rep['credit_peak']<=cfg['credits']==256
@@ -99,6 +104,8 @@ def verify(root,split):
         reports[p['key']]=rep
     assert len(binaries)==1, 'One completed formal suite must use one binary'
     assert len(bundles)==1, 'One formal suite must have one frozen source bundle'
+    assert receipt['binary_sha256']==next(iter(binaries))
+    assert receipt['source_bundle_sha256']==next(iter(bundles))
     assert all(len(v)==1 for v in weight_by_workload.values()), 'Architecture/policy changed required HBM bytes'
     assert all(len(v)==1 for v in mac_by_workload.values())
     assert control_totals=={4352} and joint_bytes=={256}
@@ -190,7 +197,7 @@ def order_diagnostic(root):
         if not receipt.exists() or not json.loads(receipt.read_text()).get('complete'):continue
         for r in json.loads(path.read_text()):
             key=(r['descriptor_order'],r['budget_group'],r['organization'],r['mode'],r['workload'])
-            if key in records:assert records[key]['point_hash']==r['point_hash']
+            if key in records:assert records[key]['raw_report_sha256']==r['raw_report_sha256']
             records[key]=r
     result=[]
     for key,last in records.items():
@@ -198,11 +205,21 @@ def order_diagnostic(root):
         if order!='source_shared_last':continue
         first=records.get(('shared_first',budget,org,policy,workload))
         if first is None:continue
+        binaries=[]
+        for r in (first,last):
+            directory=Path(r['raw_directory'])
+            one=(directory/'report_repeat1.json').read_bytes()
+            assert one==(directory/'report_repeat2.json').read_bytes()
+            assert hashlib.sha256(one).hexdigest()==r['raw_report_sha256']
+            manifest=json.loads((directory/'point_manifest.json').read_text())
+            binaries.append(manifest['binary_sha256'])
+        assert binaries[0]==binaries[1], 'Source-order pair must use the same engine binary'
         result.append(dict(budget=budget,shape=org,policy=policy,workload=workload,
             shared_first_ms=first['latency_ms'],shared_last_ms=last['latency_ms'],
             shared_first_speedup=last['latency_ms']/first['latency_ms'],
             first_shared_bind_us=first['shared_bind_cycle']/1000,
             last_shared_bind_us=last['shared_bind_cycle']/1000,
+            both_raw_repeats_checked=True,binary_sha256=binaries[0],
             scope='Development-only descriptor-interface sensitivity; not an independent heldout result.'))
     return result
 
@@ -255,13 +272,13 @@ def report_zh(root,tab,conclusions,order):
         text.append(f"|{s['budget']} / {s['heterogeneous_shape']}|{s['joint_heterogeneous_speedup_over_joint_monolithic']:.4f}×|{s['joint_heterogeneous_speedup_over_joint_homogeneous']:.4f}×|{'是，仅此测试范围' if s['heterogeneous_faster_geomean_than_both_with_same_joint_policy'] else '否'}|")
     text += ['', '**判断顺序：先看新控制器是否超过同样观察多个任务的 window_lpt_ect，再看两种双核是否超过使用相同控制器的单核。只超过 FIFO 不能证明联合机制或异构的必要性。**', '',
         '四个独立消融关闭晚绑定、配对、反馈、Next 预取；完整数据在 policy_summary.csv，未根据测试结果重新选择默认策略。', '',
-        '|配置|绑定时两核均到期可选|候选能放两核|候选两核均到期|预测绝对误差 µs|平均两核结束差 µs|',
+        '|配置|该次决策快照两核均到期|候选能放两核|候选两核均到期|预测绝对误差 µs|平均两核结束差 µs|',
         '|---|---:|---:|---:|---:|---:|']
     for d in tab['controller_diagnostics']:
         if d['policy']!='joint':continue
         percent=lambda x:'—' if x is None else f'{100*x:.1f}%'
         text.append(f"|{d['budget']}/{d['shape']}|{percent(d['fraction_bindings_with_both_due_cores'])}|{percent(d['candidate_potential_both_fraction'])}|{percent(d['candidate_due_both_fraction'])}|{d['prediction_mae_us']:.3f}|{d['core_finish_gap_mean_us']:.3f}|")
-    text += ['', '“候选”按扫描观察次数统计，“绑定”按实际提交次数统计，二者分母不同。能放入与已经到预取时机分开统计。各核控制服务和等待时间可能重叠，不相加当作总耗时。', '',
+    text += ['', '“候选”按扫描观察次数统计，第一列候选率按实际提交次数统计，使用对应决策快照中的到期掩码；不是提交瞬间再次测量。二者分母不同，不能直接等同于旧版本的绑定选择率。能放入与已经到预取时机分开统计。各核控制服务和等待时间可能重叠，不相加当作总耗时。', '',
         '供数条件仍为共享256B/ns、64ns响应、256个32B请求额度。单看额度和响应，持续供数上界为128B/ns；逐点供数下界见 supply_bounds.csv，它不是 memory-stall 的排他时间。', '',
         f"验收：{c['checks']['declared_points']}点、{c['checks']['completed_runs']}次执行，所有重复的完整JSON一致；请求排空、字节数、有效MAC和私有容量检查通过。真实性能输入没有预训练数值载荷，数值正确性由另外的小张量时序回放验证。", '',
         f'原始 Shared-last 输入顺序的开发集对照：{len(order)} 个配对点；'+('详见 source_order_diagnostic.csv。' if order else '尚无完整配对结果，不据此下结论。'), '',
