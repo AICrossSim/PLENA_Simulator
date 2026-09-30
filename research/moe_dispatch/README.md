@@ -114,3 +114,26 @@ hash and snapshots its source; default review/reproduction uses the gitlink.
 
 No existing native Simulator defaults, timing implementation or frozen reports
 are changed by this branch. Earlier experimental worktrees remain separate.
+
+## Fixed-hardware study
+
+[ROBUST_METHODS.md](ROBUST_METHODS.md) defines the M6/M8 resource groups,
+request-disjoint data split, finite search, selection rule and limitations.
+`robust_workloads.py` exports traceable DeepSeek-V2-Lite windows; incompatible
+captured model graphs are explicitly excluded. `robust_study.py` runs the
+compute/assignment diagnostics, conditional tail partition, design search,
+validation, freeze and heldout ablations. `robust_report.py` rechecks raw output
+and summarizes a completed campaign without selecting hardware.
+
+The optional `feedback` policy learns service correction only from completed
+local tasks. Optional `tail_partition` holds the final unbound task and uses
+two disjoint output partitions after both cores drain. It retains private
+partial sums, charges X/Z movement and waits for full Z before Down. This is
+bounded coarse tail partitioning, not arbitrary group stealing. Both defaults
+remain off. Small actual timed traces replay all physical resource points and
+the split Z visibility path numerically.
+
+The `--compute` binary mode is a nonphysical resident-operand projection oracle;
+it is reported separately from full analytical FFN timing. A host-only lazy
+trace macro avoids creating discarded JSON, with complete-report equivalence
+checked on three real-route points. It does not remove modeled control service.

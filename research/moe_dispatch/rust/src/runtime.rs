@@ -164,18 +164,21 @@ mod tests {
         s.w.experts[0].m = 9;
         s.w.experts[0].h = 513;
         s.w.experts[0].f = 19;
-        s.cores[0].run = Some(Run::new(9, 19, 513, 0, 4, 4));
-        let len = s.cores[0].run.as_ref().unwrap().issues.len();
-        for pos in 0..=len {
-            s.cores[0].run.as_mut().unwrap().pos = pos;
-            let run = s.cores[0].run.as_ref().unwrap();
-            for tid in 0..run.tiles.len() {
-                let expected = run.issues[pos..].iter().filter(|i| i.tile == tid).count();
-                assert_eq!(
-                    s.tile_consumers_left(0, tid),
-                    expected,
-                    "pos={pos} tid={tid}"
-                );
+        for origin in [0, 12] {
+            s.cores[0].session.as_mut().unwrap().f0 = origin;
+            s.cores[0].run = Some(Run::new(9, 19, 513, origin, 4, 4));
+            let len = s.cores[0].run.as_ref().unwrap().issues.len();
+            for pos in 0..=len {
+                s.cores[0].run.as_mut().unwrap().pos = pos;
+                let run = s.cores[0].run.as_ref().unwrap();
+                for tid in 0..run.tiles.len() {
+                    let expected = run.issues[pos..].iter().filter(|i| i.tile == tid).count();
+                    assert_eq!(
+                        s.tile_consumers_left(0, tid),
+                        expected,
+                        "origin={origin} pos={pos} tid={tid}"
+                    );
+                }
             }
         }
         // A fully landed tile with all M consumers already issued has no stock.
@@ -256,7 +259,8 @@ impl Sim {
             return 0;
         };
         let t = &r.tiles[tid];
-        let tile_group = (t.n_start / (self.cfg.group * 4), t.k_start);
+        let origin = if s.phase < 2 { s.f0 } else { s.h0 };
+        let tile_group = ((t.n_start - origin) / (self.cfg.group * 4), t.k_start);
         let cursor_group = (next.chunk, next.spec.k_start);
         let total = ceil(self.w.experts[s.e].m, core.m);
         match tile_group.cmp(&cursor_group) {
@@ -319,6 +323,23 @@ impl Sim {
                     .is_some_and(|r| r.send_cursor == r.tiles.len()))
     }
 
+    pub(super) fn feedback_bin(m: usize) -> usize {
+        match m {
+            0..=1 => 0,
+            2..=4 => 1,
+            5..=16 => 2,
+            _ => 3,
+        }
+    }
+    fn calibrated_service(&self, e: usize, c: usize) -> u64 {
+        let raw = self.prediction(e, c, self.cores.len(), false);
+        if self.cfg.dispatch == "feedback" {
+            raw.saturating_mul(self.feedback_q8[c][Self::feedback_bin(self.w.experts[e].m)])
+                .div_ceil(256)
+        } else {
+            raw
+        }
+    }
     fn predicted_finish_delay(&self, e: usize, c: usize) -> u64 {
         let available = self.progress_estimate(c);
         let supply = self.first_ready_estimate(e, c);
@@ -327,10 +348,7 @@ impl Sim {
         } else {
             available + supply
         };
-        start
-            + self
-                .prediction(e, c, self.cores.len(), false)
-                .saturating_sub(supply)
+        start + self.calibrated_service(e, c).saturating_sub(supply)
     }
 
     pub(super) fn wait_snapshot(&self) -> Value {
@@ -359,7 +377,7 @@ impl Sim {
         let remaining = total.saturating_sub(issued);
         // Progress counter, not original predicted duration minus wall time.
         // Future events/bank completion timestamps are deliberately not consulted.
-        let service = self.prediction(s.e, c, self.cores.len(), false);
+        let service = self.calibrated_service(s.e, c);
         let drain = ceil(4 * e.m * e.h, self.cfg.onchip_bytes_per_ns) as u64
             + self.cfg.dot_tail_ns
             + self.cores[c].contexts as u64 * 5;
@@ -387,6 +405,63 @@ impl Sim {
         fetch + landing
     }
 
+    // Bounded tail elasticity: after the last routed descriptor is visible,
+    // retain it in the existing FIFO until both private arenas drain. Bind two
+    // disjoint output-column ranges atomically. Gate/Up use identical F ranges;
+    // charged Z copies and the existing complete-Z barrier precede Down.
+    // This deliberately does not migrate an already-bound or prefetched task.
+    fn dispatch_tail_partition(&mut self, e: usize) -> bool {
+        if !self.cfg.tail_partition
+            || self.cores.len() != 2
+            || self.input_cursor != self.w.experts.len()
+            || self.pending.len() != 1
+            || self.cfg.dispatch == "fixed"
+            || !(0..2).all(|c| {
+                self.fits(e, c, true)
+                    && self.bounds(self.w.experts[e].f, c).1 > 0
+                    && self.bounds(self.w.experts[e].h, c).1 > 0
+            })
+        {
+            return false;
+        }
+        if self
+            .cores
+            .iter()
+            .any(|c| c.session.is_some() || c.next.is_some())
+            || self.promotion_pending.iter().any(Option::is_some)
+        {
+            return true; // Explicitly charged in wall time: no free tail prefetch.
+        }
+        if self.now < self.control_free {
+            return true;
+        }
+        if self.tail_decision_ready.is_none() {
+            let cost = if self.cfg.control_cost { 16 } else { 0 };
+            self.control_free = self.now + cost;
+            self.cores[0].stats.control_cycles += cost;
+            self.tail_decision_ready = Some(self.control_free);
+            return true;
+        }
+        if self.now < self.tail_decision_ready.unwrap() {
+            return true;
+        }
+        self.tail_decision_ready = None;
+        assert_eq!(self.pending.pop_front(), Some(e));
+        assert_eq!(self.status[e], 0);
+        self.status[e] = 1;
+        self.tail_partition_count += 1;
+        self.decisions += 1;
+        for c in 0..2 {
+            let pred = self.prediction(e, c, 2, true);
+            self.dispatch_audit.push(json!({"cycle":self.now,"task":e,"expert":self.w.experts[e].id,
+                "core":c,"eligible_cores":[0,1],"split":true,"tail_partition":true,
+                "predicted_finish_cycle":self.now+pred,"remaining_estimate":0,
+                "first_ready_delay_estimate":self.first_ready_estimate(e,c),"service_estimate":pred}));
+            self.reserve_start(e, c, true);
+        }
+        true
+    }
+
     pub(super) fn dispatch_runtime(&mut self) {
         assert_eq!(
             self.cfg.split, "none",
@@ -405,6 +480,9 @@ impl Sim {
         let Some(&e) = self.pending.front() else {
             return;
         };
+        if self.dispatch_tail_partition(e) {
+            return;
+        }
         let large = (0..self.cores.len())
             .max_by_key(|&c| (self.cores[c].m, usize::MAX - c))
             .unwrap();
@@ -481,11 +559,14 @@ impl Sim {
             "first_ready_delay_estimate":self.first_ready_estimate(e,owner),
             "service_estimate":self.prediction(e,owner,self.cores.len(),false)}),
         );
-        self.log(json!({"event":"commit_owner","cycle":self.now,"task":e,
+        trace!(
+            self,
+            json!({"event":"commit_owner","cycle":self.now,"task":e,
             "expert":self.w.experts[e].id,"core":owner,"split":false,
             "remaining_estimate":self.progress_estimate(owner),
             "first_ready_delay_estimate":self.first_ready_estimate(e,owner),
-            "service_estimate":self.prediction(e,owner,self.cores.len(),false)}));
+            "service_estimate":self.prediction(e,owner,self.cores.len(),false)})
+        );
     }
 
     pub(super) fn promote_runtime(&mut self) {
@@ -527,7 +608,8 @@ impl Sim {
                     usize::from(tile.sent > tile.acks);
                 self.cores[c].prefetch_promoted_at = Some(self.now);
             }
-            self.log(
+            trace!(
+                self,
                 json!({"event":"promote","cycle":self.now,"core":c,"task":next.e,
                 "first_ready":next.first.as_ref().is_some_and(|t|t.ready),
                 "inflight_bytes":next.first.as_ref().map_or(0,|t|t.sent-t.acks)}),
@@ -597,10 +679,13 @@ impl Sim {
             let used = self.cores[c].wslots - self.cores[c].free_slots.len();
             self.cores[c].stats.weight_peak_bytes =
                 self.cores[c].stats.weight_peak_bytes.max(used * 4096);
-            self.log(json!({"event":"next_slot_reserved","cycle":self.now,"task":e,"core":c,"slot":slot,"bytes":bytes,
+            trace!(
+                self,
+                json!({"event":"next_slot_reserved","cycle":self.now,"task":e,"core":c,"slot":slot,"bytes":bytes,
                 "current_task":self.cores[c].session.as_ref().map(|s|s.e),
                 "current_all_requests_sent":self.current_requests_sent(c),
-                "current_ready_tiles":self.ready_stock(c).0}));
+                "current_ready_tiles":self.ready_stock(c).0})
+            );
             self.last_progress = self.now;
             self.rr_desc = (c + 1) % self.cores.len();
             break;
@@ -819,7 +904,10 @@ impl Sim {
             self.cores[r.core].stats.eligible_wait_max_cycles =
                 self.cores[r.core].stats.eligible_wait_max_cycles.max(age);
             self.rr_hbm = (r.core + 1) % self.cores.len();
-            self.log(json!({"event":"dma_fire","cycle":self.now,"request":r}));
+            trace!(
+                self,
+                json!({"event":"dma_fire","cycle":self.now,"request":r})
+            );
             self.last_progress = self.now;
             self.event(
                 self.now
@@ -856,6 +944,9 @@ impl Sim {
         self.credit_used -= 1; // Return SRAM -> reserved W slot has completed.
         self.cores[r.core].stats.dma_landed += 1;
         assert_eq!(self.credit_used, self.outstanding_dma.len());
-        self.log(json!({"event":"dma_landed","cycle":self.now,"request":r}));
+        trace!(
+            self,
+            json!({"event":"dma_landed","cycle":self.now,"request":r})
+        );
     }
 }

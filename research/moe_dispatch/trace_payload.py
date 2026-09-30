@@ -32,14 +32,23 @@ def replay(workload, report, seed=930):
     inflight, owners, next_task, current, retired = {}, {}, {}, {}, set()
     k_order = Counter()
     peak_credit = 0
+    ranges, projection_retired, core_retired, z_valid = {}, {}, {}, {}
     for event in report["trace"]:
         kind, now = event["event"], event["cycle"]
         c = event.get("core")
         if kind == "commit_owner":
             t = event["task"]
             assert t not in owners and c not in next_task
-            owners[t] = c
+            owners[t] = {c}
             next_task[c] = t
+        elif kind == 'current_start' and event.get('split'):
+            t=event['task']
+            assert c not in current and c not in owners.get(t,set())
+            owners.setdefault(t,set()).add(c)
+            current[c]=t
+        elif kind == 'projection_start':
+            t=id_to_task[event['expert']]
+            ranges[c,t,event['phase']]=(event['N_start'],event['N'])
         elif kind == "promote":
             assert c not in current
             assert next_task.pop(c) == event["task"]
@@ -47,7 +56,7 @@ def replay(workload, report, seed=930):
         elif kind == "dma_fire":
             r = event["request"]
             assert r["serial"] not in inflight
-            assert owners[r["task"]] == r["core"]
+            assert r['core'] in owners[r['task']]
             assert r["task"] in (next_task.get(r["core"]), current.get(r["core"]))
             inflight[r["serial"]] = r
             peak_credit = max(peak_credit, len(inflight))
@@ -75,8 +84,11 @@ def replay(workload, report, seed=930):
             valid[row, col:col+16] = True
         elif kind == "x_stage":
             t, p = event["task"], event["phase"]
-            source = x[experts[t]["token_indices"]] if p < 2 else z[t]
             m, k, mv, kv = (event[a] for a in ("m_start", "k_start", "m_valid", "k_valid"))
+            if p<2: source=x[experts[t]['token_indices']]
+            else:
+                assert z_valid[c,t][k:k+kv].all(), 'Down read before local/remote Z visibility'
+                source=z[c,t]
             xslots[c, event["slot"]] = ((t, p, m, k), source[m:m+mv, k:k+kv].copy(), event["ready_cycle"])
         elif kind == "mac_issue":
             t, p = event["task"], event["phase"]
@@ -103,15 +115,34 @@ def replay(workload, report, seed=930):
             out[m:m+mv, n:n+nv] = np.add(out[m:m+mv, n:n+nv], values, dtype=np.float32)
         elif kind == "projection_done":
             t, p = id_to_task[event["expert"]], event["phase"]
-            done[t, p] = bf16(acc.pop((t, p)))
+            n,nv=ranges[c,t,p]
+            dst=done.setdefault((t,p),np.zeros_like(acc[t,p]))
+            dst[:,n:n+nv]=bf16(acc[t,p][:,n:n+nv])
+            finished=projection_retired.setdefault((t,p),set());assert c not in finished
+            finished.add(c)
+            if finished==owners[t]:acc.pop((t,p))
         elif kind == "activation_done":
             t = event["task"]
-            z[t] = bf16(activation(done[t, 0], done[t, 1]))
+            n,nv=ranges[c,t,0]
+            assert ranges[c,t,0]==ranges[c,t,1]
+            zz=z.setdefault((c,t),np.zeros((experts[t]['Me'],experts[t]['F']),np.float32))
+            valid=z_valid.setdefault((c,t),np.zeros(experts[t]['F'],bool))
+            assert c in projection_retired[t,0] and c in projection_retired[t,1]
+            zz[:,n:n+nv]=bf16(activation(done[t,0][:,n:n+nv],done[t,1][:,n:n+nv]))
+            valid[n:n+nv]=True
+        elif kind == 'z_copy_done':
+            t,src,dst,n,nv=(event[k] for k in ('task','src','dst','n_start','n_valid'))
+            assert z_valid[src,t][n:n+nv].all()
+            assert not z_valid[dst,t][n:n+nv].any(), 'duplicate or overlapping Z ownership'
+            z[dst,t][:,n:n+nv]=z[src,t][:,n:n+nv]
+            z_valid[dst,t][n:n+nv]=True
         elif kind == "expert_drained":
             t = id_to_task[event["expert"]]
             assert current.pop(c) == t and t not in retired
-            retired.add(t)
-            np.testing.assert_array_equal(bf16_bits(done[t, 4]), bf16_bits(reference[t]))
+            core_retired.setdefault(t,set()).add(c)
+            if core_retired[t]==owners[t]:
+                retired.add(t)
+                np.testing.assert_array_equal(bf16_bits(done[t, 4]), bf16_bits(reference[t]))
     assert not pending and not acc and not inflight and not wslots
     assert not next_task and not current and len(retired) == len(experts)
     assert len(owners) == len(experts)

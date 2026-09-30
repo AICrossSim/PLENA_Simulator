@@ -203,7 +203,8 @@ impl Sim {
             self.cores[c].stats.weight_peak_bytes =
                 self.cores[c].stats.weight_peak_bytes.max(used * 4096);
             self.diagnostics.cores[c].phase_ahead_tiles += 1;
-            self.log(
+            trace!(
+                self,
                 json!({"event":"phase_ahead_reserved","cycle":self.now,"core":c,
                 "task":e,"phase":phase,"slot":slot,"bytes":bytes}),
             );

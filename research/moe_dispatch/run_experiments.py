@@ -73,7 +73,7 @@ def source_paths() -> dict[str, Path]:
     files = list(HERE.glob("*.py")) + list((HERE / "rust").glob("Cargo.*"))
     files += list((HERE / "rust/src").rglob("*.rs"))
     paths = {str(p.relative_to(HERE)): p for p in sorted(files) if p.is_file()}
-    paths["compiler/compiler.py"] = COMPILER_PATH
+    paths.update({"compiler/"+p.name: p for p in COMPILER_PATH.parent.glob("*.py")})
     return paths
 
 
@@ -212,7 +212,7 @@ def attach_layout(point: dict[str, Any]) -> dict[str, Any]:
     if not hasattr(frontend, "engine_layout"):
         raise RuntimeError("compiler.engine_layout is not yet available; freeze the compiler helper first")
     workload = copy.deepcopy(point["workload"])
-    workload["engine_layout"] = frontend.engine_layout(workload, point["config"]["lanes"], point["config"]["group"])
+    workload["engine_layout"] = frontend.engine_layout(workload, point["config"]["lanes"], point["config"]["group"], point.get("resources"))
     if point["config"].get("surplus_rules", 0):
         workload["engine_layout"]["surplus_lut"] = frontend.surplus_policy_lut(point["config"]["lanes"], point["config"])
     return workload
