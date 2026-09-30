@@ -1,6 +1,6 @@
 // load_config.rs
 use serde::{Deserialize, Serialize};
-use std::{env, fs, sync::LazyLock};
+use std::{env, fmt, fs, str::FromStr, sync::LazyLock};
 
 // Import the types from your main module
 use quantize::{DataType, FpType, IntType, MxDataType};
@@ -13,6 +13,53 @@ pub struct ConfigValue {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigValueUsize {
     pub value: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigValueString {
+    pub value: String,
+}
+
+/// Cycles charged per matrix-matrix accumulate
+/// (`TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum MatrixLatencyModel {
+    /// `SYSTOLIC_PROCESSING_OVERHEAD + MLEN`: the historical charge.
+    #[default]
+    Mlen,
+    /// `3 * BLEN + 11`: measured on the RTL matrix pipeline with Verilator
+    /// (23 cycles at BLEN=4, 35 at BLEN=8).
+    #[value(name = "rtl_blen")]
+    RtlBlen,
+}
+
+impl MatrixLatencyModel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Mlen => "mlen",
+            Self::RtlBlen => "rtl_blen",
+        }
+    }
+}
+
+impl FromStr for MatrixLatencyModel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "mlen" => Ok(Self::Mlen),
+            "rtl_blen" => Ok(Self::RtlBlen),
+            other => Err(format!(
+                "unsupported matrix latency model {other:?} (expected \"mlen\" or \"rtl_blen\")"
+            )),
+        }
+    }
+}
+
+impl fmt::Display for MatrixLatencyModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -108,6 +155,23 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+    /// Per-accumulate latency model for matrix-matrix ops, "mlen" or
+    /// "rtl_blen". Optional so settings files that predate the key keep
+    /// working; absent means mlen.
+    #[serde(rename = "MATRIX_LATENCY_MODEL", default)]
+    pub matrix_latency_model: Option<ConfigValueString>,
+}
+
+impl ConfigSection {
+    pub fn matrix_latency_model(&self) -> MatrixLatencyModel {
+        match &self.matrix_latency_model {
+            None => MatrixLatencyModel::default(),
+            Some(model) => model
+                .value
+                .parse()
+                .unwrap_or_else(|err| panic!("TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL: {err}")),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -181,6 +245,7 @@ impl Default for AcceleratorConfig {
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
                 max_loop_instructions: ConfigValueUsize { value: 10000 },
+                matrix_latency_model: None,
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -527,6 +592,10 @@ pub fn systolic_processing_overhead() -> u32 {
     get_dc_lib_value(&CONFIG.latency.systolic_processing_overhead)
 }
 
+pub fn matrix_latency_model() -> MatrixLatencyModel {
+    CONFIG.config.matrix_latency_model()
+}
+
 // pub fn vector_ps_cycles() -> u32 {
 //     get_dc_lib_value(&CONFIG.latency.vector_ps_cycles)
 // }
@@ -700,6 +769,79 @@ mod tests {
         assert_eq!(cfg.config.hbm_size.value, 1073741824);
         assert_eq!(cfg.config.dc_en.value, 1);
         assert_eq!(cfg.config.max_loop_instructions.value, 10000);
+    }
+
+    #[test]
+    fn test_matrix_latency_model_parses_case_insensitively() {
+        assert_eq!(
+            "mlen".parse::<MatrixLatencyModel>().unwrap(),
+            MatrixLatencyModel::Mlen
+        );
+        assert_eq!(
+            "RTL_BLEN".parse::<MatrixLatencyModel>().unwrap(),
+            MatrixLatencyModel::RtlBlen
+        );
+        assert!("blen".parse::<MatrixLatencyModel>().is_err());
+        assert_eq!(MatrixLatencyModel::RtlBlen.to_string(), "rtl_blen");
+    }
+
+    #[test]
+    fn test_default_matrix_latency_model_is_mlen() {
+        let cfg = AcceleratorConfig::default();
+        assert!(cfg.config.matrix_latency_model.is_none());
+        assert_eq!(cfg.config.matrix_latency_model(), MatrixLatencyModel::Mlen);
+    }
+
+    /// Drop the `[header]` table (up to the next table) from a TOML text.
+    fn without_table(text: &str, header: &str) -> String {
+        let mut out = String::new();
+        let mut skipping = false;
+        for line in text.lines() {
+            if line.trim() == header {
+                skipping = true;
+                continue;
+            }
+            if skipping && line.trim_start().starts_with('[') {
+                skipping = false;
+            }
+            if !skipping {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_settings_file_matrix_latency_model() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../plena_settings.toml");
+        let text = fs::read_to_string(path).unwrap();
+
+        // The checked-in value is the historical charge.
+        let settings: PlenaSettings = toml::from_str(&text).unwrap();
+        assert_eq!(
+            settings.transactional.config.matrix_latency_model(),
+            MatrixLatencyModel::Mlen
+        );
+
+        // A settings file without the key means the same thing.
+        let stripped = without_table(&text, "[TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL]");
+        assert!(!stripped.contains("MATRIX_LATENCY_MODEL"));
+        let settings: PlenaSettings = toml::from_str(&stripped).unwrap();
+        assert!(settings.transactional.config.matrix_latency_model.is_none());
+        assert_eq!(
+            settings.transactional.config.matrix_latency_model(),
+            MatrixLatencyModel::Mlen
+        );
+
+        let overridden = format!(
+            "{stripped}\n[TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL]\nvalue = \"rtl_blen\"\n"
+        );
+        let settings: PlenaSettings = toml::from_str(&overridden).unwrap();
+        assert_eq!(
+            settings.transactional.config.matrix_latency_model(),
+            MatrixLatencyModel::RtlBlen
+        );
     }
 
     #[test]

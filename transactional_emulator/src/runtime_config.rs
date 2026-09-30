@@ -9,6 +9,8 @@ pub(crate) const PERIOD: Duration = Duration::from_nanos(1);
 
 pub(crate) static SYSTOLIC_PROCESSING_OVERHEAD: LazyLock<u32> =
     LazyLock::new(systolic_processing_overhead);
+pub(crate) static MATRIX_LATENCY_MODEL: LazyLock<MatrixLatencyModel> =
+    LazyLock::new(matrix_latency_model);
 pub(crate) static VECTOR_ADD_CYCLES: LazyLock<u32> = LazyLock::new(vector_add_cycles);
 pub(crate) static VECTOR_MUL_CYCLES: LazyLock<u32> = LazyLock::new(vector_mul_cycles);
 pub(crate) static VECTOR_EXP_CYCLES: LazyLock<u32> = LazyLock::new(vector_exp_cycles);

@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 pub(crate) use clap::Parser;
 use clap::ValueEnum;
 
+use crate::load_config::MatrixLatencyModel;
+
 /// Log level filter for the tracing subscriber.
 ///
 /// When passed via `--log-level`, this fully overrides the `RUST_LOG`
@@ -164,6 +166,13 @@ pub(crate) struct Opts {
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,
+
+    #[arg(long, value_enum)]
+    /// Override the cycles charged per matrix-matrix accumulate (M_MM, M_TMM,
+    /// M_BMM, M_BTMM); default: MATRIX_LATENCY_MODEL in plena_settings.toml,
+    /// mlen. `mlen` charges SYSTOLIC_PROCESSING_OVERHEAD + MLEN cycles;
+    /// `rtl_blen` charges the RTL-measured 3 * BLEN + 11 cycles.
+    pub(crate) matrix_latency_model: Option<MatrixLatencyModel>,
 
     #[arg(long)]
     /// Optional generated ASM source used to derive PC-to-stage labels for a

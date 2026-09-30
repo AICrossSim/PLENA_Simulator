@@ -209,6 +209,14 @@ dc_lib_dis = 1
 [TRANSACTIONAL.CONFIG.DC_EN]
 value = 1
 
+[TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL]
+# Cycles charged per matrix-matrix accumulate (M_MM/M_TMM/M_BMM/M_BTMM):
+#   "mlen"     = SYSTOLIC_PROCESSING_OVERHEAD + MLEN (default)
+#   "rtl_blen" = 3 * BLEN + 11, measured on the RTL matrix pipeline with
+#                Verilator (23 cycles at BLEN=4, 35 at BLEN=8)
+# Absent means "mlen". CLI override: --matrix-latency-model.
+value = "mlen"
+
 [TRANSACTIONAL.CONFIG.MAX_LOOP_INSTRUCTIONS]
 value = 100000
 
