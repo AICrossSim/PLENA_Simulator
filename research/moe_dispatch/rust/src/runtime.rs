@@ -331,16 +331,19 @@ impl Sim {
             _ => 3,
         }
     }
-    fn calibrated_service(&self, e: usize, c: usize) -> u64 {
+    pub(super) fn feedback_enabled(&self) -> bool {
+        self.cfg.dispatch == "feedback" || (self.cfg.dispatch == "joint" && self.cfg.joint_feedback)
+    }
+    pub(super) fn calibrated_service(&self, e: usize, c: usize) -> u64 {
         let raw = self.prediction(e, c, self.cores.len(), false);
-        if self.cfg.dispatch == "feedback" {
+        if self.feedback_enabled() {
             raw.saturating_mul(self.feedback_q8[c][Self::feedback_bin(self.w.experts[e].m)])
                 .div_ceil(256)
         } else {
             raw
         }
     }
-    fn predicted_finish_delay(&self, e: usize, c: usize) -> u64 {
+    pub(super) fn predicted_finish_delay(&self, e: usize, c: usize) -> u64 {
         let available = self.progress_estimate(c);
         let supply = self.first_ready_estimate(e, c);
         let start = if self.cfg.next_prefetch {
@@ -447,6 +450,7 @@ impl Sim {
         }
         self.tail_decision_ready = None;
         assert_eq!(self.pending.pop_front(), Some(e));
+        self.joint.ages.remove(&e);
         assert_eq!(self.status[e], 0);
         self.status[e] = 1;
         self.tail_partition_count += 1;
@@ -470,6 +474,9 @@ impl Sim {
         if self.input_cursor < self.w.experts.len() && self.pending.len() < self.cfg.window {
             // One descriptor arrives per cycle from the finite upstream route
             // table already charged in the compiler arena. No future routes read.
+            if self.cfg.dispatch == "joint" {
+                self.joint.ages.insert(self.input_cursor, 0);
+            }
             self.pending.push_back(self.input_cursor);
             self.input_cursor += 1;
             self.last_progress = self.now;
@@ -480,7 +487,11 @@ impl Sim {
         let Some(&e) = self.pending.front() else {
             return;
         };
-        if self.dispatch_tail_partition(e) {
+        if self.joint.snapshot.is_none() && self.dispatch_tail_partition(e) {
+            return;
+        }
+        if self.cfg.dispatch == "joint" {
+            self.dispatch_joint();
             return;
         }
         let large = (0..self.cores.len())
@@ -648,48 +659,52 @@ impl Sim {
                     continue;
                 }
             }
-            assert!(self.cores[c].wslots > self.cfg.group);
-            let e = next.e;
-            let x = &self.w.experts[e];
-            let bytes = x.f.min(4) * align(x.h.min(512) * 2, 32);
-            let slot = self.cores[c].free_slots.pop().unwrap();
-            assert!(self.cores[c].live_tiles[slot].is_none());
-            self.cores[c].live_tiles[slot] = Some(usize::MAX);
             let cost = if self.cfg.control_cost { 2 } else { 0 };
             self.control_free = self.now + cost;
-            let tile = Tile {
-                n_start: 0,
-                k_start: 0,
-                nv: x.f.min(4),
-                kv: x.h.min(512),
-                slot: Some(slot),
-                release: self.control_free,
-                sent: 0,
-                acks: 0,
-                bytes,
-                ready: false,
-                retired: false,
-            };
-            self.cores[c].next.as_mut().unwrap().first = Some(tile);
-            let stats = &mut self.cores[c].stats;
-            stats.control_cycles += cost;
-            stats.weight_bytes += bytes as u64;
-            stats.next_prefetch_tiles += 1;
-            stats.next_peak_bytes = 4096;
-            let used = self.cores[c].wslots - self.cores[c].free_slots.len();
-            self.cores[c].stats.weight_peak_bytes =
-                self.cores[c].stats.weight_peak_bytes.max(used * 4096);
-            trace!(
-                self,
-                json!({"event":"next_slot_reserved","cycle":self.now,"task":e,"core":c,"slot":slot,"bytes":bytes,
+            self.cores[c].stats.control_cycles += cost;
+            self.reserve_next_tile(c, self.control_free);
+            break;
+        }
+    }
+
+    pub(super) fn reserve_next_tile(&mut self, c: usize, release: u64) {
+        assert!(self.cores[c].wslots > self.cfg.group);
+        let e = self.cores[c].next.as_ref().unwrap().e;
+        let x = &self.w.experts[e];
+        let bytes = x.f.min(4) * align(x.h.min(512) * 2, 32);
+        let slot = self.cores[c].free_slots.pop().unwrap();
+        assert!(self.cores[c].live_tiles[slot].is_none());
+        self.cores[c].live_tiles[slot] = Some(usize::MAX);
+        let tile = Tile {
+            n_start: 0,
+            k_start: 0,
+            nv: x.f.min(4),
+            kv: x.h.min(512),
+            slot: Some(slot),
+            release,
+            sent: 0,
+            acks: 0,
+            bytes,
+            ready: false,
+            retired: false,
+        };
+        self.cores[c].next.as_mut().unwrap().first = Some(tile);
+        let stats = &mut self.cores[c].stats;
+        stats.weight_bytes += bytes as u64;
+        stats.next_prefetch_tiles += 1;
+        stats.next_peak_bytes = 4096;
+        let used = self.cores[c].wslots - self.cores[c].free_slots.len();
+        self.cores[c].stats.weight_peak_bytes =
+            self.cores[c].stats.weight_peak_bytes.max(used * 4096);
+        trace!(
+            self,
+            json!({"event":"next_slot_reserved","cycle":self.now,"task":e,"core":c,"slot":slot,"bytes":bytes,
                 "current_task":self.cores[c].session.as_ref().map(|s|s.e),
                 "current_all_requests_sent":self.current_requests_sent(c),
                 "current_ready_tiles":self.ready_stock(c).0})
-            );
-            self.last_progress = self.now;
-            self.rr_desc = (c + 1) % self.cores.len();
-            break;
-        }
+        );
+        self.last_progress = self.now;
+        self.rr_desc = (c + 1) % self.cores.len();
     }
 
     fn dma_tile(&self, r: &DmaRequest) -> &Tile {
@@ -746,7 +761,9 @@ impl Sim {
             }
         }
         {
-            if let Some(n) = &core.next {
+            if let Some(n) = &core.next
+                && self.cfg.next_prefetch
+            {
                 if let Some(t) = &n.first {
                     if t.sent < t.bytes {
                         choices.push((n.e, 0, 0, t));

@@ -13,6 +13,7 @@ macro_rules! trace {
 }
 
 mod compute;
+mod joint;
 #[allow(dead_code)]
 mod plan;
 mod runtime;
@@ -64,6 +65,11 @@ struct Config {
     dispatch: String,
     fixed_assignment: Vec<usize>,
     tail_partition: bool,
+    joint_late_bind: bool,
+    joint_feedback: bool,
+    joint_pairing: bool,
+    joint_age_limit: u8,
+    joint_margin_cycles: u64,
     split: String,
     hbm_bytes_per_ns: usize,
     hbm_latency_ns: u64,
@@ -99,6 +105,11 @@ impl Default for Config {
             dispatch: "dynamic".into(),
             fixed_assignment: vec![],
             tail_partition: false,
+            joint_late_bind: true,
+            joint_feedback: true,
+            joint_pairing: true,
+            joint_age_limit: 8,
+            joint_margin_cycles: 64,
             split: "none".into(),
             hbm_bytes_per_ns: 256,
             hbm_latency_ns: 64,
@@ -387,6 +398,7 @@ struct Sim {
     feedback_updates: u64,
     tail_decision_ready: Option<u64>,
     tail_partition_count: u64,
+    joint: joint::JointState,
 }
 
 impl Sim {
@@ -1080,7 +1092,7 @@ impl Sim {
                     a["actual_finish_cycle"] = json!(self.now);
                     a["actual_minus_predicted_cycles"] = json!(self.now as i64 - prediction as i64);
                 }
-                if self.cfg.dispatch == "feedback" && !s.split {
+                if self.feedback_enabled() && !s.split {
                     let bin = Self::feedback_bin(self.w.experts[s.e].m);
                     let sample =
                         ((self.now - s.start) * 256 / s.predicted_duration.max(1)).clamp(64, 1024);
@@ -1477,9 +1489,14 @@ impl Sim {
         assert!(cfg.max_cycles > 0 && cfg.no_progress_cycles > 0);
         assert!(matches!(
             cfg.dispatch.as_str(),
-            "fixed" | "fifo" | "dynamic" | "feedback"
+            "fixed" | "fifo" | "dynamic" | "feedback" | "joint"
         ));
         assert!(matches!(cfg.arbiter.as_str(), "rr" | "urgency" | "stock"));
+        assert!(cfg.joint_age_limit > 0);
+        if cfg.dispatch == "joint" {
+            assert!(cfg.runtime_fsm && cfg.split == "none");
+            assert!(cfg.late_bind_cycles.is_none() && cfg.surplus_rules == 0 && !cfg.shared_large);
+        }
         assert!(cfg.next_prefetch_ready_threshold.is_none_or(|n| n > 0));
         assert!(cfg.late_bind_cycles.is_none_or(|n| n > 0));
         assert!(cfg.surplus_rules <= 4);
@@ -1556,7 +1573,10 @@ impl Sim {
                 ("x_banks", 4 * total_m),
                 ("acc_banks", 2 * total_m),
                 ("acc_bytes", 2 * 1024 * 1024),
-                ("control_bytes", 4096),
+                (
+                    "control_bytes",
+                    4096 + hw["joint_state_bytes"].as_u64().unwrap_or(0) as usize,
+                ),
             ] {
                 let v = hw[field].as_array().expect("missing physical budget");
                 assert_eq!(v.len(), nc);
@@ -1569,7 +1589,13 @@ impl Sim {
                 );
             }
         }
-        if cfg.dispatch == "feedback" || cfg.tail_partition {
+        if cfg.dispatch == "joint" {
+            assert_eq!(hw["joint_state_bytes"], 256);
+        }
+        if cfg.dispatch == "feedback"
+            || cfg.tail_partition
+            || (cfg.dispatch == "joint" && cfg.joint_feedback)
+        {
             assert!(cfg.runtime_fsm && cfg.split == "none");
             assert_eq!(hw["feedback_state_bytes"], 96);
         }
@@ -1677,6 +1703,7 @@ impl Sim {
             feedback_updates: 0,
             tail_decision_ready: None,
             tail_partition_count: 0,
+            joint: joint::JointState::default(),
         };
         let mut load = vec![0u64; nc];
         for e in 0..ne {
@@ -1841,6 +1868,7 @@ impl Sim {
    "supply_diagnostics":self.diagnostics,
    "feedback_q8":self.feedback_q8,"feedback_updates":self.feedback_updates,
    "tail_partition_count":self.tail_partition_count,
+   "joint_diagnostics":self.joint.diagnostics,
    "physical_budget":self.w.engine_layout.get("hardware"),
    "late_bind_wait_cycles":self.late_bind_wait_cycles,
    "prefetch_gate_wait_core_cycles": {"current_requests_unsent":self.prefetch_gate_wait[0], "ready_tiles_at_or_above_threshold":self.prefetch_gate_wait[1]},
