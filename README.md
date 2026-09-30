@@ -132,7 +132,7 @@ etc.) and can run any of the `just` commands below directly.
 The simulator and emulator both use `plena_settings.toml` as the main configuration file for hardware parameters. This file contains:
 
 - Hardware dimensions (MLEN, BLEN, VLEN, HLEN)
-- Memory configuration (HBM, SRAM sizes)
+- Memory configuration (HBM generation and channel count, HBM and SRAM sizes)
 - Instruction latencies
 - Prefetch/writeback amounts
 

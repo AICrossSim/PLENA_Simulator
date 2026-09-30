@@ -1,5 +1,6 @@
 pub mod ddr4;
 pub mod hbm2;
+pub mod hbm3;
 
 #[derive(Debug, serde::Serialize)]
 pub struct Config {
@@ -96,6 +97,7 @@ pub enum AddrMapper {
 pub enum DRAM {
     DDR4(ddr4::DDR4),
     HBM2(hbm2::HBM2),
+    HBM3(hbm3::HBM3),
 }
 
 #[derive(Debug, serde::Serialize, Default, Clone)]
@@ -128,5 +130,9 @@ pub struct DDRController {
 #[serde(tag = "impl")]
 pub enum Controller {
     GenericDDR(DDRController),
+    /// Single command bus, for the HBM1/HBM2 device models.
     HBM12(DDRController),
+    /// Dual (row/column) command bus with half-CK ticks, for the HBM3/HBM4
+    /// device models. Takes the same parameters as `HBM12`.
+    HBM34(DDRController),
 }

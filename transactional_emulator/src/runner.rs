@@ -8,12 +8,13 @@ use tracing_subscriber::prelude::*;
 
 use crate::accelerator::{Accelerator, Scoreboard, TimingDriver, Unit};
 use crate::cli::{Opts, Parser, TimingModelOpt};
+use crate::load_config::HbmGen;
 use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
-    BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
-    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
-    VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
+    BLEN, BROADCAST_AMOUNT, HBM_CHANNELS, HBM_GEN, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE,
+    MATRIX_SRAM_TYPE, MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+    STORE_V_AMOUNT, VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
 use crate::vector_machine::VectorMachine;
@@ -29,6 +30,17 @@ fn dump_to_file(path: &str, bytes: &[u8]) {
         Ok(()) => tracing::info!(path, bytes = bytes.len(), "dumped content"),
         Err(err) => tracing::warn!(path, %err, "failed to write dump file"),
     }
+}
+
+/// Resolve the Ramulator HBM geometry: `--hbm-gen` / `--hbm-channels` win
+/// over `HBM_GEN` / `HBM_CHANNELS` from plena_settings.toml.
+fn resolve_hbm_model(cli_gen: Option<HbmGen>, cli_channels: Option<usize>) -> (HbmGen, usize) {
+    let channels = cli_channels.unwrap_or(*HBM_CHANNELS);
+    assert!(
+        channels >= 1,
+        "--hbm-channels must be at least 1, got {channels}"
+    );
+    (cli_gen.unwrap_or(*HBM_GEN), channels)
 }
 
 pub(crate) async fn run_from_cli() {
@@ -145,8 +157,19 @@ pub(crate) async fn run_from_cli() {
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
+    let (hbm_gen, hbm_channels) = resolve_hbm_model(opts.hbm_gen, opts.hbm_channels);
+    tracing::info!(generation = %hbm_gen, channels = hbm_channels, "HBM model");
+    let ram = match hbm_gen {
+        HbmGen::Hbm2 => ramulator::Ramulator::hbm2_preset(hbm_channels),
+        HbmGen::Hbm3 => ramulator::Ramulator::hbm3_preset(hbm_channels),
+    }
+    .unwrap_or_else(|err| {
+        panic!(
+            "failed to initialise the {hbm_gen} Ramulator model with {hbm_channels} channels: {err}"
+        )
+    });
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(ram),
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
@@ -319,4 +342,23 @@ pub(crate) async fn run_from_cli() {
         memory_stats.total_bytes_written,
         utilization
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hbm_model_defaults_to_hbm2_with_eight_channels() {
+        assert_eq!(resolve_hbm_model(None, None), (HbmGen::Hbm2, 8));
+    }
+
+    #[test]
+    fn hbm_model_cli_overrides_win() {
+        assert_eq!(
+            resolve_hbm_model(Some(HbmGen::Hbm3), Some(16)),
+            (HbmGen::Hbm3, 16)
+        );
+        assert_eq!(resolve_hbm_model(None, Some(2)), (HbmGen::Hbm2, 2));
+    }
 }

@@ -29,6 +29,9 @@ struct Inner {
 
     // Size of a single transfer
     transfer_size: u32,
+
+    // One controller per channel.
+    num_channels: u32,
 }
 
 /// A wrapped ramulator that works with the event-based simulation.
@@ -39,6 +42,7 @@ impl Ramulator {
         let mut ramulator = RawRamulator::new(config)?;
         let period = Duration::from_picos(ramulator.period() as _);
         let transfer_size = ramulator.burst_size() * (ramulator.channel_width() / 8);
+        let num_channels = ramulator.num_channels();
 
         Ok(Self(Arc::new(Inner {
             pending_accesses: AtomicU32::new(0),
@@ -51,6 +55,7 @@ impl Ramulator {
 
             lock: tokio::sync::Mutex::new(()),
             transfer_size,
+            num_channels,
         })))
     }
 
@@ -61,6 +66,10 @@ impl Ramulator {
 
     pub fn transfer_size(&self) -> u32 {
         self.0.transfer_size
+    }
+
+    pub fn num_channels(&self) -> u32 {
+        self.0.num_channels
     }
 
     /// Drive the model one cycle per period for as long as accesses are outstanding.

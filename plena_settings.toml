@@ -238,6 +238,17 @@ value = 17179869184   # 16 GiB (was 128 GiB)
 [TRANSACTIONAL.CONFIG.HBM_WIDTH]
 value = 512
 
+[TRANSACTIONAL.CONFIG.HBM_GEN]
+# HBM generation of the Ramulator timing model: "hbm2" (2.0 Gb/s per pin,
+# 64-bit channels) or "hbm3" (6.4 Gb/s per pin, 32-bit channels, BL8).
+# Absent means "hbm2". CLI override: --hbm-gen.
+value = "hbm2"
+
+[TRANSACTIONAL.CONFIG.HBM_CHANNELS]
+# Number of Ramulator HBM channels (one controller each). Absent means 8.
+# CLI override: --hbm-channels.
+value = 8
+
 [TRANSACTIONAL.CONFIG.MATRIX_SRAM_SIZE]
 value = 4096
 
