@@ -8,7 +8,7 @@ import run_experiments as run
 
 def gm(xs):
     xs=list(xs)
-    return math.exp(sum(math.log(x) for x in xs)/len(xs)) if xs else None
+    return math.exp(math.fsum(math.log(x) for x in xs)/len(xs)) if xs else None
 
 def num(value, digits=4):
     return 'N/A' if value is None else f'{value:.{digits}f}'
@@ -45,6 +45,21 @@ def design_attribution(root):
                                deployable=False,scope='design allocation sensitivity; per-window choice is not a fixed design'))
     csv_out(root/'shape_matched_allocation_design.csv',matched)
     csv_out(root/'resource_allocation_sensitivity.csv',allocation)
+    per_config=collections.defaultdict(list)
+    for r in rows:per_config[r['design_id'],r['mode']].append(r)
+    per_shape=collections.defaultdict(list)
+    for (did,policy),rs in per_config.items():
+        if len(rs)!=4:continue
+        d=configs[did]
+        item=dict(budget=d['budget_group'],lanes=d['lanes'],policy=policy,design_id=did,
+                  group=d['group'],tail_partition=d['tail_partition'],
+                  design_geomean_ms=gm(r['latency_ms'] for r in rs),
+                  per_window_ms={r['workload']:r['latency_ms'] for r in rs},
+                  scope='design-only best fixed resource/granularity point for this shape; not heldout validation')
+        per_shape[d['budget_group'],tuple(d['lanes']),policy].append(item)
+    csv_out(root/'design_shape_best.csv',[
+        min(candidates,key=lambda r:(r['design_geomean_ms'],r['design_id']))
+        for _,candidates in sorted(per_shape.items())])
 
 def check_raw(root):
     summary={};failures=[]
@@ -89,10 +104,14 @@ def summarize(root):
         credit_bound=r['hbm_read_bytes']*r['hbm_latency_ns']/(32*r['credit_limit'])/1000
         byte_bound=r['hbm_read_bytes']/r['hbm_bytes_per_ns']/1000
         lower=max(credit_bound,byte_bound)
+        peak_macs=sum(map(int,r['core_m'].split('+')))*4*512
+        compute_bound=r['useful_macs']/peak_macs/1000
         bounds.append(dict(point=r['point'],budget=r['budget_group'],organization=r['organization'],
             workload=r['workload'],policy=r['mode'],tail_partition=r['tail_partition'],
             latency_us=r['latency_us'],bandwidth_lower_bound_us=byte_bound,
             credit_occupancy_lower_bound_us=credit_bound,time_over_lower_bound=r['latency_us']/lower,
+            nominal_useful_compute_lower_bound_us=compute_bound,
+            credit_to_nominal_compute_bound_ratio=credit_bound/compute_bound,
             achieved_weight_GBps=r['achieved_weight_bandwidth_GBps'],
             interpretation='resource lower bound, not exclusive memory stall time'))
     csv_out(root/'supply_lower_bounds.csv',bounds)

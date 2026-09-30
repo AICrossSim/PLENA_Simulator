@@ -164,7 +164,7 @@ def rank(rows,policy='feedback'):
         # Capacity failures remove a design from selection, not from the coverage report.
         if len(rs)!=4:continue
         ranks.append(dict(design_id=did,budget_group=rs[0]['budget_group'],architecture=rs[0]['architecture'],
-                          geomean_cycles=math.exp(sum(math.log(r['latency_cycles_at_1ghz']) for r in rs)/len(rs)),
+                          geomean_cycles=math.exp(math.fsum(math.log(r['latency_cycles_at_1ghz']) for r in rs)/len(rs)),
                           worst_cycles=max(r['latency_cycles_at_1ghz'] for r in rs)))
     return sorted(ranks,key=lambda r:(r['geomean_cycles'],r['design_id']))
 
