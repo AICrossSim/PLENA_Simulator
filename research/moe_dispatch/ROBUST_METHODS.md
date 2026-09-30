@@ -56,12 +56,23 @@ occupies five cycles per word. Addresses map by `floor(address/16) % banks`.
 Capacity and port counts are independently checked. SRAM macros, routing and
 frequency have not been synthesized: equal resource budgets are not equal area.
 
+The shared on-chip copy path is 384 B/ns; endpoint SRAM accesses also reserve
+their real banks. The shared vector unit serves 32 elements/ns plus 16 cycles
+per vector operation, with source reads and destination writes additionally
+charged. These common model parameters remain identical across organizations.
+
 X has two physical buffers per core, each M_core×512×2 B. A current X tile is
 reused over the resident N group before changing M/K. This existing reuse is
 unchanged in all study policies. Weights occupy a reserved slot from admission
 through the last operand read. A 32B HBM credit returns only after its response
 lands safely in that slot; return and private W storage are not counted twice.
 No phase in this study expands the credit pool.
+
+The credit envelope itself gives a lower bound: each 32B request holds one of
+256 credits for at least 64ns, so sustained delivery is at most
+`min(256, 256*32/64) = 128 B/ns`, before SRAM landing delays. Equivalently,
+`T >= weight_bytes * 64 / (256*32)`. This is a resource/occupancy bound, not a
+claim that that many wall cycles are exclusively waiting for memory.
 
 The 2 MiB arena includes original X, route metadata, persistent component and
 final output inboxes, current expert X/Gate-Z/Up/Y, bounded partial sums and

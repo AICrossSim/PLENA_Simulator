@@ -84,6 +84,18 @@ def check_raw(root):
 def summarize(root):
     frozen=json.loads((root/'frozen_designs.json').read_text())['designs']
     rows=json.loads((root/'heldout_rows.json').read_text())
+    bounds=[]
+    for r in rows:
+        credit_bound=r['hbm_read_bytes']*r['hbm_latency_ns']/(32*r['credit_limit'])/1000
+        byte_bound=r['hbm_read_bytes']/r['hbm_bytes_per_ns']/1000
+        lower=max(credit_bound,byte_bound)
+        bounds.append(dict(point=r['point'],budget=r['budget_group'],organization=r['organization'],
+            workload=r['workload'],policy=r['mode'],tail_partition=r['tail_partition'],
+            latency_us=r['latency_us'],bandwidth_lower_bound_us=byte_bound,
+            credit_occupancy_lower_bound_us=credit_bound,time_over_lower_bound=r['latency_us']/lower,
+            achieved_weight_GBps=r['achieved_weight_bandwidth_GBps'],
+            interpretation='resource lower bound, not exclusive memory stall time'))
+    csv_out(root/'supply_lower_bounds.csv',bounds)
     lookup={(r['budget_group'],r['architecture'],r['workload'],r['mode'],r['tail_partition']):r for r in rows}
     by_arch={(d['budget_group'],d['architecture']):d for d in frozen}
     results=[];common=[];observations=[]
@@ -182,6 +194,7 @@ def report(root,checks,frozen,summary,common):
         fraction=r['fraction_bindings_with_two_legal_cores']
         text.append(f"|{r['budget']}|{'+'.join(map(str,r['lanes']))}|{r['ordinary_bindings']}|{num(100*fraction if fraction is not None else None,1)}%|{num(r['prediction_mean_absolute_error_us'],3)}|{num(r['prediction_worst_underestimate_us'],3)}|")
     text += ['', '`common_policy_comparison.csv`进一步固定相同任务粒度和相同调度比较形状；`dispatch_ablation.csv`保留每个测试窗口全部策略/粒度组合。最终部署表含硬件、存储分配及冻结粒度的联合选择，不能把全部差异归给M形状。', '',
+             '**供数的公式约束：**256个32B额度、最短64ns响应，将持续请求吞吐限制在不超过128 B/ns（128 GB/s），SRAM落地还会继续占用额度。因此256 GB/s接口峰值不能直接当成可达带宽。`supply_lower_bounds.csv`逐点给出额度占用下界及实得带宽；这不是把内存等待与计算时间相加的墙钟分解。', '',
              '整专家有限搜索暴露长尾后，增加了受限的最后专家分列：不迁移已绑定任务，等两核排空，再按输出列分成两个任务。Gate/Up坐标一致；Z复制、端口、屏障均收费。它会损失Next预取并增加片上搬运，因此保留开关对照，并未假设一定加速。当前不是任意细粒度偷取列块的调度器。', '',
              '4+2在Me=[4,2]机制用例有优势，在[3,3]有反例。纯计算投影、完整FFN和真实路由层窗口是不同计时范围。旧B8三点已复现；它们不是本次独立测试集，不能混进本表。', '',
              '## 验收与复现', '',
