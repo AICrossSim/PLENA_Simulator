@@ -10,12 +10,48 @@ def gm(xs):
     xs=list(xs)
     return math.exp(sum(math.log(x) for x in xs)/len(xs)) if xs else None
 
+def num(value, digits=4):
+    return 'N/A' if value is None else f'{value:.{digits}f}'
+
+def raw_directory(root,row):
+    recorded=Path(row['raw_directory'])
+    # An extracted archive preserves stage/points/id, not the original /tmp root.
+    relocated=root.joinpath(*recorded.parts[-3:])
+    return relocated if relocated.is_dir() else recorded
+
+def design_attribution(root):
+    """Postprocess design data only; these rows do not select test hardware."""
+    configs={d['id']:d for d in json.loads((root/'all_designs.json').read_text())}
+    rows=json.loads((root/'design_rows.json').read_text())
+    matched=[];allocation=[];best={}
+    for r in rows:
+        d=configs[r['design_id']];h=d['resources'];n=len(d['lanes'])
+        key=(r['budget_group'],tuple(d['lanes']),r['group'],r['mode'],r['tail_partition'],r['workload'])
+        if key not in best or r['latency_ms']<best[key]['latency_ms']:best[key]=r
+        # Equal dual W, arena and bank splits eliminate those allocation choices.
+        equal=(h['weight_slots']==([10] if n==1 else [5,5])
+               and len(set(h['acc_bytes']))==1 and len(set(h['acc_banks']))==1)
+        if equal:
+            matched.append(dict(scope='design only; fixed equal allocation',**r))
+    for r in matched:
+        d=configs[r['design_id']]
+        key=(r['budget_group'],tuple(d['lanes']),r['group'],r['mode'],r['tail_partition'],r['workload'])
+        opt=best[key]
+        allocation.append(dict(budget=r['budget_group'],lanes=d['lanes'],group=r['group'],
+                               policy=r['mode'],tail_partition=r['tail_partition'],workload=r['workload'],
+                               equal_allocation_id=r['design_id'],equal_allocation_ms=r['latency_ms'],
+                               per_window_best_allocation_id=opt['design_id'],per_window_best_ms=opt['latency_ms'],
+                               diagnostic_upper_bound_speedup=r['latency_ms']/opt['latency_ms'],
+                               deployable=False,scope='design allocation sensitivity; per-window choice is not a fixed design'))
+    csv_out(root/'shape_matched_allocation_design.csv',matched)
+    csv_out(root/'resource_allocation_sensitivity.csv',allocation)
+
 def check_raw(root):
     summary={};failures=[]
     for stage in ('assignment','elasticity','design','validation','heldout'):
         rs=json.loads((root/f'{stage}_rows.json').read_text())
         for row in rs:
-            p=Path(row['raw_directory']);r=json.loads((p/'report_repeat1.json').read_text())
+            p=raw_directory(root,row);r=json.loads((p/'report_repeat1.json').read_text())
             w=json.loads((p/'workload.json').read_text());hw=r['physical_budget']
             expected=sum(3*e['Me']*e['H']*e['F'] for e in w['experts'])
             checks={
@@ -38,7 +74,7 @@ def check_raw(root):
         rejects=root/f'{stage}_rejections.csv'
         summary[stage]=dict(accepted_points=len(rs),runs=2*len(rs),capacity_rejections=len(list(csv.DictReader(rejects.open()))) if rejects.exists() else 0)
     result=dict(timing=summary,all_accepted_points_pass=not failures,failures=failures,
-                numeric_tests=dict(compiler=15,rust=23,python=38,physical_points_with_small_payload_replay=132,
+                numeric_tests=dict(compiler=15,rust=23,python=39,physical_points_with_small_payload_replay=132,
                                    scope='seeded small payloads on actual timed trace; not pretrained model validation'),
                 large_payloads_executed=False,native_ramulator=False,full_model_latency=False)
     run.write_json(root/'resource_and_correctness.json',result)
@@ -50,7 +86,7 @@ def summarize(root):
     rows=json.loads((root/'heldout_rows.json').read_text())
     lookup={(r['budget_group'],r['architecture'],r['workload'],r['mode'],r['tail_partition']):r for r in rows}
     by_arch={(d['budget_group'],d['architecture']):d for d in frozen}
-    results=[];common=[]
+    results=[];common=[];observations=[]
     for d in frozen:
         selected=[r for r in rows if r['budget_group']==d['budget_group'] and r['architecture']==d['architecture']
                   and r['mode']=='feedback' and r['tail_partition']==d['tail_partition']]
@@ -64,21 +100,44 @@ def summarize(root):
             pairs=[(r,lookup.get((d['budget_group'],ref,r['workload'],'feedback',reference['tail_partition']))) for r in selected]
             pairs=[(a,b) for a,b in pairs if b]
             record[f'gm_speedup_vs_{ref}']=gm(b['latency_ms']/a['latency_ms'] for a,b in pairs)
-            record[f'worst_slowdown_vs_{ref}_pct']=max([0]+[100*(a['latency_ms']/b['latency_ms']-1) for a,b in pairs])
+            record[f'paired_coverage_vs_{ref}']=len(pairs)
+            record[f'worst_slowdown_vs_{ref}_pct']=max([0]+[100*(a['latency_ms']/b['latency_ms']-1) for a,b in pairs]) if pairs else None
         record['gm_feedback_vs_fifo_same_grain']=gm(lookup[d['budget_group'],d['architecture'],r['workload'],'fifo',d['tail_partition']]['latency_ms']/r['latency_ms'] for r in selected)
         record['gm_feedback_vs_dynamic_same_grain']=gm(lookup[d['budget_group'],d['architecture'],r['workload'],'dynamic',d['tail_partition']]['latency_ms']/r['latency_ms'] for r in selected)
+        audits=[]
+        for row in selected:
+            raw=json.loads((raw_directory(root,row)/'report_repeat1.json').read_text())
+            audits.extend(a for a in raw['dispatch_audit'] if not a.get('tail_partition',False))
+            for index,core in enumerate(raw['cores']):
+                s=core['stats']
+                observations.append(dict(budget=d['budget_group'],architecture=d['architecture'],lanes=d['lanes'],
+                    workload=row['workload'],core=index,m=core['m'],layer_cycles=raw['cycles'],
+                    core_finish_cycles=s['done_cycle'],arithmetic_active_cycles=s['arithmetic_active_cycles'],
+                    useful_macs=s['useful_macs'],issued_macs=s['issued_macs'],
+                    control_service_cycles=s['control_cycles'],weight_bytes=s['weight_bytes'],
+                    x_stage_bytes=s['x_stage_bytes'],copy_bytes=s['copy_bytes'],
+                    **{f'front_{k}_cycles':v for k,v in s['front_states'].items()},
+                    interpretation='front categories exclusive per core; overlap arithmetic and other cores; not additive wall breakdown'))
+        errors=[a['actual_minus_predicted_cycles'] for a in audits if 'actual_minus_predicted_cycles' in a]
+        record['ordinary_bindings']=len(audits)
+        record['fraction_bindings_with_two_legal_cores']=sum(len(a.get('eligible_cores',[]))==2 for a in audits)/len(audits) if audits else None
+        record['prediction_mean_absolute_error_us']=sum(abs(e) for e in errors)/len(errors)/1000 if errors else None
+        record['prediction_worst_underestimate_us']=max([0]+errors)/1000
         results.append(record)
         for grain in (False,True):
             actual=grain if len(d['lanes'])==2 else False
             for policy in ('fifo','dynamic','feedback'):
                 selected=[r for r in rows if r['budget_group']==d['budget_group'] and r['architecture']==d['architecture'] and r['mode']==policy and r['tail_partition']==actual]
-                single=[lookup[d['budget_group'],'single',r['workload'],policy,False] for r in selected]
-                uniform=[lookup[d['budget_group'],'homogeneous',r['workload'],policy,grain] for r in selected]
+                single=[(r,lookup.get((d['budget_group'],'single',r['workload'],policy,False))) for r in selected]
+                uniform=[(r,lookup.get((d['budget_group'],'homogeneous',r['workload'],policy,grain))) for r in selected]
                 common.append(dict(budget=d['budget_group'],architecture=d['architecture'],grain='tail' if grain else 'whole',policy=policy,
                                    coverage=len(selected),geomean_ms=gm(r['latency_ms'] for r in selected),
-                                   gm_speedup_vs_single=gm(b['latency_ms']/r['latency_ms'] for r,b in zip(selected,single)),
-                                   gm_speedup_vs_homogeneous=gm(b['latency_ms']/r['latency_ms'] for r,b in zip(selected,uniform))))
+                                   paired_coverage_vs_single=sum(b is not None for _,b in single),
+                                   paired_coverage_vs_homogeneous=sum(b is not None for _,b in uniform),
+                                   gm_speedup_vs_single=gm(b['latency_ms']/r['latency_ms'] for r,b in single if b),
+                                   gm_speedup_vs_homogeneous=gm(b['latency_ms']/r['latency_ms'] for r,b in uniform if b)))
     csv_out(root/'heldout_summary.csv',results);csv_out(root/'common_policy_comparison.csv',common)
+    csv_out(root/'selected_core_observations.csv',observations)
     run.write_json(root/'heldout_summary.json',results)
     # Design mean/worst Pareto under the same feedback policy, independent of test results.
     design=json.loads((root/'design_rows.json').read_text());pareto=[]
@@ -99,29 +158,35 @@ def summarize(root):
     return frozen,results,common
 
 def report(root,checks,frozen,summary,common):
+    order={'single':0,'homogeneous':1,'heterogeneous':2}
     text=['# 固定硬件 MoE 搜索与验证结果','',
           '范围：Compiler + Rust analytical；真实路由、解析访存与片上端口计时。不是原生 Ramulator、完整模型推理或芯片测试。', '',
           '## 结论', '']
     for budget in ('M6','M8'):
         group=[r for r in summary if r['budget']==budget];hetero=next(r for r in group if r['architecture']=='heterogeneous')
-        text.append(f"- {budget}：冻结异构 {'+'.join(map(str,hetero['lanes']))}，测试集相对同预算单核的几何平均加速 {hetero['gm_speedup_vs_single']:.4f}×，相对同构 {hetero['gm_speedup_vs_homogeneous']:.4f}×；相对同构最差慢 {hetero['worst_slowdown_vs_homogeneous_pct']:.2f}%。")
-    text += ['', '平均数来自8个请求互不重叠的测试窗口；只覆盖 DeepSeek-V2-Lite 的两个层、两个 decode step 和三个数据来源，不能声称跨模型稳健。配置在测试前冻结；每类一个固定点，不逐窗口选赢家。', '',
+        text.append(f"- {budget}：冻结异构 {'+'.join(map(str,hetero['lanes']))}，测试集相对同预算单核的几何平均加速 {num(hetero['gm_speedup_vs_single'])}×，相对同构 {num(hetero['gm_speedup_vs_homogeneous'])}×；相对同构最差慢 {num(hetero['worst_slowdown_vs_homogeneous_pct'],2)}%。覆盖 {hetero['coverage']}。")
+    text += ['', '平均数来自8个请求互不重叠的测试窗口（BFCL/SWE，decode step 7）。整套设计/验证/测试覆盖 DeepSeek-V2-Lite 的两个层、两个 decode step 和三个数据来源，不能声称跨模型稳健。配置在测试前冻结；每类一个固定点，不逐窗口选赢家。', '',
              '## 冻结配置', '', '|预算|组织|M×N×K（N=4/K=512）|W槽|X KiB|累加区 bytes|累加bank|G|尾部分列|', '|---|---|---|---|---|---|---|---|---|']
-    for d in sorted(frozen,key=lambda d:(d['budget_group'],d['architecture'])):
+    for d in sorted(frozen,key=lambda d:(d['budget_group'],order[d['architecture']])):
         h=d['resources'];text.append(f"|{d['budget_group']}|{d['architecture']}|{' + '.join(f'{m}×4×512' for m in d['lanes'])}|{h['weight_slots']}|{[2*m for m in d['lanes']]}|{h['acc_bytes']}|{h['acc_banks']}|{d['group']}|{d['tail_partition']}|")
     text += ['', '各组共享48 KiB权重/返回预算、2 MiB累加/中间/输出/控制预算、256 B/ns HBM、256个32B额度；M6/M8分别12/16 KiB X、24/32个X bank、12/16个accumulator bank。相同资源代理量不等于等面积。', '',
              '## 测试集延迟', '', '下表为每个 batch 的BFCL/SWE两个独立窗口算术平均，单位ms；加速比按全部8窗口的几何平均计算。', '',
              '|预算|组织|B2 ms|B4 ms|B8 ms|B16 ms|相对单核|相对同构|相对同构最差减速|', '|---|---|---:|---:|---:|---:|---:|---:|---:|']
-    for r in sorted(summary,key=lambda d:(d['budget'],d['architecture'])):
-        text.append(f"|{r['budget']}|{'+'.join(map(str,r['lanes']))}|{r['B2_mean_ms']:.6f}|{r['B4_mean_ms']:.6f}|{r['B8_mean_ms']:.6f}|{r['B16_mean_ms']:.6f}|{r['gm_speedup_vs_single']:.4f}×|{r['gm_speedup_vs_homogeneous']:.4f}×|{r['worst_slowdown_vs_homogeneous_pct']:.2f}%|")
+    for r in sorted(summary,key=lambda d:(d['budget'],order[d['architecture']])):
+        text.append(f"|{r['budget']}|{'+'.join(map(str,r['lanes']))}|{num(r['B2_mean_ms'],6)}|{num(r['B4_mean_ms'],6)}|{num(r['B8_mean_ms'],6)}|{num(r['B16_mean_ms'],6)}|{num(r['gm_speedup_vs_single'])}×|{num(r['gm_speedup_vs_homogeneous'])}×|{num(r['worst_slowdown_vs_homogeneous_pct'],2)}%|")
     text += ['', '## 收益归因', '', '|预算|组织|反馈相对FIFO，同硬件同粒度|反馈相对既有预计时间策略|', '|---|---|---:|---:|']
-    for r in summary:text.append(f"|{r['budget']}|{'+'.join(map(str,r['lanes']))}|{r['gm_feedback_vs_fifo_same_grain']:.4f}×|{r['gm_feedback_vs_dynamic_same_grain']:.4f}×|")
+    for r in summary:text.append(f"|{r['budget']}|{'+'.join(map(str,r['lanes']))}|{num(r['gm_feedback_vs_fifo_same_grain'])}×|{num(r['gm_feedback_vs_dynamic_same_grain'])}×|")
+    text += ['', '上述预测策略只能在多个核都合法时改变归属；它不重排FIFO，也不能迁移已绑定的Next。下表排除强制双核尾部分列绑定，误差为绑定时预测的绝对完成时间与实际完成时间之差。', '',
+             '|预算|组织|普通绑定数|两核均合法比例|平均绝对误差 µs|最大低估 µs|', '|---|---|---:|---:|---:|---:|']
+    for r in summary:
+        fraction=r['fraction_bindings_with_two_legal_cores']
+        text.append(f"|{r['budget']}|{'+'.join(map(str,r['lanes']))}|{r['ordinary_bindings']}|{num(100*fraction if fraction is not None else None,1)}%|{num(r['prediction_mean_absolute_error_us'],3)}|{num(r['prediction_worst_underestimate_us'],3)}|")
     text += ['', '`common_policy_comparison.csv`进一步固定相同任务粒度和相同调度比较形状；`dispatch_ablation.csv`保留每个测试窗口全部策略/粒度组合。最终部署表含硬件、存储分配及冻结粒度的联合选择，不能把全部差异归给M形状。', '',
              '整专家有限搜索暴露长尾后，增加了受限的最后专家分列：不迁移已绑定任务，等两核排空，再按输出列分成两个任务。Gate/Up坐标一致；Z复制、端口、屏障均收费。它会损失Next预取并增加片上搬运，因此保留开关对照，并未假设一定加速。当前不是任意细粒度偷取列块的调度器。', '',
              '4+2在Me=[4,2]机制用例有优势，在[3,3]有反例。纯计算投影、完整FFN和真实路由层窗口是不同计时范围。旧B8三点已复现；它们不是本次独立测试集，不能混进本表。', '',
              '## 验收与复现', '',
              f"- 接受计时点：{sum(v['accepted_points'] for v in checks['timing'].values())}；每点两次完整JSON一致。分阶段数量见 resource_and_correctness.json。",
-             '- 编译器15项、Rust23项、Python38项测试通过；全部132个资源点有小尺寸实际定时轨迹数值重放。大尺寸只执行地址/时序和守恒检查。',
+             '- 编译器15项、Rust23项、Python39项测试通过；全部132个资源点有小尺寸实际定时轨迹数值重放。大尺寸只执行地址/时序和守恒检查。',
              '- 逐核容量、控制计费、HBM事务/字节、K顺序、ownership与最终排空检查通过。重叠的等待/服务计数没有相加成总延迟。',
              '- METHODS.md记录数据流与选择函数；workload_manifest.json记录来源/hash/请求划分；design_results.csv保留全部设计结果；design_pareto.csv保留平均/最差关系。',
              '- frozen_designs.json在heldout计时前产生。配置只由设计/验证集选择；同类可能有很接近的候选，不据少量窗口宣称全局最佳。',
@@ -130,7 +195,7 @@ def report(root,checks,frozen,summary,common):
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--output',type=Path,required=True);a=ap.parse_args();root=a.output
-    checks=check_raw(root);frozen,summary,common=summarize(root);report(root,checks,frozen,summary,common)
+    checks=check_raw(root);frozen,summary,common=summarize(root);design_attribution(root);report(root,checks,frozen,summary,common)
     shutil.copy2(Path(__file__).with_name('ROBUST_METHODS.md'),root/'METHODS.md')
     shutil.copy2(root/'inputs/workload_manifest.json',root/'workload_manifest.json')
     print(json.dumps(summary,indent=2))

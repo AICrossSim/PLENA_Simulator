@@ -103,6 +103,14 @@ existing W slot and prefetch its first tile before Current retires, but obtains
 workspace only at promotion. Common supply uses stock-cycle arbitration with
 the existing aging and tie rotation. Surplus rules 1–4 remain off.
 
+The route exporter orders routed experts by ID and puts Shared last. This is
+a common input convention for all organizations, **not captured hardware
+arrival timing**. Routes and Shared are logically available at the FFN boundary;
+the finite interface admits one descriptor per cycle. Policies compare cores
+for the FIFO head and do not reorder that stream. The tail rule consequently
+acts on Shared in these real windows. Results do not establish invariance to
+expert order or superiority over every possible window-reordering scheduler.
+
 All shapes receive three policies:
 
 * `fifo`: FIFO head to a legal idle core first, round-robin tie; otherwise legal
@@ -123,6 +131,9 @@ The update occupies two cycles of the existing mutually exclusive control
 port; the multiplier changes only when that service completes. Ordinary bind
 decision cost is 4+4×eligible_cores cycles, promotion and tile admission retain
 their existing charges. Bounded decision costs gate execution, not just stats.
+The control port is modeled separately from data-bank arbitration, with its
+records charged inside the arena capacity. Its physical banking, SRAM macro
+mapping and achievable frequency are not established by this analytical model.
 Binding error is actual completion minus the predicted absolute completion at
 binding; report mean absolute error and largest positive error (underestimate).
 
@@ -184,8 +195,8 @@ hardware, so a policy change is not confused with a task-size change.
 
 The selection function is fixed before timing in `selection_plan.json`:
 rank hardware by design geometric-mean feedback latency; validate the best
-three per budget/architecture; choose lowest validation geometric mean (ID for
-deterministic ties). No invented worst-regression cutoff. Report worst-case
+three per budget/architecture; choose lowest validation geometric mean (design
+geometric mean, then ID, for deterministic ties). No invented worst-regression cutoff. Report worst-case
 and Pareto behavior alongside the mean. Freeze six designs before any heldout
 timing. Test every frozen design under all three policies; never swap physical
 configurations per window. All full design results remain available, including

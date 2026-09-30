@@ -212,6 +212,8 @@ def main():
     rows,rejects=run_points(points,root,a.binary,split,a.workers)
     if a.stage=='validation':
         ranking=rank(rows);chosen={}
+        design_scores={r['design_id']:r['geomean_cycles'] for r in rank(json.loads((root/'design_rows.json').read_text()))}
+        ranking.sort(key=lambda r:(r['geomean_cycles'],design_scores[r['design_id']],r['design_id']))
         for r in ranking:chosen.setdefault((r['budget_group'],r['architecture']),r['design_id'])
         assert len(chosen)==6,'some architecture/budget lacks complete validation coverage'
         run.write_json(root/'frozen_designs.json',dict(selection=PLAN,designs=[d for d in space if d['id'] in chosen.values()],

@@ -69,3 +69,17 @@ class RobustRuntimeTests(unittest.TestCase):
                         self.assertEqual(sum(c['stats']['z_exchange_bytes'] for c in r['cores']),2*7*35)
                     self.assertEqual(r['useful_macs'],sum(3*e['Me']*e['H']*e['F'] for e in w['experts']))
         self.assertEqual(len(hashes),1)
+
+    def test_split_shared_result_combines_in_router_order(self):
+        w=workload([3,3,3],h=33,f=19)
+        shared=w['experts'][-1]
+        shared.update(id=-1,is_shared=True,route_slots=[-1]*3,route_scores=[1.0]*3)
+        w['top_k']=2
+        for t in w['tokens']:t['routes']=[r for r in t['routes'] if r['expert_id']!=2]
+        hashes=set()
+        for lanes in compiler.ROBUST_ORGANIZATIONS:
+            for tail in (False,True):
+                r,_=self.run_engine(w,list(lanes),resources=self.resources(lanes),group=2,
+                    runtime_fsm=True,dispatch='feedback',tail_partition=tail,arbiter='stock')
+                hashes.add(replay(w,r)['sha256_bf16'])
+        self.assertEqual(len(hashes),1)
