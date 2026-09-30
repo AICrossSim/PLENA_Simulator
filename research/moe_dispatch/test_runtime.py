@@ -89,6 +89,97 @@ class RuntimeTests(unittest.TestCase):
         w = workload([4, 2, 3], h=33, f=19)
         self.assertEqual(self.run_case(w), self.run_case(w))
 
+    def test_policy_matrix_same_bytes_bit_exact_and_binding_error(self):
+        w = workload([7, 2, 1, 3, 7], h=33, f=19)
+        w["experts"][-1]["is_shared"] = True
+        w["experts"][-1]["id"] = -1
+        variants = [{}, {"shared_large": True}]
+        variants += [{"next_prefetch_ready_threshold": n} for n in (1, 2, 4)]
+        variants += [{"late_bind_cycles": n} for n in (128, 512, 2048)]
+        hashes, weights = set(), set()
+        for lanes in ((6,), (3, 3), (4, 2)):
+            for arbiter in ("rr", "stock"):
+                for policy in variants:
+                    with self.subTest(lanes=lanes, arbiter=arbiter, policy=policy):
+                        r = self.run_case(w, lanes, arbiter=arbiter, **policy)
+                        hashes.add(replay(w, r)["sha256_bf16"])
+                        weights.add(r["weight_bytes"])
+                        for a in r["dispatch_audit"]:
+                            self.assertGreater(len(a["eligible_cores"]), 0)
+                            self.assertEqual(a["actual_minus_predicted_cycles"],
+                                             a["actual_finish_cycle"]-a["predicted_finish_cycle"])
+                            if "late_bind_cycles" in policy:
+                                self.assertLess(a["remaining_estimate"], policy["late_bind_cycles"])
+                            if policy.get("shared_large") and a["expert"] == -1:
+                                self.assertEqual(a["core"], 0)
+        self.assertEqual(len(hashes), 1)
+        self.assertEqual(len(weights), 1)
+
+    def test_prefetch_permission_requires_all_three_projections_sent(self):
+        w = workload([7, 2, 3, 1], h=513, f=19)
+        for n in (1, 2, 4):
+            r = self.run_case(w, (6,), next_prefetch_ready_threshold=n,
+                              dma_ready_period=7, dma_ready_cycles=3)
+            fired = {}
+            checked = 0
+            for ev in r["trace"]:
+                if ev["event"] == "dma_fire":
+                    t = ev["request"]["task"]
+                    fired[t] = fired.get(t, 0) + 32
+                if ev["event"] == "next_slot_reserved" and ev["current_task"] is not None:
+                    t = ev["current_task"]
+                    expected = sum(x["physical_bytes"] for x in w["experts"][t]["weights"].values())
+                    self.assertEqual(fired[t], expected)
+                    self.assertTrue(ev["current_all_requests_sent"])
+                    self.assertLess(ev["current_ready_tiles"], n)
+                    checked += 1
+            self.assertGreater(checked, 0)
+            self.assertTrue(replay(w, r)["all_bit_exact"])
+
+    def test_late_binding_can_leave_fifo_waiting(self):
+        r = self.run_case(workload([7, 7, 3, 2], h=513, f=19), late_bind_cycles=128)
+        self.assertGreater(r["late_bind_wait_cycles"], 0)
+        self.assertEqual(len(r["dispatch_audit"]), 4)
+
+    def test_surplus_rules_tails_and_phase_ahead_payload(self):
+        w = workload([7,2,1,3],h=513,f=19)
+        hashes=set()
+        for lanes in ((6,), (3,3), (4,2)):
+            for rules in (0,1,2,3,4):
+                with self.subTest(lanes=lanes,rules=rules):
+                    r=self.run_case(w,lanes,surplus_rules=rules,surplus_margin_cycles=64,
+                                    arbiter="stock",dma_ready_period=7,dma_ready_cycles=3)
+                    hashes.add(replay(w,r)["sha256_bf16"])
+                    self.assertEqual(r["supply_diagnostics"]["credit_completions"],r["dma_transactions_landed"])
+                    if rules==4:
+                        self.assertGreater(sum(c["phase_ahead_tiles"] for c in r["supply_diagnostics"]["cores"]),0)
+                        self.assertTrue(any(t["event"]=="phase_ahead_reserved" for t in r["trace"]))
+        self.assertEqual(len(hashes),1)
+
+    def test_ahead_down_with_multiple_k_segments_and_shared_output(self):
+        w=workload([3,2,1],h=9,f=513)
+        w["experts"][0]["is_shared"]=True
+        w["experts"][0]["id"]=-1
+        hashes=set()
+        for lanes in ((6,), (3,3), (4,2)):
+            for margin in (32,128):
+                r=self.run_case(w,lanes,surplus_rules=4,surplus_margin_cycles=margin,arbiter="stock")
+                hashes.add(replay(w,r)["sha256_bf16"])
+        self.assertEqual(len(hashes),1)
+
+    def test_expanded_credit_diagnostic_keeps_data_path_correct(self):
+        w=workload([7,2,1,3],h=513,f=19)
+        hashes=set()
+        for lanes in ((6,), (3,3), (4,2)):
+            for credits in (512,1024):
+                r=self.run_case(w,lanes,surplus_rules=4,credits=credits,
+                                diagnostic_credit_expansion=True,arbiter="stock")
+                self.assertTrue(r["resource_conditions"]["not_eligible_for_equal_budget_claim"])
+                self.assertEqual(r["dma_return_capacity_bytes"],32*credits)
+                self.assertEqual(r["resource_conditions"]["extra_credit_tag_bytes"],2*(credits-256))
+                hashes.add(replay(w,r)["sha256_bf16"])
+        self.assertEqual(len(hashes),1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,6 +22,8 @@ checks small numerical workloads against byte-addressed SRAM; a new replay also
 uses actual Rust DMA addresses, issue events and K commits to execute seeded
 payloads. Large performance runs remain timing-only. See
 [RUNTIME_FSM.md](RUNTIME_FSM.md) for the current contract;
+[RUNTIME_POLICY_ABLATION.md](RUNTIME_POLICY_ABLATION.md) for the policy and
+residual-capacity admission experiments;
 [METHODS.md](METHODS.md) describes the historical controller.
 
 ## Reproduce from the Simulator repository root
@@ -64,6 +66,32 @@ The default workload bundle comes from the Compiler: captured DeepSeek-V2-Lite
 BFCL last-token prefill routes, B2/B4/B8/B16. No model weights are downloaded.
 Those batches are nested prefixes of one capture, not independent benchmarks.
 
+## Policy and residual-capacity experiments
+
+The runtime now defaults to stock-cycle arbitration. Optional controls cover
+tail-only Next prefetch, late binding, Shared pinning, Compiler-supplied Current
+depth protection, four-tier arbitration and one next-projection tile. The new
+admission rules remain experimental; the results do not support enabling all
+four by default. Historical suites select round-robin explicitly.
+
+```bash
+python research/moe_dispatch/run_experiments.py --suite runtime_policy \
+  --workers 4 --repeats 2 --output /tmp/moe-runtime-policy
+python research/moe_dispatch/run_experiments.py --suite surplus \
+  --workers 4 --repeats 2 --output /tmp/moe-surplus
+python research/moe_dispatch/audit_runtime_policies.py \
+  --root /tmp/moe-surplus --expected-points 132
+```
+
+`credit_diagnostic` (36 points) and `surplus_credit_diagnostic` (132 points)
+explicitly label expanded return-buffer/credit-tag budgets. They are separate
+from the 256-credit same-SRAM ablation. See the policy methods for details.
+`check_large_batches.py --capture CAPTURE.npz --output OUTPUT` rebatches real
+decode routes and checks capacity first. All B32–B256 plans in the current
+capture fail the existing all-results-resident storage contract, so no large
+batch latency is reported. The results summary is
+[RUNTIME_POLICIES_20260930.md](results/RUNTIME_POLICIES_20260930.md).
+
 During paired-repository development, `PLENA_DISPATCH_COMPILER` can select a
 different `research/moe_dispatch` directory. The runner records that planner's
 hash and snapshots its source; default review/reproduction uses the gitlink.
@@ -74,9 +102,10 @@ hash and snapshots its source; default review/reproduction uses the gitlink.
 |---|---|
 | `rust/src/main.rs` | Admission, finite resources, DMA, bank service, execution and reports |
 | `rust/src/runtime.rs` | Current/Next, bounded prefetch, stable DMA protocol and response identity |
+| `rust/src/surplus.rs` | Depth reservation, deadline admission, next-phase prefetch and supply observations |
 | `rust/src/plan.rs` | Physical tiling, X reuse and exact work/traffic accounting |
 | `frontend.py` | Load the pinned Compiler without duplicating its implementation |
-| `run_experiments.py` | Four-mode runtime ablation, historical sweeps and repeat checks |
+| `run_experiments.py`, `audit_runtime_policies.py` | Immutable campaigns, ablations, repeat and resource checks |
 | `trace_payload.py`, `test_runtime.py` | Actual timed-event numerical replay and boundary cases |
 | `numerical.py`, `test_*.py` | Separate payload audit and timing integration tests |
 | `results/RUNTIME_FSM_20260930.md` | Current repair acceptance, all four modes and measured model outcomes |

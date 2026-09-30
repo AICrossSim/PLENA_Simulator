@@ -3,6 +3,7 @@
 #[allow(dead_code)]
 mod plan;
 mod runtime;
+mod surplus;
 use plan::{Issue, Projection, build_groups};
 use runtime::{DmaRequest, NextTask};
 use serde::{Deserialize, Serialize};
@@ -52,6 +53,7 @@ struct Config {
     hbm_bytes_per_ns: usize,
     hbm_latency_ns: u64,
     credits: usize,
+    diagnostic_credit_expansion: bool,
     arbiter: String,
     ideal_hbm: bool,
     ideal_onchip: bool,
@@ -63,6 +65,11 @@ struct Config {
     record_trace: bool,
     runtime_fsm: bool,
     next_prefetch: bool,
+    next_prefetch_ready_threshold: Option<usize>,
+    late_bind_cycles: Option<u64>,
+    shared_large: bool,
+    surplus_rules: u8,
+    surplus_margin_cycles: u64,
     dma_ready_after: u64,
     dma_ready_period: u64,
     dma_ready_cycles: u64,
@@ -79,7 +86,8 @@ impl Default for Config {
             hbm_bytes_per_ns: 256,
             hbm_latency_ns: 64,
             credits: 256,
-            arbiter: "rr".into(),
+            diagnostic_credit_expansion: false,
+            arbiter: "stock".into(),
             ideal_hbm: false,
             ideal_onchip: false,
             control_cost: true,
@@ -90,6 +98,11 @@ impl Default for Config {
             record_trace: false,
             runtime_fsm: true,
             next_prefetch: true,
+            next_prefetch_ready_threshold: None,
+            late_bind_cycles: None,
+            shared_large: false,
+            surplus_rules: 0,
+            surplus_margin_cycles: 64,
             dma_ready_after: 0,
             dma_ready_period: 1,
             dma_ready_cycles: 1,
@@ -278,6 +291,8 @@ struct Core {
     session: Option<Session>,
     next: Option<NextTask>,
     incoming: Option<Tile>,
+    ahead: Option<surplus::PhaseAhead>,
+    surplus_thresholds: Option<surplus::Thresholds>,
     prefetch_promoted_at: Option<u64>,
     dma_wait_since: Option<u64>,
     run: Option<Run>,
@@ -342,9 +357,13 @@ struct Sim {
     dma_serial: u64,
     last_progress: u64,
     runtime_decision_paid: bool,
+    runtime_candidate_mask: u8,
+    late_bind_wait_cycles: u64,
+    prefetch_gate_wait: [u64; 2], // Observer: unsent Current / enough ready tiles.
     promotion_pending: Vec<Option<u64>>,
     input_backpressure_cycles: u64,
     dispatch_audit: Vec<Value>, // Observer history, not a hardware task queue.
+    diagnostics: surplus::Diagnostics,
 }
 
 impl Sim {
@@ -560,6 +579,7 @@ impl Sim {
             predicted_duration: pred,
             issues_at_start: self.cores[c].stats.issues,
         });
+        self.load_surplus_thresholds(c);
         let mut ready = self.now;
         let (dst, dstride) = self.allocation(c, "x");
         for src in 0..self.cores.len() {
@@ -762,14 +782,20 @@ impl Sim {
         let prefetched = if phase == 0 {
             self.cores[c].incoming.take()
         } else {
-            None
+            self.cores[c].ahead.take().map(|a| {
+                assert_eq!(a.phase, phase);
+                a.tile
+            })
         };
         let next_occupied = self.cores[c]
             .next
             .as_ref()
             .is_some_and(|v| v.first.is_some()) as usize;
         assert_eq!(
-            self.cores[c].free_slots.len() + next_occupied + prefetched.is_some() as usize,
+            self.cores[c].free_slots.len()
+                + next_occupied
+                + prefetched.is_some() as usize
+                + usize::from(self.cores[c].ahead.is_some()),
             self.cores[c].wslots
         );
         let mut run = Run::new(e.m, n, k, start, self.cores[c].m, self.cfg.group);
@@ -982,6 +1008,16 @@ impl Sim {
             }
             Event::DrainDone(c) => {
                 let s = self.cores[c].session.take().unwrap();
+                if self.cfg.runtime_fsm {
+                    let a = self
+                        .dispatch_audit
+                        .iter_mut()
+                        .find(|a| a["task"].as_u64() == Some(s.e as u64))
+                        .unwrap();
+                    let prediction = a["predicted_finish_cycle"].as_u64().unwrap();
+                    a["actual_finish_cycle"] = json!(self.now);
+                    a["actual_minus_predicted_cycles"] = json!(self.now as i64 - prediction as i64);
+                }
                 self.cores[c].stats.done_cycle = self.now;
                 self.cores[c].stats.prediction_absolute_error_cycles +=
                     s.predicted_duration.abs_diff(self.now - s.start);
@@ -1360,7 +1396,32 @@ impl Sim {
             cfg.dispatch.as_str(),
             "fixed" | "fifo" | "dynamic"
         ));
-        assert!(matches!(cfg.arbiter.as_str(), "rr" | "urgency"));
+        assert!(matches!(cfg.arbiter.as_str(), "rr" | "urgency" | "stock"));
+        assert!(cfg.next_prefetch_ready_threshold.is_none_or(|n| n > 0));
+        assert!(cfg.late_bind_cycles.is_none_or(|n| n > 0));
+        assert!(cfg.surplus_rules <= 4);
+        if cfg.surplus_rules > 0 {
+            assert!(cfg.runtime_fsm && cfg.split == "none");
+            assert!(
+                cfg.late_bind_cycles.is_none()
+                    && cfg.next_prefetch_ready_threshold.is_none()
+                    && !cfg.shared_large
+            );
+            assert_eq!(
+                w.engine_layout["surplus_lut"]["cores"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                cfg.lanes.len()
+            );
+        }
+        assert!(
+            cfg.runtime_fsm
+                || (cfg.next_prefetch_ready_threshold.is_none()
+                    && cfg.late_bind_cycles.is_none()
+                    && !cfg.shared_large
+                    && cfg.arbiter != "stock")
+        );
         assert!(w.hidden > 0 && w.batch > 0);
         for (index, e) in w.experts.iter().enumerate() {
             assert!(
@@ -1386,7 +1447,12 @@ impl Sim {
                 && cfg.window <= 8
                 && cfg.hbm_bytes_per_ns >= 32
                 && cfg.credits > 0
-                && cfg.credits <= 256
+                && cfg.credits
+                    <= if cfg.diagnostic_credit_expansion {
+                        1024
+                    } else {
+                        256
+                    }
                 && cfg.dma_ready_period > 0
                 && cfg.dma_ready_cycles > 0
                 && cfg.dma_ready_cycles <= cfg.dma_ready_period
@@ -1421,6 +1487,8 @@ impl Sim {
                 session: None,
                 next: None,
                 incoming: None,
+                ahead: None,
+                surplus_thresholds: None,
                 prefetch_promoted_at: None,
                 dma_wait_since: None,
                 run: None,
@@ -1479,9 +1547,13 @@ impl Sim {
             dma_serial: 0,
             last_progress: 0,
             runtime_decision_paid: false,
+            runtime_candidate_mask: 0,
+            late_bind_wait_cycles: 0,
+            prefetch_gate_wait: [0; 2],
             promotion_pending: vec![None; nc],
             input_backpressure_cycles: 0,
             dispatch_audit: vec![],
+            diagnostics: surplus::Diagnostics::new(nc),
         };
         let mut load = vec![0u64; nc];
         for e in 0..ne {
@@ -1527,11 +1599,23 @@ impl Sim {
             }
             self.admit_weights();
             if self.cfg.runtime_fsm {
+                self.admit_phase_ahead();
                 self.admit_next_weights();
             }
+            self.diagnostics.accepted_this_cycle.fill(false);
             self.hbm_issue();
             for c in 0..self.cores.len() {
                 let state = self.step_core(c);
+                self.diagnostics.front_wait_code[c] = match state {
+                    "previous_k_commit" => 1,
+                    "x_not_ready" => 2,
+                    "weight_not_ready" => 3,
+                    "result_context_full" => 4,
+                    "chunk_result_drain" => 5,
+                    "chunk_conversion" => 6,
+                    "operand_feed" => 7,
+                    _ => 0,
+                };
                 *self.cores[c]
                     .stats
                     .front_states
@@ -1540,6 +1624,9 @@ impl Sim {
                 if self.now < self.cores[c].arithmetic_until {
                     self.cores[c].stats.arithmetic_active_cycles += 1;
                 }
+            }
+            if self.cfg.runtime_fsm {
+                self.observe_supply();
             }
             // Zero-latency oracle events can be enqueued by this cycle's service.
             while self
@@ -1600,6 +1687,7 @@ impl Sim {
             assert_eq!(c.contexts, 0);
             assert!(c.stats.workspace_peak_bytes <= c.capacity);
             assert!(c.next.is_none() && c.incoming.is_none() && c.session.is_none());
+            assert!(c.ahead.is_none());
         }
         assert!(self.outstanding_dma.is_empty() && self.pending_dma.is_none());
         if self.cfg.runtime_fsm {
@@ -1613,8 +1701,15 @@ impl Sim {
    "weight_bytes":weight,"credit_peak":self.credit_peak,"dispatch_decisions":self.decisions,"deferrals":self.deferrals,
    "pending_window_peak":self.unassigned_peak,"drained":true,"ownership_k_order_capacity_checks":true,
    "dma_transactions_accepted":self.dma_serial,"dma_transactions_landed":self.cores.iter().map(|c|c.stats.dma_landed).sum::<u64>(),
-   "dma_credit_bytes":32,"dma_return_capacity_bytes":8192,"input_backpressure_cycles":self.input_backpressure_cycles,
+   "dma_credit_bytes":32,"dma_return_capacity_bytes":8192.max(self.cfg.credits*32),"input_backpressure_cycles":self.input_backpressure_cycles,
+   "resource_conditions":{"over_budget_credit_diagnostic":self.cfg.diagnostic_credit_expansion,
+     "extra_return_bytes":self.cfg.credits.saturating_sub(256)*32,
+     "extra_credit_tag_bytes":self.cfg.credits.saturating_sub(256)*2,
+     "not_eligible_for_equal_budget_claim":self.cfg.credits>256},
    "dispatch_audit":self.dispatch_audit,
+   "supply_diagnostics":self.diagnostics,
+   "late_bind_wait_cycles":self.late_bind_wait_cycles,
+   "prefetch_gate_wait_core_cycles": {"current_requests_unsent":self.prefetch_gate_wait[0], "ready_tiles_at_or_above_threshold":self.prefetch_gate_wait[1]},
    "control_accounting":self.w.engine_layout.get("control_accounting"),
    "numerical_validation":"separate address-payload tests; this timing run does not execute numerical tensors",
    "model_limitations":["HBM is aggregate bandwidth plus fixed response latency, not channel/row timing", "vector and copy phases are conservatively charged as read/service/write without overlap", "candidate scalar cost heuristic, not optimal dispatch", "timing/payload are separately verified, not a unified native emulator"],
@@ -1667,6 +1762,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.split = "forced".into();
         cfg.runtime_fsm = false;
+        cfg.arbiter = "rr".into();
         let b = Sim::new(w, cfg).run();
         assert_eq!(a["weight_bytes"], b["weight_bytes"]);
         assert_eq!(a["useful_macs"], b["useful_macs"]);

@@ -156,6 +156,78 @@ mod tests {
         assert!(s.cores[0].session.is_some());
         assert_eq!(s.promotion_pending[0], None);
     }
+
+    #[test]
+    fn bounded_stock_matches_unissued_consumers_including_tails() {
+        let mut s = sim(8);
+        s.promote_runtime();
+        s.w.experts[0].m = 9;
+        s.w.experts[0].h = 513;
+        s.w.experts[0].f = 19;
+        s.cores[0].run = Some(Run::new(9, 19, 513, 0, 4, 4));
+        let len = s.cores[0].run.as_ref().unwrap().issues.len();
+        for pos in 0..=len {
+            s.cores[0].run.as_mut().unwrap().pos = pos;
+            let run = s.cores[0].run.as_ref().unwrap();
+            for tid in 0..run.tiles.len() {
+                let expected = run.issues[pos..].iter().filter(|i| i.tile == tid).count();
+                assert_eq!(
+                    s.tile_consumers_left(0, tid),
+                    expected,
+                    "pos={pos} tid={tid}"
+                );
+            }
+        }
+        // A fully landed tile with all M consumers already issued has no stock.
+        s.cores[0].live_tiles[0] = Some(0);
+        s.cores[0].run.as_mut().unwrap().tiles[0].ready = true;
+        assert_eq!(s.ready_stock(0), (0, 0));
+    }
+
+    #[test]
+    fn gate_and_up_exhaustion_do_not_enable_successor_prefetch() {
+        let mut s = sim(8);
+        s.promote_runtime();
+        s.cores[0].run = Some(Run::new(1, 16, 512, 0, 4, 4));
+        let r = s.cores[0].run.as_mut().unwrap();
+        r.send_cursor = r.tiles.len();
+        for phase in [0, 1, 2] {
+            s.cores[0].session.as_mut().unwrap().phase = phase;
+            assert!(!s.current_requests_sent(0));
+        }
+        s.cores[0].session.as_mut().unwrap().phase = 4;
+        assert!(s.current_requests_sent(0));
+        s.cores[0].run.as_mut().unwrap().send_cursor -= 1;
+        assert!(!s.current_requests_sent(0));
+    }
+
+    #[test]
+    fn inventory_includes_inflight_without_double_counting_landing() {
+        let mut s = sim(8);
+        s.promote_runtime();
+        s.issue_runtime();
+        assert_eq!(s.current_inventory(0), 256);
+        let r = s.outstanding_dma.values().next().unwrap().clone();
+        s.now = 100;
+        s.ack_runtime(r);
+        assert_eq!(s.current_inventory(0), 256);
+    }
+
+    #[test]
+    fn next_stage_cannot_borrow_current_group_slots_during_gather() {
+        let mut s = sim(8);
+        s.promote_runtime();
+        s.cfg.surplus_rules = 4;
+        s.cores[0].surplus_thresholds = Some(surplus::Thresholds {
+            depth: 4,
+            low: 4096,
+            target: 8192,
+        });
+        assert_eq!(s.borrowable_slots(0), 1);
+        s.admit_phase_ahead();
+        assert!(s.cores[0].ahead.is_some());
+        assert_eq!(s.borrowable_slots(0), 0);
+    }
 }
 
 /// Stable identity survives Next -> Current and Current input gathering.
@@ -173,6 +245,94 @@ pub(super) struct DmaRequest {
 }
 
 impl Sim {
+    /// Remaining consumers of a resident weight tile, derived from the existing
+    /// N-group/K/M issue cursor. No full-plan scan or new per-expert history.
+    fn tile_consumers_left(&self, c: usize, tid: usize) -> usize {
+        let core = &self.cores[c];
+        let (Some(s), Some(r)) = (&core.session, &core.run) else {
+            return 0;
+        };
+        let Some(next) = r.issues.get(r.pos) else {
+            return 0;
+        };
+        let t = &r.tiles[tid];
+        let tile_group = (t.n_start / (self.cfg.group * 4), t.k_start);
+        let cursor_group = (next.chunk, next.spec.k_start);
+        let total = ceil(self.w.experts[s.e].m, core.m);
+        match tile_group.cmp(&cursor_group) {
+            std::cmp::Ordering::Less => 0,
+            std::cmp::Ordering::Greater => total,
+            std::cmp::Ordering::Equal => total.saturating_sub(
+                next.spec.m_start / core.m + usize::from(t.n_start < next.spec.n_start),
+            ),
+        }
+    }
+
+    /// Fully landed Current tiles only, excluding already-issued consumers.
+    /// Runway is nominal operand-feed service, not issue count * pipeline depth.
+    /// Dependencies/X readiness/bank contention can reduce its realizable rate;
+    /// this is a causal arbitration estimate, never an execution-ready signal.
+    fn ready_stock(&self, c: usize) -> (usize, u64) {
+        let core = &self.cores[c];
+        let (Some(s), Some(r)) = (&core.session, &core.run) else {
+            return (0, 0);
+        };
+        let me = self.w.experts[s.e].m;
+        let mut count = 0;
+        let mut cycles = 0;
+        for &tid in core.live_tiles.iter().flatten() {
+            if tid >= r.tiles.len() {
+                continue;
+            } // Next reservation sentinel.
+            let t = &r.tiles[tid];
+            let left = self.tile_consumers_left(c, tid);
+            if !t.ready || t.retired || left == 0 {
+                continue;
+            }
+            count += 1;
+            let service = |m| {
+                if self.cfg.ideal_onchip {
+                    1
+                } else {
+                    ceil(t.nv * t.kv * 2, core.wb.free.len() * 16)
+                        .max(ceil(m * t.kv * 2, core.xb.free.len() * 16))
+                        .max(1) as u64
+                }
+            };
+            let last_m = (me - 1) % core.m + 1;
+            cycles += (left - 1) as u64 * service(core.m) + service(last_m);
+        }
+        (count, cycles)
+    }
+
+    pub(super) fn current_requests_sent(&self, c: usize) -> bool {
+        let core = &self.cores[c];
+        let Some(s) = &core.session else {
+            return true;
+        };
+        // Entire expert, including Down, not merely the current projection.
+        s.phase == 5
+            || (s.phase == 4
+                && core
+                    .run
+                    .as_ref()
+                    .is_some_and(|r| r.send_cursor == r.tiles.len()))
+    }
+
+    fn predicted_finish_delay(&self, e: usize, c: usize) -> u64 {
+        let available = self.progress_estimate(c);
+        let supply = self.first_ready_estimate(e, c);
+        let start = if self.cfg.next_prefetch {
+            available.max(supply)
+        } else {
+            available + supply
+        };
+        start
+            + self
+                .prediction(e, c, self.cores.len(), false)
+                .saturating_sub(supply)
+    }
+
     pub(super) fn wait_snapshot(&self) -> Value {
         json!({"cycle":self.now,"credit_used":self.credit_used,"pending_dma":self.pending_dma,
             "input_cursor":self.input_cursor,"pending":self.pending,
@@ -189,7 +349,7 @@ impl Sim {
             * (2 * ceil(x.f, 4) * ceil(x.h, 512) + ceil(x.h, 4) * ceil(x.f, 512))) as u64
     }
 
-    fn progress_estimate(&self, c: usize) -> u64 {
+    pub(super) fn progress_estimate(&self, c: usize) -> u64 {
         let Some(s) = &self.cores[c].session else {
             return 0;
         };
@@ -206,7 +366,7 @@ impl Sim {
         (service.saturating_mul(remaining).div_ceil(total)).max(drain)
     }
 
-    fn first_ready_estimate(&self, e: usize, c: usize) -> u64 {
+    pub(super) fn first_ready_estimate(&self, e: usize, c: usize) -> u64 {
         let x = &self.w.experts[e];
         let bytes = x.f.min(4) * align(x.h.min(512) * 2, 32);
         let bw = self
@@ -245,14 +405,36 @@ impl Sim {
         let Some(&e) = self.pending.front() else {
             return;
         };
+        let large = (0..self.cores.len())
+            .max_by_key(|&c| (self.cores[c].m, usize::MAX - c))
+            .unwrap();
+        let mut late_excluded = false;
         let eligible: Vec<_> = (0..self.cores.len())
             .filter(|&c| {
-                self.cores[c].next.is_none()
+                let base = self.cores[c].next.is_none()
                     && self.fits(e, c, false)
                     && (self.cfg.dispatch != "fixed" || self.fixed[e] == c)
+                    && (!self.cfg.shared_large || !self.w.experts[e].is_shared || c == large);
+                let timely = self
+                    .cfg
+                    .late_bind_cycles
+                    .is_none_or(|limit| self.progress_estimate(c) < limit);
+                late_excluded |=
+                    base && (!timely || (self.cfg.surplus_rules >= 2 && !self.surplus_due(c, e)));
+                base && timely
+                    && (self.cfg.surplus_rules < 2 || self.surplus_due(c, e))
+                    && (!self.runtime_decision_paid
+                        || (self.cfg.late_bind_cycles.is_none() && self.cfg.surplus_rules < 2)
+                        || self.runtime_candidate_mask & (1 << c) != 0)
             })
             .collect();
+        if eligible.is_empty() && late_excluded {
+            self.late_bind_wait_cycles += 1;
+        }
         if eligible.is_empty() || self.now < self.control_free {
+            if eligible.is_empty() && self.now >= self.control_free {
+                self.runtime_decision_paid = false;
+            }
             return;
         }
         if !self.runtime_decision_paid && self.cfg.control_cost {
@@ -262,6 +444,7 @@ impl Sim {
             self.control_free = self.now + cost;
             self.cores[eligible[0]].stats.control_cycles += cost;
             self.runtime_decision_paid = true;
+            self.runtime_candidate_mask = eligible.iter().fold(0, |mask, &c| mask | (1 << c));
             return;
         }
         self.runtime_decision_paid = false;
@@ -275,20 +458,8 @@ impl Sim {
                         (c + self.cores.len() - self.rr_desc) % self.cores.len(),
                     )
                 } else {
-                    let available = self.progress_estimate(c);
-                    let supply = self.first_ready_estimate(e, c);
-                    let start = if self.cfg.next_prefetch {
-                        available.max(supply)
-                    } else {
-                        available + supply
-                    };
-                    // Suffix includes ongoing memory throughput, operand banks,
-                    // vector work and dependency tails: not compute-only after first tile.
-                    let suffix = self
-                        .prediction(e, c, self.cores.len(), false)
-                        .saturating_sub(supply);
                     (
-                        start + suffix,
+                        self.predicted_finish_delay(e, c),
                         (c + self.cores.len() - self.rr_desc) % self.cores.len(),
                     )
                 }
@@ -305,6 +476,7 @@ impl Sim {
         self.dispatch_audit.push(
             json!({"cycle":self.now,"task":e,"expert":self.w.experts[e].id,
             "core":owner,"eligible_cores":eligible,
+            "predicted_finish_cycle":self.now + self.predicted_finish_delay(e,owner),
             "remaining_estimate":self.progress_estimate(owner),
             "first_ready_delay_estimate":self.first_ready_estimate(e,owner),
             "service_estimate":self.prediction(e,owner,self.cores.len(),false)}),
@@ -328,9 +500,10 @@ impl Sim {
                 if self.now < self.control_free {
                     continue;
                 }
-                self.control_free = self.now + 2;
-                self.cores[c].stats.control_cycles += 2;
-                self.promotion_pending[c] = Some(self.now + 2);
+                let cost = 2 + u64::from(self.cfg.surplus_rules > 0);
+                self.control_free = self.now + cost;
+                self.cores[c].stats.control_cycles += cost;
+                self.promotion_pending[c] = Some(self.now + cost);
             } else {
                 self.promotion_pending[c] = Some(self.now);
             }
@@ -379,6 +552,20 @@ impl Sim {
             if next.first.is_some() || self.cores[c].free_slots.is_empty() {
                 continue;
             }
+            if self.cfg.surplus_rules >= 1 && self.borrowable_slots(c) == 0 {
+                self.diagnostics.cores[c].next_denied_for_current_depth += 1;
+                continue;
+            }
+            if let Some(threshold) = self.cfg.next_prefetch_ready_threshold {
+                if !self.current_requests_sent(c) {
+                    self.prefetch_gate_wait[0] += 1;
+                    continue;
+                }
+                if self.ready_stock(c).0 >= threshold {
+                    self.prefetch_gate_wait[1] += 1;
+                    continue;
+                }
+            }
             assert!(self.cores[c].wslots > self.cfg.group);
             let e = next.e;
             let x = &self.w.experts[e];
@@ -410,7 +597,10 @@ impl Sim {
             let used = self.cores[c].wslots - self.cores[c].free_slots.len();
             self.cores[c].stats.weight_peak_bytes =
                 self.cores[c].stats.weight_peak_bytes.max(used * 4096);
-            self.log(json!({"event":"next_slot_reserved","cycle":self.now,"task":e,"core":c,"slot":slot,"bytes":bytes}));
+            self.log(json!({"event":"next_slot_reserved","cycle":self.now,"task":e,"core":c,"slot":slot,"bytes":bytes,
+                "current_task":self.cores[c].session.as_ref().map(|s|s.e),
+                "current_all_requests_sent":self.current_requests_sent(c),
+                "current_ready_tiles":self.ready_stock(c).0}));
             self.last_progress = self.now;
             self.rr_desc = (c + 1) % self.cores.len();
             break;
@@ -419,7 +609,11 @@ impl Sim {
 
     fn dma_tile(&self, r: &DmaRequest) -> &Tile {
         let c = &self.cores[r.core];
-        let tile = if c.next.as_ref().is_some_and(|n| n.e == r.task) {
+        let tile = if c.ahead.as_ref().is_some_and(|a| a.phase == r.phase) {
+            assert_eq!(c.session.as_ref().unwrap().e, r.task);
+            assert_eq!(r.tile, 0);
+            &c.ahead.as_ref().unwrap().tile
+        } else if c.next.as_ref().is_some_and(|n| n.e == r.task) {
             assert_eq!((r.phase, r.tile), (0, 0));
             c.next.as_ref().unwrap().first.as_ref().unwrap()
         } else {
@@ -439,7 +633,9 @@ impl Sim {
     fn dma_tile_mut(&mut self, r: &DmaRequest) -> &mut Tile {
         self.dma_tile(r); // Validate immutable identity before selecting mutable view.
         let c = &mut self.cores[r.core];
-        if c.next.as_ref().is_some_and(|n| n.e == r.task) {
+        if c.ahead.as_ref().is_some_and(|a| a.phase == r.phase) {
+            &mut c.ahead.as_mut().unwrap().tile
+        } else if c.next.as_ref().is_some_and(|n| n.e == r.task) {
             c.next.as_mut().unwrap().first.as_mut().unwrap()
         } else if let Some(run) = &mut c.run {
             &mut run.tiles[r.tile]
@@ -447,63 +643,90 @@ impl Sim {
             c.incoming.as_mut().unwrap()
         }
     }
-    fn candidate(&self, c: usize) -> Option<DmaRequest> {
+    fn candidates(&self, c: usize) -> Vec<DmaRequest> {
         let core = &self.cores[c];
-        let mut choice = None;
+        let mut choices = Vec::new();
         if let (Some(s), Some(r)) = (&core.session, &core.run) {
             if r.send_cursor < r.admit {
-                choice = Some((s.e, s.phase, r.send_cursor, &r.tiles[r.send_cursor]));
+                choices.push((s.e, s.phase, r.send_cursor, &r.tiles[r.send_cursor]));
             }
         } else if let (Some(s), Some(t)) = (&core.session, &core.incoming) {
             if t.sent < t.bytes {
-                choice = Some((s.e, 0, 0, t));
+                choices.push((s.e, 0, 0, t));
             }
         }
-        if choice.is_none() {
+        if let Some(a) = &core.ahead {
+            if a.tile.sent < a.tile.bytes {
+                choices.push((core.session.as_ref().unwrap().e, a.phase, 0, &a.tile));
+            }
+        }
+        {
             if let Some(n) = &core.next {
                 if let Some(t) = &n.first {
                     if t.sent < t.bytes {
-                        choice = Some((n.e, 0, 0, t));
+                        choices.push((n.e, 0, 0, t));
                     }
                 }
             }
         }
-        let (task, phase, tile, t) = choice?;
-        if t.release > self.now || t.sent == t.bytes {
-            return None;
-        }
-        let e = &self.w.experts[task];
-        let name = match phase {
-            0 => "gate",
-            1 => "up",
-            4 => "down",
-            _ => panic!("non GEMM DMA"),
-        };
-        let k = if phase < 2 { e.h } else { e.f };
-        let base = e.weights[name]["hbm_base"]
-            .as_u64()
-            .unwrap_or(((task * 3 + if phase < 2 { phase } else { 2 }) * 16 * 1024 * 1024) as u64)
-            as usize;
-        let stride = e.weights[name]["row_stride_bytes"]
-            .as_u64()
-            .unwrap_or(align(k * 2, 32) as u64) as usize;
-        let tile_stride = align(t.kv * 2, 32);
-        Some(DmaRequest {
-            serial: self.dma_serial,
-            core: c,
-            task,
-            phase,
-            tile,
-            slot: t.slot.unwrap(),
-            offset: t.sent,
-            address: base
-                + (t.n_start + t.sent / tile_stride) * stride
-                + t.k_start * 2
-                + t.sent % tile_stride,
-        })
+        choices
+            .into_iter()
+            .take(if self.cfg.surplus_rules >= 3 {
+                usize::MAX
+            } else {
+                1
+            })
+            .filter_map(|(task, phase, tile, t)| {
+                if t.release > self.now || t.sent == t.bytes {
+                    return None;
+                }
+                let e = &self.w.experts[task];
+                let name = match phase {
+                    0 => "gate",
+                    1 => "up",
+                    4 => "down",
+                    _ => panic!("non GEMM DMA"),
+                };
+                let k = if phase < 2 { e.h } else { e.f };
+                let base = e.weights[name]["hbm_base"].as_u64().unwrap_or(
+                    ((task * 3 + if phase < 2 { phase } else { 2 }) * 16 * 1024 * 1024) as u64,
+                ) as usize;
+                let stride = e.weights[name]["row_stride_bytes"]
+                    .as_u64()
+                    .unwrap_or(align(k * 2, 32) as u64) as usize;
+                let tile_stride = align(t.kv * 2, 32);
+                Some(DmaRequest {
+                    serial: self.dma_serial,
+                    core: c,
+                    task,
+                    phase,
+                    tile,
+                    slot: t.slot.unwrap(),
+                    offset: t.sent,
+                    address: base
+                        + (t.n_start + t.sent / tile_stride) * stride
+                        + t.k_start * 2
+                        + t.sent % tile_stride,
+                })
+            })
+            .collect()
+    }
+    pub(super) fn candidate(&self, c: usize) -> Option<DmaRequest> {
+        self.candidates(c).into_iter().next()
     }
 
     pub(super) fn issue_runtime(&mut self) {
+        // No landing/MAC issue occurs inside this request-accept loop. Compute
+        // the bounded slot reduction once, not once per 32B grant.
+        let stocks: Vec<_> = (0..self.cores.len())
+            .map(|c| {
+                if self.cfg.arbiter == "stock" {
+                    self.ready_stock(c).1
+                } else {
+                    0
+                }
+            })
+            .collect();
         let grants = if self.cfg.ideal_hbm {
             self.cfg.credits
         } else {
@@ -515,7 +738,13 @@ impl Sim {
             }
             if self.pending_dma.is_none() {
                 let candidates: Vec<_> = (0..self.cores.len())
-                    .filter_map(|c| self.candidate(c))
+                    .flat_map(|c| {
+                        if self.cfg.surplus_rules >= 3 {
+                            self.candidates(c)
+                        } else {
+                            self.candidate(c).into_iter().collect()
+                        }
+                    })
                     .collect();
                 for r in &candidates {
                     self.cores[r.core].dma_wait_since.get_or_insert(self.now);
@@ -531,11 +760,21 @@ impl Sim {
                             .filter(|&&t| t < run.tiles.len() && run.tiles[t].ready)
                             .count()
                     });
+                    let (tier, inventory) = if self.cfg.surplus_rules >= 3 {
+                        self.request_tier(r)
+                    } else {
+                        (0, 0)
+                    };
                     (
+                        tier,
                         !(age >= 64),
                         if age >= 64 { u64::MAX - age } else { 0 },
-                        if self.cfg.arbiter == "urgency" {
-                            ready
+                        if self.cfg.surplus_rules >= 3 {
+                            inventory
+                        } else if self.cfg.arbiter == "stock" {
+                            stocks[c]
+                        } else if self.cfg.arbiter == "urgency" {
+                            ready as u64
                         } else {
                             0
                         },
@@ -554,6 +793,7 @@ impl Sim {
                 self.cores[r.core].stats.dma_backpressure_cycles += 1;
                 break; // No AGU advance, charge, new selection or changed tag.
             }
+            self.record_dma_accept(&r);
             let t = self.dma_tile_mut(&r);
             assert_eq!(t.sent, r.offset);
             t.sent += 32;
@@ -562,7 +802,7 @@ impl Sim {
             if complete {
                 let core = &mut self.cores[r.core];
                 if let (Some(s), Some(run)) = (&core.session, &mut core.run) {
-                    if s.e == r.task {
+                    if s.e == r.task && s.phase == r.phase {
                         assert_eq!(run.send_cursor, r.tile);
                         run.send_cursor += 1;
                     }
@@ -608,6 +848,7 @@ impl Sim {
     }
     pub(super) fn ack_runtime(&mut self, r: DmaRequest) {
         assert_eq!(self.outstanding_dma.remove(&r.serial), Some(r.clone()));
+        self.record_dma_landing(&r);
         let t = self.dma_tile_mut(&r);
         t.acks += 32;
         assert!(t.acks <= t.sent && t.acks <= t.bytes);

@@ -50,6 +50,8 @@ class AnalyticalEngineIntegrationTests(unittest.TestCase):
         if cfg["split"] != "none":
             cfg["runtime_fsm"] = False  # Frozen split diagnostic, outside Current/Next.
         workload = {**workload, "engine_layout": engine_layout(workload, lanes, cfg["group"])}
+        if cfg.get("surplus_rules",0):
+            workload["engine_layout"]["surplus_lut"] = compiler.surplus_policy_lut(lanes,cfg)
         with tempfile.TemporaryDirectory(prefix="plena-dispatch-engine-test-") as tmp:
             tmp = Path(tmp)
             wp, cp, out = tmp / "workload.json", tmp / "config.json", tmp / "report.json"

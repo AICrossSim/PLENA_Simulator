@@ -121,6 +121,54 @@ def toy_workloads() -> list[dict[str, Any]]:
 
 def make_points(workloads: list[dict[str, Any]], suite: str, trace: bool) -> list[dict[str, Any]]:
     points = []
+    if suite == "credit_diagnostic":
+        for w in workloads:
+            if w["batch"] not in (2,4,8,16): continue
+            for org,lanes in ORGANIZATIONS:
+                for credits in (256,512,1024):
+                    cfg=dict(BASE,lanes=lanes,group=4,dispatch="dynamic",split="none",record_trace=trace,
+                             window=8,runtime_fsm=True,next_prefetch=True,diagnostic_credit_expansion=credits>256)
+                    cfg.update(arbiter="stock",credits=credits)
+                    points.append({"key":f"credit_diagnostic__{w['id']}__{org}__credits{credits}","suite":suite,
+                                   "organization":org,"mode":"reference","condition":f"credits{credits}",
+                                   "workload":w,"config":cfg})
+        return points
+    if suite in ("surplus", "surplus_credit_diagnostic"):
+        variants = [("baseline", 0, 64), ("depth", 1, 64)]
+        variants += [(f"rules{r}_margin{m}", r, m) for r in (2, 3, 4) for m in (32, 64, 128)]
+        for w in workloads:
+            if w["batch"] not in (2,4,8,16): continue
+            for org,lanes in ORGANIZATIONS:
+                for mode,rules,margin in variants:
+                    cfg = dict(BASE,lanes=lanes,group=4,dispatch="dynamic",split="none",
+                               record_trace=trace,window=8,runtime_fsm=True,next_prefetch=True,
+                               surplus_rules=rules,surplus_margin_cycles=margin)
+                    cfg["arbiter"] = "stock"
+                    if suite == "surplus_credit_diagnostic":
+                        cfg.update(credits=1024, diagnostic_credit_expansion=True)
+                    points.append({"key":f"{suite}__{w['id']}__{org}__{mode}","suite":suite,
+                                   "organization":org,"mode":mode,"condition":f"credits{cfg['credits']}",
+                                   "workload":w,"config":cfg})
+        return points
+    if suite == "runtime_policy":
+        variants = [("reference", {})]
+        variants += [(f"prefetch_tail{n}", {"next_prefetch_ready_threshold": n}) for n in (1, 2, 4)]
+        variants += [(f"late{n}", {"late_bind_cycles": n}) for n in (128, 512, 2048)]
+        variants += [("shared_large", {"shared_large": True})]
+        for w in workloads:
+            if w["batch"] not in (2, 4, 8, 16):
+                continue
+            for org, lanes in ORGANIZATIONS:
+                for arbiter in ("stock", "rr"):
+                    for mode, change in variants:
+                        config = dict(BASE, lanes=lanes, group=4, dispatch="dynamic",
+                                      split="none", record_trace=trace, window=8,
+                                      runtime_fsm=True, next_prefetch=True)
+                        config.update(arbiter=arbiter, **change)
+                        points.append({"key": f"runtime_policy__{w['id']}__{org}__{arbiter}__{mode}",
+                                       "suite": suite, "organization": org, "mode": mode,
+                                       "condition": arbiter, "workload": w, "config": config})
+        return points
     if suite == "runtime":
         for w in workloads:
             if w["batch"] not in (2, 4, 8, 16):
@@ -165,6 +213,8 @@ def attach_layout(point: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("compiler.engine_layout is not yet available; freeze the compiler helper first")
     workload = copy.deepcopy(point["workload"])
     workload["engine_layout"] = frontend.engine_layout(workload, point["config"]["lanes"], point["config"]["group"])
+    if point["config"].get("surplus_rules", 0):
+        workload["engine_layout"]["surplus_lut"] = frontend.surplus_policy_lut(point["config"]["lanes"], point["config"])
     return workload
 
 
@@ -255,6 +305,22 @@ def summary_row(item: dict[str, Any]) -> dict[str, Any]:
     row["hbm_read_bytes"] = r["weight_bytes"]
     row["hbm_write_bytes"] = 0  # Results remain in the accounted on-chip inbox.
     row["input_backpressure_cycles"] = r.get("input_backpressure_cycles", 0)
+    row["arbiter"] = cfg["arbiter"]
+    row["credit_limit"] = cfg["credits"]
+    row["over_budget_credit_diagnostic"] = cfg.get("diagnostic_credit_expansion", False)
+    row["extra_return_bytes"] = max(0, cfg["credits"]-256)*32
+    row["extra_credit_tag_bytes"] = max(0, cfg["credits"]-256)*2
+    row["hbm_byte_lower_bound_us"] = r["weight_bytes"] / cfg["hbm_bytes_per_ns"] / 1000
+    row["achieved_weight_bandwidth_GBps"] = r["weight_bytes"] / r["cycles"]
+    row["gap_above_byte_lower_bound_percent"] = (r["cycles"] * cfg["hbm_bytes_per_ns"] / r["weight_bytes"] - 1)*100
+    row["late_bind_wait_cycles"] = r.get("late_bind_wait_cycles", 0)
+    audits = r.get("dispatch_audit", [])
+    errors = [a["actual_minus_predicted_cycles"] for a in audits if "actual_minus_predicted_cycles" in a]
+    row["binding_mean_signed_error_us"] = sum(errors) / len(errors) / 1000 if errors else ""
+    row["binding_mean_absolute_error_us"] = sum(abs(e) for e in errors) / len(errors) / 1000 if errors else ""
+    row["binding_worst_underestimate_us"] = max([0] + errors) / 1000 if errors else ""
+    for n in (1, 2):
+        row[f"bindings_with_{n}_eligible_cores"] = sum(len(a["eligible_cores"]) == n for a in audits)
     for key in ("dma_accepted", "dma_landed", "dma_backpressure_cycles", "next_bindings",
                 "next_prefetch_tiles", "next_ready_at_promotion", "next_inflight_at_promotion",
                 "next_weight_wait_cycles"):
@@ -299,7 +365,7 @@ def main() -> None:
     parser.add_argument("--workloads", type=Path, default=frontend.DEFAULT_WORKLOADS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
-    parser.add_argument("--suite", choices=("runtime", "matrix", "toy", "sensitivity"), default="runtime")
+    parser.add_argument("--suite", choices=("surplus_credit_diagnostic", "credit_diagnostic", "surplus", "runtime_policy", "runtime", "matrix", "toy", "sensitivity"), default="runtime_policy")
     parser.add_argument("--pilot", action="store_true", help="matrix: B2 G4 (9 points); toy: Me4/2 G4; sensitivity: BW256/lat64")
     parser.add_argument("--filter", default="", help="regular expression on human-readable point key")
     parser.add_argument("--workers", type=int, default=1)
