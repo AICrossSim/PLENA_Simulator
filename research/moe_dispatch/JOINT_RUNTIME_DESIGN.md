@@ -44,6 +44,47 @@ Data direction is HBM -> reserved private W -> operand feed -> MAC -> private
 accumulator -> existing vector and output-copy path. The drawing above shows
 control connectivity, not that weight data travels through the dispatcher.
 
+## Concrete interface and datapath
+
+Dispatch granularity in this study is **one complete expert FFN**. It is not an
+individual token, a router top-k selection, or an independently migrated K
+segment. The expert computes Gate and Up, forms the nonlinear intermediate,
+then computes Down. The local engine tiles each projection; the dispatcher
+does not place each matrix tile independently.
+
+Physical dimensions are always written **M x N x K**, with N=4 and K=512.
+M6 comparisons have 12,288 multipliers; input/weight are BF16 and accumulation
+is FP32. No new quantization mechanism is introduced.
+
+| M6 organization | Core shapes | Private W slots | X double buffers | Total arena |
+|---|---|---|---|---|
+| Single | 6x4x512 | 10 | 12 KiB | 2 MiB |
+| Homogeneous | 3x4x512 + 3x4x512 | 5 + 5 | 6 + 6 KiB | 1 + 1 MiB |
+| Heterogeneous | 4x4x512 + 2x4x512 | 5 + 5 | 8 + 4 KiB | M-proportional, 2 MiB total |
+
+One full W tile is 4x512x2 = 4,096 B, independent of core M. A full X tile is
+M x512x2 B; each core has two such buffers. The W budget also includes an 8 KiB
+shared return region, giving 48 KiB total. The arena includes intermediates,
+retained outputs and the control reserve; it is not all available for live
+partial sums. Capacity and bank/port counts remain distinct constraints.
+
+The Compiler emits shapes, route-row references, tensor addresses/strides,
+allocation bounds and future-workspace fit information. It does not select
+experts or hard-code task owners from the evaluation trace. Runtime uses these
+descriptors and actual resource state. The task lifetime is:
+
+    Waiting: no owner, no reserved W slot
+       -> Proposed: charged decision snapshot, still no ownership
+       -> Committed Next: immutable owner + one reserved W landing slot
+       -> Current: acquire workspace, stream tiled Gate/Up/Down computation
+       -> Finished: retain required output for the existing combine operation
+
+One Current and at most one Next are allowed per core. Binding is distinct
+from issue: execution still requires actual W/X readiness, output capacity and
+the previous K dependency. The no-prefetch ablation keeps the reservation
+protocol but does not issue Next DMA before promotion. A forecast never
+substitutes for a real completion event.
+
 ## Bounded hardware policy
 
 1. Accept at most one descriptor per cycle. Initially allow the finite window
