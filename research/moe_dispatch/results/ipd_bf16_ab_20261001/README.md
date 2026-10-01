@@ -41,17 +41,27 @@ Every policy and organization preserves the same useful MAC count and weight
 byte count per workload. All capacity checks, DMA drain checks, and repeated
 report equality checks passed.
 
-For 4+2 IPD, mean HBM weight-read utilization is 47.57% of the configured 256 B/ns and
-95.13% of the 128 B/ns steady-state ceiling from 256 × 32 B / 64 ns credits.
+For 4+2 IPD, mean HBM weight-read utilization is 47.57% of the configured
+256 B/ns and 95.13% of the 128 B/ns steady-state ceiling from 256 × 32 B /
+64 ns credits.
 The latter is an analytical credit-bandwidth bound, not a measured HBM device
 limit. Mean arithmetic-active observer fractions are 59.63% and 54.81% on the
 two cores; useful MACs divided by nominal multiplier-cycle capacity are 1.16%
 for the whole organization. Arithmetic-active can overlap feed or front-end
-waits and must not be called useful MAC utilization. The per-point file also records
-MAC issue/HBM-accept intersections, weight-wait fractions, spatial efficiency,
+waits and must not be called useful MAC utilization. The per-point file also
+records MAC issue/HBM-accept intersections, weight-wait fractions, spatial efficiency,
 credit peaks, and control service. Simultaneous arithmetic and HBM requests
 occur in the model; this does not by itself prove that future cross-layer
 prefetch will improve latency, especially near the credit roof.
+
+Review of diagnostic semantics: quota demand follows Current when present and
+uses Next only when Current is absent. A newly bound Next therefore does not
+immediately change the quota while Current runs. The Compiler protocol text
+uses the shorter phrase "Current/Next task identity changes"; the Rust rule
+above is the measured one. `ipd_quota_block_cycles` counts cycles in which at
+least one candidate was filtered at the first DMA grant opportunity. It is
+not a count of cycles with an idle HBM link. Neither diagnostic enters the
+latency or HBM utilization calculations above.
 
 ## B: sequential no-prefetch baseline
 

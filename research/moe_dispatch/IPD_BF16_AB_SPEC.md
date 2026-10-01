@@ -34,7 +34,9 @@ the two cores. For a core with a Current or Next expert, predicted demand in
 at least 16 operand-feed cycles per M group. Shares are proportional, each at
 least 32 credits, and sum to 256. If the peer has no legal request, its unused
 share can be borrowed. Quota limits are stored in bounded registers and
-recomputed only when Current/Next task identity changes; the update costs
+recomputed only when the selected task identity changes: Current takes
+precedence, and Next is used only while Current is absent. Binding Next while
+Current still runs therefore does not refresh the quota. Each update costs
 eight cycles on the shared control port before new DMA requests may be picked.
 A valid request stalled by DMA backpressure retains its identity; a credit is
 released only after W landing. The formula is an
