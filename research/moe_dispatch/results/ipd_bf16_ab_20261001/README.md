@@ -34,19 +34,20 @@ not establish the necessity of heterogeneous cores; the 6 and 3+3 columns
 provide that comparison here, subject to independent replication.
 
 The 4+2 advantage over 3+3 is essentially absent at B2 (0.9998×), then
-1.0043× at B4, 1.0369× at B8, and 1.0487× at B16. One window is 0.04% slower
-than 3+3 IPD; the worst 4+2 IPD regression against same-shape joint is 0.13%.
+1.0043× at B4, 1.0369× at B8, and 1.0487× at B16. Two B2 windows are
+slower than 3+3 IPD, by 0.04% and 0.03%; the worst 4+2 IPD regression
+against same-shape joint is 0.13%.
 Every policy and organization preserves the same useful MAC count and weight
 byte count per workload. All capacity checks, DMA drain checks, and repeated
 report equality checks passed.
 
-For 4+2 IPD, mean HBM throughput is 47.57% of the configured 256 B/ns and
+For 4+2 IPD, mean HBM weight-read utilization is 47.57% of the configured 256 B/ns and
 95.13% of the 128 B/ns steady-state ceiling from 256 × 32 B / 64 ns credits.
 The latter is an analytical credit-bandwidth bound, not a measured HBM device
 limit. Mean arithmetic-active observer fractions are 59.63% and 54.81% on the
 two cores; useful MACs divided by nominal multiplier-cycle capacity are 1.16%
-for the whole organization. Arithmetic-active includes feed and stalls and
-must not be called useful MAC utilization. The per-point file also records
+for the whole organization. Arithmetic-active can overlap feed or front-end
+waits and must not be called useful MAC utilization. The per-point file also records
 MAC issue/HBM-accept intersections, weight-wait fractions, spatial efficiency,
 credit peaks, and control service. Simultaneous arithmetic and HBM requests
 occur in the model; this does not by itself prove that future cross-layer
