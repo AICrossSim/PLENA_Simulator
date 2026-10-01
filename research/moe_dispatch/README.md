@@ -1,6 +1,17 @@
 # Heterogeneous MoE dispatch: analytical execution model
 
-Research branch: `research/moe-joint-runtime` (Compiler and Simulator).
+New fixed-budget BF16 work on `research/moe-ipd-bf16-ab` is specified in
+[IPD_BF16_AB_SPEC.md](IPD_BF16_AB_SPEC.md). It adds an `ipd` high/low visible-window
+dispatch policy with optional quotas inside the existing 256-credit pool, a
+paired archived-route comparison runner, and a no-prefetch sequential
+multi-layer baseline profiler. The latter needs an external adjacent-layer
+route capture for real multi-layer results; the Git archive only has layer-13
+inputs. Both additions remain independent analytical Rust research tools.
+
+Parent research branch: `research/moe-joint-runtime` (Compiler and Simulator).
+The new A/B branch pins its matching Compiler commit as a submodule.
+Its measured summary is in
+[results/ipd_bf16_ab_20261001/README.md](results/ipd_bf16_ab_20261001/README.md).
 
 ## Current review entry points
 

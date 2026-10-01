@@ -14,6 +14,7 @@ macro_rules! trace {
 
 mod compute;
 mod joint;
+mod multilayer;
 #[allow(dead_code)]
 mod plan;
 mod runtime;
@@ -70,6 +71,8 @@ struct Config {
     joint_pairing: bool,
     joint_age_limit: u8,
     joint_margin_cycles: u64,
+    ipd_credit_quotas: bool,
+    profile_bin_cycles: u64,
     split: String,
     hbm_bytes_per_ns: usize,
     hbm_latency_ns: u64,
@@ -110,6 +113,8 @@ impl Default for Config {
             joint_pairing: true,
             joint_age_limit: 8,
             joint_margin_cycles: 64,
+            ipd_credit_quotas: false,
+            profile_bin_cycles: 0,
             split: "none".into(),
             hbm_bytes_per_ns: 256,
             hbm_latency_ns: 64,
@@ -195,6 +200,8 @@ struct Stats {
     workspace_peak_bytes: usize,
     contexts_peak: usize,
     arithmetic_active_cycles: u64,
+    mac_issue_hbm_accept_cycles: u64,
+    arithmetic_window_hbm_accept_cycles: u64,
     done_cycle: u64,
     prediction_absolute_error_cycles: u64,
     prediction_actual_cycles: u64,
@@ -210,6 +217,22 @@ struct Stats {
     dma_landed: u64,
     dma_backpressure_cycles: u64,
     eligible_wait_max_cycles: u64,
+}
+
+// Observer-only time bins. They are never read by dispatch or DMA decisions.
+#[derive(Default, Serialize)]
+struct ProfileBin {
+    start_cycle: u64,
+    cycles: u64,
+    hbm_accepted_bytes: u64,
+    hbm_spare_bytes_sum: u64,
+    credit_used_sum: u64,
+    credit_full_cycles: u64,
+    free_w_slots_sum: Vec<u64>,
+    current_cycles: Vec<u64>,
+    arithmetic_active_cycles: Vec<u64>,
+    weight_not_ready_cycles: Vec<u64>,
+    slot_credit_bw_opportunity_cycles: Vec<u64>,
 }
 #[derive(Clone)]
 struct Tile {
@@ -361,7 +384,15 @@ struct Sim {
     seq: u64,
     events: BinaryHeap<Reverse<(u64, u64, Event)>>,
     credit_used: usize,
+    credit_used_by_core: Vec<usize>,
     credit_peak: usize,
+    credit_peak_by_core: Vec<usize>,
+    ipd_quota_block_cycles: u64,
+    ipd_quota_key: Vec<Option<usize>>,
+    ipd_quota_limits: Vec<usize>,
+    ipd_quota_ready: u64,
+    ipd_quota_updates: u64,
+    ipd_quota_control_cycles: u64,
     control_free: u64,
     bus_free: u64,
     vector_free: u64,
@@ -399,6 +430,7 @@ struct Sim {
     tail_decision_ready: Option<u64>,
     tail_partition_count: u64,
     joint: joint::JointState,
+    profile_bins: Vec<ProfileBin>,
 }
 
 impl Sim {
@@ -1489,13 +1521,17 @@ impl Sim {
         assert!(cfg.max_cycles > 0 && cfg.no_progress_cycles > 0);
         assert!(matches!(
             cfg.dispatch.as_str(),
-            "fixed" | "fifo" | "dynamic" | "feedback" | "joint"
+            "fixed" | "fifo" | "dynamic" | "feedback" | "joint" | "ipd"
         ));
         assert!(matches!(cfg.arbiter.as_str(), "rr" | "urgency" | "stock"));
         assert!(cfg.joint_age_limit > 0);
-        if cfg.dispatch == "joint" {
+        if matches!(cfg.dispatch.as_str(), "joint" | "ipd") {
             assert!(cfg.runtime_fsm && cfg.split == "none");
             assert!(cfg.late_bind_cycles.is_none() && cfg.surplus_rules == 0 && !cfg.shared_large);
+        }
+        assert!(!cfg.ipd_credit_quotas || cfg.dispatch == "ipd");
+        if cfg.ipd_credit_quotas {
+            assert_eq!(cfg.credits, 256, "IPD quotas are a fixed-budget policy");
         }
         assert!(cfg.next_prefetch_ready_threshold.is_none_or(|n| n > 0));
         assert!(cfg.late_bind_cycles.is_none_or(|n| n > 0));
@@ -1589,12 +1625,12 @@ impl Sim {
                 );
             }
         }
-        if cfg.dispatch == "joint" {
+        if matches!(cfg.dispatch.as_str(), "joint" | "ipd") {
             assert_eq!(hw["joint_state_bytes"], 256);
         }
         if cfg.dispatch == "feedback"
             || cfg.tail_partition
-            || (cfg.dispatch == "joint" && cfg.joint_feedback)
+            || (matches!(cfg.dispatch.as_str(), "joint" | "ipd") && cfg.joint_feedback)
         {
             assert!(cfg.runtime_fsm && cfg.split == "none");
             assert_eq!(hw["feedback_state_bytes"], 96);
@@ -1666,7 +1702,15 @@ impl Sim {
             seq: 0,
             events: BinaryHeap::new(),
             credit_used: 0,
+            credit_used_by_core: vec![0; nc],
             credit_peak: 0,
+            credit_peak_by_core: vec![0; nc],
+            ipd_quota_block_cycles: 0,
+            ipd_quota_key: vec![None; nc],
+            ipd_quota_limits: vec![256; nc],
+            ipd_quota_ready: 0,
+            ipd_quota_updates: 0,
+            ipd_quota_control_cycles: 0,
             control_free: 0,
             bus_free: 0,
             vector_free: 0,
@@ -1704,6 +1748,7 @@ impl Sim {
             tail_decision_ready: None,
             tail_partition_count: 0,
             joint: joint::JointState::default(),
+            profile_bins: vec![],
         };
         let mut load = vec![0u64; nc];
         for e in 0..ne {
@@ -1761,9 +1806,14 @@ impl Sim {
                 self.admit_next_weights();
             }
             self.diagnostics.accepted_this_cycle.fill(false);
+            let dma_before = self.dma_serial;
             self.hbm_issue();
+            let hbm_accepted_this_cycle = self.dma_serial > dma_before;
             for c in 0..self.cores.len() {
                 let state = self.step_core(c);
+                if state == "issue" && hbm_accepted_this_cycle {
+                    self.cores[c].stats.mac_issue_hbm_accept_cycles += 1;
+                }
                 self.diagnostics.front_wait_code[c] = match state {
                     "previous_k_commit" => 1,
                     "x_not_ready" => 2,
@@ -1781,6 +1831,47 @@ impl Sim {
                     .or_default() += 1;
                 if self.now < self.cores[c].arithmetic_until {
                     self.cores[c].stats.arithmetic_active_cycles += 1;
+                    self.cores[c].stats.arithmetic_window_hbm_accept_cycles +=
+                        u64::from(hbm_accepted_this_cycle);
+                }
+            }
+            if self.cfg.profile_bin_cycles > 0 {
+                let period = self.cfg.profile_bin_cycles;
+                if self
+                    .profile_bins
+                    .last()
+                    .is_none_or(|b| b.start_cycle / period != self.now / period)
+                {
+                    let n = self.cores.len();
+                    self.profile_bins.push(ProfileBin {
+                        start_cycle: (self.now / period) * period,
+                        free_w_slots_sum: vec![0; n],
+                        current_cycles: vec![0; n],
+                        arithmetic_active_cycles: vec![0; n],
+                        weight_not_ready_cycles: vec![0; n],
+                        slot_credit_bw_opportunity_cycles: vec![0; n],
+                        ..Default::default()
+                    });
+                }
+                let bin = self.profile_bins.last_mut().unwrap();
+                bin.cycles += 1;
+                let accepted = (self.dma_serial - dma_before) * 32;
+                bin.hbm_accepted_bytes += accepted;
+                bin.hbm_spare_bytes_sum +=
+                    (self.cfg.hbm_bytes_per_ns as u64).saturating_sub(accepted);
+                bin.credit_used_sum += self.credit_used as u64;
+                bin.credit_full_cycles += u64::from(self.credit_used == self.cfg.credits);
+                for (c, core) in self.cores.iter().enumerate() {
+                    bin.free_w_slots_sum[c] += core.free_slots.len() as u64;
+                    bin.current_cycles[c] += u64::from(core.session.is_some());
+                    bin.arithmetic_active_cycles[c] += u64::from(self.now < core.arithmetic_until);
+                    bin.weight_not_ready_cycles[c] +=
+                        u64::from(self.diagnostics.front_wait_code[c] == 3);
+                    bin.slot_credit_bw_opportunity_cycles[c] += u64::from(
+                        !core.free_slots.is_empty()
+                            && self.credit_used < self.cfg.credits
+                            && accepted < self.cfg.hbm_bytes_per_ns as u64,
+                    );
                 }
             }
             if self.cfg.runtime_fsm {
@@ -1823,6 +1914,35 @@ impl Sim {
             done = done.max(self.vector_io(c, rows * n + 2 * self.w.batch * n, &ss, &ds));
         }
         self.combine_cycles = done - experts_done;
+        if self.cfg.profile_bin_cycles > 0 {
+            let period = self.cfg.profile_bin_cycles;
+            for cycle in experts_done..done {
+                if self
+                    .profile_bins
+                    .last()
+                    .is_none_or(|b| b.start_cycle / period != cycle / period)
+                {
+                    let n = self.cores.len();
+                    self.profile_bins.push(ProfileBin {
+                        start_cycle: (cycle / period) * period,
+                        free_w_slots_sum: vec![0; n],
+                        current_cycles: vec![0; n],
+                        arithmetic_active_cycles: vec![0; n],
+                        weight_not_ready_cycles: vec![0; n],
+                        slot_credit_bw_opportunity_cycles: vec![0; n],
+                        ..Default::default()
+                    });
+                }
+                let bin = self.profile_bins.last_mut().unwrap();
+                bin.cycles += 1;
+                bin.hbm_spare_bytes_sum += self.cfg.hbm_bytes_per_ns as u64;
+                for (c, core) in self.cores.iter().enumerate() {
+                    bin.free_w_slots_sum[c] += core.free_slots.len() as u64;
+                    bin.slot_credit_bw_opportunity_cycles[c] +=
+                        u64::from(!core.free_slots.is_empty());
+                }
+            }
+        }
         self.now = done;
         let expected: u64 = self
             .w
@@ -1857,6 +1977,10 @@ impl Sim {
    "cycles":self.now,"time_ms_at_1ghz":self.now as f64/1e6,"experts_done_cycles":experts_done,"combine_tail_cycles":self.combine_cycles,
    "useful_macs":useful,"issued_macs":self.cores.iter().map(|c|c.stats.issued_macs).sum::<u64>(),
    "weight_bytes":weight,"credit_peak":self.credit_peak,"dispatch_decisions":self.decisions,"deferrals":self.deferrals,
+   "credit_peak_by_core":self.credit_peak_by_core,"ipd_quota_block_cycles":self.ipd_quota_block_cycles,
+   "ipd_quota_updates":self.ipd_quota_updates,"ipd_quota_control_cycles":self.ipd_quota_control_cycles,
+   "ipd_quota_final_limits":self.ipd_quota_limits,
+   "profile_bin_cycles":self.cfg.profile_bin_cycles,"profile_bins":self.profile_bins,
    "pending_window_peak":self.unassigned_peak,"drained":true,"ownership_k_order_capacity_checks":true,
    "dma_transactions_accepted":self.dma_serial,"dma_transactions_landed":self.cores.iter().map(|c|c.stats.dma_landed).sum::<u64>(),
    "dma_credit_bytes":32,"dma_return_capacity_bytes":8192.max(self.cfg.credits*32),"input_backpressure_cycles":self.input_backpressure_cycles,
@@ -1881,6 +2005,12 @@ impl Sim {
 }
 fn main() {
     let args: Vec<_> = std::env::args().collect();
+    if args.len() == 4 && args[1] == "--multilayer-baseline" {
+        let input: Value = serde_json::from_slice(&std::fs::read(&args[2]).unwrap()).unwrap();
+        let report = multilayer::run(input);
+        std::fs::write(&args[3], serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        return;
+    }
     assert_eq!(
         args.len(),
         4,

@@ -142,6 +142,104 @@ fn propose(
     (anchor, aged.is_some(), chosen, comparisons)
 }
 
+// A bounded two-ended policy: a high-intensity descriptor targets the wider
+// compute core while the lowest-intensity visible companion targets the other.
+// Both ends are selected only from the same already-arrived eight descriptors.
+// Existing capacity masks and late admission still govern irrevocable binding.
+fn propose_ipd(
+    candidates: &[Candidate],
+    experts: &[Expert],
+    core_m: &[usize],
+    age_limit: u8,
+    rr: usize,
+) -> (Option<usize>, bool, Vec<Placement>, u64) {
+    let nc = core_m.len();
+    let aged = candidates
+        .iter()
+        .enumerate()
+        .find(|(_, x)| x.potential != 0 && x.age >= age_limit)
+        .map(|(i, _)| i);
+    let anchor = aged.or_else(|| {
+        candidates
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| x.potential != 0)
+            .max_by_key(|(i, x)| {
+                let e = &experts[x.task];
+                (e.is_shared as u8, e.m, Reverse(*i))
+            })
+            .map(|(i, _)| i)
+    });
+    let mut comparisons = 0;
+    let Some(a) = anchor else {
+        return (None, false, vec![], comparisons);
+    };
+    let x = &candidates[a];
+    let wide = (0..nc).max_by_key(|&c| (core_m[c], Reverse(c))).unwrap();
+    let preferred = if x.potential & (1 << wide) != 0 {
+        wide
+    } else {
+        (0..nc)
+            .filter(|&c| x.potential & (1 << c) != 0)
+            .min_by_key(|&c| (x.finish[c], (c + nc - rr) % nc))
+            .unwrap()
+    };
+    if nc == 1 {
+        return (
+            anchor,
+            aged.is_some(),
+            vec![Placement {
+                index: a,
+                core: preferred,
+            }],
+            1,
+        );
+    }
+    // When shapes are equal, both orientations are legal; keep the better
+    // finish-time orientation instead of inventing a "wide" homogeneous core.
+    let orientations: Vec<usize> = if core_m[0] == core_m[1] {
+        (0..nc).collect()
+    } else {
+        vec![preferred]
+    };
+    let mut best: Option<((u64, usize, usize, usize), Vec<Placement>)> = None;
+    for c in orientations {
+        if x.potential & (1 << c) == 0 {
+            continue;
+        }
+        let other = 1 - c;
+        let low = candidates
+            .iter()
+            .enumerate()
+            .filter(|(j, y)| *j != a && y.potential & (1 << other) != 0)
+            .min_by_key(|(j, y)| (experts[y.task].m, y.finish[other], *j));
+        if let Some((j, y)) = low {
+            comparisons += candidates.len() as u64;
+            let score = (x.finish[c].max(y.finish[other]), experts[y.task].m, c, j);
+            let pair = vec![
+                Placement { index: a, core: c },
+                Placement {
+                    index: j,
+                    core: other,
+                },
+            ];
+            if best.as_ref().is_none_or(|(old, _)| score < *old) {
+                best = Some((score, pair));
+            }
+        }
+    }
+    let proposed = if let Some((_, pair)) = best {
+        pair
+    } else {
+        comparisons += nc as u64;
+        vec![Placement {
+            index: a,
+            core: preferred,
+        }]
+    };
+    (anchor, aged.is_some(), proposed, comparisons)
+}
+
 impl Sim {
     fn joint_lead_bound(&self, visible: usize) -> u64 {
         // Read/shape scan + at most two orientations per visible descriptor +
@@ -285,13 +383,24 @@ impl Sim {
             }
             candidates.push(candidate);
         }
-        let (anchor, age_forced, proposed, comparisons) = propose(
-            &candidates,
-            self.cores.len(),
-            self.cfg.joint_age_limit,
-            self.cfg.joint_pairing,
-            self.rr_desc,
-        );
+        let (anchor, age_forced, proposed, comparisons) = if self.cfg.dispatch == "ipd" {
+            let core_m: Vec<_> = self.cores.iter().map(|c| c.m).collect();
+            propose_ipd(
+                &candidates,
+                &self.w.experts,
+                &core_m,
+                self.cfg.joint_age_limit,
+                self.rr_desc,
+            )
+        } else {
+            propose(
+                &candidates,
+                self.cores.len(),
+                self.cfg.joint_age_limit,
+                self.cfg.joint_pairing,
+                self.rr_desc,
+            )
+        };
         // Compare complete future pairs, then bind only placements whose DMA
         // lead window has opened. A hot task is not forced onto an idle small
         // core merely because the preferred large core is not yet due.
@@ -348,7 +457,7 @@ impl Sim {
                     && self.fits(e, p.core, false)
                     && !self.cores[p.core].free_slots.is_empty()
             });
-        let audit = json!({"snapshot_cycle":snapshot.started,"commit_cycle":self.now,
+        let audit = json!({"policy":self.cfg.dispatch,"snapshot_cycle":snapshot.started,"commit_cycle":self.now,
             "charged_cycles":snapshot.charged_cycles,"comparisons":snapshot.comparisons,
             "anchor":candidates.get(snapshot.anchor).map(|x|x.task),"age_forced":snapshot.age_forced,
             "candidates":candidates.iter().map(|x|json!({"task":x.task,"age":x.age,
@@ -615,5 +724,53 @@ mod tests {
         let no = no.run();
         assert_eq!(report["weight_bytes"], no["weight_bytes"]);
         assert_eq!(no["drained"], true);
+    }
+    #[test]
+    fn two_ended_policy_places_hot_shared_and_cold_companion() {
+        let mut s = sim(&[1, 2, 16, 3]);
+        s.w.experts[2].is_shared = true;
+        let candidates: Vec<_> = (0..4)
+            .map(|task| Candidate {
+                task,
+                potential: 3,
+                eligible: 3,
+                service: [100 + task as u64; 2],
+                finish: [100 + task as u64; 2],
+                age: 0,
+            })
+            .collect();
+        let (anchor, aged, placements, _) = propose_ipd(&candidates, &s.w.experts, &[4, 2], 8, 0);
+        assert_eq!(anchor, Some(2));
+        assert!(!aged);
+        assert_eq!(
+            placements
+                .iter()
+                .map(|p| (p.index, p.core))
+                .collect::<Vec<_>>(),
+            vec![(2, 0), (0, 1)]
+        );
+    }
+    #[test]
+    fn ipd_keeps_work_bytes_and_finite_credits() {
+        let mut s = sim(&[1, 2, 8, 3]);
+        s.cfg.dispatch = "ipd".into();
+        s.cfg.ipd_credit_quotas = true;
+        let result = s.run();
+        assert_eq!(result["drained"], true);
+        assert_eq!(result["credit_peak"].as_u64().unwrap() <= 256, true);
+        assert_eq!(
+            result["dma_transactions_accepted"],
+            result["dma_transactions_landed"]
+        );
+        let baseline = sim(&[1, 2, 8, 3]).run();
+        assert_eq!(result["weight_bytes"], baseline["weight_bytes"]);
+        assert_eq!(result["useful_macs"], baseline["useful_macs"]);
+        assert_eq!(
+            result["joint_diagnostics"]["paired_rounds"]
+                .as_u64()
+                .unwrap()
+                > 0,
+            true
+        );
     }
 }

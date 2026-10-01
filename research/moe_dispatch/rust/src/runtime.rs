@@ -87,6 +87,27 @@ mod tests {
         assert_eq!(s.dma_serial, 2);
     }
     #[test]
+    fn ipd_quota_borrows_when_other_core_has_no_request() {
+        let mut s = sim(256);
+        s.cfg.dispatch = "ipd".into();
+        s.cfg.ipd_credit_quotas = true;
+        assert!(!s.refresh_ipd_quotas());
+        s.now = s.ipd_quota_ready;
+        let limits = s.ipd_quota_limits.clone();
+        assert_eq!(limits.iter().sum::<usize>(), 256);
+        assert!(limits.iter().all(|&n| n >= 32));
+        // Only core zero has a legal Next request. It may borrow the other
+        // core's share; actual global and per-core credits still balance.
+        s.issue_runtime();
+        assert_eq!(s.credit_used, s.credit_used_by_core.iter().sum::<usize>());
+        assert!(s.credit_used > 0);
+        let accepted: Vec<_> = s.outstanding_dma.values().cloned().collect();
+        for request in accepted {
+            s.ack_runtime(request);
+        }
+        assert_eq!(s.credit_used_by_core, vec![0, 0]);
+    }
+    #[test]
     fn in_flight_next_response_survives_promotion_and_input_gather() {
         let mut s = sim(8);
         s.issue_runtime();
@@ -248,6 +269,65 @@ pub(super) struct DmaRequest {
 }
 
 impl Sim {
+    fn compute_ipd_credit_limits(&self) -> Vec<usize> {
+        let nc = self.cores.len();
+        if nc == 1 || !self.cfg.ipd_credit_quotas {
+            return vec![self.cfg.credits; nc];
+        }
+        let demand: Vec<usize> = (0..nc)
+            .map(|c| {
+                let core = &self.cores[c];
+                let task = core
+                    .session
+                    .as_ref()
+                    .map(|s| s.e)
+                    .or_else(|| core.next.as_ref().map(|n| n.e));
+                let Some(e) = task else {
+                    return 128;
+                };
+                // 4 KiB tile / >=16 cycles per M group of operand-feed service.
+                // Convert estimated B/cycle * measured response time to 32 B tags.
+                let groups = self.w.experts[e].m.div_ceil(core.m).max(1);
+                (128 * self.cfg.hbm_latency_ns as usize)
+                    .div_ceil(16 * groups)
+                    .max(1)
+            })
+            .collect();
+        let total = demand.iter().sum::<usize>().max(1);
+        let first = (self.cfg.credits * demand[0] / total).clamp(32, self.cfg.credits - 32);
+        vec![first, self.cfg.credits - first]
+    }
+    fn refresh_ipd_quotas(&mut self) -> bool {
+        if !self.cfg.ipd_credit_quotas || self.cores.len() == 1 {
+            return true;
+        }
+        let key: Vec<_> = self
+            .cores
+            .iter()
+            .map(|core| {
+                core.session
+                    .as_ref()
+                    .map(|s| s.e)
+                    .or_else(|| core.next.as_ref().map(|n| n.e))
+            })
+            .collect();
+        if key != self.ipd_quota_key {
+            if self.now < self.control_free {
+                return false;
+            }
+            self.ipd_quota_limits = self.compute_ipd_credit_limits();
+            self.ipd_quota_key = key;
+            // A bounded register update is charged on the existing control
+            // port. This includes the two demand estimates and division/shape
+            // comparison; no free per-DMA policy recomputation is assumed.
+            self.control_free = self.now + 8;
+            self.ipd_quota_ready = self.control_free;
+            self.ipd_quota_updates += 1;
+            self.ipd_quota_control_cycles += 8;
+            self.cores[0].stats.control_cycles += 8;
+        }
+        self.now >= self.ipd_quota_ready
+    }
     /// Remaining consumers of a resident weight tile, derived from the existing
     /// N-group/K/M issue cursor. No full-plan scan or new per-expert history.
     fn tile_consumers_left(&self, c: usize, tid: usize) -> usize {
@@ -332,7 +412,8 @@ impl Sim {
         }
     }
     pub(super) fn feedback_enabled(&self) -> bool {
-        self.cfg.dispatch == "feedback" || (self.cfg.dispatch == "joint" && self.cfg.joint_feedback)
+        self.cfg.dispatch == "feedback"
+            || (matches!(self.cfg.dispatch.as_str(), "joint" | "ipd") && self.cfg.joint_feedback)
     }
     pub(super) fn calibrated_service(&self, e: usize, c: usize) -> u64 {
         let raw = self.prediction(e, c, self.cores.len(), false);
@@ -474,7 +555,7 @@ impl Sim {
         if self.input_cursor < self.w.experts.len() && self.pending.len() < self.cfg.window {
             // One descriptor arrives per cycle from the finite upstream route
             // table already charged in the compiler arena. No future routes read.
-            if self.cfg.dispatch == "joint" {
+            if matches!(self.cfg.dispatch.as_str(), "joint" | "ipd") {
                 self.joint.ages.insert(self.input_cursor, 0);
             }
             self.pending.push_back(self.input_cursor);
@@ -490,7 +571,7 @@ impl Sim {
         if self.joint.snapshot.is_none() && self.dispatch_tail_partition(e) {
             return;
         }
-        if self.cfg.dispatch == "joint" {
+        if matches!(self.cfg.dispatch.as_str(), "joint" | "ipd") {
             self.dispatch_joint();
             return;
         }
@@ -818,6 +899,7 @@ impl Sim {
     }
 
     pub(super) fn issue_runtime(&mut self) {
+        let quota_ready = self.refresh_ipd_quotas();
         // No landing/MAC issue occurs inside this request-accept loop. Compute
         // the bounded slot reduction once, not once per 32B grant.
         let stocks: Vec<_> = (0..self.cores.len())
@@ -834,12 +916,15 @@ impl Sim {
         } else {
             self.cfg.hbm_bytes_per_ns / 32
         };
-        for _ in 0..grants {
+        for grant in 0..grants {
             if self.credit_used >= self.cfg.credits {
                 break;
             }
             if self.pending_dma.is_none() {
-                let candidates: Vec<_> = (0..self.cores.len())
+                if !quota_ready {
+                    break;
+                }
+                let mut candidates: Vec<_> = (0..self.cores.len())
                     .flat_map(|c| {
                         if self.cfg.surplus_rules >= 3 {
                             self.candidates(c)
@@ -848,6 +933,26 @@ impl Sim {
                         }
                     })
                     .collect();
+                if self.cfg.dispatch == "ipd" && self.cfg.ipd_credit_quotas && self.cores.len() == 2
+                {
+                    let has = [
+                        candidates.iter().any(|r| r.core == 0),
+                        candidates.iter().any(|r| r.core == 1),
+                    ];
+                    let limits = &self.ipd_quota_limits;
+                    let original = candidates.len();
+                    candidates.retain(|r| {
+                        let limit = if has[1 - r.core] {
+                            limits[r.core]
+                        } else {
+                            self.cfg.credits
+                        };
+                        self.credit_used_by_core[r.core] < limit
+                    });
+                    if grant == 0 && original > candidates.len() {
+                        self.ipd_quota_block_cycles += 1;
+                    }
+                }
                 for r in &candidates {
                     self.cores[r.core].dma_wait_since.get_or_insert(self.now);
                 }
@@ -914,6 +1019,9 @@ impl Sim {
             assert!(self.outstanding_dma.insert(r.serial, r.clone()).is_none());
             self.dma_serial += 1;
             self.credit_used += 1;
+            self.credit_used_by_core[r.core] += 1;
+            self.credit_peak_by_core[r.core] =
+                self.credit_peak_by_core[r.core].max(self.credit_used_by_core[r.core]);
             self.credit_peak = self.credit_peak.max(self.credit_used);
             assert_eq!(self.credit_used, self.outstanding_dma.len());
             self.cores[r.core].stats.dma_accepted += 1;
@@ -959,6 +1067,7 @@ impl Sim {
         assert!(t.acks <= t.sent && t.acks <= t.bytes);
         t.ready = t.acks == t.bytes;
         self.credit_used -= 1; // Return SRAM -> reserved W slot has completed.
+        self.credit_used_by_core[r.core] -= 1;
         self.cores[r.core].stats.dma_landed += 1;
         assert_eq!(self.credit_used, self.outstanding_dma.len());
         trace!(

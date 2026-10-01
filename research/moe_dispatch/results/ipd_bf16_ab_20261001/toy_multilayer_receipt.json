@@ -1,0 +1,10 @@
+{
+  "binary_sha256": "d1a75257e1b52fcf1ee425b2826dde3556626a458ede2e5a20e32db5ca21f8aa",
+  "input_sha256": "5ffbc99217d6f89201554cbace52c10f6d3bc86b400b075c8082c6e31b9e21ff",
+  "layers": 2,
+  "no_cross_layer_prefetch": true,
+  "repeats_equal": true,
+  "report_sha256": "375f6de3aa60e42a4ae8bc33b5f64e05b37c3bf627d5e60bbdb28e3cf7dcc466",
+  "source_bundle_sha256": "4b371f757d4c81a8f8449720b01c5d4ff5ed46c019d471dee0b36eeb37e454a6",
+  "total_cycles": 14618
+}
