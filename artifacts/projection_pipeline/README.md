@@ -1,6 +1,12 @@
-# Recurrent sublayer results, 2026-09-28
+# Recurrent sublayer results
 
-The [latest complete batch comparison](final_comparison/README.md) adds
+The [2026-10-01 software projection study](software_study/README.md) is the
+current main candidate: no dedicated projection replay/slice/M_MM.P/S4
+hardware, with a shared Compiler projection baseline and separately measured
+native recurrent access. It includes 100 analytical cases and 29 machine or
+real-weight checks. The tables below preserve the earlier hardware candidates.
+
+The [2026-09-29 complete batch comparison](final_comparison/README.md) adds
 per-projection Compiler schedule selection and separates the historical
 Matrix+Vector mapping, matched-arithmetic Matrix reference, previous optimized
 path and latest candidate. It includes all stages at B1/2/4/8/16.

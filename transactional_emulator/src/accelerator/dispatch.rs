@@ -514,6 +514,7 @@ impl Accelerator {
                 if matches!(
                     op,
                     op::Opcode::M_MV { .. }
+                        | op::Opcode::M_TMV { .. }
                         | op::Opcode::M_MV_WO { .. }
                         | op::Opcode::M_MM_P { .. }
                 ) {
@@ -577,6 +578,7 @@ impl Accelerator {
                             }
                             | op::Opcode::M_MM_P { .. }
                             | op::Opcode::M_MV { view: Some(_), .. }
+                            | op::Opcode::M_TMV { view: Some(_), .. }
                             | op::Opcode::M_MV_WO { .. }
                             | op::Opcode::L_TILE_CFG { .. }
                             | op::Opcode::L_TILE_CCFG { .. }

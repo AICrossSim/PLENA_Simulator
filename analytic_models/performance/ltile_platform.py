@@ -95,6 +95,9 @@ class ExecutionProfile:
     # choices affect the program/cache identity, never physical resources.
     projection_panel_overrides: tuple = ()
     projection_vector_rows: int = 58
+    projection_request_tile: int = 16
+    projection_k_tile: int = 256
+    projection_codec_rows: int = 6
     gather_vector_rows: int = 64
     hbm_controllers: int = 8
 
@@ -105,7 +108,7 @@ class ExecutionProfile:
             raise ValueError("unknown state rounding")
         if self.delta != "bf16_rational_from_log" or self.scheduling != "serial_retirement":
             raise ValueError("unvalidated arithmetic or scheduling contract")
-        if self.projection_schedule not in ("resident", "compact", "batch"):
+        if self.projection_schedule not in ("resident", "compact", "batch", "transposed"):
             raise ValueError("unknown projection schedule")
         if type(self.projection_n_panel_tile) is not int or self.projection_n_panel_tile not in (1, 2, 4, 8):
             raise ValueError("projection N panel tile must be 1, 2, 4 or 8")
@@ -124,10 +127,25 @@ class ExecutionProfile:
         if overrides and self.projection_schedule == "resident":
             raise ValueError("projection overrides require the compact Matrix interface")
         object.__setattr__(self, "projection_panel_overrides", tuple(sorted(tuple(item) for item in overrides)))
-        if not 1 <= self.projection_vector_rows <= 58 or not 1 <= self.gather_vector_rows <= 64:
+        if type(self.projection_codec_rows) is not int or self.projection_codec_rows not in (0, 6):
+            raise ValueError("codec reservation must be zero or six Vector rows")
+        if type(self.projection_request_tile) is not int or self.projection_request_tile not in (1, 2, 4, 8, 16):
+            raise ValueError("projection request tile must be 1/2/4/8/16")
+        if self.projection_schedule != "resident" and self.projection_request_tile != 16:
+            raise ValueError("request grouping is only exposed for the resident software path")
+        if type(self.projection_k_tile) is not int or self.projection_k_tile not in (256, 512, 1024) or (
+            self.projection_schedule != "transposed" and self.projection_k_tile != 256
+        ):
+            raise ValueError("larger K grouping requires the transposed software path")
+        if self.projection_schedule == "transposed" and (
+            self.matrix.weight_replay or self.matrix.projection_segments != 1
+            or self.projection_n_panel_tile != 1 or overrides
+        ):
+            raise ValueError("transposed software path uses no projection extensions")
+        if not 1 <= self.projection_vector_rows <= 64 - self.projection_codec_rows or not 1 <= self.gather_vector_rows <= 64:
             raise ValueError("invalid projection/gather Vector workspace")
         if self.projection_schedule != "resident" and self.matrix.accumulator != "BF16":
-            raise ValueError("compact projection requires BF16 partial sums")
+            raise ValueError("this projection schedule requires BF16 partial sums")
         if self.matrix.matrix_capacity_bytes != 1024**2 or self.matrix.vector_capacity_bytes != 256 * 1024:
             raise ValueError("connected ISA geometry requires 1 MiB Matrix / 256 KiB Vector")
 

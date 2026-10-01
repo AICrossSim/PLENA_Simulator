@@ -29,6 +29,7 @@ from transactional_emulator.testbench.aten.recurrent_conv_test import run_progra
 from transactional_emulator.testbench.aten.matrix_projection_test import reference as matrix_reference
 from transactional_emulator.testbench.aten.recurrent_prepare_test import norm_reference
 from compiler.aten.plena.isa_matrix_projection import Projection, lower_b1_projection
+from compiler.aten.plena.isa_projection_software import lower_transposed_projection
 from compiler.aten.plena.recurrent_coefficients import (
     GATE_CONSTANTS,
     ConvStep,
@@ -45,10 +46,20 @@ from compiler.aten.plena.recurrent_coefficients import (
 )
 from compiler.aten.plena.ltile_v2 import Options, lower_group
 from analytic_models.performance.ltile_cost import Machine
+from analytic_models.performance.ltile_platform import ExecutionProfile
 from analytic_models.performance.matrix_service import MatrixService
 
 
 KDA_PREFIX = "language_model.model.layers.0."
+
+
+def execution_profile(args, machine, matrix):
+    controllers = json.loads((args.memory_root / "ramulator.json").read_text())["memory_system"]["controllers"]
+    return ExecutionProfile(
+        machine=machine, matrix=matrix, hbm_controllers=len(controllers),
+        projection_schedule="transposed" if args.transposed_k else "resident",
+        projection_k_tile=args.transposed_k or 256,
+    )
 
 
 def tree(values, axis=-1):
@@ -59,12 +70,13 @@ def tree(values, axis=-1):
 
 
 class Program:
-    def __init__(self, hardware):
+    def __init__(self, hardware, transposed_k=None):
         self.arena = Arena()
         self.lines = []
         self.references = []
         self.stages = []
         self.h = hardware
+        self.transposed_k = transposed_k
         self.zero = self.arena.add(np.zeros(2048))
         self.onehot = self.arena.add(np.eye(1, 2048).ravel())
         self.constants = self.arena.add(np.repeat(np.asarray(GATE_CONSTANTS)[:, None], 2048, axis=1))
@@ -91,12 +103,21 @@ class Program:
         k, n = w.shape
         padded = np.zeros(((k + 31) // 32 * 32, (n + 31) // 32 * 32), np.float32)
         padded[:k, :n] = w
-        packed = padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy().ravel()
+        tile = self.transposed_k or 256
+        shape = Projection(0, 0, 0, 0, k, n, tile)
+        if self.transposed_k:
+            packed = np.concatenate([
+                padded[k0:k0 + rows, col:col + 32].T.copy().ravel()
+                for col, k0, rows, _ in shape.packets()
+            ])
+        else:
+            packed = padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy().ravel()
         weights = self.arena.add(packed)
         out = self.output(n, 2048)
-        config = Projection(source, weights, out, self.zero, k, n, 256)
-        self.emit(name, lower_b1_projection(config))
-        expected = matrix_reference(x, w, 256, self.h)
+        config = Projection(source, weights, out, self.zero, k, n, tile)
+        lower = lower_transposed_projection if self.transposed_k else lower_b1_projection
+        self.emit(name, lower(config))
+        expected = matrix_reference(x, w, tile, self.h)
         self.check(name, out, expected)
         print(json.dumps({"stage": name, "built": True, "weight_bytes": config.weight_bytes}), flush=True)
         return out, expected
@@ -133,7 +154,7 @@ MAMBA_PREFIX = "backbone.layers.0."
 def run_kda(args):
     data = np.load(args.capture / "kda_inputs_0000.npz")
     h = MatrixService(accumulator=args.accumulator)
-    p = Program(h)
+    p = Program(h, args.transposed_k)
     if not 0 <= args.token < len(data["hidden_input"]):
         raise ValueError("token outside captured contiguous input sequence")
     x = bf(data["hidden_input"][args.token].ravel())
@@ -318,6 +339,7 @@ def run_kda(args):
         fp_constants=fp + [0.0] * 25,
         recheck_only=args.recheck_only,
         references=p.references,
+        profile=execution_profile(args, machine, h),
     )
     checked = 0
     errors = {}
@@ -342,6 +364,7 @@ def run_kda(args):
         tokens=1,
         token_index=args.token,
         control=args.control,
+        projection_transposed_k=args.transposed_k,
         checked_values=checked,
         stages=errors,
         elapsed_seconds=time.monotonic() - start,
@@ -385,7 +408,7 @@ def run_kda(args):
 
 def run_mamba(args):
     h = MatrixService(accumulator=args.accumulator)
-    p = Program(h)
+    p = Program(h, args.transposed_k)
     fp = [2688 * 1e-5, np.sqrt(2688), 512 * 1e-5, np.sqrt(512)]
     carried = np.load(args.state_input) if args.state_input else None
     initial_state = np.zeros((64, 128, 64), np.float32) if carried is None else carried["state"]
@@ -570,6 +593,7 @@ def run_mamba(args):
         fp_constants=fp + [0.0] * 28,
         recheck_only=args.recheck_only,
         references=p.references,
+        profile=execution_profile(args, machine, h),
     )
     checks = {}
     for name, address, reference in p.references:
@@ -602,6 +626,7 @@ def run_mamba(args):
         formal_decode_passed=False,
         incoming_state="zero" if carried is None else str(args.state_input),
         control=args.control,
+        projection_transposed_k=args.transposed_k,
         comparison_scope="row vs FSM shares extended arithmetic, Matrix access, packing and all surrounding operators",
         incoming_state_sha256=None if carried is None else digest(args.state_input),
         sequence_note="real first prompt embedding; carried-state follow-up repeats that embedding",
@@ -635,6 +660,8 @@ def main():
     parser.add_argument("--capture", type=Path)
     parser.add_argument("--token", type=int, default=0)
     parser.add_argument("--accumulator", choices=["BF16", "FP32"], default="BF16")
+    parser.add_argument("--transposed-k", type=int, choices=[256, 512, 1024],
+                        help="Existing M_TMV, offline weight transpose, explicit BF16 K boundary")
     parser.add_argument(
         "--control",
         choices=["row", "fsm"],
@@ -652,6 +679,7 @@ def main():
         Path(__file__),
         COMPILER_ROOT / "aten/plena/recurrent_coefficients.py",
         COMPILER_ROOT / "aten/plena/isa_matrix_projection.py",
+        COMPILER_ROOT / "aten/plena/isa_projection_software.py",
         COMPILER_ROOT / "aten/plena/ltile_v2.py",
     ]
     if args.capture:

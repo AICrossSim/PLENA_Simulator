@@ -10,6 +10,8 @@ from .ltile_platform import ExecutionProfile
 
 
 def price_program(assembly, profile, backend, *, matrix=True, nvfp4_regions=()):
+    if nvfp4_regions and profile.projection_codec_rows != 6:
+        raise ValueError("compressed weights require the reserved codec workspace")
     configured = len(json.loads(backend.config.read_text())["memory_system"]["controllers"])
     if configured != profile.hbm_controllers or profile.machine.clock_hz != 10**9:
         raise ValueError("execution profile and memory backend topology/clock differ")

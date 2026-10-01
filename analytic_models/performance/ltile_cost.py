@@ -607,8 +607,29 @@ def assembly_cost(
             cost.sram += groups * (
                 max(cycles, math.ceil(words * 32 / h.matrix_read_elements)) + math.ceil(2048 / h.vector_read_elements)
             )
+            cost.accesses["matrix_bank_words"] += groups * words
+            cost.accesses["vector_read_rows"] += groups
             array = 2 * (h.edge - 1) + (h.edge - 1) * max(h.mac_ii, h.mac_latency) + h.mac_latency
             cost.arithmetic += groups * (array + int(math.log2(h.groups)) * h.tree_add_latency + h.tree_add_latency)
+        elif op == "M_TMV":
+            if matrix_service is None or len(args) != 4:
+                raise ValueError("M_TMV requires explicit bounded Matrix service and view")
+            h = matrix_service
+            view = views[int(args[3])]
+            if h.weight_replay or h.projection_segments != 1 or view.heads != 1 or view.rows != 32 or view.cols > h.reduction_lanes:
+                raise ValueError("bounded M_TMV requires one N32-by-K view without projection extensions")
+            if 32 % h.edge or value(args[1]) % 32 or (value(args[1]) // 2048 + 32)*4096 > h.matrix_capacity_bytes:
+                raise ValueError("transposed projection exceeds Matrix geometry")
+            if value(args[2]) % 2048:
+                raise ValueError("M_TMV input needs an aligned Vector row")
+            for col in range(0, 32, h.edge):
+                for row in range(col, col+h.edge):
+                    cycles, words = bank_service(value(args[1]), view, ((0,row),))
+                    cost.sram += max(cycles, math.ceil(words*32/h.matrix_read_elements))
+                    cost.accesses["matrix_bank_words"] += words
+                cost.sram += math.ceil(2048/h.vector_read_elements)
+                cost.accesses["vector_read_rows"] += 1
+                cost.arithmetic += h.arithmetic_cycles()
         elif op == "M_MM.P":
             if matrix_service is None or len(args) != 5:
                 raise ValueError("M_MM.P requires an explicit bounded Matrix service")

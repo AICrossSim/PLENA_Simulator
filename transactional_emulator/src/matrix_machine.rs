@@ -957,6 +957,10 @@ impl MatrixMachine {
         v_addr: u32,
         view: Option<MatrixViewDescriptor>,
     ) {
+        if let Some(profile) = crate::matrix_service::PROFILE.as_ref() {
+            self.bounded_tmv(m_addr, v_addr, view, profile).await;
+            return;
+        }
         // TODO: `_mat_base` is computed for the assertion below but the read
         // uses `m_addr` directly. For tile-aligned reads they're equivalent
         // (integer division), but other matrix ops here use `mat_base`. Worth
@@ -982,6 +986,61 @@ impl MatrixMachine {
             .to_kind(tch::Kind::Float);
         let result = vec_f32.matmul(&mat_t_f32).squeeze_dim(0);
         self.v_accum += result;
+    }
+
+    /// Existing transposed opcode with static N-by-K weight placement.
+    /// Read one contiguous output row at a time into the same finite Matrix
+    /// operand latch used by M_MV. No panel replay or compact input selector.
+    async fn bounded_tmv(
+        &mut self,
+        matrix: u32,
+        vector: u32,
+        view: Option<MatrixViewDescriptor>,
+        profile: &crate::matrix_service::MatrixService,
+    ) {
+        let view = view.expect("bounded M_TMV requires a rectangular view");
+        assert!(!profile.weight_replay && profile.projection_segments == 1);
+        assert_eq!(view.shape.tile_count, 1);
+        assert_eq!(view.shape.rows, self.blen);
+        assert!(view.shape.cols <= profile.reduction_lanes && view.shape.cols <= self.mlen);
+        assert!(self.blen.is_multiple_of(profile.edge));
+        assert!(vector.is_multiple_of(self.mlen));
+        for col in (0..self.blen).step_by(profile.edge as usize) {
+            let mut weights = Vec::with_capacity(profile.edge as usize * view.shape.cols as usize);
+            for row in col..col + profile.edge {
+                let (weight, service) = self
+                    .mram
+                    .read_layout_indexed_rows(matrix, view.layout(), &[(0, row)])
+                    .await;
+                let port = (service.bank_words * u64::from(self.mram.bank_width()))
+                    .div_ceil(u64::from(profile.matrix_read_elements));
+                crate::timing::charge_bank_cycles(service.service_cycles.max(port)).await;
+                weights.extend(
+                    Vec::<f32>::try_from(weight.as_tensor().to_kind(tch::Kind::Float)).unwrap(),
+                );
+            }
+            let input = self.vram.read(vector).await;
+            crate::timing::charge_bank_cycles(u64::from(
+                self.mlen.div_ceil(profile.vector_read_elements),
+            ))
+            .await;
+            let input = Vec::<f32>::try_from(input.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            let old = Vec::<f32>::try_from(&self.v_accum).unwrap();
+            let k = view.shape.cols as usize;
+            let values = (0..profile.edge as usize)
+                .map(|j| {
+                    profile.column(
+                        &input[..k],
+                        &weights[j * k..(j + 1) * k],
+                        old[col as usize + j],
+                    )
+                })
+                .collect::<Vec<_>>();
+            crate::timing::charge_arithmetic_cycles(profile.arithmetic_cycles()).await;
+            self.v_accum
+                .narrow(0, i64::from(col), i64::from(profile.edge))
+                .copy_(&Tensor::from_slice(&values));
+        }
     }
 
     pub(crate) async fn mv_wo(&mut self, v_addr: u32) {

@@ -325,7 +325,8 @@ def build_layer(
 
 
 def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream", native_coefficients=False,
-                vector_rows=58, gather_vector_rows=64, projection_n_panel_tile=1, projection_panel_overrides=()):
+                vector_rows=58, gather_vector_rows=64, projection_n_panel_tile=1, projection_panel_overrides=(),
+                projection_request_tile=16, projection_k_tile=256):
     """Compile batch stages with shared weight panels and private state.
 
     No B1 cycle multiplication. Matrix SRAM weights stay resident across
@@ -336,6 +337,14 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
 
     if type(batch) is not int or not 1 <= batch <= 16:
         raise ValueError("batch must be 1..16")
+    if type(projection_request_tile) is not int or projection_request_tile not in (1, 2, 4, 8, 16):
+        raise ValueError("projection request tile must be 1/2/4/8/16")
+    if projection_request_tile != 16 and projection_schedule != "resident":
+        raise ValueError("software request grouping requires resident projection")
+    if type(projection_k_tile) is not int or projection_k_tile not in (256, 512, 1024) or (
+        projection_schedule != "transposed" and projection_k_tile != 256
+    ):
+        raise ValueError("larger K grouping requires the transposed software path")
     overrides = dict(projection_panel_overrides)
     if len(overrides) != len(projection_panel_overrides):
         raise ValueError("duplicate projection stage override")
@@ -348,7 +357,7 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
             compiler_root,
             control=control,
             gather=gather,
-            projection_schedule=projection_schedule,
+            projection_schedule="resident" if projection_schedule == "transposed" else projection_schedule,
             arena=arena,
             shared_weights=weights,
             native_coefficients=native_coefficients,
@@ -361,7 +370,7 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
     names = {s.name for s in plans[0].stages if s.matrix_shape}
     if overrides.keys() - names:
         raise ValueError(f"unknown projection stage override: {sorted(overrides.keys() - names)}")
-    if batch == 1:
+    if batch == 1 and projection_schedule != "transposed":
         result = plans[0]
         for index, s in enumerate(result.stages):
             if s.name in overrides:
@@ -381,7 +390,14 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
         if s.matrix_shape:
             _, n, k = s.matrix_shape
             spec = result.Projection(s.input_base, s.weight_base, s.output_base, s.zero_base, k, n, 256)
-            if projection_schedule in ("compact", "batch"):
+            if projection_schedule == "transposed":
+                from compiler.aten.plena.isa_projection_software import lower_transposed_projection
+
+                text = lower_transposed_projection(
+                    replace(spec, k_tile=projection_k_tile),
+                    [x.input_base for x in columns], [x.output_base for x in columns], vector_rows=vector_rows,
+                )
+            elif projection_schedule in ("compact", "batch"):
                 from compiler.aten.plena.isa_matrix_projection import lower_compact_projection
 
                 text = lower_compact_projection(
@@ -393,6 +409,11 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", 
             else:
                 lower = lower_resident_projection if projection_schedule == "resident" else lower_batch_projection
                 kwargs = {"vector_rows": vector_rows} if projection_schedule == "resident" else {}
+                if projection_schedule == "resident" and projection_request_tile < batch:
+                    from compiler.aten.plena.isa_projection_software import lower_software_projection
+
+                    lower = lower_software_projection
+                    kwargs["request_tile"] = projection_request_tile
                 text = lower(spec, [x.input_base for x in columns], [x.output_base for x in columns], **kwargs)
             result.stages.append(replace(s, assembly=text, matrix_shape=(batch, n, k)))
         else:

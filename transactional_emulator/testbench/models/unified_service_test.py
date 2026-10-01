@@ -3,7 +3,9 @@
 import argparse
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
+import subprocess
 import numpy as np
 
 from analytic_models.performance.ltile_platform import ExecutionProfile
@@ -17,6 +19,7 @@ from compiler.aten.plena.isa_matrix_projection import (
     lower_compact_projection,
     lower_resident_projection,
 )
+from compiler.aten.plena.isa_projection_software import lower_software_projection, lower_transposed_projection
 from compiler.aten.plena.recurrent_coefficients import CompactCoefficientLoader, lower_bf16_gather, lower_softmax_rows
 from compiler.aten.plena.prepared_vector_recurrence import PreparedVectorGroup, lower_prepared_vector_recurrence
 from compiler.aten.plena.matrix_recurrence_lowering import NEMOTRON_MAMBA, KIMI_KDA
@@ -27,23 +30,126 @@ def profile_for(memory):
     return ExecutionProfile(hbm_controllers=len(config["memory_system"]["controllers"]))
 
 
+def legacy_mm_case(root, runtime, batch=4):
+    """Original M_MM ABI, packed columns and partial sums across DMA reloads.
+
+    This small original geometry certifies functionality only. Its coarse
+    legacy Matrix timing is deliberately excluded from the bounded-model
+    performance calibration and the full-size sublayer speedup tables.
+    """
+    import tomlkit
+    from compiler.aten.plena import PlenaCompiler
+    from transactional_emulator.testbench.aten.recurrent_gate_test import (
+        AssemblyToBinary, COMPILER_ROOT, MatrixSramPoint, _write_settings,
+    )
+
+    root = root.resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    if batch not in (1, 2, 4, 8, 16):
+        raise ValueError("legacy Matrix check expects batch 1/2/4/8/16")
+    mlen, k, n, slices = 64, 256, 64, 2
+    physical_batch = (batch + 3) // 4 * 4
+    rng = np.random.default_rng(10201 + batch)
+    # Small integers keep the reference exact, isolating addresses and
+    # accumulation lifetime from reduction-order precision differences.
+    x = np.zeros((physical_batch, k), np.float32)
+    x[:batch] = rng.integers(-1, 2, (batch, k)).astype(np.float32)
+    weight = rng.integers(-1, 2, (k, n)).astype(np.float32)
+    groups = k // mlen // slices
+    packed = np.zeros((groups * mlen, n // 4 * mlen), np.float32)
+    for group in range(groups):
+        for column in range(n // 4):
+            for part in range(slices):
+                k0 = (group * slices + part) * mlen
+                packed[group * mlen:(group + 1) * mlen,
+                       column * mlen + part * 4:column * mlen + (part + 1) * 4] = weight[k0:k0 + mlen, column * 4:(column + 1) * 4]
+    p = PlenaCompiler(mlen=mlen, blen=4, mram_tile_capacity=1)
+    source = p.input("X", shape=x.shape, physical_shape=x.shape, real_data_ratio=1.0, hbm_element_bytes=2)
+    weights = p.input("W", shape=packed.shape, physical_shape=packed.shape, real_data_ratio=1.0, hbm_element_bytes=2)
+    resident = p.load_batch(source, name="X_vram")
+    output = p.alloc("Y", physical_batch, n, strict=False, physical_shape=(physical_batch, n))
+    p.vram_sub_projection_packed_skinny_stream_k_accum_to(
+        resident, 0, weights, 0, output, 0, 0, max_k_tiles_per_packed_tile=slices,
+    )
+    text = p.compile()
+    assembly, binary = root / "program.asm", root / "program.mem"
+    assembly.write_text(text)
+    AssemblyToBinary(str(COMPILER_ROOT / "doc/operation.svh"), str(COMPILER_ROOT / "doc/configuration.svh")).generate_binary(str(assembly), str(binary))
+    image = bytearray(1024**2)
+    for name, values in (("X", x), ("W", packed)):
+        address = p._compiler.get_hbm_layout(name).hbm_base_addr
+        payload = (bf(values).view(np.uint32) >> 16).astype("<u2").tobytes()
+        if address + len(payload) > len(image):
+            raise AssertionError("legacy fixture exceeds allocated HBM")
+        image[address:address + len(payload)] = payload
+    (root / "hbm.bin").write_bytes(image)
+    for name in ("fp", "int"):
+        (root / (name + ".bin")).write_bytes(bytes(64))
+    settings = _write_settings(root, MatrixSramPoint(mlen=mlen, banks=16, bank_width=4, capacity_bytes=mlen**2 * 2))
+    config = tomlkit.parse(settings.read_text())
+    for name, value in dict(HLEN=16, BROADCAST_AMOUNT=4, VECTOR_SRAM_SIZE=512, HBM_V_Prefetch_Amount=4).items():
+        config["TRANSACTIONAL"]["CONFIG"][name]["value"] = value
+    for name in ("HBM_M_WEIGHT_TYPE", "HBM_M_KV_TYPE", "HBM_V_ACT_TYPE", "HBM_V_KV_TYPE"):
+        config["TRANSACTIONAL"]["PRECISION"][name] = dict(
+            format="Plain", DATA_TYPE=dict(type="Fp", sign=True, exponent=8, mantissa=7),
+        )
+    settings.write_text(tomlkit.dumps(config))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PLENA_")}
+    env.update(OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", RUST_LOG="warn")
+    if os.environ.get("LIBTORCH"):
+        env["LD_LIBRARY_PATH"] = os.environ["LIBTORCH"] + "/lib:" + env.get("LD_LIBRARY_PATH", "")
+    command = [str(runtime.resolve()), "--opcode", str(binary), "--hbm", str(root / "hbm.bin"),
+               "--fpsram", str(root / "fp.bin"), "--intsram", str(root / "int.bin"),
+               "--settings", str(settings), "--hbm-size", str(len(image))]
+    with (root / "run.log").open("w") as log:
+        subprocess.run(command, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
+    raw = np.fromfile(root / "vram_dump.bin", "<u2")
+    actual = (raw.astype(np.uint32) << 16).view(np.float32)
+    offset = p._compiler.get_vram_addr(output.name)
+    np.testing.assert_array_equal(actual[offset:offset + physical_batch * n].reshape(physical_batch, n), bf(x @ weight))
+    result = dict(case=root.name, status="passed", checked_values=batch * n,
+                  checked_padding_values=(physical_batch - batch) * n,
+                  dimensions=dict(mlen=mlen, blen=4, batch=batch, physical_batch=physical_batch,
+                                  k=k, n=n, packed_k_slices=slices),
+                  logical_weight_bytes=k*n*2, packed_weight_bytes=packed.size*2,
+                  matrix_capacity_bytes=mlen**2 * 2, vector_capacity_bytes=512 * mlen * 2,
+                  mm_instructions=text.count("M_MM 0,"), writeouts=text.count("M_MM_WO"),
+                  runtime_sha256=digest(runtime), program_sha256=digest(binary), command=command,
+                  input_sha256=digest(root / "hbm.bin"), settings_sha256=digest(settings),
+                  scope="functional original M_MM packed columns and live accumulation across DMA reloads; no performance certification")
+    (root / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
 def matrix_case(
     root, runtime, memory, b, k, n, *, resident=False, compact_tile=None,
-    n_panel_tile=1, projection_segments=1,
+    n_panel_tile=1, projection_segments=1, software_tile=None, vector_rows=58, transposed_k=None,
 ):
     rng = np.random.default_rng(3107 + b + k + n)
     arena = Arena()
     zero = arena.add(np.zeros(2048))
     h = profile_for(memory)
-    spec = Projection(0, 0, 0, 0, k, n, 256)
+    spec = Projection(0, 0, 0, 0, k, n, transposed_k or 256)
     xs = [bf(rng.normal(0, 0.2, k)) for _ in range(b)]
     inputs = [arena.add(np.pad(x, (0, spec.input_values - k))) for x in xs]
     w = bf(rng.normal(0, 0.1, (k, n)))
     padded = np.pad(w, ((0, (-k) % 32), (0, (-n) % 32)))
-    weights = arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
+    if transposed_k:
+        packets = [padded[k0:k0+rows, col:col+32].T.copy().reshape(-1) for col,k0,rows,_ in spec.packets()]
+        weights = arena.add(np.concatenate(packets))
+    else:
+        weights = arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
     outputs = [arena.add(np.full(spec.output_values, 7), output=True) for _ in xs]
     spec = replace(spec, inputs=inputs[0], weights=weights, outputs=outputs[0], zero=zero)
-    if compact_tile is not None:
+    if transposed_k:
+        h = replace(h, projection_schedule="transposed", projection_k_tile=transposed_k)
+        assembly = lower_transposed_projection(spec, inputs, outputs, vector_rows=vector_rows)
+    elif software_tile is not None:
+        h = replace(h, projection_schedule="resident", projection_request_tile=software_tile,
+                    projection_vector_rows=vector_rows, projection_codec_rows=6 if vector_rows == 58 else 0)
+        assembly = lower_software_projection(spec, inputs, outputs,
+                                              request_tile=software_tile, vector_rows=vector_rows)
+    elif compact_tile is not None:
         h = replace(h, projection_schedule="batch" if compact_tile == 4 else "compact")
         h = replace(h, matrix=replace(
             h.matrix, weight_replay=True, projection_segments=projection_segments
@@ -59,7 +165,7 @@ def matrix_case(
         assembly = "".join(lower_b1_projection(replace(spec, inputs=x, outputs=y)) for x, y in zip(inputs, outputs))
     image, result = run_program(root, runtime, memory, arena, assembly, profile=h)
     for x, address in zip(xs, outputs):
-        if not np.array_equal(read(image, address, n), reference(x, w, 256, h.matrix)):
+        if not np.array_equal(read(image, address, n), reference(x, w, spec.k_tile, h.matrix)):
             raise AssertionError("shared-panel numerical mismatch")
         np.testing.assert_array_equal(read(image, address + 2 * n, spec.output_values - n), 0)
     return dict(
@@ -68,10 +174,14 @@ def matrix_case(
         dimensions=dict(
             batch=b, k=k, n=n, batch_tile=compact_tile, n_panel_tile=n_panel_tile,
             projection_segments=projection_segments,
+            software_request_tile=software_tile, vector_rows=vector_rows,
+            transposed_k=transposed_k,
         ),
         checked_values=b * n,
         status="passed",
-        scope=("M_MM.P replay/slicing, distinct private requests, tail K/N, BF16 partial sums"
+        projection_relative_l2_vs_fp32=[float(np.linalg.norm(read(image,a,n)-x@w)/max(np.linalg.norm(x@w),1e-30)) for x,a in zip(xs,outputs)],
+        scope=("M_TMV static N-by-K weights; existing operand latches, serial row reads; declared BF16 K boundary"
+               if transposed_k else "M_MM.P replay/slicing, distinct private requests, tail K/N, BF16 partial sums"
                if compact_tile is not None else "M_MV panel reuse, private requests, tail K/N, final writeback"),
     )
 
@@ -477,7 +587,7 @@ def main():
         p.add_argument("--" + arg, required=True, type=Path)
     p.add_argument(
         "--only", default="all",
-        choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel", "mixed"),
+        choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel", "mixed", "software", "legacy_mm", "transposed"),
     )
     p.add_argument("--segments", nargs="+", type=int, choices=(1, 2, 4), default=[1],
                    help="Candidate M_MM.P segments for --only panel; default preserves the original path")
@@ -545,8 +655,26 @@ def main():
         (f"mixed_projection_b{batch}", lambda d, b=batch: mixed_projection_case(d, args.runtime, args.memory_root, b))
         for batch in (1, 2, 4, 8, 16)
     ]
+    software = [
+        (f"software_b{b}_q{tile}_v{rows}",
+         lambda d, b=b, tile=tile, rows=rows: matrix_case(
+             d, args.runtime, args.memory_root, b, 6145 if b >= 8 else 2305, 65,
+             software_tile=tile, vector_rows=rows))
+        for b in (1, 2, 4, 8, 16) for tile, rows in ((b, 58), (max(1, b // 2), 64))
+    ]
+    transposed = [
+        (f"transposed_b{b}_k{tile}", lambda d, b=b, tile=tile: matrix_case(
+            d, args.runtime, args.memory_root, b, 6145 if b >= 8 else 2305, 65, transposed_k=tile))
+        for b in (1, 2, 4, 8, 16) for tile in (256, 1024)
+    ]
+    # Held-out K grouping and shape: neither appears in the performance sweep.
+    transposed += [
+        (f"transposed_heldout_b{b}_k512", lambda d, b=b: matrix_case(
+            d, args.runtime, args.memory_root, b, 3841, 33, transposed_k=512))
+        for b in (2, 8)
+    ]
     groups = {
-        "all": jobs + auxiliary + attention + experts + resident + projection + panel + mixed,
+        "all": jobs + auxiliary + attention + experts + resident + projection + panel + mixed + software + transposed,
         "auxiliary": auxiliary,
         "attention": attention,
         "experts": experts,
@@ -554,6 +682,10 @@ def main():
         "projection": projection,
         "panel": panel,
         "mixed": mixed,
+        "software": software,
+        "transposed": transposed,
+        "legacy_mm": [(f"legacy_mm_b{b}_packed_long_k", lambda d, b=b: legacy_mm_case(d, args.runtime, b))
+                      for b in (1, 2, 4, 8, 16)],
     }
     jobs = groups[args.only]
     for name, run in jobs:
@@ -562,7 +694,7 @@ def main():
         (args.output / "validation.json").write_text(
             json.dumps(dict(status="running", results=results), indent=2) + "\n"
         )
-        print(name, result["prediction"]["total"], "passed", flush=True)
+        print(name, result.get("prediction", {}).get("total", "functional only"), "passed", flush=True)
     (args.output / "validation.json").write_text(
         json.dumps(dict(status="passed", results=results, runtime_sha256=digest(args.runtime)), indent=2) + "\n"
     )

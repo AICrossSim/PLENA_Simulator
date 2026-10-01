@@ -63,6 +63,7 @@ class Services:
                 "ltile_v2.py",
                 "ltile_native.py",
                 "isa_matrix_projection.py",
+                "isa_projection_software.py",
                 "recurrent_coefficients.py",
                 "prepared_vector_recurrence.py",
                 "mview.py",
@@ -95,6 +96,10 @@ class Services:
     def layer(self, kind, batch, control, weight="BF16", *, supply="packed"):
         if weight not in ("BF16", "NVFP4"):
             raise ValueError("unsupported weight contract")
+        if self.profile.projection_schedule == "transposed" and weight != "BF16":
+            raise ValueError("transposed static weight packing is validated only for BF16")
+        if weight != "BF16" and self.profile.projection_codec_rows != 6:
+            raise ValueError("compressed weights require the reserved codec workspace")
         if supply not in ("packed", "native") or (supply == "native" and control != "fsm"):
             raise ValueError("native coefficient supply requires the resident FSM interface")
 
@@ -106,6 +111,8 @@ class Services:
                 gather_vector_rows=self.profile.gather_vector_rows,
                 projection_n_panel_tile=self.profile.projection_n_panel_tile,
                 projection_panel_overrides=self.profile.projection_panel_overrides,
+                projection_request_tile=self.profile.projection_request_tile,
+                projection_k_tile=self.profile.projection_k_tile,
             )
             regions = (
                 {(s.weight_base, s.weight_bytes) for s in plan.stages if s.matrix_shape} if weight == "NVFP4" else set()
@@ -125,7 +132,9 @@ class Services:
                     if self.profile.projection_schedule in ("compact", "batch") or self.profile.matrix.weight_replay
                     else None,
                     projection_workspace_bytes=self.profile.projection_vector_rows * 4096,
-                    projection_reserved_codec_bytes=6 * 4096,
+                    projection_reserved_codec_bytes=self.profile.projection_codec_rows * 4096,
+                    projection_request_tile=self.profile.projection_request_tile,
+                    projection_k_tile=self.profile.projection_k_tile,
                     coefficient_supply=supply,
                     baseline="compact coefficients cached in existing Vector SRAM; ordinary BF16 row/tree instructions"
                     if control == "old_isa"
@@ -195,23 +204,32 @@ class Services:
     def projection(self, batch, k, n, weight="BF16"):
         if weight not in ("BF16", "NVFP4"):
             raise ValueError("unsupported weight contract")
+        if self.profile.projection_schedule == "transposed" and weight != "BF16":
+            raise ValueError("transposed static weight packing is validated only for BF16")
+        if weight != "BF16" and self.profile.projection_codec_rows != 6:
+            raise ValueError("compressed weights require the reserved codec workspace")
         overrides = dict(self.profile.projection_panel_overrides)
         if overrides.keys() - {"projection"}:
             raise ValueError("standalone projection accepts only the projection stage override")
 
         def generate():
             _, Projection, _, _, _ = compiler_api(self.compiler)
-            from compiler.aten.plena.isa_matrix_projection import lower_resident_projection
+            from compiler.aten.plena.isa_projection_software import lower_software_projection, lower_transposed_projection
 
             a = ShapeArena()
             zero = a.add(2048)
-            spec = Projection(0, 0, 0, zero, k, n, 256)
+            spec = Projection(0, 0, 0, zero, k, n, self.profile.projection_k_tile)
             inputs = [a.add(spec.input_values) for _ in range(batch)]
             weights = a.add(spec.weight_bytes // 2)
             outputs = [a.add(spec.output_values) for _ in range(batch)]
-            p = Projection(inputs[0], weights, outputs[0], zero, k, n, 256)
-            if self.profile.projection_schedule == "resident":
-                text = lower_resident_projection(p, inputs, outputs, vector_rows=self.profile.projection_vector_rows)
+            p = Projection(inputs[0], weights, outputs[0], zero, k, n, self.profile.projection_k_tile)
+            if self.profile.projection_schedule == "transposed":
+                text = lower_transposed_projection(p, inputs, outputs, vector_rows=self.profile.projection_vector_rows)
+            elif self.profile.projection_schedule == "resident":
+                text = lower_software_projection(
+                    p, inputs, outputs, vector_rows=self.profile.projection_vector_rows,
+                    request_tile=self.profile.projection_request_tile,
+                )
             else:
                 from compiler.aten.plena.isa_matrix_projection import lower_compact_projection
 
@@ -228,16 +246,20 @@ class Services:
                     shape=[batch, n, k],
                     hbm_allocated_bytes=a.size,
                     weight_bytes=p.weight_bytes,
+                    projection_request_tile=self.profile.projection_request_tile,
+                    projection_k_tile=self.profile.projection_k_tile,
                     matrix_capacity_bytes=self.profile.matrix.matrix_capacity_bytes,
                     vector_live_bytes=self.profile.projection_vector_rows * 4096
                     + (self.profile.codec.input_bytes + self.profile.codec.output_bytes if weight == "NVFP4" else 0),
                     mapping=(
                         "existing M_MV; output32 panels, K256; bounded input-window cache; shared weight panels"
                         if self.profile.projection_schedule == "resident"
+                        else "existing M_TMV; static N-by-K packets; serial row reads; no replay; explicit K reduction contract"
+                        if self.profile.projection_schedule == "transposed"
                         else "M_MM.P; K256/output32; aligned compact input rows; finite replay; masked tails; bounded request tiles"
                     ),
                     projection_resources=self.profile.matrix.projection_resources()
-                    if self.profile.projection_schedule != "resident" or self.profile.matrix.weight_replay
+                    if self.profile.projection_schedule in ("compact", "batch") or self.profile.matrix.weight_replay
                     else None,
                 ),
             )
