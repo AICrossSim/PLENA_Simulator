@@ -1,0 +1,5029 @@
+{
+  "designs": [
+    {
+      "architecture": "single",
+      "arena_policy": "proportional",
+      "bank_policy": "proportional",
+      "budget_group": "M6",
+      "group": 4,
+      "id": "M6_6_W10_Aproportional_Pproportional_G4_joint_budget",
+      "lanes": [
+        6
+      ],
+      "physical_id": "M6_6_W10_Aproportional_Pproportional_G4",
+      "prior_selected_tail_partition": false,
+      "resources": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          2097152
+        ],
+        "control_bytes": [
+          4352
+        ],
+        "feedback_state_bytes": 96,
+        "joint_state_bytes": 256,
+        "weight_banks": [
+          64
+        ],
+        "weight_slots": [
+          10
+        ],
+        "x_banks": [
+          24
+        ]
+      },
+      "tail_partition": false
+    },
+    {
+      "architecture": "homogeneous",
+      "arena_policy": "proportional",
+      "bank_policy": "proportional",
+      "budget_group": "M6",
+      "group": 4,
+      "id": "M6_3+3_W5-5_Aproportional_Pproportional_G4_joint_budget",
+      "lanes": [
+        3,
+        3
+      ],
+      "physical_id": "M6_3+3_W5-5_Aproportional_Pproportional_G4",
+      "prior_selected_tail_partition": true,
+      "resources": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          1048576,
+          1048576
+        ],
+        "control_bytes": [
+          2176,
+          2176
+        ],
+        "feedback_state_bytes": 96,
+        "joint_state_bytes": 256,
+        "weight_banks": [
+          32,
+          32
+        ],
+        "weight_slots": [
+          5,
+          5
+        ],
+        "x_banks": [
+          12,
+          12
+        ]
+      },
+      "tail_partition": false
+    },
+    {
+      "architecture": "heterogeneous",
+      "arena_policy": "proportional",
+      "bank_policy": "proportional",
+      "budget_group": "M6",
+      "group": 4,
+      "id": "M6_4+2_W5-5_Aproportional_Pproportional_G4_joint_budget",
+      "lanes": [
+        4,
+        2
+      ],
+      "physical_id": "M6_4+2_W5-5_Aproportional_Pproportional_G4",
+      "prior_selected_tail_partition": false,
+      "resources": {
+        "acc_banks": [
+          8,
+          4
+        ],
+        "acc_bytes": [
+          1398080,
+          699072
+        ],
+        "control_bytes": [
+          2176,
+          2176
+        ],
+        "feedback_state_bytes": 96,
+        "joint_state_bytes": 256,
+        "weight_banks": [
+          32,
+          32
+        ],
+        "weight_slots": [
+          5,
+          5
+        ],
+        "x_banks": [
+          16,
+          8
+        ]
+      },
+      "tail_partition": false
+    },
+    {
+      "architecture": "single",
+      "arena_policy": "proportional",
+      "bank_policy": "proportional",
+      "budget_group": "M8",
+      "group": 4,
+      "id": "M8_8_W10_Aproportional_Pproportional_G4_joint_budget",
+      "lanes": [
+        8
+      ],
+      "physical_id": "M8_8_W10_Aproportional_Pproportional_G4",
+      "prior_selected_tail_partition": false,
+      "resources": {
+        "acc_banks": [
+          16
+        ],
+        "acc_bytes": [
+          2097152
+        ],
+        "control_bytes": [
+          4352
+        ],
+        "feedback_state_bytes": 96,
+        "joint_state_bytes": 256,
+        "weight_banks": [
+          64
+        ],
+        "weight_slots": [
+          10
+        ],
+        "x_banks": [
+          32
+        ]
+      },
+      "tail_partition": false
+    },
+    {
+      "architecture": "homogeneous",
+      "arena_policy": "proportional",
+      "bank_policy": "proportional",
+      "budget_group": "M8",
+      "group": 4,
+      "id": "M8_4+4_W5-5_Aproportional_Pproportional_G4_joint_budget",
+      "lanes": [
+        4,
+        4
+      ],
+      "physical_id": "M8_4+4_W5-5_Aproportional_Pproportional_G4",
+      "prior_selected_tail_partition": true,
+      "resources": {
+        "acc_banks": [
+          8,
+          8
+        ],
+        "acc_bytes": [
+          1048576,
+          1048576
+        ],
+        "control_bytes": [
+          2176,
+          2176
+        ],
+        "feedback_state_bytes": 96,
+        "joint_state_bytes": 256,
+        "weight_banks": [
+          32,
+          32
+        ],
+        "weight_slots": [
+          5,
+          5
+        ],
+        "x_banks": [
+          16,
+          16
+        ]
+      },
+      "tail_partition": false
+    },
+    {
+      "architecture": "heterogeneous",
+      "arena_policy": "equal",
+      "bank_policy": "proportional",
+      "budget_group": "M8",
+      "group": 2,
+      "id": "M8_5+3_W5-5_Aequal_Pproportional_G2_joint_budget",
+      "lanes": [
+        5,
+        3
+      ],
+      "physical_id": "M8_5+3_W5-5_Aequal_Pproportional_G2",
+      "prior_selected_tail_partition": true,
+      "resources": {
+        "acc_banks": [
+          10,
+          6
+        ],
+        "acc_bytes": [
+          1048576,
+          1048576
+        ],
+        "control_bytes": [
+          2176,
+          2176
+        ],
+        "feedback_state_bytes": 96,
+        "joint_state_bytes": 256,
+        "weight_banks": [
+          32,
+          32
+        ],
+        "weight_slots": [
+          5,
+          5
+        ],
+        "x_banks": [
+          20,
+          12
+        ]
+      },
+      "tail_partition": false
+    }
+  ],
+  "policies": [
+    "dynamic",
+    "window_lpt_ect",
+    "joint",
+    "joint_no_late"
+  ],
+  "workloads": [
+    {
+      "batch": 6,
+      "descriptor_order": "natural",
+      "experts": [
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 4,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  4,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 4,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 262144,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 4,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 262144,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 512,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 512,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  4,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 4,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 262144,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 8192,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 0,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "token_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 33554432,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "79e3b2e3059fb9fb33b843edf3dcd88170095cdef146944326bfda029ff5f24d",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me4_2.e0.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 0,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "0009cfcb6043c1162066dbde92fbd51ebe2452325b621fa9490b02a7d6ccba2d",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me4_2.e0.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 16777216,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "d883cf1ddff1816683b037d0addd48d883151e7e2b85eec9a3b442ab973da46c",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me4_2.e0.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 2,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  2,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  2,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 2,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 131072,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 4096,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 1,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0
+          ],
+          "token_indices": [
+            4,
+            5
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 83886080,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "9e408182664f1e576bfa9911c788b18fa0c8a8d8f0af4d109555f4f32793701e",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me4_2.e1.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 50331648,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "8ca46886b7476c90ad6d47056bc88ccb4bd844e94ad3af6a7a5ed52c22569efd",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me4_2.e1.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 67108864,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "d89e88b2e71efdb573e4782b81b117fdc7450c4f71250a989e106a3bfe78dbf7",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me4_2.e1.up"
+            }
+          }
+        }
+      ],
+      "hidden": 512,
+      "id": "synthetic_me4_2",
+      "input": {
+        "dtype": "BF16",
+        "shape": [
+          6,
+          512
+        ],
+        "synthetic": true
+      },
+      "mechanism_input": "Synthetic disjoint top-1 routed experts; no Shared expert. Me is per-expert token count, batch=sum(Me).",
+      "route_scores_renormalized": false,
+      "routing_is_input_not_timed": true,
+      "scope": "synthetic routed shape mechanism, no captured numerical payload",
+      "tokens": [
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me4_2-t0",
+          "token_index": 0
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me4_2-t1",
+          "token_index": 1
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me4_2-t2",
+          "token_index": 2
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me4_2-t3",
+          "token_index": 3
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me4_2-t4",
+          "token_index": 4
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me4_2-t5",
+          "token_index": 5
+        }
+      ],
+      "top_k": 1
+    },
+    {
+      "batch": 6,
+      "descriptor_order": "natural",
+      "experts": [
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 3,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  3,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 3,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 196608,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 3,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 196608,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 384,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 384,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  3,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 3,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 196608,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 6144,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 0,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0,
+            0
+          ],
+          "token_indices": [
+            0,
+            1,
+            2
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 33554432,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "fd4f2a0cea42dc4ee69df5b3fe265d43497a76afe2e8c1c3ad4d91b837e740ce",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me3_3.e0.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 0,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "b6bae3593e7c6c96b809ad0b529482f30a4cb38639c9129c2f72a89dc77d312f",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me3_3.e0.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 16777216,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "da4b0b4a03fb6dfe9f5b3068aaea2d08cea6fb1a7859dd9a64e3506de9926131",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me3_3.e0.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 3,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  3,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 3,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 196608,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 3,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 196608,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 384,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 384,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  3,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 3,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 196608,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 6144,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 1,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0,
+            0
+          ],
+          "token_indices": [
+            3,
+            4,
+            5
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 83886080,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "42c86c9fe5eba0d4763a1f9d202e40dd92a75139e4958d29bcc72038db0d19ea",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me3_3.e1.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 50331648,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "cf2ed2b804d7aa10f71f54d95498fbbb599da6d25229ddd25e59b8e14a43ea16",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me3_3.e1.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 67108864,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "1d94c7289fd801f9ea0e346be4fd2e2a7d74ac9b1a60a17e01f8ba412b0f5c0b",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me3_3.e1.up"
+            }
+          }
+        }
+      ],
+      "hidden": 512,
+      "id": "synthetic_me3_3",
+      "input": {
+        "dtype": "BF16",
+        "shape": [
+          6,
+          512
+        ],
+        "synthetic": true
+      },
+      "mechanism_input": "Synthetic disjoint top-1 routed experts; no Shared expert. Me is per-expert token count, batch=sum(Me).",
+      "route_scores_renormalized": false,
+      "routing_is_input_not_timed": true,
+      "scope": "synthetic routed shape mechanism, no captured numerical payload",
+      "tokens": [
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me3_3-t0",
+          "token_index": 0
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me3_3-t1",
+          "token_index": 1
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me3_3-t2",
+          "token_index": 2
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me3_3-t3",
+          "token_index": 3
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me3_3-t4",
+          "token_index": 4
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me3_3-t5",
+          "token_index": 5
+        }
+      ],
+      "top_k": 1
+    },
+    {
+      "batch": 6,
+      "descriptor_order": "natural",
+      "experts": [
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 0,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            0
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 33554432,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "323ebba321b66a4361275ae889f295bcbd5915d3d8a80b72fb72f4445ebcc85b",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e0.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 0,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "7092e3030273d3f1283799c19437ef0e0ff70411e2521c3e64b76b3dc192d876",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e0.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 16777216,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "ec2d9f4618789820431ea8f4f34b9bc62a8245424340e1c3d4eefd91d71359b8",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e0.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 1,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            1
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 83886080,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "623ef40a3314b8adb373e1e46a75ed69cb395ce258d0a1a551f9013d94914a1f",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e1.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 50331648,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "a468b131b496ddaf448eb8d93c63a0ad4ab5df752b04400adf48d563b77844d2",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e1.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 67108864,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "5c2ba1d113aa18828b2f747d66c601aa80853abb524bd24a7c2d98e700112ddf",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e1.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 2,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            2
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 134217728,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "59dbe910d4a282b19c311c317c3b5289e594289975ba06a4d6536158789befed",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e2.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 100663296,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "e1bf3fe322c1ecf145f301de50863e312ebba055a5d95d3d434609c0f7fb41b2",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e2.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 117440512,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "877ad04377d34f413d94054ece18b9b4046761f035d7ebef1383eb8b16bbe4e2",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e2.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 3,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            3
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 184549376,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "5349411ef2cba66440d94f982a69a33532225f16ab96d80a0e67fac6b8bee141",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e3.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 150994944,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "ccba9b3431a0dc5b1297ca372ed34e1f83878854bc02fa6e9324484a80791f53",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e3.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 167772160,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "38e54cb3cd0565666b4d54cbfcabb33c5cf2197045f24cce50f4baed6c97f7d9",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e3.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 4,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            4
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 234881024,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "a34ab2e4c03f5c31491d65d8d73343dfcd9a63dfae331db1186f30201c0bf30e",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e4.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 201326592,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "ad080ed9ac85cc23fdcce8e058c2219638991910a30dad582fdb3ac4c10ba193",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e4.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 218103808,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "2ae26cacf67df83d703e263b585b3ae8b9af14e514f48c77c453289d709e9988",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e4.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 5,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            5
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 285212672,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "2a845695a845f72b4ceba1ecac6a996f3619cbbb9bbfc4d8588ad722b30bcf88",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e5.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 251658240,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "cb16c87639a361d80f9b3d60e4ee5d98bc7f80c09d51bf581ce8e7fbb3e0f451",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e5.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 268435456,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "9e7bd64a7197a8f5f85a32f2ea42490eeb0d81aa92c3ec9ef95af68fe405b77c",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_me1_six.e5.up"
+            }
+          }
+        }
+      ],
+      "hidden": 512,
+      "id": "synthetic_me1_six",
+      "input": {
+        "dtype": "BF16",
+        "shape": [
+          6,
+          512
+        ],
+        "synthetic": true
+      },
+      "mechanism_input": "Synthetic disjoint top-1 routed experts; no Shared expert. Me is per-expert token count, batch=sum(Me).",
+      "route_scores_renormalized": false,
+      "routing_is_input_not_timed": true,
+      "scope": "synthetic routed shape mechanism, no captured numerical payload",
+      "tokens": [
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me1_six-t0",
+          "token_index": 0
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me1_six-t1",
+          "token_index": 1
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 2,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me1_six-t2",
+          "token_index": 2
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 3,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me1_six-t3",
+          "token_index": 3
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 4,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me1_six-t4",
+          "token_index": 4
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 5,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_me1_six-t5",
+          "token_index": 5
+        }
+      ],
+      "top_k": 1
+    },
+    {
+      "batch": 23,
+      "descriptor_order": "natural",
+      "experts": [
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 16,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  16,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 16,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 1048576,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 16,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 1048576,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 2048,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 2048,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  16,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 16,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 1048576,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 32768,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 0,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "token_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 33554432,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "fbedf8cb8a5c50ed2fa9781e8e3d316be53b0c5c50a6c5d865457f05503998c5",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e0.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 0,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "4375e666c6ccb8ee1d65bebf8b10158c1bb9243f706c82f8d5f74f1faea25e52",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e0.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 16777216,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "1e5181a4863047e69a7fecb1554a1037f5dea9e9a2aeb218ec63a710743a98b3",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e0.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 1,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            16
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 83886080,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "5628c98db8095b723beedbfc5dfbd994809f9e73e8f6a5877d178c5e9acb2093",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e1.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 50331648,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "0b5da3f3eb714ce2a7da9e1244be263a4774d9f401313347a5c00d9a3a2f5f12",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e1.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 67108864,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "be03e4e5eb5a8b38d39067f518b1845bbdb31a27c82df20d57506a1badf185aa",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e1.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 2,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            17
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 134217728,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "023625da6efb11abd0f74f0fd52b973366169fed9dc44fb057179ce2af613422",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e2.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 100663296,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "d888fdd9caa019596849a4932f829cec93e38e1a69fbe34f1db50fe374fd083f",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e2.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 117440512,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "76d7b2339fab1f60893af64fff55e963d4cde3c79c9a7c4a2e7d5ed2e730516d",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e2.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 2,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  2,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  2,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 2,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 131072,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 4096,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 3,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0
+          ],
+          "token_indices": [
+            18,
+            19
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 184549376,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "b674e0d8fdec3543255c283011ad6b389f3053890d9c074eb8dfce86be1839ba",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e3.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 150994944,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "9332b9e4b0824b55f3b84e97b4dab090b9ee40b52831c33d1b9ce4abaf08c538",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e3.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 167772160,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "7ee5072ce1a0b08258ad316da6e6d47423a7de70fed5f2a4802279502d6dd7cc",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e3.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 2,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  2,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  2,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 2,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 131072,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 4096,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 4,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0
+          ],
+          "token_indices": [
+            20,
+            21
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 234881024,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "e4e5ea6f1ce1429bdb3ce45820a70cdcd8662f11f10d22d6c87f5f8e159b1253",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e4.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 201326592,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "238db6e3f20afb1705770a0fed26781598165d5e174ad30b12cedc65e3178b3a",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e4.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 218103808,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "2777e76d419b1957863b5743c56c1f2218a1118be35e3ddae4ec5ef783596ca4",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e4.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 5,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            22
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 285212672,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "1c38ee2c05d9dda215b871be20ed56023b179ac98d6cfab68f545146a43f9c25",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e5.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 251658240,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "5ad599d0e71413c09681b8587af2e34d4983eb4eb690d4b8f392168ee1a179ae",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e5.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 268435456,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "036e7b28abbbb8fad23b184809f8c9848d27379adba58aa22c9af849c324c26b",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e5.up"
+            }
+          }
+        }
+      ],
+      "hidden": 512,
+      "id": "synthetic_mixed_natural",
+      "input": {
+        "dtype": "BF16",
+        "shape": [
+          23,
+          512
+        ],
+        "synthetic": true
+      },
+      "mechanism_input": "Synthetic disjoint top-1 routed experts; no Shared expert. Me is per-expert token count, batch=sum(Me).",
+      "route_scores_renormalized": false,
+      "routing_is_input_not_timed": true,
+      "scope": "synthetic routed shape mechanism, no captured numerical payload",
+      "tokens": [
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t0",
+          "token_index": 0
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t1",
+          "token_index": 1
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t2",
+          "token_index": 2
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t3",
+          "token_index": 3
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t4",
+          "token_index": 4
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t5",
+          "token_index": 5
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t6",
+          "token_index": 6
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t7",
+          "token_index": 7
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t8",
+          "token_index": 8
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t9",
+          "token_index": 9
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t10",
+          "token_index": 10
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t11",
+          "token_index": 11
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t12",
+          "token_index": 12
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t13",
+          "token_index": 13
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t14",
+          "token_index": 14
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t15",
+          "token_index": 15
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t16",
+          "token_index": 16
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 2,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t17",
+          "token_index": 17
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 3,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t18",
+          "token_index": 18
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 3,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t19",
+          "token_index": 19
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 4,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t20",
+          "token_index": 20
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 4,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t21",
+          "token_index": 21
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 5,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t22",
+          "token_index": 22
+        }
+      ],
+      "top_k": 1
+    },
+    {
+      "batch": 23,
+      "descriptor_order": "reversed_same_experts_tokens_weights",
+      "experts": [
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 5,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            22
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 285212672,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "1c38ee2c05d9dda215b871be20ed56023b179ac98d6cfab68f545146a43f9c25",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e5.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 251658240,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "5ad599d0e71413c09681b8587af2e34d4983eb4eb690d4b8f392168ee1a179ae",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e5.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 268435456,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "036e7b28abbbb8fad23b184809f8c9848d27379adba58aa22c9af849c324c26b",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e5.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 2,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  2,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  2,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 2,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 131072,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 4096,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 4,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0
+          ],
+          "token_indices": [
+            20,
+            21
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 234881024,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "e4e5ea6f1ce1429bdb3ce45820a70cdcd8662f11f10d22d6c87f5f8e159b1253",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e4.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 201326592,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "238db6e3f20afb1705770a0fed26781598165d5e174ad30b12cedc65e3178b3a",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e4.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 218103808,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "2777e76d419b1957863b5743c56c1f2218a1118be35e3ddae4ec5ef783596ca4",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e4.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 2,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  2,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 2,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 131072,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 256,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  2,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 2,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 131072,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 4096,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 3,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0
+          ],
+          "token_indices": [
+            18,
+            19
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 184549376,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "b674e0d8fdec3543255c283011ad6b389f3053890d9c074eb8dfce86be1839ba",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e3.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 150994944,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "9332b9e4b0824b55f3b84e97b4dab090b9ee40b52831c33d1b9ce4abaf08c538",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e3.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 167772160,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "7ee5072ce1a0b08258ad316da6e6d47423a7de70fed5f2a4802279502d6dd7cc",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e3.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 2,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            17
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 134217728,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "023625da6efb11abd0f74f0fd52b973366169fed9dc44fb057179ce2af613422",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e2.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 100663296,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "d888fdd9caa019596849a4932f829cec93e38e1a69fbe34f1db50fe374fd083f",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e2.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 117440512,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "76d7b2339fab1f60893af64fff55e963d4cde3c79c9a7c4a2e7d5ed2e730516d",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e2.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 1,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  1,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 1,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 65536,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 128,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  1,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 1,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 65536,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 2048,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 1,
+          "is_shared": false,
+          "route_scores": [
+            1.0
+          ],
+          "route_slots": [
+            0
+          ],
+          "token_indices": [
+            16
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 83886080,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "5628c98db8095b723beedbfc5dfbd994809f9e73e8f6a5877d178c5e9acb2093",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e1.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 50331648,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "0b5da3f3eb714ce2a7da9e1244be263a4774d9f401313347a5c00d9a3a2f5f12",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e1.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 67108864,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "be03e4e5eb5a8b38d39067f518b1845bbdb31a27c82df20d57506a1badf185aa",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e1.up"
+            }
+          }
+        },
+        {
+          "F": 128,
+          "H": 512,
+          "Me": 16,
+          "dag": {
+            "edges": [
+              [
+                "input",
+                "gate"
+              ],
+              [
+                "input",
+                "up"
+              ],
+              [
+                "gate",
+                "silu"
+              ],
+              [
+                "silu",
+                "z"
+              ],
+              [
+                "up",
+                "z"
+              ],
+              [
+                "z",
+                "down"
+              ],
+              [
+                "down",
+                "retire"
+              ]
+            ],
+            "nodes": [
+              {
+                "dtype": "BF16",
+                "id": "input",
+                "op": "gather_input",
+                "output_shape": [
+                  16,
+                  512
+                ]
+              },
+              {
+                "K": 512,
+                "M": 16,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "gate",
+                "macs": 1048576,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "gate"
+              },
+              {
+                "K": 512,
+                "M": 16,
+                "N": 128,
+                "depends_on": [
+                  "input"
+                ],
+                "id": "up",
+                "macs": 1048576,
+                "op": "gemm",
+                "round_output": "BF16",
+                "weight": "up"
+              },
+              {
+                "depends_on": [
+                  "gate"
+                ],
+                "dtype": "BF16",
+                "elements": 2048,
+                "id": "silu",
+                "op": "silu"
+              },
+              {
+                "depends_on": [
+                  "silu",
+                  "up"
+                ],
+                "dtype": "BF16",
+                "elements": 2048,
+                "id": "z",
+                "op": "multiply",
+                "shape": [
+                  16,
+                  128
+                ]
+              },
+              {
+                "K": 128,
+                "M": 16,
+                "N": 512,
+                "accumulator": "FP32",
+                "depends_on": [
+                  "z"
+                ],
+                "id": "down",
+                "macs": 1048576,
+                "op": "gemm",
+                "weight": "down"
+              },
+              {
+                "depends_on": [
+                  "down"
+                ],
+                "id": "retire",
+                "op": "copy_to_result_inboxes",
+                "payload_bytes": 32768,
+                "round_before_route_combine": "BF16"
+              }
+            ]
+          },
+          "id": 0,
+          "is_shared": false,
+          "route_scores": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "route_slots": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "token_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "weights": {
+            "down": {
+              "dtype": "BF16",
+              "hbm_base": 33554432,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 256,
+              "shape_nk": [
+                512,
+                128
+              ],
+              "source_sha256": "fbedf8cb8a5c50ed2fa9781e8e3d316be53b0c5c50a6c5d865457f05503998c5",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e0.down"
+            },
+            "gate": {
+              "dtype": "BF16",
+              "hbm_base": 0,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "4375e666c6ccb8ee1d65bebf8b10158c1bb9243f706c82f8d5f74f1faea25e52",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e0.gate"
+            },
+            "up": {
+              "dtype": "BF16",
+              "hbm_base": 16777216,
+              "payload_bytes": 131072,
+              "physical_bytes": 131072,
+              "row_stride_bytes": 1024,
+              "shape_nk": [
+                128,
+                512
+              ],
+              "source_sha256": "1e5181a4863047e69a7fecb1554a1037f5dea9e9a2aeb218ec63a710743a98b3",
+              "source_shard": "synthetic-shape-only-no-numerical-weight-payload",
+              "tensor_name": "synthetic_mixed_natural.e0.up"
+            }
+          }
+        }
+      ],
+      "hidden": 512,
+      "id": "synthetic_mixed_reversed",
+      "input": {
+        "dtype": "BF16",
+        "shape": [
+          23,
+          512
+        ],
+        "synthetic": true
+      },
+      "mechanism_input": "Synthetic disjoint top-1 routed experts; no Shared expert. Me is per-expert token count, batch=sum(Me).",
+      "route_scores_renormalized": false,
+      "routing_is_input_not_timed": true,
+      "scope": "synthetic routed shape mechanism, no captured numerical payload",
+      "tokens": [
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t0",
+          "token_index": 0
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t1",
+          "token_index": 1
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t2",
+          "token_index": 2
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t3",
+          "token_index": 3
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t4",
+          "token_index": 4
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t5",
+          "token_index": 5
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t6",
+          "token_index": 6
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t7",
+          "token_index": 7
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t8",
+          "token_index": 8
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t9",
+          "token_index": 9
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t10",
+          "token_index": 10
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t11",
+          "token_index": 11
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t12",
+          "token_index": 12
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t13",
+          "token_index": 13
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t14",
+          "token_index": 14
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 0,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t15",
+          "token_index": 15
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 1,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t16",
+          "token_index": 16
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 2,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t17",
+          "token_index": 17
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 3,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t18",
+          "token_index": 18
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 3,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t19",
+          "token_index": 19
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 4,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t20",
+          "token_index": 20
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 4,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t21",
+          "token_index": 21
+        },
+        {
+          "routes": [
+            {
+              "expert_id": 5,
+              "score": 1.0,
+              "slot": 0
+            }
+          ],
+          "sample_id": "synthetic_mixed_natural-t22",
+          "token_index": 22
+        }
+      ],
+      "top_k": 1
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "binary_sha256": "21b2b8e23d25fa74928dc5b7c2b30916d902ba66ea3d1c9a7bc769a3fcea9949",
+  "config_sha256": "e8086c5536d52328d30dd1ae140850fa4d2b164db8333e96cdf1fb2873b72db5",
+  "input_directory": "/tmp/plena-joint-runtime-20260930/runs/points/test__shared_first__joint_test_bfcl_b8_l13_s7__M6_6_W10_Aproportional_Pproportional_G4_joint_budget__joint__b4d20de240ea94de",
+  "key": "test__shared_first__joint_test_bfcl_b8_l13_s7__M6_6_W10_Aproportional_Pproportional_G4_joint_budget__joint",
+  "point_hash": "b4d20de240ea94dedec1244a74417c42b5bf7a3529923f0c5727a9d6fcd63540",
+  "repeats_required": 2,
+  "scope": "candidate analytical model; not native Ramulator or measured silicon",
+  "source_bundle_sha256": "97bada6c75dd89b60aa223209f496b2552ac9a4377f6428b8853df575db71997",
+  "workload_sha256": "86d4cb1c0d7489c4966ce3573216d39403132f07f97e3c66019a8fc5336ba22a"
+}

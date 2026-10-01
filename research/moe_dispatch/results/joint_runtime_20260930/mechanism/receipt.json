@@ -1,0 +1,9 @@
+{
+  "all_drained_capacity_ownership_k_order_checked": true,
+  "binary_sha256": "21b2b8e23d25fa74928dc5b7c2b30916d902ba66ea3d1c9a7bc769a3fcea9949",
+  "host_wall_seconds": 36.534249944612384,
+  "per_workload_useful_and_hbm_bytes_identical": true,
+  "points": 120,
+  "repeats_equal": true,
+  "runs": 240
+}

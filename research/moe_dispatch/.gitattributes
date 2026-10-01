@@ -1,2 +1,6 @@
 results/*.csv linguist-generated=true
 results/*.json linguist-generated=true
+results/joint_runtime_20260930/**/*.json -text linguist-generated=true
+results/joint_runtime_20260930/**/*.csv -text whitespace=cr-at-eol linguist-generated=true
+results/joint_runtime_20260930/*.json -text linguist-generated=true
+results/joint_runtime_20260930/*.csv -text whitespace=cr-at-eol linguist-generated=true

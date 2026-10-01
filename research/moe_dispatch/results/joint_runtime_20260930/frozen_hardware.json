@@ -1,0 +1,246 @@
+[
+  {
+    "architecture": "single",
+    "arena_policy": "proportional",
+    "bank_policy": "proportional",
+    "budget_group": "M6",
+    "group": 4,
+    "id": "M6_6_W10_Aproportional_Pproportional_G4_joint_budget",
+    "lanes": [
+      6
+    ],
+    "physical_id": "M6_6_W10_Aproportional_Pproportional_G4",
+    "prior_selected_tail_partition": false,
+    "resources": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        2097152
+      ],
+      "control_bytes": [
+        4352
+      ],
+      "feedback_state_bytes": 96,
+      "joint_state_bytes": 256,
+      "weight_banks": [
+        64
+      ],
+      "weight_slots": [
+        10
+      ],
+      "x_banks": [
+        24
+      ]
+    },
+    "tail_partition": false
+  },
+  {
+    "architecture": "homogeneous",
+    "arena_policy": "proportional",
+    "bank_policy": "proportional",
+    "budget_group": "M6",
+    "group": 4,
+    "id": "M6_3+3_W5-5_Aproportional_Pproportional_G4_joint_budget",
+    "lanes": [
+      3,
+      3
+    ],
+    "physical_id": "M6_3+3_W5-5_Aproportional_Pproportional_G4",
+    "prior_selected_tail_partition": true,
+    "resources": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        1048576,
+        1048576
+      ],
+      "control_bytes": [
+        2176,
+        2176
+      ],
+      "feedback_state_bytes": 96,
+      "joint_state_bytes": 256,
+      "weight_banks": [
+        32,
+        32
+      ],
+      "weight_slots": [
+        5,
+        5
+      ],
+      "x_banks": [
+        12,
+        12
+      ]
+    },
+    "tail_partition": false
+  },
+  {
+    "architecture": "heterogeneous",
+    "arena_policy": "proportional",
+    "bank_policy": "proportional",
+    "budget_group": "M6",
+    "group": 4,
+    "id": "M6_4+2_W5-5_Aproportional_Pproportional_G4_joint_budget",
+    "lanes": [
+      4,
+      2
+    ],
+    "physical_id": "M6_4+2_W5-5_Aproportional_Pproportional_G4",
+    "prior_selected_tail_partition": false,
+    "resources": {
+      "acc_banks": [
+        8,
+        4
+      ],
+      "acc_bytes": [
+        1398080,
+        699072
+      ],
+      "control_bytes": [
+        2176,
+        2176
+      ],
+      "feedback_state_bytes": 96,
+      "joint_state_bytes": 256,
+      "weight_banks": [
+        32,
+        32
+      ],
+      "weight_slots": [
+        5,
+        5
+      ],
+      "x_banks": [
+        16,
+        8
+      ]
+    },
+    "tail_partition": false
+  },
+  {
+    "architecture": "single",
+    "arena_policy": "proportional",
+    "bank_policy": "proportional",
+    "budget_group": "M8",
+    "group": 4,
+    "id": "M8_8_W10_Aproportional_Pproportional_G4_joint_budget",
+    "lanes": [
+      8
+    ],
+    "physical_id": "M8_8_W10_Aproportional_Pproportional_G4",
+    "prior_selected_tail_partition": false,
+    "resources": {
+      "acc_banks": [
+        16
+      ],
+      "acc_bytes": [
+        2097152
+      ],
+      "control_bytes": [
+        4352
+      ],
+      "feedback_state_bytes": 96,
+      "joint_state_bytes": 256,
+      "weight_banks": [
+        64
+      ],
+      "weight_slots": [
+        10
+      ],
+      "x_banks": [
+        32
+      ]
+    },
+    "tail_partition": false
+  },
+  {
+    "architecture": "homogeneous",
+    "arena_policy": "proportional",
+    "bank_policy": "proportional",
+    "budget_group": "M8",
+    "group": 4,
+    "id": "M8_4+4_W5-5_Aproportional_Pproportional_G4_joint_budget",
+    "lanes": [
+      4,
+      4
+    ],
+    "physical_id": "M8_4+4_W5-5_Aproportional_Pproportional_G4",
+    "prior_selected_tail_partition": true,
+    "resources": {
+      "acc_banks": [
+        8,
+        8
+      ],
+      "acc_bytes": [
+        1048576,
+        1048576
+      ],
+      "control_bytes": [
+        2176,
+        2176
+      ],
+      "feedback_state_bytes": 96,
+      "joint_state_bytes": 256,
+      "weight_banks": [
+        32,
+        32
+      ],
+      "weight_slots": [
+        5,
+        5
+      ],
+      "x_banks": [
+        16,
+        16
+      ]
+    },
+    "tail_partition": false
+  },
+  {
+    "architecture": "heterogeneous",
+    "arena_policy": "equal",
+    "bank_policy": "proportional",
+    "budget_group": "M8",
+    "group": 2,
+    "id": "M8_5+3_W5-5_Aequal_Pproportional_G2_joint_budget",
+    "lanes": [
+      5,
+      3
+    ],
+    "physical_id": "M8_5+3_W5-5_Aequal_Pproportional_G2",
+    "prior_selected_tail_partition": true,
+    "resources": {
+      "acc_banks": [
+        10,
+        6
+      ],
+      "acc_bytes": [
+        1048576,
+        1048576
+      ],
+      "control_bytes": [
+        2176,
+        2176
+      ],
+      "feedback_state_bytes": 96,
+      "joint_state_bytes": 256,
+      "weight_banks": [
+        32,
+        32
+      ],
+      "weight_slots": [
+        5,
+        5
+      ],
+      "x_banks": [
+        20,
+        12
+      ]
+    },
+    "tail_partition": false
+  }
+]

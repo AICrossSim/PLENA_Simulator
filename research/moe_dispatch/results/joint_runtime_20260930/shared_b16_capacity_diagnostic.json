@@ -1,0 +1,212 @@
+[
+  {
+    "workload": "joint_test_bfcl_b16_l13_s7",
+    "batch": 16,
+    "core_m": [
+      5,
+      3
+    ],
+    "binding": {
+      "actual_finish_cycle": 2739637,
+      "actual_minus_predicted_cycles": 1828052,
+      "anchor": 0,
+      "chosen_pair": [
+        0,
+        6
+      ],
+      "core": 1,
+      "cycle": 97,
+      "eligible_cores": [
+        1
+      ],
+      "expert": -1,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 911585,
+      "predicted_service_snapshot": 911488,
+      "remaining_estimate": 0,
+      "service_estimate": 911488,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 7,
+      "task": 0
+    },
+    "cores": [
+      {
+        "core": 0,
+        "m": 5,
+        "capacity_bytes": 1048576,
+        "reserved_before_workspace_bytes": 703168,
+        "available_workspace_bytes": 345408,
+        "shared_workspace_bytes": 378880,
+        "required_total_bytes": 1082048,
+        "margin_bytes": -33472,
+        "feasible": false,
+        "result_columns": [
+          0,
+          1280
+        ],
+        "result_layout_reserve": 696320,
+        "control_bytes": 2176
+      },
+      {
+        "core": 1,
+        "m": 3,
+        "capacity_bytes": 1048576,
+        "reserved_before_workspace_bytes": 424640,
+        "available_workspace_bytes": 623936,
+        "shared_workspace_bytes": 378880,
+        "required_total_bytes": 803520,
+        "margin_bytes": 245056,
+        "feasible": true,
+        "result_columns": [
+          1280,
+          2048
+        ],
+        "result_layout_reserve": 417792,
+        "control_bytes": 2176
+      }
+    ],
+    "raw_directory": "/tmp/plena-joint-runtime-20260930/runs/points/test__shared_first__joint_test_bfcl_b16_l13_s7__M8_5+3_W5-5_Aequal_Pproportional_G2_joint_budget__joint__f798d009e811e6d6",
+    "interpretation": "Shared is forced onto core 1 by frozen compiler storage feasibility; this is not evidence of a predictor core preference. The total 2 MiB arena is not changed."
+  },
+  {
+    "workload": "joint_test_gpqa_b16_l13_s7",
+    "batch": 16,
+    "core_m": [
+      5,
+      3
+    ],
+    "binding": {
+      "actual_finish_cycle": 2821526,
+      "actual_minus_predicted_cycles": 1909941,
+      "anchor": 0,
+      "chosen_pair": [
+        0,
+        3
+      ],
+      "core": 1,
+      "cycle": 97,
+      "eligible_cores": [
+        1
+      ],
+      "expert": -1,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 911585,
+      "predicted_service_snapshot": 911488,
+      "remaining_estimate": 0,
+      "service_estimate": 911488,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 7,
+      "task": 0
+    },
+    "cores": [
+      {
+        "core": 0,
+        "m": 5,
+        "capacity_bytes": 1048576,
+        "reserved_before_workspace_bytes": 702592,
+        "available_workspace_bytes": 345984,
+        "shared_workspace_bytes": 378880,
+        "required_total_bytes": 1081472,
+        "margin_bytes": -32896,
+        "feasible": false,
+        "result_columns": [
+          0,
+          1280
+        ],
+        "result_layout_reserve": 696320,
+        "control_bytes": 2176
+      },
+      {
+        "core": 1,
+        "m": 3,
+        "capacity_bytes": 1048576,
+        "reserved_before_workspace_bytes": 424064,
+        "available_workspace_bytes": 624512,
+        "shared_workspace_bytes": 378880,
+        "required_total_bytes": 802944,
+        "margin_bytes": 245632,
+        "feasible": true,
+        "result_columns": [
+          1280,
+          2048
+        ],
+        "result_layout_reserve": 417792,
+        "control_bytes": 2176
+      }
+    ],
+    "raw_directory": "/tmp/plena-joint-runtime-20260930/runs/points/test__shared_first__joint_test_gpqa_b16_l13_s7__M8_5+3_W5-5_Aequal_Pproportional_G2_joint_budget__joint__b3c7272734d59998",
+    "interpretation": "Shared is forced onto core 1 by frozen compiler storage feasibility; this is not evidence of a predictor core preference. The total 2 MiB arena is not changed."
+  },
+  {
+    "workload": "joint_test_swe_b16_l13_s7",
+    "batch": 16,
+    "core_m": [
+      5,
+      3
+    ],
+    "binding": {
+      "actual_finish_cycle": 2225004,
+      "actual_minus_predicted_cycles": 1313419,
+      "anchor": 0,
+      "chosen_pair": [
+        0,
+        3
+      ],
+      "core": 1,
+      "cycle": 97,
+      "eligible_cores": [
+        1
+      ],
+      "expert": -1,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 911585,
+      "predicted_service_snapshot": 911488,
+      "remaining_estimate": 0,
+      "service_estimate": 911488,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 7,
+      "task": 0
+    },
+    "cores": [
+      {
+        "core": 0,
+        "m": 5,
+        "capacity_bytes": 1048576,
+        "reserved_before_workspace_bytes": 701440,
+        "available_workspace_bytes": 347136,
+        "shared_workspace_bytes": 378880,
+        "required_total_bytes": 1080320,
+        "margin_bytes": -31744,
+        "feasible": false,
+        "result_columns": [
+          0,
+          1280
+        ],
+        "result_layout_reserve": 696320,
+        "control_bytes": 2176
+      },
+      {
+        "core": 1,
+        "m": 3,
+        "capacity_bytes": 1048576,
+        "reserved_before_workspace_bytes": 422912,
+        "available_workspace_bytes": 625664,
+        "shared_workspace_bytes": 378880,
+        "required_total_bytes": 801792,
+        "margin_bytes": 246784,
+        "feasible": true,
+        "result_columns": [
+          1280,
+          2048
+        ],
+        "result_layout_reserve": 417792,
+        "control_bytes": 2176
+      }
+    ],
+    "raw_directory": "/tmp/plena-joint-runtime-20260930/runs/points/test__shared_first__joint_test_swe_b16_l13_s7__M8_5+3_W5-5_Aequal_Pproportional_G2_joint_budget__joint__442892693cdf6adc",
+    "interpretation": "Shared is forced onto core 1 by frozen compiler storage feasibility; this is not evidence of a predictor core preference. The total 2 MiB arena is not changed."
+  }
+]

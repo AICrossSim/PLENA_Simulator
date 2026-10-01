@@ -1,0 +1,7993 @@
+{
+  "combine_tail_cycles": 13345,
+  "config": {
+    "arbiter": "stock",
+    "control_cost": true,
+    "credits": 256,
+    "diagnostic_credit_expansion": false,
+    "dispatch": "joint",
+    "dma_ready_after": 0,
+    "dma_ready_cycles": 1,
+    "dma_ready_period": 1,
+    "dot_tail_ns": 20,
+    "fixed_assignment": [],
+    "group": 2,
+    "hbm_bytes_per_ns": 256,
+    "hbm_latency_ns": 64,
+    "ideal_hbm": false,
+    "ideal_onchip": false,
+    "joint_age_limit": 8,
+    "joint_feedback": true,
+    "joint_late_bind": true,
+    "joint_margin_cycles": 64,
+    "joint_pairing": true,
+    "lanes": [
+      5,
+      3
+    ],
+    "late_bind_cycles": null,
+    "max_cycles": 200000000,
+    "next_prefetch": true,
+    "next_prefetch_ready_threshold": null,
+    "no_progress_cycles": 1000000,
+    "onchip_bytes_per_ns": 384,
+    "record_trace": false,
+    "runtime_fsm": true,
+    "shared_large": false,
+    "split": "none",
+    "surplus_margin_cycles": 64,
+    "surplus_rules": 0,
+    "tail_partition": false,
+    "vector_elements_per_ns": 32,
+    "window": 8
+  },
+  "control_accounting": {
+    "active_experts_per_core": 1,
+    "added_state": {
+      "active_contexts": 256,
+      "dma_return_tags": 512,
+      "global_credit_age_cursors": 128,
+      "joint_window_snapshot_and_scan": 256,
+      "next_contexts": 256,
+      "online_service_feedback": 96,
+      "pending_descriptors": 512,
+      "progress_estimate_registers": 128,
+      "runtime_policy_registers": 32,
+      "surplus_lut_and_state": 160,
+      "weight_slot_owners": 80
+    },
+    "dma_credit_capacity": 256,
+    "dma_credit_unit_bytes": 32,
+    "dma_return_tag_bits": 16,
+    "existing_state_bytes": 1872,
+    "headroom_bytes_per_core": [
+      0,
+      64
+    ],
+    "next_experts_per_core": 1,
+    "next_prefetch_tiles_per_core": 1,
+    "next_workspace_policy": "capacity checked at bind, exclusive arena acquired only after Current retires; Next may hold one existing W slot",
+    "pending_window": 8,
+    "reserve_headroom_bytes": 64,
+    "selection_service": "finite scan and descriptor updates must be charged by simulator",
+    "shared_control_storage": [
+      {
+        "base": 1296,
+        "bytes": 880,
+        "core": 0
+      },
+      {
+        "base": 1296,
+        "bytes": 816,
+        "core": 1
+      }
+    ],
+    "state_bytes_per_core": [
+      2176,
+      2112
+    ],
+    "total_state_bytes": 4288
+  },
+  "cores": [
+    {
+      "capacity": 1048576,
+      "m": 5,
+      "reserved_input_result_control": 703168,
+      "stats": {
+        "accumulator_rmw_bytes": 10305536,
+        "arithmetic_active_cycles": 4646059,
+        "contexts_peak": 3,
+        "control_cycles": 283050,
+        "copy_bytes": 1482752,
+        "dma_accepted": 17301504,
+        "dma_backpressure_cycles": 0,
+        "dma_landed": 17301504,
+        "done_cycle": 7163676,
+        "eligible_wait_max_cycles": 71,
+        "expert_completions": 32,
+        "front_states": {
+          "chunk_conversion": 295816,
+          "chunk_result_drain": 670469,
+          "idle_no_expert": 225,
+          "issue": 143616,
+          "operand_feed": 2023988,
+          "phase_advance": 96,
+          "previous_k_commit": 205227,
+          "vector_copy_or_phase_barrier": 21668,
+          "weight_not_ready": 3800477,
+          "x_not_ready": 2096
+        },
+        "issued_macs": 1470627840,
+        "issues": 143616,
+        "next_bindings": 32,
+        "next_inflight_at_promotion": 1,
+        "next_peak_bytes": 4096,
+        "next_prefetch_tiles": 32,
+        "next_ready_at_promotion": 31,
+        "next_weight_wait_cycles": 0,
+        "prediction_absolute_error_cycles": 1744933,
+        "prediction_actual_cycles": 7163453,
+        "remote_copy_bytes": 308224,
+        "useful_macs": 640155648,
+        "vector_service_cycles": 202088,
+        "weight_bytes": 553648128,
+        "weight_peak_bytes": 20480,
+        "workspace_peak_bytes": 811456,
+        "x_peak_bytes": 10240,
+        "x_stage_bytes": 160038912,
+        "z_exchange_bytes": 0
+      },
+      "weight_bank_words": 70287360,
+      "workspace_bank_words": 10991072,
+      "x_bank_words": 30007296
+    },
+    {
+      "capacity": 1048576,
+      "m": 3,
+      "reserved_input_result_control": 424640,
+      "stats": {
+        "accumulator_rmw_bytes": 7520256,
+        "arithmetic_active_cycles": 4351717,
+        "contexts_peak": 4,
+        "control_cycles": 156706,
+        "copy_bytes": 811008,
+        "dma_accepted": 9732096,
+        "dma_backpressure_cycles": 0,
+        "dma_landed": 9732096,
+        "done_cycle": 7144260,
+        "eligible_wait_max_cycles": 72,
+        "expert_completions": 17,
+        "front_states": {
+          "chunk_conversion": 175373,
+          "chunk_result_drain": 363737,
+          "idle_no_expert": 19683,
+          "issue": 121856,
+          "operand_feed": 2656083,
+          "phase_advance": 51,
+          "previous_k_commit": 4360,
+          "vector_copy_or_phase_barrier": 15776,
+          "weight_not_ready": 3806239,
+          "x_not_ready": 520
+        },
+        "issued_macs": 748683264,
+        "issues": 121856,
+        "next_bindings": 17,
+        "next_inflight_at_promotion": 2,
+        "next_peak_bytes": 4096,
+        "next_prefetch_tiles": 17,
+        "next_ready_at_promotion": 15,
+        "next_weight_wait_cycles": 0,
+        "prediction_absolute_error_cycles": 1900131,
+        "prediction_actual_cycles": 7143995,
+        "remote_copy_bytes": 324608,
+        "useful_macs": 467140608,
+        "vector_service_cycles": 115944,
+        "weight_bytes": 311427072,
+        "weight_peak_bytes": 20480,
+        "workspace_peak_bytes": 803520,
+        "x_peak_bytes": 6144,
+        "x_stage_bytes": 116785152,
+        "z_exchange_bytes": 0
+      },
+      "weight_bank_words": 49741824,
+      "workspace_bank_words": 7979552,
+      "x_bank_words": 21897216
+    }
+  ],
+  "credit_peak": 256,
+  "cycles": 7177023,
+  "deferrals": 0,
+  "dispatch_audit": [
+    {
+      "actual_finish_cycle": 2739637,
+      "actual_minus_predicted_cycles": 1828052,
+      "anchor": 0,
+      "chosen_pair": [
+        0,
+        6
+      ],
+      "core": 1,
+      "cycle": 97,
+      "eligible_cores": [
+        1
+      ],
+      "expert": -1,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 911585,
+      "predicted_service_snapshot": 911488,
+      "remaining_estimate": 0,
+      "service_estimate": 911488,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 7,
+      "task": 0
+    },
+    {
+      "actual_finish_cycle": 312443,
+      "actual_minus_predicted_cycles": 40962,
+      "anchor": 0,
+      "chosen_pair": [
+        0,
+        6
+      ],
+      "core": 0,
+      "cycle": 97,
+      "eligible_cores": [
+        0,
+        1
+      ],
+      "expert": 6,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 271481,
+      "predicted_service_snapshot": 161176,
+      "remaining_estimate": 0,
+      "service_estimate": 271384,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 7,
+      "task": 6
+    },
+    {
+      "actual_finish_cycle": 508768,
+      "actual_minus_predicted_cycles": -73975,
+      "anchor": 7,
+      "chosen_pair": [
+        7
+      ],
+      "core": 0,
+      "cycle": 311478,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 7,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 582743,
+      "predicted_service_snapshot": 135952,
+      "remaining_estimate": 281,
+      "service_estimate": 271120,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 311378,
+      "task": 7
+    },
+    {
+      "actual_finish_cycle": 670303,
+      "actual_minus_predicted_cycles": -108985,
+      "anchor": 10,
+      "chosen_pair": [
+        10
+      ],
+      "core": 0,
+      "cycle": 508186,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 10,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 779288,
+      "predicted_service_snapshot": 135820,
+      "remaining_estimate": 250,
+      "service_estimate": 270988,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 508086,
+      "task": 10
+    },
+    {
+      "actual_finish_cycle": 824663,
+      "actual_minus_predicted_cycles": -115986,
+      "anchor": 1,
+      "chosen_pair": [
+        1
+      ],
+      "core": 0,
+      "cycle": 669771,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 0,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 940649,
+      "predicted_service_snapshot": 135556,
+      "remaining_estimate": 290,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 669671,
+      "task": 1
+    },
+    {
+      "actual_finish_cycle": 979649,
+      "actual_minus_predicted_cycles": -115655,
+      "anchor": 3,
+      "chosen_pair": [
+        3
+      ],
+      "core": 0,
+      "cycle": 824467,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 3,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 1095304,
+      "predicted_service_snapshot": 135556,
+      "remaining_estimate": 249,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 824367,
+      "task": 3
+    },
+    {
+      "actual_finish_cycle": 1133230,
+      "actual_minus_predicted_cycles": -87399,
+      "anchor": 5,
+      "chosen_pair": [
+        5
+      ],
+      "core": 0,
+      "cycle": 979373,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 5,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 1220629,
+      "predicted_service_snapshot": 120730,
+      "remaining_estimate": 278,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 979273,
+      "task": 5
+    },
+    {
+      "actual_finish_cycle": 1285633,
+      "actual_minus_predicted_cycles": -77065,
+      "anchor": 2,
+      "chosen_pair": [
+        2
+      ],
+      "core": 0,
+      "cycle": 1132937,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 1,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 1362698,
+      "predicted_service_snapshot": 115017,
+      "remaining_estimate": 304,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 1132837,
+      "task": 2
+    },
+    {
+      "actual_finish_cycle": 1519548,
+      "actual_minus_predicted_cycles": -47633,
+      "anchor": 15,
+      "chosen_pair": [
+        15
+      ],
+      "core": 0,
+      "cycle": 1285205,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 19,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 1567181,
+      "predicted_service_snapshot": 141400,
+      "remaining_estimate": 264,
+      "service_estimate": 271252,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 1285105,
+      "task": 15
+    },
+    {
+      "actual_finish_cycle": 1672082,
+      "actual_minus_predicted_cycles": -57405,
+      "anchor": 4,
+      "chosen_pair": [
+        4
+      ],
+      "core": 0,
+      "cycle": 1518814,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 4,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 1729487,
+      "predicted_service_snapshot": 105477,
+      "remaining_estimate": 260,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 1518714,
+      "task": 4
+    },
+    {
+      "actual_finish_cycle": 1836016,
+      "actual_minus_predicted_cycles": -46420,
+      "anchor": 8,
+      "chosen_pair": [
+        17
+      ],
+      "core": 0,
+      "cycle": 1671630,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 21,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 1882436,
+      "predicted_service_snapshot": 105579,
+      "remaining_estimate": 291,
+      "service_estimate": 270988,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 1671530,
+      "task": 17
+    },
+    {
+      "actual_finish_cycle": 1989696,
+      "actual_minus_predicted_cycles": -48895,
+      "anchor": 8,
+      "chosen_pair": [
+        8
+      ],
+      "core": 0,
+      "cycle": 1835414,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 8,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2038591,
+      "predicted_service_snapshot": 101667,
+      "remaining_estimate": 270,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 1835314,
+      "task": 8
+    },
+    {
+      "actual_finish_cycle": 2140571,
+      "actual_minus_predicted_cycles": -36249,
+      "anchor": 9,
+      "chosen_pair": [
+        9
+      ],
+      "core": 0,
+      "cycle": 1989404,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 9,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2176820,
+      "predicted_service_snapshot": 93816,
+      "remaining_estimate": 280,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 1989304,
+      "task": 9
+    },
+    {
+      "actual_finish_cycle": 2294262,
+      "actual_minus_predicted_cycles": -36371,
+      "anchor": 11,
+      "chosen_pair": [
+        11
+      ],
+      "core": 0,
+      "cycle": 2140114,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 11,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2330633,
+      "predicted_service_snapshot": 95313,
+      "remaining_estimate": 302,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 2140014,
+      "task": 11
+    },
+    {
+      "actual_finish_cycle": 2445137,
+      "actual_minus_predicted_cycles": -26720,
+      "anchor": 12,
+      "chosen_pair": [
+        12
+      ],
+      "core": 0,
+      "cycle": 2293936,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 12,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2471857,
+      "predicted_service_snapshot": 89046,
+      "remaining_estimate": 307,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 2293836,
+      "task": 12
+    },
+    {
+      "actual_finish_cycle": 2598828,
+      "actual_minus_predicted_cycles": -26838,
+      "anchor": 13,
+      "chosen_pair": [
+        13
+      ],
+      "core": 0,
+      "cycle": 2444680,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 15,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2625666,
+      "predicted_service_snapshot": 90548,
+      "remaining_estimate": 286,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 2444580,
+      "task": 13
+    },
+    {
+      "actual_finish_cycle": 2764652,
+      "actual_minus_predicted_cycles": -14841,
+      "anchor": 14,
+      "chosen_pair": [
+        14
+      ],
+      "core": 0,
+      "cycle": 2598502,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 18,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2779493,
+      "predicted_service_snapshot": 90548,
+      "remaining_estimate": 291,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 2598402,
+      "task": 14
+    },
+    {
+      "actual_finish_cycle": 3015093,
+      "actual_minus_predicted_cycles": 4630,
+      "anchor": 16,
+      "chosen_pair": [
+        18
+      ],
+      "core": 1,
+      "cycle": 2739739,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 22,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3010463,
+      "predicted_service_snapshot": 135556,
+      "remaining_estimate": 0,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 2739639,
+      "task": 18
+    },
+    {
+      "actual_finish_cycle": 3039980,
+      "actual_minus_predicted_cycles": 101165,
+      "anchor": 16,
+      "chosen_pair": [
+        16
+      ],
+      "core": 0,
+      "cycle": 2764179,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 20,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 2938815,
+      "predicted_service_snapshot": 87371,
+      "remaining_estimate": 281,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 2764079,
+      "task": 16
+    },
+    {
+      "actual_finish_cycle": 3289995,
+      "actual_minus_predicted_cycles": 4354,
+      "anchor": 20,
+      "chosen_pair": [
+        21
+      ],
+      "core": 1,
+      "cycle": 3014804,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 27,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3285641,
+      "predicted_service_snapshot": 135556,
+      "remaining_estimate": 249,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3014704,
+      "task": 21
+    },
+    {
+      "actual_finish_cycle": 3316132,
+      "actual_minus_predicted_cycles": 105008,
+      "anchor": 19,
+      "chosen_pair": [
+        19
+      ],
+      "core": 0,
+      "cycle": 3039497,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 23,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3211124,
+      "predicted_service_snapshot": 85949,
+      "remaining_estimate": 278,
+      "service_estimate": 270988,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3039397,
+      "task": 19
+    },
+    {
+      "actual_finish_cycle": 3566109,
+      "actual_minus_predicted_cycles": 5427,
+      "anchor": 20,
+      "chosen_pair": [
+        22
+      ],
+      "core": 1,
+      "cycle": 3289712,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 29,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3560682,
+      "predicted_service_snapshot": 135688,
+      "remaining_estimate": 250,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3289612,
+      "task": 22
+    },
+    {
+      "actual_finish_cycle": 3591024,
+      "actual_minus_predicted_cycles": 77744,
+      "anchor": 20,
+      "chosen_pair": [
+        20
+      ],
+      "core": 0,
+      "cycle": 3315384,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 26,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3513280,
+      "predicted_service_snapshot": 99020,
+      "remaining_estimate": 276,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3315284,
+      "task": 20
+    },
+    {
+      "actual_finish_cycle": 3842057,
+      "actual_minus_predicted_cycles": 5398,
+      "anchor": 24,
+      "chosen_pair": [
+        25
+      ],
+      "core": 1,
+      "cycle": 3565690,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 33,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3836659,
+      "predicted_service_snapshot": 135688,
+      "remaining_estimate": 249,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3565590,
+      "task": 25
+    },
+    {
+      "actual_finish_cycle": 3866019,
+      "actual_minus_predicted_cycles": 77527,
+      "anchor": 23,
+      "chosen_pair": [
+        23
+      ],
+      "core": 0,
+      "cycle": 3590599,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 30,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 3788492,
+      "predicted_service_snapshot": 99020,
+      "remaining_estimate": 273,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3590499,
+      "task": 23
+    },
+    {
+      "actual_finish_cycle": 4117440,
+      "actual_minus_predicted_cycles": 3764,
+      "anchor": 24,
+      "chosen_pair": [
+        30
+      ],
+      "core": 1,
+      "cycle": 3841647,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 39,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4113676,
+      "predicted_service_snapshot": 136219,
+      "remaining_estimate": 250,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3841547,
+      "task": 30
+    },
+    {
+      "actual_finish_cycle": 4142629,
+      "actual_minus_predicted_cycles": 78829,
+      "anchor": 24,
+      "chosen_pair": [
+        24
+      ],
+      "core": 0,
+      "cycle": 3865592,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 32,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4063800,
+      "predicted_service_snapshot": 99309,
+      "remaining_estimate": 299,
+      "service_estimate": 271120,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 3865492,
+      "task": 24
+    },
+    {
+      "actual_finish_cycle": 4392486,
+      "actual_minus_predicted_cycles": 2499,
+      "anchor": 26,
+      "chosen_pair": [
+        28
+      ],
+      "core": 1,
+      "cycle": 4117032,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 36,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4389987,
+      "predicted_service_snapshot": 136616,
+      "remaining_estimate": 251,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4116932,
+      "task": 28
+    },
+    {
+      "actual_finish_cycle": 4419006,
+      "actual_minus_predicted_cycles": 79042,
+      "anchor": 26,
+      "chosen_pair": [
+        26
+      ],
+      "core": 0,
+      "cycle": 4141781,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 34,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4339964,
+      "predicted_service_snapshot": 99309,
+      "remaining_estimate": 274,
+      "service_estimate": 271120,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4141681,
+      "task": 26
+    },
+    {
+      "actual_finish_cycle": 4667864,
+      "actual_minus_predicted_cycles": 2729,
+      "anchor": 27,
+      "chosen_pair": [
+        33
+      ],
+      "core": 1,
+      "cycle": 4392180,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 42,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4665135,
+      "predicted_service_snapshot": 136616,
+      "remaining_estimate": 251,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4392080,
+      "task": 33
+    },
+    {
+      "actual_finish_cycle": 4694983,
+      "actual_minus_predicted_cycles": 58591,
+      "anchor": 27,
+      "chosen_pair": [
+        27
+      ],
+      "core": 0,
+      "cycle": 4418166,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 35,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4636392,
+      "predicted_service_snapshot": 109293,
+      "remaining_estimate": 301,
+      "service_estimate": 270988,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4418066,
+      "task": 27
+    },
+    {
+      "actual_finish_cycle": 4943003,
+      "actual_minus_predicted_cycles": 1406,
+      "anchor": 29,
+      "chosen_pair": [
+        34
+      ],
+      "core": 1,
+      "cycle": 4667584,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 43,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4941597,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 252,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4667484,
+      "task": 34
+    },
+    {
+      "actual_finish_cycle": 4971100,
+      "actual_minus_predicted_cycles": 43725,
+      "anchor": 29,
+      "chosen_pair": [
+        29
+      ],
+      "core": 0,
+      "cycle": 4694362,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 38,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 4927375,
+      "predicted_service_snapshot": 116721,
+      "remaining_estimate": 268,
+      "service_estimate": 270988,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4694262,
+      "task": 29
+    },
+    {
+      "actual_finish_cycle": 5218368,
+      "actual_minus_predicted_cycles": 1642,
+      "anchor": 31,
+      "chosen_pair": [
+        35
+      ],
+      "core": 1,
+      "cycle": 4942713,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 44,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 5216726,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 252,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4942613,
+      "task": 35
+    },
+    {
+      "actual_finish_cycle": 5246720,
+      "actual_minus_predicted_cycles": 32760,
+      "anchor": 31,
+      "chosen_pair": [
+        31
+      ],
+      "core": 0,
+      "cycle": 4970468,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 40,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 5213960,
+      "predicted_service_snapshot": 121908,
+      "remaining_estimate": 280,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 4970368,
+      "task": 31
+    },
+    {
+      "actual_finish_cycle": 5491007,
+      "actual_minus_predicted_cycles": -1228,
+      "anchor": 32,
+      "chosen_pair": [
+        36
+      ],
+      "core": 1,
+      "cycle": 5218088,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 45,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 5492235,
+      "predicted_service_snapshot": 137279,
+      "remaining_estimate": 252,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 5217988,
+      "task": 36
+    },
+    {
+      "actual_finish_cycle": 5529117,
+      "actual_minus_predicted_cycles": 12539,
+      "anchor": 32,
+      "chosen_pair": [
+        32
+      ],
+      "core": 0,
+      "cycle": 5246231,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 41,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 5516578,
+      "predicted_service_snapshot": 135553,
+      "remaining_estimate": 290,
+      "service_estimate": 271252,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 5246131,
+      "task": 32
+    },
+    {
+      "actual_finish_cycle": 5767753,
+      "actual_minus_predicted_cycles": 2871,
+      "anchor": 44,
+      "chosen_pair": [
+        44
+      ],
+      "core": 1,
+      "cycle": 5490602,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 54,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 5764882,
+      "predicted_service_snapshot": 137412,
+      "remaining_estimate": 252,
+      "service_estimate": 270988,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 5490502,
+      "task": 44
+    },
+    {
+      "actual_finish_cycle": 5804680,
+      "actual_minus_predicted_cycles": 18130,
+      "anchor": 37,
+      "chosen_pair": [
+        39
+      ],
+      "core": 0,
+      "cycle": 5528277,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 48,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 5786550,
+      "predicted_service_snapshot": 129328,
+      "remaining_estimate": 249,
+      "service_estimate": 270856,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 5528177,
+      "task": 39
+    },
+    {
+      "actual_finish_cycle": 6042784,
+      "actual_minus_predicted_cycles": 1552,
+      "anchor": 37,
+      "chosen_pair": [
+        38
+      ],
+      "core": 1,
+      "cycle": 5767219,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 47,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6041232,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 252,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 5767119,
+      "task": 38
+    },
+    {
+      "actual_finish_cycle": 6081270,
+      "actual_minus_predicted_cycles": 18514,
+      "anchor": 37,
+      "chosen_pair": [
+        46
+      ],
+      "core": 0,
+      "cycle": 5804183,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 57,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6062756,
+      "predicted_service_snapshot": 129580,
+      "remaining_estimate": 297,
+      "service_estimate": 271120,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 5804083,
+      "task": 46
+    },
+    {
+      "actual_finish_cycle": 6318275,
+      "actual_minus_predicted_cycles": 1758,
+      "anchor": 37,
+      "chosen_pair": [
+        40
+      ],
+      "core": 1,
+      "cycle": 6042504,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 49,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6316517,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 252,
+      "service_estimate": 270724,
+      "snapshot_candidates": 8,
+      "snapshot_cycle": 6042404,
+      "task": 40
+    },
+    {
+      "actual_finish_cycle": 6356832,
+      "actual_minus_predicted_cycles": 13771,
+      "anchor": 37,
+      "chosen_pair": [
+        43
+      ],
+      "core": 0,
+      "cycle": 6080563,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 52,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6343061,
+      "predicted_service_snapshot": 131448,
+      "remaining_estimate": 242,
+      "service_estimate": 270856,
+      "snapshot_candidates": 7,
+      "snapshot_cycle": 6080475,
+      "task": 43
+    },
+    {
+      "actual_finish_cycle": 6593738,
+      "actual_minus_predicted_cycles": 1766,
+      "anchor": 37,
+      "chosen_pair": [
+        41
+      ],
+      "core": 1,
+      "cycle": 6317959,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 50,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6591972,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 252,
+      "service_estimate": 270724,
+      "snapshot_candidates": 6,
+      "snapshot_cycle": 6317883,
+      "task": 41
+    },
+    {
+      "actual_finish_cycle": 6632157,
+      "actual_minus_predicted_cycles": 44112,
+      "anchor": 37,
+      "chosen_pair": [
+        37
+      ],
+      "core": 0,
+      "cycle": 6356340,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 46,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6588045,
+      "predicted_service_snapshot": 115964,
+      "remaining_estimate": 245,
+      "service_estimate": 270724,
+      "snapshot_candidates": 5,
+      "snapshot_cycle": 6356276,
+      "task": 37
+    },
+    {
+      "actual_finish_cycle": 6868915,
+      "actual_minus_predicted_cycles": 1498,
+      "anchor": 42,
+      "chosen_pair": [
+        45
+      ],
+      "core": 1,
+      "cycle": 6593404,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 56,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6867417,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 252,
+      "service_estimate": 270724,
+      "snapshot_candidates": 4,
+      "snapshot_cycle": 6593352,
+      "task": 45
+    },
+    {
+      "actual_finish_cycle": 6907353,
+      "actual_minus_predicted_cycles": 43876,
+      "anchor": 42,
+      "chosen_pair": [
+        42
+      ],
+      "core": 0,
+      "cycle": 6631804,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 51,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 6863477,
+      "predicted_service_snapshot": 115964,
+      "remaining_estimate": 213,
+      "service_estimate": 270724,
+      "snapshot_candidates": 3,
+      "snapshot_cycle": 6631764,
+      "task": 42
+    },
+    {
+      "actual_finish_cycle": 7144260,
+      "actual_minus_predicted_cycles": 1693,
+      "anchor": 47,
+      "chosen_pair": [
+        48
+      ],
+      "core": 1,
+      "cycle": 6868617,
+      "eligible_cores": [
+        1
+      ],
+      "expert": 63,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 7142567,
+      "predicted_service_snapshot": 137145,
+      "remaining_estimate": 189,
+      "service_estimate": 270724,
+      "snapshot_candidates": 2,
+      "snapshot_cycle": 6868589,
+      "task": 48
+    },
+    {
+      "actual_finish_cycle": 7163676,
+      "actual_minus_predicted_cycles": 14446,
+      "anchor": 47,
+      "chosen_pair": [
+        47
+      ],
+      "core": 0,
+      "cycle": 6906971,
+      "eligible_cores": [
+        0
+      ],
+      "expert": 58,
+      "first_ready_delay_estimate": 136,
+      "joint": true,
+      "predicted_finish_cycle": 7149230,
+      "predicted_service_snapshot": 121260,
+      "remaining_estimate": 223,
+      "service_estimate": 270724,
+      "snapshot_candidates": 1,
+      "snapshot_cycle": 6906951,
+      "task": 47
+    }
+  ],
+  "dispatch_decisions": 49,
+  "dma_credit_bytes": 32,
+  "dma_return_capacity_bytes": 8192,
+  "dma_transactions_accepted": 27033600,
+  "dma_transactions_landed": 27033600,
+  "drained": true,
+  "experts_done_cycles": 7163678,
+  "feedback_q8": [
+    [
+      238,
+      253,
+      258,
+      256
+    ],
+    [
+      259,
+      260,
+      384,
+      256
+    ]
+  ],
+  "feedback_updates": 49,
+  "input_backpressure_cycles": 5804136,
+  "issued_macs": 2219311104,
+  "joint_diagnostics": {
+    "aging_forced_rounds": 36,
+    "audit": [
+      {
+        "age_forced": false,
+        "anchor": 0,
+        "candidates": [
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              615552,
+              911488
+            ],
+            "potential_mask": 2,
+            "standalone_service": [
+              615552,
+              911488
+            ],
+            "task": 0
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              270724,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 1
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              270856,
+              270856
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              270724,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 3
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              270856,
+              270856
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              270724,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 5
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              271384,
+              271384
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              161176,
+              161176
+            ],
+            "task": 6
+          },
+          {
+            "age": 0,
+            "eligible_mask": 3,
+            "finish_delay": [
+              271120,
+              271120
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135952,
+              160912
+            ],
+            "task": 7
+          }
+        ],
+        "charged_cycles": 90,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 0
+          },
+          {
+            "core": 0,
+            "task": 6
+          }
+        ],
+        "commit_cycle": 97,
+        "committed": true,
+        "comparisons": 7,
+        "proposed": [
+          {
+            "core": 1,
+            "due": true,
+            "task": 0
+          },
+          {
+            "core": 0,
+            "due": true,
+            "task": 6
+          }
+        ],
+        "snapshot_cycle": 7
+      },
+      {
+        "age_forced": false,
+        "anchor": 7,
+        "candidates": [
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270869,
+              1058838
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 1
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              271001,
+              1058970
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270869,
+              1058838
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 3
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              271001,
+              1058970
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270869,
+              1058838
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 5
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              271265,
+              1059234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135952,
+              160912
+            ],
+            "task": 7
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270869,
+              1058838
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              271001,
+              1058970
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 9
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 7
+          }
+        ],
+        "commit_cycle": 311478,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 7
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 1
+          }
+        ],
+        "snapshot_cycle": 311378
+      },
+      {
+        "age_forced": false,
+        "anchor": 10,
+        "candidates": [
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270838,
+              978116
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 1
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270970,
+              978248
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270838,
+              978116
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 3
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270970,
+              978248
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270838,
+              978116
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 5
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270838,
+              978116
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270970,
+              978248
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135688,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              271102,
+              978380
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135820,
+              135820
+            ],
+            "task": 10
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 10
+          }
+        ],
+        "commit_cycle": 508186,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 10
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 1
+          }
+        ],
+        "snapshot_cycle": 508086
+      },
+      {
+        "age_forced": false,
+        "anchor": 1,
+        "candidates": [
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270878,
+              916732
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 1
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              251966,
+              916864
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270878,
+              916732
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 3
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              251966,
+              916864
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270878,
+              916732
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 5
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270878,
+              916732
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              251966,
+              916864
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270878,
+              916732
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 11
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 1
+          }
+        ],
+        "commit_cycle": 669771,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 1
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 3
+          }
+        ],
+        "snapshot_cycle": 669671
+      },
+      {
+        "age_forced": false,
+        "anchor": 3,
+        "candidates": [
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229706,
+              869181
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270837,
+              869049
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 3
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229706,
+              869181
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270837,
+              869049
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 5
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270837,
+              869049
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229706,
+              869181
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270837,
+              869049
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135556,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229706,
+              869181
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 12
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 3
+          }
+        ],
+        "commit_cycle": 824467,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 3
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 5
+          }
+        ],
+        "snapshot_cycle": 824367
+      },
+      {
+        "age_forced": false,
+        "anchor": 5,
+        "candidates": [
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229735,
+              819579
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229735,
+              819579
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              241256,
+              819447
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              120730,
+              135556
+            ],
+            "task": 5
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              241256,
+              819447
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              120730,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229735,
+              819579
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              241256,
+              819447
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              120730,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229735,
+              819579
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              241256,
+              819447
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              120730,
+              135556
+            ],
+            "task": 13
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 5
+          }
+        ],
+        "commit_cycle": 979373,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 5
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 8
+          }
+        ],
+        "snapshot_cycle": 979273
+      },
+      {
+        "age_forced": false,
+        "anchor": 2,
+        "candidates": [
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229761,
+              773798
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 2
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229761,
+              773798
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              220132,
+              773666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              110140,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229761,
+              773798
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              220132,
+              773666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              110140,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229761,
+              773798
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              220132,
+              773666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              110140,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              220132,
+              773666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              110140,
+              135556
+            ],
+            "task": 14
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 2
+          }
+        ],
+        "commit_cycle": 1132937,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 2
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 8
+          }
+        ],
+        "snapshot_cycle": 1132837
+      },
+      {
+        "age_forced": false,
+        "anchor": 15,
+        "candidates": [
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229721,
+              734127
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203171,
+              733995
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229721,
+              734127
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203171,
+              733995
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              229721,
+              734127
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115017,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203171,
+              733995
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203171,
+              733995
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              281976,
+              734523
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              141400,
+              161044
+            ],
+            "task": 15
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 15
+          }
+        ],
+        "commit_cycle": 1285205,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 15
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 8
+          }
+        ],
+        "snapshot_cycle": 1285105
+      },
+      {
+        "age_forced": true,
+        "anchor": 4,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              210673,
+              642618
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              105477,
+              135688
+            ],
+            "task": 4
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203167,
+              642486
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              210673,
+              642618
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              105477,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203167,
+              642486
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              210673,
+              642618
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              105477,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203167,
+              642486
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203167,
+              642486
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203167,
+              642486
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 16
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 4
+          }
+        ],
+        "commit_cycle": 1518814,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 4
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 8
+          }
+        ],
+        "snapshot_cycle": 1518714
+      },
+      {
+        "age_forced": true,
+        "anchor": 8,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203198,
+              602745
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              210704,
+              602877
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              105477,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203198,
+              602745
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              210704,
+              602877
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              105477,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203198,
+              602745
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203198,
+              602745
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203198,
+              602745
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              210806,
+              603009
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              105579,
+              135820
+            ],
+            "task": 17
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 17
+          }
+        ],
+        "commit_cycle": 1671630,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 1,
+            "due": false,
+            "task": 8
+          },
+          {
+            "core": 0,
+            "due": true,
+            "task": 17
+          }
+        ],
+        "snapshot_cycle": 1671530
+      },
+      {
+        "age_forced": true,
+        "anchor": 8,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203177,
+              537853
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 8
+          },
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              195870,
+              537985
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              98056,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203177,
+              537853
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              195870,
+              537985
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              98056,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203177,
+              537853
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203177,
+              537853
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203177,
+              537853
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203177,
+              537853
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 18
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 8
+          }
+        ],
+        "commit_cycle": 1835414,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 8
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 11
+          }
+        ],
+        "snapshot_cycle": 1835314
+      },
+      {
+        "age_forced": true,
+        "anchor": 9,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 1,
+            "finish_delay": [
+              187416,
+              488243
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              93816,
+              135688
+            ],
+            "task": 9
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203187,
+              488111
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              187416,
+              488243
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              93816,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203187,
+              488111
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203187,
+              488111
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203187,
+              488111
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              203187,
+              488111
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              101667,
+              135556
+            ],
+            "task": 18
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              187507,
+              488375
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              93907,
+              135820
+            ],
+            "task": 19
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 9
+          }
+        ],
+        "commit_cycle": 1989404,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 9
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 11
+          }
+        ],
+        "snapshot_cycle": 1989304
+      },
+      {
+        "age_forced": true,
+        "anchor": 11,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190519,
+              451109
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 11
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              187438,
+              451241
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              93816,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190519,
+              451109
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190519,
+              451109
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190519,
+              451109
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190519,
+              451109
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 18
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              187529,
+              451373
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              93907,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190519,
+              451109
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 20
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 11
+          }
+        ],
+        "commit_cycle": 2140114,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 11
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 13
+          }
+        ],
+        "snapshot_cycle": 2140014
+      },
+      {
+        "age_forced": true,
+        "anchor": 12,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              177921,
+              401534
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              89046,
+              135688
+            ],
+            "task": 12
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190524,
+              401402
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190524,
+              401402
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190524,
+              401402
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190524,
+              401402
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 18
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              178007,
+              401666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              89132,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190524,
+              401402
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 20
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              190524,
+              401402
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              95313,
+              135556
+            ],
+            "task": 21
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 12
+          }
+        ],
+        "commit_cycle": 2293936,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 12
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 13
+          }
+        ],
+        "snapshot_cycle": 2293836
+      },
+      {
+        "age_forced": true,
+        "anchor": 13,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180986,
+              364401
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 13
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180986,
+              364401
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180986,
+              364401
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180986,
+              364401
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 18
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              177986,
+              364665
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              89132,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180986,
+              364401
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 20
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180986,
+              364401
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 21
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              177900,
+              364533
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              89046,
+              135688
+            ],
+            "task": 22
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 13
+          }
+        ],
+        "commit_cycle": 2444680,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 13
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 14
+          }
+        ],
+        "snapshot_cycle": 2444580
+      },
+      {
+        "age_forced": true,
+        "anchor": 14,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180991,
+              314693
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 14
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180991,
+              314693
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180991,
+              314693
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 18
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171640,
+              314957
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180991,
+              314693
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 20
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180991,
+              314693
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 21
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171557,
+              314825
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 22
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              180991,
+              314693
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              90548,
+              135556
+            ],
+            "task": 23
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 14
+          }
+        ],
+        "commit_cycle": 2598502,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 14
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 16
+          }
+        ],
+        "snapshot_cycle": 2598402
+      },
+      {
+        "age_forced": true,
+        "anchor": 16,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              191115,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              191115,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 18
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188109,
+              270988
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              191115,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 20
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              191115,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 21
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188026,
+              270856
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 22
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              191115,
+              270724
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 23
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188193,
+              271120
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 24
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 18
+          }
+        ],
+        "commit_cycle": 2739739,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 16
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 18
+          }
+        ],
+        "snapshot_cycle": 2739639
+      },
+      {
+        "age_forced": true,
+        "anchor": 16,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              174636,
+              518234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 16
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171630,
+              518498
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              174636,
+              518234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 20
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              174636,
+              518234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 21
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171547,
+              518366
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 22
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              174636,
+              518234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              87371,
+              135556
+            ],
+            "task": 23
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171714,
+              518630
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 24
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171547,
+              518366
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 25
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 16
+          }
+        ],
+        "commit_cycle": 2764179,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 16
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 20
+          }
+        ],
+        "snapshot_cycle": 2764079
+      },
+      {
+        "age_forced": false,
+        "anchor": 20,
+        "candidates": [
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188025,
+              271101
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188916,
+              270837
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86312,
+              135556
+            ],
+            "task": 20
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188916,
+              270837
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86312,
+              135556
+            ],
+            "task": 21
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              187942,
+              270969
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 22
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188916,
+              270837
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86312,
+              135556
+            ],
+            "task": 23
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188109,
+              271233
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 24
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              187942,
+              270969
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 25
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188109,
+              271233
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 26
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 21
+          }
+        ],
+        "commit_cycle": 3014804,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 20
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 21
+          }
+        ],
+        "snapshot_cycle": 3014704
+      },
+      {
+        "age_forced": true,
+        "anchor": 19,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171627,
+              519466
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 19
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              172518,
+              520260
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86312,
+              136086
+            ],
+            "task": 20
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171544,
+              519334
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 22
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              172518,
+              520260
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86312,
+              136086
+            ],
+            "task": 23
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171711,
+              519598
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 24
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171544,
+              519334
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 25
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171711,
+              519598
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 26
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171627,
+              519466
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 27
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 19
+          }
+        ],
+        "commit_cycle": 3039497,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 19
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 22
+          }
+        ],
+        "snapshot_cycle": 3039397
+      },
+      {
+        "age_forced": true,
+        "anchor": 20,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              214801,
+              271896
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136086
+            ],
+            "task": 20
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188447,
+              270970
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 22
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              214801,
+              271896
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136086
+            ],
+            "task": 23
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188614,
+              271234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 24
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188447,
+              270970
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 25
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188614,
+              271234
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 26
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              188530,
+              271102
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 27
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              214801,
+              271896
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136086
+            ],
+            "task": 28
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 22
+          }
+        ],
+        "commit_cycle": 3289712,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 20
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 22
+          }
+        ],
+        "snapshot_cycle": 3289612
+      },
+      {
+        "age_forced": true,
+        "anchor": 20,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197896,
+              519537
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 20
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197896,
+              519537
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 23
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171709,
+              517817
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 24
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171542,
+              517553
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85866,
+              135688
+            ],
+            "task": 25
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171709,
+              517817
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              86033,
+              160912
+            ],
+            "task": 26
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171625,
+              517685
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 27
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197896,
+              519537
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 28
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              171625,
+              517685
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              85949,
+              135820
+            ],
+            "task": 29
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 20
+          }
+        ],
+        "commit_cycle": 3315384,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 20
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 25
+          }
+        ],
+        "snapshot_cycle": 3315284
+      },
+      {
+        "age_forced": false,
+        "anchor": 24,
+        "candidates": [
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216887,
+              272953
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 23
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              217176,
+              271233
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              160912
+            ],
+            "task": 24
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216983,
+              270969
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              135688
+            ],
+            "task": 25
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              217176,
+              271233
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              160912
+            ],
+            "task": 26
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              217080,
+              271101
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              135820
+            ],
+            "task": 27
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216887,
+              272953
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 28
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              217080,
+              271101
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              135820
+            ],
+            "task": 29
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216983,
+              270969
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              135688
+            ],
+            "task": 30
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 25
+          }
+        ],
+        "commit_cycle": 3565690,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 24
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 25
+          }
+        ],
+        "snapshot_cycle": 3565590
+      },
+      {
+        "age_forced": true,
+        "anchor": 23,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197893,
+              521439
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 23
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198182,
+              520779
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              161541
+            ],
+            "task": 24
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198182,
+              520779
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              161541
+            ],
+            "task": 26
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198086,
+              520646
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136351
+            ],
+            "task": 27
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197893,
+              521439
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99020,
+              136616
+            ],
+            "task": 28
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198086,
+              520646
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136351
+            ],
+            "task": 29
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197989,
+              520514
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              136219
+            ],
+            "task": 30
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197989,
+              520514
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              136219
+            ],
+            "task": 31
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 23
+          }
+        ],
+        "commit_cycle": 3590599,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 23
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 30
+          }
+        ],
+        "snapshot_cycle": 3590499
+      },
+      {
+        "age_forced": true,
+        "anchor": 24,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              218184,
+              272294
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              161541
+            ],
+            "task": 24
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              218184,
+              272294
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              161541
+            ],
+            "task": 26
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              218088,
+              272161
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136351
+            ],
+            "task": 27
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              236930,
+              272954
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              108551,
+              136616
+            ],
+            "task": 28
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              218088,
+              272161
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136351
+            ],
+            "task": 29
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              217991,
+              272029
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              136219
+            ],
+            "task": 30
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              217991,
+              272029
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              136219
+            ],
+            "task": 31
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              290332,
+              406992
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 30
+          }
+        ],
+        "commit_cycle": 3841647,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 24
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 30
+          }
+        ],
+        "snapshot_cycle": 3841547
+      },
+      {
+        "age_forced": true,
+        "anchor": 24,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198208,
+              523684
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              162170
+            ],
+            "task": 24
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198208,
+              523684
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              162170
+            ],
+            "task": 26
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198112,
+              523551
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136882
+            ],
+            "task": 27
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              216954,
+              523285
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              108551,
+              136616
+            ],
+            "task": 28
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198112,
+              523551
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136882
+            ],
+            "task": 29
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198015,
+              523418
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              136749
+            ],
+            "task": 31
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270356,
+              657323
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              216954,
+              523285
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              108551,
+              136616
+            ],
+            "task": 33
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 24
+          }
+        ],
+        "commit_cycle": 3865592,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 24
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 28
+          }
+        ],
+        "snapshot_cycle": 3865492
+      },
+      {
+        "age_forced": true,
+        "anchor": 26,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216886,
+              273354
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              162170
+            ],
+            "task": 26
+          },
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216790,
+              273221
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136882
+            ],
+            "task": 27
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              250437,
+              272955
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 28
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216790,
+              273221
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              136882
+            ],
+            "task": 29
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              216693,
+              273088
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              136749
+            ],
+            "task": 31
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              289034,
+              406993
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              250437,
+              272955
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 33
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              250437,
+              272955
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 34
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 28
+          }
+        ],
+        "commit_cycle": 4117032,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 26
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 28
+          }
+        ],
+        "snapshot_cycle": 4116932
+      },
+      {
+        "age_forced": true,
+        "anchor": 26,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198183,
+              523681
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99309,
+              162798
+            ],
+            "task": 26
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198087,
+              523547
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              137412
+            ],
+            "task": 27
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              198087,
+              523547
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99213,
+              137412
+            ],
+            "task": 29
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              197990,
+              523414
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              99116,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270331,
+              656261
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231734,
+              522223
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 33
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231734,
+              522223
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 34
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231734,
+              522223
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 35
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 26
+          }
+        ],
+        "commit_cycle": 4141781,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 26
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 33
+          }
+        ],
+        "snapshot_cycle": 4141681
+      },
+      {
+        "age_forced": true,
+        "anchor": 27,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 2,
+            "finish_delay": [
+              240033,
+              274279
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109293,
+              137412
+            ],
+            "task": 27
+          },
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              240033,
+              274279
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109293,
+              137412
+            ],
+            "task": 29
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              239927,
+              274146
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109187,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              292165,
+              406993
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              253568,
+              272955
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 33
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              253568,
+              272955
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 34
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              253568,
+              272955
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              136616
+            ],
+            "task": 35
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              239927,
+              274146
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109187,
+              137279
+            ],
+            "task": 36
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 33
+          }
+        ],
+        "commit_cycle": 4392180,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 27
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 33
+          }
+        ],
+        "snapshot_cycle": 4392080
+      },
+      {
+        "age_forced": true,
+        "anchor": 27,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 1,
+            "finish_delay": [
+              218226,
+              523192
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109293,
+              137412
+            ],
+            "task": 27
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              218226,
+              523192
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109293,
+              137412
+            ],
+            "task": 29
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              218120,
+              523059
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109187,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270358,
+              655906
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231761,
+              522925
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 34
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231761,
+              522925
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 35
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              218120,
+              523059
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              109187,
+              137279
+            ],
+            "task": 36
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231761,
+              522925
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 27
+          }
+        ],
+        "commit_cycle": 4418166,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 27
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 34
+          }
+        ],
+        "snapshot_cycle": 4418066
+      },
+      {
+        "age_forced": true,
+        "anchor": 29,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 2,
+            "finish_delay": [
+              257040,
+              274280
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116721,
+              137412
+            ],
+            "task": 29
+          },
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              256926,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116607,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              294352,
+              406994
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              255755,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 34
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              255755,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 35
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              256926,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116607,
+              137279
+            ],
+            "task": 36
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              255755,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              255755,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 34
+          }
+        ],
+        "commit_cycle": 4667584,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 29
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 34
+          }
+        ],
+        "snapshot_cycle": 4667484
+      },
+      {
+        "age_forced": true,
+        "anchor": 29,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 1,
+            "finish_delay": [
+              233013,
+              522436
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116721,
+              137412
+            ],
+            "task": 29
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              232899,
+              522303
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116607,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270325,
+              655150
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231728,
+              522169
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 35
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              232899,
+              522303
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116607,
+              137279
+            ],
+            "task": 36
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231728,
+              522169
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231728,
+              522169
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              232899,
+              522303
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              116607,
+              137279
+            ],
+            "task": 39
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 29
+          }
+        ],
+        "commit_cycle": 4694362,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 29
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 35
+          }
+        ],
+        "snapshot_cycle": 4694262
+      },
+      {
+        "age_forced": true,
+        "anchor": 31,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 2,
+            "finish_delay": [
+              269562,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121908,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              296407,
+              406994
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              257810,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 35
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              269562,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121908,
+              137279
+            ],
+            "task": 36
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              257810,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              257810,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              269562,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121908,
+              137279
+            ],
+            "task": 39
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              257810,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 35
+          }
+        ],
+        "commit_cycle": 4942713,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 31
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 35
+          }
+        ],
+        "snapshot_cycle": 4942613
+      },
+      {
+        "age_forced": true,
+        "anchor": 31,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 1,
+            "finish_delay": [
+              243492,
+              521422
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121908,
+              137279
+            ],
+            "task": 31
+          },
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270337,
+              654269
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              243492,
+              521422
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121908,
+              137279
+            ],
+            "task": 36
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231740,
+              521288
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231740,
+              521288
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              243492,
+              521422
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121908,
+              137279
+            ],
+            "task": 39
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231740,
+              521288
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231740,
+              521288
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 31
+          }
+        ],
+        "commit_cycle": 4970468,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 31
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 37
+          }
+        ],
+        "snapshot_cycle": 4970368
+      },
+      {
+        "age_forced": true,
+        "anchor": 32,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 2,
+            "finish_delay": [
+              297599,
+              406994
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              279218,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              137279
+            ],
+            "task": 36
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              259002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              259002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              279218,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              137279
+            ],
+            "task": 39
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              259002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              259002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              259002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 36
+          }
+        ],
+        "commit_cycle": 5218088,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 32
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 36
+          }
+        ],
+        "snapshot_cycle": 5217988
+      },
+      {
+        "age_forced": true,
+        "anchor": 32,
+        "candidates": [
+          {
+            "age": 11,
+            "eligible_mask": 1,
+            "finish_delay": [
+              270347,
+              654076
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              135553,
+              241566
+            ],
+            "task": 32
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231750,
+              521095
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231750,
+              521095
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              251966,
+              521229
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              137279
+            ],
+            "task": 39
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231750,
+              521095
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231750,
+              521095
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231750,
+              521095
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              251966,
+              521229
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              126148,
+              137279
+            ],
+            "task": 43
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 32
+          }
+        ],
+        "commit_cycle": 5246231,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 32
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 37
+          }
+        ],
+        "snapshot_cycle": 5246131
+      },
+      {
+        "age_forced": false,
+        "anchor": 44,
+        "candidates": [
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270139,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270139,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              296703,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129328,
+              137279
+            ],
+            "task": 39
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270139,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270139,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270139,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              296703,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129328,
+              137279
+            ],
+            "task": 43
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              296829,
+              274280
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129454,
+              137412
+            ],
+            "task": 44
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 44
+          }
+        ],
+        "commit_cycle": 5490602,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 1,
+            "due": true,
+            "task": 44
+          },
+          {
+            "core": 0,
+            "due": false,
+            "task": 37
+          }
+        ],
+        "snapshot_cycle": 5490502
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231709,
+              512017
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231709,
+              512017
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              258273,
+              512151
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129328,
+              137279
+            ],
+            "task": 39
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231709,
+              512017
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231709,
+              512017
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231709,
+              512017
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              258273,
+              512151
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129328,
+              137279
+            ],
+            "task": 43
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231709,
+              512017
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 39
+          }
+        ],
+        "commit_cycle": 5528277,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 1,
+            "due": false,
+            "task": 37
+          },
+          {
+            "core": 0,
+            "due": true,
+            "task": 39
+          }
+        ],
+        "snapshot_cycle": 5528177
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 9,
+            "eligible_mask": 2,
+            "finish_delay": [
+              268357,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              268357,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 38
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              268357,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              268357,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              268357,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              294921,
+              274147
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129328,
+              137279
+            ],
+            "task": 43
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              268357,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              295173,
+              274414
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129580,
+              162798
+            ],
+            "task": 46
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 38
+          }
+        ],
+        "commit_cycle": 5767219,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 37
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 38
+          }
+        ],
+        "snapshot_cycle": 5767119
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231757,
+              512666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231757,
+              512666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231757,
+              512666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231757,
+              512666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              258321,
+              513858
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129328,
+              137809
+            ],
+            "task": 43
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231757,
+              512666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              258573,
+              514126
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              129580,
+              163427
+            ],
+            "task": 46
+          },
+          {
+            "age": 0,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231757,
+              512666
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 46
+          }
+        ],
+        "commit_cycle": 5804183,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 1,
+            "due": false,
+            "task": 37
+          },
+          {
+            "core": 0,
+            "due": true,
+            "task": 46
+          }
+        ],
+        "snapshot_cycle": 5804083
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 11,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 40
+          },
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              300821,
+              275205
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              131448,
+              137809
+            ],
+            "task": 43
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 1,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 0,
+            "eligible_mask": 2,
+            "finish_delay": [
+              270025,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 100,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 40
+          }
+        ],
+        "commit_cycle": 6042504,
+        "committed": true,
+        "comparisons": 14,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 37
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 40
+          }
+        ],
+        "snapshot_cycle": 6042404
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 12,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231702,
+              511282
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231702,
+              511282
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 7,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231702,
+              511282
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              262498,
+              512474
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              131448,
+              137809
+            ],
+            "task": 43
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231702,
+              511282
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 2,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231702,
+              511282
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 1,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231702,
+              511282
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 88,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 43
+          }
+        ],
+        "commit_cycle": 6080563,
+        "committed": true,
+        "comparisons": 12,
+        "proposed": [
+          {
+            "core": 1,
+            "due": false,
+            "task": 37
+          },
+          {
+            "core": 0,
+            "due": true,
+            "task": 43
+          }
+        ],
+        "snapshot_cycle": 6080475
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 13,
+            "eligible_mask": 2,
+            "finish_delay": [
+              271002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 9,
+            "eligible_mask": 2,
+            "finish_delay": [
+              271002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 41
+          },
+          {
+            "age": 8,
+            "eligible_mask": 2,
+            "finish_delay": [
+              271002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              271002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 3,
+            "eligible_mask": 2,
+            "finish_delay": [
+              271002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 2,
+            "eligible_mask": 2,
+            "finish_delay": [
+              271002,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 76,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 41
+          }
+        ],
+        "commit_cycle": 6317959,
+        "committed": true,
+        "comparisons": 10,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 37
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 41
+          }
+        ],
+        "snapshot_cycle": 6317883
+      },
+      {
+        "age_forced": true,
+        "anchor": 37,
+        "candidates": [
+          {
+            "age": 14,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231705,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 37
+          },
+          {
+            "age": 9,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231705,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231705,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 4,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231705,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 3,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231705,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 64,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 37
+          }
+        ],
+        "commit_cycle": 6356340,
+        "committed": true,
+        "comparisons": 8,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 37
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 42
+          }
+        ],
+        "snapshot_cycle": 6356276
+      },
+      {
+        "age_forced": true,
+        "anchor": 42,
+        "candidates": [
+          {
+            "age": 10,
+            "eligible_mask": 2,
+            "finish_delay": [
+              265891,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              265891,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 45
+          },
+          {
+            "age": 5,
+            "eligible_mask": 2,
+            "finish_delay": [
+              265891,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 4,
+            "eligible_mask": 2,
+            "finish_delay": [
+              265891,
+              274013
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 52,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 45
+          }
+        ],
+        "commit_cycle": 6593404,
+        "committed": true,
+        "comparisons": 6,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 42
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 45
+          }
+        ],
+        "snapshot_cycle": 6593352
+      },
+      {
+        "age_forced": true,
+        "anchor": 42,
+        "candidates": [
+          {
+            "age": 11,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231673,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 42
+          },
+          {
+            "age": 6,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231673,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 5,
+            "eligible_mask": 1,
+            "finish_delay": [
+              231673,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              115964,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 40,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 42
+          }
+        ],
+        "commit_cycle": 6631804,
+        "committed": true,
+        "comparisons": 4,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 42
+          },
+          {
+            "core": 1,
+            "due": false,
+            "task": 47
+          }
+        ],
+        "snapshot_cycle": 6631764
+      },
+      {
+        "age_forced": false,
+        "anchor": 47,
+        "candidates": [
+          {
+            "age": 7,
+            "eligible_mask": 2,
+            "finish_delay": [
+              278040,
+              273950
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121260,
+              137145
+            ],
+            "task": 47
+          },
+          {
+            "age": 6,
+            "eligible_mask": 2,
+            "finish_delay": [
+              278040,
+              273950
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121260,
+              137145
+            ],
+            "task": 48
+          }
+        ],
+        "charged_cycles": 28,
+        "chosen": [
+          {
+            "core": 1,
+            "task": 48
+          }
+        ],
+        "commit_cycle": 6868617,
+        "committed": true,
+        "comparisons": 2,
+        "proposed": [
+          {
+            "core": 0,
+            "due": false,
+            "task": 47
+          },
+          {
+            "core": 1,
+            "due": true,
+            "task": 48
+          }
+        ],
+        "snapshot_cycle": 6868589
+      },
+      {
+        "age_forced": true,
+        "anchor": 47,
+        "candidates": [
+          {
+            "age": 8,
+            "eligible_mask": 1,
+            "finish_delay": [
+              242259,
+              511030
+            ],
+            "potential_mask": 3,
+            "standalone_service": [
+              121260,
+              137145
+            ],
+            "task": 47
+          }
+        ],
+        "charged_cycles": 20,
+        "chosen": [
+          {
+            "core": 0,
+            "task": 47
+          }
+        ],
+        "commit_cycle": 6906971,
+        "committed": true,
+        "comparisons": 2,
+        "proposed": [
+          {
+            "core": 0,
+            "due": true,
+            "task": 47
+          }
+        ],
+        "snapshot_cycle": 6906951
+      }
+    ],
+    "control_cycles": 4458,
+    "deferred_placements": 46,
+    "estimate_saturations": 0,
+    "initial_fill_wait_cycles": 7,
+    "late_floor_blocked_core_cycles": 2660085,
+    "max_bypass": 14,
+    "no_eligible_cycles": 6692884,
+    "pair_comparisons": 611,
+    "paired_rounds": 1,
+    "preferred_core_wait_cycles": 0,
+    "reordered_bindings": 26,
+    "revalidation_cancellations": 0,
+    "single_rounds": 47,
+    "snapshot_candidate_sum": 356,
+    "snapshot_count": 48
+  },
+  "late_bind_wait_cycles": 0,
+  "model_limitations": [
+    "HBM is aggregate bandwidth plus fixed response latency, not channel/row timing",
+    "vector and copy phases are conservatively charged as read/service/write without overlap",
+    "candidate scalar cost heuristic, not optimal dispatch",
+    "timing/payload are separately verified, not a unified native emulator"
+  ],
+  "numerical_validation": "separate address-payload tests; this timing run does not execute numerical tensors",
+  "ownership_k_order_capacity_checks": true,
+  "pending_window_peak": 8,
+  "physical_budget": {
+    "acc_banks": [
+      10,
+      6
+    ],
+    "acc_bytes": [
+      1048576,
+      1048576
+    ],
+    "control_bytes": [
+      2176,
+      2176
+    ],
+    "feedback_state_bytes": 96,
+    "joint_state_bytes": 256,
+    "weight_banks": [
+      32,
+      32
+    ],
+    "weight_slots": [
+      5,
+      5
+    ],
+    "x_banks": [
+      20,
+      12
+    ]
+  },
+  "prefetch_gate_wait_core_cycles": {
+    "current_requests_unsent": 0,
+    "ready_tiles_at_or_above_threshold": 0
+  },
+  "resource_conditions": {
+    "extra_credit_tag_bytes": 0,
+    "extra_return_bytes": 0,
+    "not_eligible_for_equal_budget_claim": false,
+    "over_budget_credit_diagnostic": false
+  },
+  "schema": "plena_dispatch_analytical_v1",
+  "scope": "routed MoE from resident inputs/routes to ordered combine; analytical HBM, not Ramulator; timing metadata, separate payload tests",
+  "supply_diagnostics": {
+    "cores": [
+      {
+        "idle_reason_and_other_phase": {
+          "0": 10290,
+          "1": 2418,
+          "100": 3207,
+          "1000": 3861,
+          "1001": 404,
+          "1002": 133,
+          "1003": 431474,
+          "1005": 49377,
+          "1006": 30290,
+          "1007": 286496,
+          "103": 1934,
+          "105": 3913,
+          "106": 3341,
+          "107": 146195,
+          "1100": 5792,
+          "1101": 450,
+          "1103": 563418,
+          "1105": 52881,
+          "1106": 31333,
+          "1107": 385788,
+          "1200": 1286,
+          "1400": 8205,
+          "1401": 72,
+          "1403": 513758,
+          "1405": 54660,
+          "1406": 13606,
+          "1407": 385822,
+          "1500": 770,
+          "1600": 9863,
+          "2": 161,
+          "200": 4467,
+          "3": 3365,
+          "3000": 13,
+          "3001": 11,
+          "3002": 169,
+          "3003": 505,
+          "3005": 86,
+          "3007": 363,
+          "3103": 353,
+          "3105": 93,
+          "3106": 15,
+          "3107": 60,
+          "3400": 5,
+          "3403": 1582,
+          "3405": 690,
+          "3406": 1,
+          "3407": 957,
+          "400": 465,
+          "401": 289,
+          "403": 4583,
+          "405": 1201,
+          "406": 201,
+          "407": 17597,
+          "5": 7946,
+          "500": 2400,
+          "6": 5405,
+          "600": 418,
+          "7": 338399
+        },
+        "next_denied_for_current_depth": 0,
+        "no_accept_cycles": 3392837,
+        "observed_cycles": 7163678,
+        "phase_ahead_tiles": 0,
+        "slot_occupancy_cycles": {
+          "1004": 7289,
+          "104": 11229,
+          "1103": 1316,
+          "2003": 3639,
+          "2102": 1160,
+          "3002": 4242,
+          "3101": 1429,
+          "4001": 8667,
+          "4100": 1167,
+          "5": 10987,
+          "5000": 7112553
+        },
+        "tier0_eligible_cycles": 0,
+        "tier0_episodes": 0,
+        "tier_grants": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "idle_reason_and_other_phase": {
+          "0": 7848,
+          "1": 29559,
+          "100": 4831,
+          "1000": 15317,
+          "1001": 34531,
+          "1002": 197,
+          "1003": 663358,
+          "1005": 114435,
+          "1006": 74693,
+          "1007": 383224,
+          "101": 29370,
+          "103": 3453,
+          "105": 16305,
+          "106": 10158,
+          "107": 143756,
+          "1100": 15136,
+          "1101": 33904,
+          "1103": 606464,
+          "1105": 112268,
+          "1106": 67989,
+          "1107": 380234,
+          "1200": 1478,
+          "1400": 16969,
+          "1401": 22108,
+          "1403": 498933,
+          "1405": 147265,
+          "1406": 33964,
+          "1407": 323845,
+          "1500": 755,
+          "1600": 3,
+          "2": 1686,
+          "200": 3720,
+          "3": 2567,
+          "3000": 330,
+          "3001": 6233,
+          "3002": 116,
+          "3003": 23398,
+          "3005": 4063,
+          "3006": 570,
+          "3007": 22610,
+          "3100": 309,
+          "3101": 5524,
+          "3103": 22226,
+          "3105": 3427,
+          "3106": 482,
+          "3107": 21589,
+          "3400": 470,
+          "3401": 5651,
+          "3403": 24244,
+          "3405": 11252,
+          "3406": 123,
+          "3407": 24586,
+          "400": 6264,
+          "401": 32280,
+          "403": 12739,
+          "405": 27308,
+          "406": 8606,
+          "407": 163238,
+          "5": 16212,
+          "500": 7811,
+          "6": 12286,
+          "600": 212,
+          "7": 144022
+        },
+        "next_denied_for_current_depth": 0,
+        "no_accept_cycles": 4408504,
+        "observed_cycles": 7163678,
+        "phase_ahead_tiles": 0,
+        "slot_occupancy_cycles": {
+          "1004": 5848,
+          "104": 3206,
+          "1103": 705,
+          "2003": 3548,
+          "2102": 753,
+          "3002": 2918,
+          "3101": 521,
+          "4001": 8006,
+          "4100": 13,
+          "5": 30852,
+          "5000": 7107308
+        },
+        "tier0_eligible_cycles": 0,
+        "tier0_episodes": 0,
+        "tier_grants": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "credit_completions": 27033600,
+    "credit_lease_cycles_max": 77,
+    "credit_lease_cycles_sum": 1766330624
+  },
+  "tail_partition_count": 0,
+  "time_ms_at_1ghz": 7.177023,
+  "trace": [],
+  "useful_macs": 1107296256,
+  "weight_bytes": 865075200,
+  "workload": "joint_test_bfcl_b16_l13_s7"
+}

@@ -1,0 +1,28 @@
+{
+  "arbiter": "stock",
+  "control_cost": true,
+  "credits": 256,
+  "dispatch": "joint",
+  "dot_tail_ns": 20,
+  "group": 4,
+  "hbm_bytes_per_ns": 256,
+  "hbm_latency_ns": 64,
+  "ideal_hbm": false,
+  "ideal_onchip": false,
+  "joint_age_limit": 8,
+  "joint_feedback": true,
+  "joint_late_bind": true,
+  "joint_margin_cycles": 64,
+  "joint_pairing": true,
+  "lanes": [
+    6
+  ],
+  "next_prefetch": true,
+  "onchip_bytes_per_ns": 384,
+  "record_trace": false,
+  "runtime_fsm": true,
+  "split": "none",
+  "tail_partition": false,
+  "vector_elements_per_ns": 32,
+  "window": 8
+}

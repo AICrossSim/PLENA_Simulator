@@ -1,6 +1,24 @@
 # Heterogeneous MoE dispatch: analytical execution model
 
-Research branch: `research/moe-heterogeneous-dispatch`.
+Research branch: `research/moe-joint-runtime` (Compiler and Simulator).
+
+## Current review entry points
+
+- [Joint runtime architecture and storage contract](JOINT_RUNTIME_DESIGN.md):
+  bounded task matching, delayed ownership/landing-slot commitment and local feedback.
+- [Frozen experiment results and replay instructions](results/joint_runtime_20260930/README.md):
+  M6/M8 configurations, independent routing windows, policy ablations, capacity
+  diagnostics and six complete replay cases.
+- [Residual-capacity admission results](results/SURPLUS_ADMISSION_20260930_ZH.md):
+  the earlier four-rule experiment, including regressions and large-batch
+  capacity failures. It is a separate experiment; joint does not enable these
+  rules simultaneously.
+
+The latest joint study uses `dispatch="joint"`; the executable's default policy
+is retained for historical reproducibility. Neither heterogeneous configuration
+beats both matched single-core and homogeneous references on the independent
+test set. The new 1.25/0.75 MiB storage split discussed after these experiments
+is a proposal, not an implemented or measured configuration.
 
 This prototype compares `6`, `3+3`, and `4+2` M-lane organizations under equal
 aggregate arithmetic, SRAM, bank and supply budgets. It consumes explicit
@@ -12,8 +30,10 @@ atomic whole-expert ownership, one prefetched tile per Next, stable DMA requests
 under backpressure, shared credits released after SRAM landing, and ordered K
 updates. X reuse, private SRAM, accumulator banks and result inboxes are retained.
 Historical paired-column splitting remains under `runtime_fsm=false` only.
-Descriptor selection and copies are charged. The predictor is a shape/service heuristic,
-**not an online-trained predictor**.
+Descriptor selection and copies are charged. The original dynamic policy is a
+shape/service heuristic. Optional feedback and joint policies additionally
+calibrate service estimates from completed local tasks; they do not predict
+expert IDs or use a neural predictor.
 
 This is a standalone analytical crate, not the native transactional-emulator
 backend. Router/attention latency, pretrained weight execution, Ramulator,

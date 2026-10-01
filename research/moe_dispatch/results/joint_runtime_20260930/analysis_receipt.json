@@ -1,0 +1,11 @@
+{
+  "analysis_script_sha256": "0118c3f3493f20423005784a4ca148ad4640dbeaef63d239ac9c2d8708e1f799",
+  "conclusions_sha256": "163a98d4ea811f23749fdf2caf2479913f01965f7e4c9bea30bb6256a2e3a27d",
+  "input_rows_sha256": "5cdf020e9aee109874551a6e63514b81cb8357b6936cddac38d1e149dd38310d",
+  "measured_source_bundle_sha256": "97bada6c75dd89b60aa223209f496b2552ac9a4377f6428b8853df575db71997",
+  "note": "Postprocessing-only validation/wording changes after timing freeze; no runtime parameters or raw inputs changed. Archive-local point directories are preferred; stored absolute paths remain provenance.",
+  "plan_sha256": "a749a62e13cf33a81a77284e3440b3ed9ded9069632bd1cecc2fe8bc1bf51087",
+  "resource_checks_sha256": "6714dd4e58c902cb6c41930af81dbf133d1f9d898ab6dca7f8c37c034a2798e8",
+  "runtime_binary_sha256": "21b2b8e23d25fa74928dc5b7c2b30916d902ba66ea3d1c9a7bc769a3fcea9949",
+  "scope": "test"
+}

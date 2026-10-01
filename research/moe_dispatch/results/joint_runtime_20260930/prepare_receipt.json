@@ -1,0 +1,11 @@
+{
+  "note": "Manifest is frozen before new timing; hardware inherited from an earlier study.",
+  "sha256": {
+    "frozen_hardware.json": "3ed21accf3f497e56a72336b9ea89850d3de6fc60a21310f9a1f456029a6ec62",
+    "inputs/development_workloads.json": "530690572dceabd77c541f480c72dcf058531e1a3785abdc1fcd5230a187f1c8",
+    "inputs/test_workloads.json": "f3bb566a667b44882a1c4f0d02ecfa823b7c9bed93a772e24fbee752b2b6855a",
+    "plan.json": "a749a62e13cf33a81a77284e3440b3ed9ded9069632bd1cecc2fe8bc1bf51087",
+    "workload_manifest.json": "1b0079d9400c934039881660f924ace5ac158f8346d54e86595f6f1d46ec7ebe"
+  },
+  "timing_seen": false
+}

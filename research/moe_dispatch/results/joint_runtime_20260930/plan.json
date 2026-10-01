@@ -1,0 +1,31 @@
+{
+  "ablations": [
+    "joint_no_late",
+    "joint_no_pair",
+    "joint_no_feedback",
+    "joint_no_prefetch"
+  ],
+  "control": "joint_state_bytes=256; control_bytes total=4352; reserved identically for every policy; feedback_state_bytes=96 remains separately accounted.",
+  "development": "Earlier four design windows only. Earlier heldout was seen and is not reused as an independent test.",
+  "hardware": "Six prior frozen physical/G configurations, each retained unchanged except common 256 B joint-control reserve within the existing 2 MiB arena. No further hardware search.",
+  "input": "Stable Shared-first expert descriptors for every policy, otherwise existing routed expert order. One descriptor/cycle and bounded 8-entry window remain. Original Shared-last ordering is a development diagnostic.",
+  "joint_parameters": "Default bounded joint controller: late binding, pair choice, completion feedback enabled; age_limit=8, margin=64 cycles. No per-organization tuning.",
+  "main_policies": [
+    "fifo",
+    "dynamic",
+    "feedback",
+    "joint",
+    "window_lpt_ect",
+    "selected_tail_reference"
+  ],
+  "predictor_state": "Cold reset per independent window; updates only from completed tasks. No claim of training over earlier requests.",
+  "references": "window_lpt_ect uses the same bounded joint window with pairing, late binding and feedback disabled; it is a critical-task plus ECT baseline, not a HEFT DAG implementation. selected_tail_reference uses feedback with the previous frozen tail flag and the same new control reserve.",
+  "repetition": "Exactly two executions; complete raw JSON byte equality required. Host wall time is not simulated latency.",
+  "reporting": "Paired per-window latency and geometric mean speedups, worst slowdown, decision opportunity, prediction error, Shared binding, storage/bytes/checks; no additive global wall-time interpretation of per-core overlapping counters.",
+  "schema": "plena_joint_runtime_study_v1",
+  "scope": "Captured DeepSeek-V2-Lite decode routing; analytical complete FFN with router excluded. Not native Ramulator, pretrained numerical execution, or full model inference.",
+  "supply": "256 B/ns, 64 ns response, 256 shared 32 B credits, stock arbitration, finite SRAM landing. Current/Next prefetch enabled except declared ablation.",
+  "task_granularity": "Whole experts only, tail_partition=false for every primary policy and ablation; selected_tail_reference separately preserves the prior frozen tail setting.",
+  "test_count": "12 fresh windows x 6 frozen hardware x 10 policies x 2 repeats = 1440 executions.",
+  "test_selection": "Exclude all request identities in previous robust manifest; sort valid decode-step7 requests by SHA256(plena-runtime-v2:dataset:sample_id). Take disjoint consecutive groups B2/B4/B8/B16 in each of BFCL/GPQA/SWE, all layer13. No performance or route-hotness selection."
+}

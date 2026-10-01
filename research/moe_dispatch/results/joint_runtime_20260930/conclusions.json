@@ -1,0 +1,55 @@
+{
+  "checks": {
+    "all_resource_checks_passed": true,
+    "binary_sha256": "21b2b8e23d25fa74928dc5b7c2b30916d902ba66ea3d1c9a7bc769a3fcea9949",
+    "complete": true,
+    "completed_runs": 1440,
+    "control_reserved_bytes": 4352,
+    "declared_points": 720,
+    "drained_points": 720,
+    "full_json_identical_pairs": 720,
+    "hbm_bytes_equal_across_all_organizations_and_policies": true,
+    "joint_state_reserved_bytes": 256,
+    "native_ramulator": false,
+    "numerical_scope": "Separate small seeded timed-trace replay tests; real-route timing is metadata-only.",
+    "scope": "test",
+    "source_bundle_sha256": "97bada6c75dd89b60aa223209f496b2552ac9a4377f6428b8853df575db71997",
+    "useful_macs_equal": true
+  },
+  "complete": true,
+  "limits": [
+    "One model, three captured datasets, offline request rebatching, layer13 decode-step7 for fresh test.",
+    "No actual full-model inference, router timing, native HBM/Ramulator channel timing, or pretrained numerical tensors.",
+    "Predictor state resets each window; no claim of cross-request training.",
+    "No area/power/Fmax synthesis. All policies reserve identical extra256B control state inside the fixed2MiB arena.",
+    "Front-end/control counters overlap other activity and cannot be summed into global latency.",
+    "next_prefetch_tiles counts reservations; actual prefetch usefulness uses readiness/inflight at promotion."
+  ],
+  "organization": [
+    {
+      "budget": "M6",
+      "heterogeneous_faster_geomean_than_both_with_same_joint_policy": false,
+      "heterogeneous_shape": "4+2",
+      "interpretation": "These are measured analytical comparisons, not evidence of global optimality or area/energy superiority.",
+      "joint_heterogeneous_speedup_over_joint_homogeneous": 1.0177828265556386,
+      "joint_heterogeneous_speedup_over_joint_monolithic": 0.9987718990488114,
+      "joint_speedup_over_prior_selected_tail_reference": 1.0193257967419194,
+      "joint_speedup_over_same_hardware_dynamic": 1.019342648973011,
+      "joint_speedup_over_same_window_lpt_ect": 1.0293900028565188
+    },
+    {
+      "budget": "M8",
+      "heterogeneous_faster_geomean_than_both_with_same_joint_policy": false,
+      "heterogeneous_shape": "5+3",
+      "interpretation": "These are measured analytical comparisons, not evidence of global optimality or area/energy superiority.",
+      "joint_heterogeneous_speedup_over_joint_homogeneous": 0.9862612244094275,
+      "joint_heterogeneous_speedup_over_joint_monolithic": 0.9834726615518934,
+      "joint_speedup_over_prior_selected_tail_reference": 1.0033483074754797,
+      "joint_speedup_over_same_hardware_dynamic": 1.0019814975099448,
+      "joint_speedup_over_same_window_lpt_ect": 0.9995899408579322
+    }
+  ],
+  "scope": "test",
+  "selection": "No policy or hardware selected from these results; every declared policy reported.",
+  "source_order_diagnostic_points": 120
+}
