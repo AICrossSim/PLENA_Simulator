@@ -1285,6 +1285,15 @@ impl Engine {
                 continue;
             }
             let old_offset=task.offset;let old_count=task.plan.tiles.len();let mut wasted=0;
+            // Next now holds a real activation reservation before prefetch.
+            // A steal is restricted above to an unstarted, action-zero task:
+            // these arenas contain no produced values and can be returned.
+            // Accepted weight response leases remain with the original owner
+            // until the normal discard drain; they are never released here.
+            let old_acc=self.accumulator_footprint(t);let (old_z,old_u)=self.context_footprint(t);
+            if let Some(a)=self.tasks[t].acc_addr.take(){self.cores[src].acc_arena.release(a,old_acc);}
+            if let Some(a)=self.tasks[t].z_addr.take(){self.z_arena.release(a,old_z);}
+            if let Some(a)=self.tasks[t].u_addr.take(){if old_u>0{self.u_arena.release(a,old_u);}}
             for idx in old_offset..old_offset+old_count{
                 if self.tiles[idx].addr.is_some(){self.tiles[idx].discarded=true;wasted+=self.tiles[idx].sent as u64;if self.tiles[idx].landed==self.tiles[idx].sent{self.release_discarded(idx);}}
             }
@@ -1410,93 +1419,120 @@ impl Engine {
         let mut active=self.active_tasks();
         active.sort_by_key(|&t|if self.cfg.w_reuse{usize::from(self.cores[self.tasks[t].core].cur==Some(t))}else{usize::from(self.cores[self.tasks[t].core].cur!=Some(t))});
         for tid in active {
-            let c = self.tasks[tid].core;
-            let offset = self.tasks[tid].offset;
-            let no_ahead=!self.cfg.quota||!self.cfg.pipeline;
-            if no_ahead && self.cores[c].cur!=Some(tid){continue;}
-            if !self.cfg.w_reuse&&self.cores[c].cur!=Some(tid){
-                // A refill group keeps its pool bytes until every M block has
-                // consumed them. Partial Next admission must not use the hard
-                // capacity needed to finish either Current's immediate group.
-                // Admission is atomic for this bounded Next group; no live
-                // payload is evicted or released to repair a capacity wait.
-                let target=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);
-                let next_bytes=(self.tasks[tid].admit..target).map(|i|self.pool_reservation(self.tiles[offset+i].spec.bytes)).sum::<usize>();
-                let current_bytes=self.cores.iter().filter_map(|core|core.cur).map(|current|{
-                    let task=&self.tasks[current];
-                    task.plan.actions[task.action..].iter().find_map(|a|if let Action::Group(g)=a{Some((g.first_tile..g.first_tile+g.tile_count).filter(|&i|i>=task.admit).map(|i|self.pool_reservation(self.tiles[task.offset+i].spec.bytes)).sum::<usize>())}else{None}).unwrap_or(0)
-                }).sum::<usize>();
-                let (lo,hi)=if self.cfg.byte_pool{(0,self.cfg.pool)}else{self.pool_partition(c)};
-                let free=self.pool.ranges.iter().map(|&(a,b)|(a+b).min(hi).saturating_sub(a.max(lo))).sum::<usize>();
-                if next_bytes+current_bytes>free||self.cores[c].live+next_bytes>self.cores[c].quota{continue;}
-            }
-            if !self.cfg.byte_pool&&self.cores[c].cur!=Some(tid){
-                // A static partition cannot lend another core's idle slots.
-                // Admit a Next head only as an entire bounded group, and only
-                // if both compute contexts can really share the fixed arena.
-                // Otherwise an unusable partial Next pins the whole partition.
-                let Some(current)=self.cores[c].cur else{continue;};
-                if self.accumulator_footprint(current)+self.accumulator_footprint(tid)>self.core_acc_capacity(c){continue;}
-                let current_ready=self.group_at(current,self.tasks[current].action).is_none_or(|g|(g.first_tile..g.first_tile+g.tile_count).all(|i|self.tiles[self.tasks[current].offset+i].loaded));
-                if !current_ready{continue;}
-                let target=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);
-                let needed=(self.tasks[tid].admit..target).map(|i|self.pool_reservation(self.tiles[offset+i].spec.bytes)).sum::<usize>();let (lo,hi)=self.pool_partition(c);let free=self.pool.ranges.iter().map(|&(a,b)|(a+b).min(hi).saturating_sub(a.max(lo))).sum::<usize>();
-                if needed>free||self.cores[c].live+needed>self.cores[c].quota{continue;}
-            }
+            let c=self.tasks[tid].core;
+            let offset=self.tasks[tid].offset;
+            let current=self.cores[c].cur==Some(tid);
+            let no_ahead=!self.cfg.quota || !self.cfg.pipeline;
+            if !current && no_ahead { continue; }
+            let head=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter()
+                .find_map(|a|if let Action::Group(g)=a{Some(g.clone())}else{None});
             let mut count=self.tasks[tid].plan.tiles.len();
-            if !self.cfg.w_reuse {count=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);}
-            if self.cores[c].cur!=Some(tid){count=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);}
-            if no_ahead {
-                count=self.group_at(tid,self.tasks[tid].action).map_or(self.tasks[tid].admit,|g|g.first_tile+g.tile_count);
-            } else if self.cfg.quota_policy=="fixed_one_tile" {
-                // Current can complete its required group; Next may prefetch
-                // only its first tile, rather than borrowing the full pool.
-                count=if self.cores[c].cur!=Some(tid){1}else{self.group_at(tid,self.tasks[tid].action).map_or(self.tasks[tid].admit,|g|g.first_tile+g.tile_count)};
+            if !self.cfg.w_reuse || !current || no_ahead {
+                count=head.as_ref().map_or(self.tasks[tid].admit,|g|g.first_tile+g.tile_count);
             }
-            while self.tasks[tid].admit < count {
-                let idx = offset + self.tasks[tid].admit;
-                let b = self.tiles[idx].spec.bytes;
-                let reserved=self.pool_reservation(b);
-                let limit = if self.cfg.quota {
-                    self.cores[c].quota
-                } else if self.cfg.byte_pool {
-                    self.cfg.pool
-                } else {
-                    let (lo,hi)=self.pool_partition(c);hi-lo
-                };
-                // Reserve one legal head tile for the other context. This also
-                // works when a whole group exceeds the pool quota. Swapping a
-                // full-quota Current for
-                // a zero-prefetched Next leaves both contexts unable to progress.
-                let other=if self.cores[c].cur==Some(tid){None}else{self.cores[c].cur};
-                let current_reserve=other.map_or(0,|o|self.tasks[o].plan.actions[self.tasks[o].action..].iter().find_map(|a|if let Action::Group(g)=a{Some({let i=(g.first_tile+self.tasks[o].tile_in_group).max(self.tasks[o].admit);if i<g.first_tile+g.tile_count{self.pool_reservation(self.tiles[self.tasks[o].offset+i].spec.bytes)}else{0}})}else{None}).unwrap_or(0));
-                let required_current=self.cores[c].cur==Some(tid)&&self.group_at(tid,self.tasks[tid].action).is_some_and(|g|idx>=offset+g.first_tile&&idx<offset+g.first_tile+g.tile_count);
-                // Quotas are targets for unreserved capacity, not revocable
-                // leases. A stage transition may shrink a quota below a
-                // bounded Next head already held by this core. The real
-                // Current group can borrow actually free pool bytes to break
-                // that cycle; future lookahead and Next cannot do so.
-                let borrow=self.cfg.quota&&required_current&&self.cores[c].live+reserved>limit;
-                if self.cores[c].live + reserved + current_reserve > limit && !borrow {
-                    self.pool_quota_denials += 1;
-                    break;
+            if self.cfg.quota_policy=="fixed_one_tile" && !no_ahead {
+                count=if current {head.as_ref().map_or(self.tasks[tid].admit,|g|g.first_tile+g.tile_count)}else{1};
+            }
+            while self.tasks[tid].admit<count {
+                let first=self.tasks[tid].admit;
+                let Some(g)=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{
+                    (first>=g.first_tile && first<g.first_tile+g.tile_count).then_some(g.clone())
+                }else{None})else{break;};
+                // An offloaded frame cannot drain until its helper is idle.
+                // Do not let it pin the helper's own next frame, or admit
+                // still later owner lookahead past this resource barrier.
+                let service=self.service_core(c,g.kind);
+                if service!=c && self.cores[service].cur.is_some() {break;}
+                let end=(g.first_tile+g.tile_count).min(count);
+                let need=(first..end).map(|i|self.pool_reservation(self.tiles[offset+i].spec.bytes)).sum::<usize>();
+                let limit=if self.cfg.quota {self.cores[c].quota}else if self.cfg.byte_pool {self.cfg.pool}else{let(lo,hi)=self.pool_partition(c);hi-lo};
+                let required=current && self.group_at(tid,self.tasks[tid].action).is_some_and(|h|h.first_tile==g.first_tile);
+                let borrow=self.cfg.quota && required && self.cores[c].live+need>limit;
+                if self.cores[c].live+need>limit && !borrow {self.pool_quota_denials+=1;break;}
+                // A group is a finite operand frame. Test the real first-fit
+                // allocator transactionally, not the sum of disjoint holes.
+                // No partial frame obtains leases or emits DMA requests.
+                let mut candidate=self.pool.clone();
+                let mut allocations=Vec::with_capacity(end-first);
+                for i in first..end {
+                    let reserved=self.pool_reservation(self.tiles[offset+i].spec.bytes);
+                    let addr=if self.cfg.byte_pool {candidate.alloc(reserved)}else{let(lo,hi)=self.pool_partition(c);candidate.alloc_partition(reserved,lo,hi)};
+                    let Some(addr)=addr else{break;};
+                    allocations.push((offset+i,addr,reserved));
                 }
-                let allocation=if self.cfg.byte_pool{self.pool.alloc(reserved)}else{let (lo,hi)=self.pool_partition(c);self.pool.alloc_partition(reserved,lo,hi)};
-                let Some(addr) = allocation else {
-                    self.pool_capacity_denials += 1;
-                    break;
-                };
-                if borrow{self.quota_progress_borrows+=1;}
-                self.tiles[idx].addr = Some(addr);
-                self.tiles[idx].reserved_bytes=reserved;
-                self.tasks[tid].admit += 1;
-                self.tasks[tid].bytes_live += reserved;
-                self.tasks[tid].peak = self.tasks[tid].peak.max(self.tasks[tid].bytes_live);
-                self.cores[c].live += reserved;
-                self.last_progress = self.now;
-                if self.cfg.trace {
-                    self.log(json!({"event":"reserve","cycle":self.now,"tile":idx,"addr":addr,"bytes":b,"reserved_bytes":reserved,"owner":c,"private_partition":!self.cfg.byte_pool}));
+                if allocations.len()!=end-first {self.pool_capacity_denials+=1;break;}
+                // Speculation cannot pin another selected head, including a
+                // helper core's own task. Reserve missing heads on the same
+                // physical snapshot; these proof leases are not installed.
+                if !required {
+                    let mut proof=candidate.clone();
+                    let safe=self.cores.iter().filter_map(|core|core.cur).all(|cur|{
+                        let task=&self.tasks[cur];
+                        task.plan.actions[task.action..].iter().find_map(|a|if let Action::Group(h)=a{Some(h)}else{None}).is_none_or(|h|{
+                            (h.first_tile..h.first_tile+h.tile_count).filter(|&i|i>=task.admit).all(|i|{
+                                let n=self.pool_reservation(self.tiles[task.offset+i].spec.bytes);
+                                if self.cfg.byte_pool {proof.alloc(n)}else{let(lo,hi)=self.pool_partition(task.core);proof.alloc_partition(n,lo,hi)}.is_some()
+                            })
+                        })
+                    });
+                    if !safe {self.pool_capacity_denials+=1;break;}
                 }
+                // The explicit one-tile policy is the only partial Next frame.
+                // It may not consume space needed by Current's future full
+                // frame: otherwise an unswitchable partial Next pins progress.
+                if !current && (self.cfg.quota_policy=="fixed_one_tile" || self.cfg.comp=="offload") {
+                    let Some(cur)=self.cores[c].cur else{break;};
+                    let frame=self.tasks[cur].plan.actions[self.tasks[cur].action..].iter().filter_map(|a|if let Action::Group(h)=a{Some(h)}else{None})
+                        .max_by_key(|h|(h.first_tile..h.first_tile+h.tile_count).map(|i|self.pool_reservation(self.tiles[self.tasks[cur].offset+i].spec.bytes)).sum::<usize>());
+                    let mut proof=candidate.clone();
+                    let safe=frame.is_none_or(|h|(h.first_tile..h.first_tile+h.tile_count).all(|i|{
+                        let n=self.pool_reservation(self.tiles[self.tasks[cur].offset+i].spec.bytes);
+                        if self.cfg.byte_pool {proof.alloc(n)}else{let(lo,hi)=self.pool_partition(c);proof.alloc_partition(n,lo,hi)}.is_some()
+                    }));
+                    if !safe {self.pool_capacity_denials+=1;break;}
+                }
+                if !current {
+                    // A ready parked head must really be resumable. Install
+                    // finite context leases only after a transactional check
+                    // that also protects not-yet-activated Current contexts.
+                    let mut acc=self.cores.iter().map(|core|core.acc_arena.clone()).collect::<Vec<_>>();
+                    let mut z=self.z_arena.clone();let mut u=self.u_arena.clone();
+                    let contexts=self.cores.iter().filter_map(|core|core.cur).chain(std::iter::once(tid)).collect::<Vec<_>>();
+                    let safe=contexts.iter().all(|&t|{
+                        if self.tasks[t].z_addr.is_some(){return true;}
+                        let (zb,ub)=self.context_footprint(t);
+                        acc[self.tasks[t].core].alloc(self.accumulator_footprint(t)).is_some()
+                            && z.alloc(zb).is_some() && (ub==0 || u.alloc(ub).is_some())
+                    });
+                    if !safe {self.pool_capacity_denials+=1;break;}
+                    if self.cfg.comp=="offload" && self.cores.len()==2 {
+                        let big=self.cfg.lanes.iter().enumerate().max_by_key(|&(i,m)|(*m,std::cmp::Reverse(i))).unwrap().0;
+                        if c!=big {
+                            // Offload suppresses Next promotion while its
+                            // owner needs the helper. A parked Next arena
+                            // cannot consume that owner's future helper RF.
+                            // Protect the workload-visible worst legal owner
+                            // frame, including small-M IS rank prepasses.
+                            let rank_cols=self.cfg.ranks_sh[0].saturating_add(self.cfg.ranks_sh[1]).max(self.cfg.ranks_sh[2])
+                                .max(self.cfg.ranks_rt[0].saturating_add(self.cfg.ranks_rt[1])).max(self.cfg.ranks_rt[2]).max(32);
+                            let words=(self.batch*32).max(self.batch.min(self.cfg.lanes[big])*rank_cols);
+                            if acc[c].alloc(align(words*4,16)).is_none(){self.pool_capacity_denials+=1;break;}
+                        }
+                    }
+                    for t in contexts {assert!(self.activate_context(t),"transactional context reservation changed");}
+                }
+                self.pool=candidate;
+                if borrow {self.quota_progress_borrows+=allocations.len() as u64;}
+                for (idx,addr,reserved) in allocations {
+                    self.tiles[idx].addr=Some(addr);
+                    self.tiles[idx].reserved_bytes=reserved;
+                    self.tasks[tid].admit+=1;
+                    self.tasks[tid].bytes_live+=reserved;
+                    self.tasks[tid].peak=self.tasks[tid].peak.max(self.tasks[tid].bytes_live);
+                    self.cores[c].live+=reserved;
+                    if self.cfg.trace {self.log(json!({"event":"reserve","cycle":self.now,"tile":idx,"addr":addr,"bytes":self.tiles[idx].spec.bytes,"reserved_bytes":reserved,"owner":c,"private_partition":!self.cfg.byte_pool,"complete_frame":end==g.first_tile+g.tile_count}));}
+                }
+                self.last_progress=self.now;
             }
         }
     }
@@ -2455,7 +2491,7 @@ impl Engine {
                 let idx = self.tasks[t].offset + g.first_tile + self.tasks[t].tile_in_group;
                 let tile = &self.tiles[idx];
                 if !tile.loaded {
-                    if !self.cfg.byte_pool&&self.tasks[t].row_block==0&&self.tasks[t].tile_in_group==0 {self.alternate_context(t);if self.cores[owner].cur!=Some(t){return 7;}}
+                    if self.tasks[t].row_block==0&&self.tasks[t].tile_in_group==0 {self.alternate_context(t);if self.cores[owner].cur!=Some(t){return 7;}}
                     let tile=&self.tiles[idx];
                     return if tile.ready {
                         4
@@ -2971,6 +3007,10 @@ mod tests {
         let q=json!({"workload":{"id":"steal","batch":8,"hidden":544,"top_k":1,"experts":[{"id":0,"Me":8,"H":544,"F":160,"is_shared":false},{"id":1,"Me":2,"H":544,"F":32,"is_shared":false}]},"config":{"lanes":[4,2],"dataflow":["ws_group","ws_group"],"precision":"P0","comp_mode":"none","control_costs":false,"placement":"fifo","contexts_per_core":2,"context_interleave":false,"record_trace":true,"max_cycles":100000}});
         let mut e=Engine::new(&q).unwrap();e.bind();e.tasks[0].predicted=1;e.cores[1].cur=Some(0);e.cores[1].next=Some(0);e.control_free=0;e.bind();e.cores[1].cur=None;e.cores[1].next=None;e.tasks[0].predicted=1000000;e.control_free=0;
         assert_eq!(e.cores[0].next,Some(1));let old=e.tasks[1].offset;
+        // This test deliberately runs no compute before the steal. A full
+        // Next frame needs its real quota; an undersized soft target no
+        // longer permits a partial group to emit requests.
+        e.cores[0].quota=e.cfg.pool;
         for _ in 0..1000{let mut busy=vec![false;e.cfg.pool_banks];e.returns();e.land(&mut busy);e.admit();e.hbm();for c in &mut e.cores{c.stats.states[7]+=1;}e.now+=1;if e.tiles[old].sent>0{break;}}
         assert!(e.tiles[old].sent>0);assert!(e.tiles[old].landed<e.tiles[old].sent);e.work_steal();assert_eq!(e.steals,1);assert!(e.tiles[old].discarded);assert_ne!(e.tasks[1].offset,old);assert_eq!(e.tasks[1].core,1);
         let r=e.run().unwrap();assert!(r["work_steal_waste_bytes"].as_u64().unwrap()>0);assert_eq!(r["weight_bytes"].as_u64().unwrap(),r["native_expert_bytes"].as_u64().unwrap()+r["comp_padding_bytes"].as_u64().unwrap()+r["work_steal_waste_bytes"].as_u64().unwrap());assert_eq!(r["drained"],true);assert_eq!(r["dma_transactions_accepted"],r["dma_transactions_landed"]);

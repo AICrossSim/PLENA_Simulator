@@ -58,6 +58,16 @@ group can borrow actually unused pool capacity. Future lookahead cannot borrow;
 all existing byte leases, bank service and request limits remain enforced.
 The bounded admissions are reported as `quota_progress_borrows`.
 
+Pool admission reserves an entire bounded operand group transactionally using
+the actual physical free ranges. Speculative groups must leave realizable
+placements for selected Current heads, and Next also reserves its finite
+accumulator/Z/U context arenas after protecting Current activation. The
+one-tile diagnostic preserves a full future Current frame. Missing heads may
+resume a fully ready parked context in both pool modes; live WOR frames cannot
+be evicted. Offloaded frames wait for helper availability and cannot pin the
+helper's independent task. D032 records the post-heldout correctness amendment
+and the required complete new-engine rerun.
+
 BF16 U is stored in a fixed K-segment rank permutation and is read through the
 physical activation banks. Two bounded local rank-input SRAM cache entries per
 core use the existing control reserve; external reads, local reads and fills

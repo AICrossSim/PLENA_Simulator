@@ -1,0 +1,7 @@
+{
+  "cold_experts": 0,
+  "measured_cold_comparisons": 0,
+  "no_samples_expert_own": 0,
+  "status": "no_calibration_expert_below_32_tokens_in_this_capture",
+  "scope": "all192 routed expert/layer populations audited from real calibration; no artificial starvation is treated as naturally cold"
+}

@@ -1,0 +1,13 @@
+label,scope,layer,rank_lanes,expert,projection,bits,method,rank,factor_a,factor_b,relative_error,cosine,factor_bytes,error_vs_w4_rtn,error_target,cosine_target,passes_accuracy_thresholds,frozen_format_match
+W4 RTN baseline,layer,2,8,all,moe,4,rtn,0,mxint4,bf16,0.12359511593107778,0.9925265685180653,0,1.0,0.06179755796553889,0.999,False,False
+Frozen W4/A4/B16/L8 default,layer,2,8,all,moe,4,qera_approx,48,mxint4,bf16,0.09462352686491922,0.995555660379025,24135808,0.7655927675789841,0.06179755796553889,0.999,False,True
+"Best error among W3/W4 search, post-hoc",layer,2,16,all,moe,4,qera_exact,96,bf16,bf16,0.05362653425310944,0.9985658605836429,80035840,0.43388878151960325,0.06179755796553889,0.999,False,False
+"MXINT8 RTN reference, outside W3/W4 accuracy qualification",layer,2,8,all,moe,8,rtn,0,mxint4,bf16,0.007214355187630077,0.9999739762690625,0,0.05837087601142045,0.06179755796553889,0.999,True,False
+W4 RTN baseline,layer,13,8,all,moe,4,rtn,0,mxint4,bf16,0.21099589175214253,0.9786187224458414,0,1.0,0.10549794587607127,0.999,False,False
+Frozen W4/A4/B16/L8 default,layer,13,8,all,moe,4,qera_approx,48,mxint4,bf16,0.18955994601208515,0.9824793317323552,24135808,0.8984058620191607,0.10549794587607127,0.999,False,True
+"Best error among W3/W4 search, post-hoc",layer,13,16,all,moe,4,qera_exact,96,bf16,bf16,0.132789393652706,0.9913211913106409,80035840,0.629345872803505,0.10549794587607127,0.999,False,False
+"MXINT8 RTN reference, outside W3/W4 accuracy qualification",layer,13,8,all,moe,8,rtn,0,mxint4,bf16,0.012411180590054721,0.9999229799717833,0,0.05882190637452871,0.10549794587607127,0.999,True,False
+W4 RTN baseline,layer,26,8,all,moe,4,rtn,0,mxint4,bf16,0.10850791008664885,0.9946462194546319,0,1.0,0.05425395504332443,0.999,False,False
+Frozen W4/A4/B16/L8 default,layer,26,8,all,moe,4,qera_approx,48,mxint4,bf16,0.048287680947908716,0.9988334708157097,24135808,0.44501530726514454,0.05425395504332443,0.999,False,True
+"Best error among W3/W4 search, post-hoc",layer,26,16,all,moe,4,qera_exact,96,bf16,bf16,0.02885286535412713,0.9995838240264017,80035840,0.26590564071399686,0.05425395504332443,0.999,True,False
+"MXINT8 RTN reference, outside W3/W4 accuracy qualification",layer,26,8,all,moe,8,rtn,0,mxint4,bf16,0.005975857004418654,0.9999821994878592,0,0.055073008038277034,0.05425395504332443,0.999,True,False

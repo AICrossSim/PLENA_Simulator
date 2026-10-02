@@ -1,0 +1,5 @@
+{
+  "complete": true,
+  "actual_ffn_rows": 196608,
+  "causal_sequences": "independent per layer/bit/method/L/uniform budget"
+}

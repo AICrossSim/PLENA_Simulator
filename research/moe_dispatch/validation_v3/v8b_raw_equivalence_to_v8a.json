@@ -1,0 +1,148 @@
+{
+  "all28_original_json_bytes_equal": true,
+  "old_binary_sha256": "3546a9d0c4626ca5bb2da77d6ca82591141fc75e5054fb26747d9b6fff90f66e",
+  "new_binary_sha256": "23d91e9300eba984b2b1d5b4a83766f3b5c23e347c63830588bccf107fc5b161",
+  "scope": "14 exact previously failing non-offload configurations, each repeated twice",
+  "rows": [
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__forward4",
+      "repeat": 1,
+      "raw_sha256": "6fa538bd2a8822287b2671345cb77e229c5929d1c3f6cd493adb5130ce0793ac"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__forward4",
+      "repeat": 2,
+      "raw_sha256": "6fa538bd2a8822287b2671345cb77e229c5929d1c3f6cd493adb5130ce0793ac"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__forward5",
+      "repeat": 1,
+      "raw_sha256": "cfba631eb34654da312e557cf6f095b56090da458c8e7b05bee2e8803bc67b81"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__forward5",
+      "repeat": 2,
+      "raw_sha256": "cfba631eb34654da312e557cf6f095b56090da458c8e7b05bee2e8803bc67b81"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__leave_out_w_reuse",
+      "repeat": 1,
+      "raw_sha256": "0a9aab52297a91d9fb43cf90e61fbd3fb697988c37dc374184dda2d20e11caad"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__leave_out_w_reuse",
+      "repeat": 2,
+      "raw_sha256": "0a9aab52297a91d9fb43cf90e61fbd3fb697988c37dc374184dda2d20e11caad"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__forward4",
+      "repeat": 1,
+      "raw_sha256": "6b1ff8da5b8f1e2c3f3d2dfe9f3ee6f82420aa19a9c35ff9866b5b25f59fed81"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__forward4",
+      "repeat": 2,
+      "raw_sha256": "6b1ff8da5b8f1e2c3f3d2dfe9f3ee6f82420aa19a9c35ff9866b5b25f59fed81"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__forward5",
+      "repeat": 1,
+      "raw_sha256": "f0d60d3edc4e116d01f36c544006c1917baa885bcc9c5ce88eafa039e3f48def"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__forward5",
+      "repeat": 2,
+      "raw_sha256": "f0d60d3edc4e116d01f36c544006c1917baa885bcc9c5ce88eafa039e3f48def"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__leave_out_w_reuse",
+      "repeat": 1,
+      "raw_sha256": "fa7b3edbba628efa2b609e6d083d8f48f7b565debfe3b191d10be6af9afd42cd"
+    },
+    {
+      "point_key": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__leave_out_w_reuse",
+      "repeat": 2,
+      "raw_sha256": "fa7b3edbba628efa2b609e6d083d8f48f7b565debfe3b191d10be6af9afd42cd"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward4",
+      "repeat": 1,
+      "raw_sha256": "40cf60caf0ef72546491b1fb35290735e73e0ce63123bc52e441dc4ef69359b2"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward4",
+      "repeat": 2,
+      "raw_sha256": "40cf60caf0ef72546491b1fb35290735e73e0ce63123bc52e441dc4ef69359b2"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward5",
+      "repeat": 1,
+      "raw_sha256": "11ad523816f8132daf2fc7abd92f215388b38e943e15c70927c2a3402bf6b6cf"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward5",
+      "repeat": 2,
+      "raw_sha256": "11ad523816f8132daf2fc7abd92f215388b38e943e15c70927c2a3402bf6b6cf"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__leave_out_w_reuse",
+      "repeat": 1,
+      "raw_sha256": "91db119b13c399407f1881562efeed4e0a8eefdca3f091ccd21c47e272f0aba3"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__leave_out_w_reuse",
+      "repeat": 2,
+      "raw_sha256": "91db119b13c399407f1881562efeed4e0a8eefdca3f091ccd21c47e272f0aba3"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward4",
+      "repeat": 1,
+      "raw_sha256": "e58b97151d4e94a41a87bc29cb94350af491a2e5baa9114b074a6b26edad9f7b"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward4",
+      "repeat": 2,
+      "raw_sha256": "e58b97151d4e94a41a87bc29cb94350af491a2e5baa9114b074a6b26edad9f7b"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward5",
+      "repeat": 1,
+      "raw_sha256": "e873da9c9812d57b04d20d807c6ce2f98684ecef97811bc71446077a22879869"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward5",
+      "repeat": 2,
+      "raw_sha256": "e873da9c9812d57b04d20d807c6ce2f98684ecef97811bc71446077a22879869"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__leave_out_w_reuse",
+      "repeat": 1,
+      "raw_sha256": "5c319b8abbd1f6bdd5760b1d01dee2df41384d324a125a6ba59e0d12872b3fa7"
+    },
+    {
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__leave_out_w_reuse",
+      "repeat": 2,
+      "raw_sha256": "5c319b8abbd1f6bdd5760b1d01dee2df41384d324a125a6ba59e0d12872b3fa7"
+    },
+    {
+      "point_key": "main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__demand__default",
+      "repeat": 1,
+      "raw_sha256": "82719e6d0c988dd2803ebb43a15739f64cb1226490c47e09d3c6b65bf37a7fc5"
+    },
+    {
+      "point_key": "main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__demand__default",
+      "repeat": 2,
+      "raw_sha256": "82719e6d0c988dd2803ebb43a15739f64cb1226490c47e09d3c6b65bf37a7fc5"
+    },
+    {
+      "point_key": "main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__iso__default",
+      "repeat": 1,
+      "raw_sha256": "93ae39c50b69cc7dd8ef220008a9a205d19a114921b698bdc9f9688512feb889"
+    },
+    {
+      "point_key": "main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__iso__default",
+      "repeat": 2,
+      "raw_sha256": "93ae39c50b69cc7dd8ef220008a9a205d19a114921b698bdc9f9688512feb889"
+    }
+  ]
+}

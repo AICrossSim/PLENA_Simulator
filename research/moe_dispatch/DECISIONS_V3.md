@@ -424,3 +424,64 @@ Current tile versus complete Next-group capacity condition. All 74 Rust tests
 pass. Because affected timing changed, v7 restarts the complete timing campaign;
 v6 points are not reused as final measurements. Timed numerical and legacy
 regressions are repeated on the immutable v7 binary before final authorization.
+
+## D032 — post-heldout correctness amendment: physical frames and resumable contexts
+
+The v7 campaign was frozen in commit `f6c9c5e` before heldout execution. Its
+complete matrix then exposed six additional GPQA B16 refill-ablation deadlocks
+and two default BFCL B16 M8 heldout deadlocks. All campaign processes were
+stopped, the authorization revoked, and every old input/config/result/failure
+preserved. This is an explicit correctness amendment after heldout began;
+it is not a claim that heldout was never observed. Old measurements cannot
+enter the new engine's results, and the entire 55,012-point matrix must restart
+with two repetitions. Formats, hardware, inputs, thresholds and the comparator
+selection rule remain unchanged.
+
+D031's summed-free-byte test was insufficient. In one captured pool state,
+the remaining 4096 B consisted of disjoint 3072-B and 1024-B holes, so Current's
+eighth 4096-B tile could not allocate even though the aggregate count fit.
+All new groups now use transactional first-fit allocation: the complete
+bounded group's actual placements must fit, or no tile receives a lease.
+Speculative Current lookahead and Next additionally prove placements for all
+missing selected Current heads on that same physical allocator snapshot,
+including each private partition. The explicit one-tile Next diagnostic is
+the only partial frame and must leave a physically realizable full future
+Current frame. Existing Current soft-quota borrowing still obeys hard storage.
+
+The default M8 failures exposed a separate switching omission: a selected
+context with no resident WOR tile reached a missing Main head after UStore,
+but byte-pool mode did not switch back to an already-ready parked head. The
+blocked-head switch now applies in both allocation modes, retaining the
+complete-ready-group, real WOR capacity, accumulator and aging checks. Next
+prefetch installs finite accumulator/Z/U reservations transactionally after
+first protecting all not-yet-activated Current contexts; separate independent
+availability checks cannot overcommit an arena. A steal of an unstarted,
+action-zero Next returns only its unused context reservations. Accepted DMA
+response leases still drain at their original owner, and retakes remain charged.
+
+An offloaded auxiliary group cannot drain while its helper has an independent
+Current task. Admission waits at this service-availability barrier rather than
+pinning the helper's next frame; offload Next also preserves a complete future
+owner frame because offload disables context interleaving. A helper's parked
+Next accumulator reservation must additionally leave a physically realizable
+worst legal owner helper frame, derived from this batch size and static rank
+dimensions. This prevents Next's unpromotable arena from blocking a subsequent
+Shared auxiliary result. The extra safe-state edge was derived by independent
+review, not observed as a campaign deadlock. No live data is
+evicted, compacted, released early or silently copied, and no physical capacity
+is added. These rules apply universally across organizations and modes.
+
+Five targeted regressions cover fragmented-frame rollback, shared-pool
+blocked-head resume, busy-helper progress, joint context-arena admission and
+the parked helper Next's future-owner accumulator headroom.
+All 79 Rust tests pass. The original 14 failed configurations (six historical
+BFCL, six GPQA and two M8) pass twice under immutable v8, with full JSON identity
+and drain/storage invariants. Timed numerical/legacy validation and every
+development, native-wire and M5 campaign are repeated before amended PREREG is
+committed and new heldout execution is authorized. All failed attempts and
+their historical source/binary signatures remain available for audit.
+
+The finalized host implementation searches group descriptors only from the
+task's current action, omitting retired prefix descriptors. This changes no
+cycle, allocator decision or simulated hardware state; the interim v8a release
+and all original raw replays are retained for exact equivalence checking.

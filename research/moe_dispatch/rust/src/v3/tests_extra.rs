@@ -1,6 +1,63 @@
 //! Causal integration checks, including cases absent from the large shape study.
 use super::*;
 #[test]
+fn fragmented_full_frame_admission_has_no_partial_side_effects() {
+    let q=json!({"workload":{"id":"physical-fragmentation","batch":8,"hidden":512,"top_k":1,"experts":[{"id":-1,"Me":8,"H":512,"F":16,"is_shared":true}]},"config":{"lanes":[6],"dataflow":["ws_group"],"wor_tiles":[8],"precision":"P0","comp_mode":"none","rank_lanes":0,"w_reuse":false,"pool_bytes":65536,"placement":"fifo"}});
+    let mut e=Engine::new(&q).unwrap();e.bind();e.cores[0].quota=65536;
+    assert_eq!(e.group_at(0,0).unwrap().tile_count,8);
+    // Exactly 32 KiB free, but only seven full 4-KiB placements: the last
+    // 4096 B are split into 3072 and 1024 B, as in the captured failure.
+    e.pool.ranges=vec![(0,28672),(32768,3072),(64512,1024)];e.pool.used=32768;
+    let before=e.pool.ranges.clone();e.admit();
+    assert_eq!(e.tasks[0].admit,0);assert_eq!(e.pool.used,32768);
+    assert_eq!(e.pool.ranges,before);assert_eq!(e.tasks[0].bytes_live,0);
+    assert!(e.tiles.iter().all(|x|x.addr.is_none()&&x.sent==0));
+}
+#[test]
+fn shared_byte_pool_blocked_head_can_resume_a_ready_parked_frame() {
+    let q=json!({"workload":{"id":"ready-parked","batch":4,"hidden":512,"top_k":1,"experts":[{"id":-1,"Me":4,"H":512,"F":16,"is_shared":true},{"id":7,"Me":1,"H":512,"F":16,"is_shared":false}]},"config":{"lanes":[6],"dataflow":["ws_group"],"wor_tiles":[8],"precision":"P0","comp_mode":"none","rank_lanes":0,"pool_bytes":65536,"placement":"fifo","contexts_per_core":2,"context_aging":0,"control_costs":false}});
+    let mut e=Engine::new(&q).unwrap();e.bind();let cur=e.cores[0].cur.unwrap();e.tasks[cur].predicted=1;e.control_free=0;e.bind();let parked=e.cores[0].next.unwrap();
+    let g=e.group_at(parked,0).unwrap();for i in g.first_tile..g.first_tile+g.tile_count {e.tiles[e.tasks[parked].offset+i].ready=true;}
+    e.now=100;e.tasks[cur].blocked=0;e.step_core(0);
+    assert_eq!(e.cores[0].cur,Some(parked));assert_eq!(e.cores[0].next,Some(cur));
+    assert_eq!(e.context_switches,1);assert!(e.tasks[parked].z_addr.is_some());
+}
+#[test]
+fn offload_frame_cannot_pin_a_busy_helpers_progress() {
+    let q=json!({"workload":{"id":"helper-head-protection","batch":8,"hidden":544,"top_k":1,"experts":[{"id":-1,"Me":8,"H":544,"F":160,"is_shared":true},{"id":7,"Me":1,"H":544,"F":160,"is_shared":false}]},"config":{"lanes":[4,2],"dataflow":["ws_group","ws_group"],"wor_tiles":[8,8],"precision":"P1","comp_mode":"offload","rank_lanes":8,"ranks":{"shared":[8,8,8],"routed":[8,8,8]},"pool_bytes":65536,"placement":"fifo","control_costs":false}});
+    let mut e=Engine::new(&q).unwrap();e.bind();let owner=e.cores[0].cur.unwrap();
+    // Bind the helper during the owner's local Main phase, then model the
+    // transition to its next helper-serviced group while that task is busy.
+    e.tasks[owner].action=e.tasks[owner].plan.actions.iter().position(|a|matches!(a,Action::Group(g) if g.kind==Kind::Main)).unwrap();
+    e.cores[0].next=Some(owner);e.control_free=0;e.bind();e.cores[0].next=None;
+    let helper=e.cores[1].cur.unwrap();e.tasks[owner].action=0;
+    assert_eq!(e.group_at(owner,0).unwrap().kind,Kind::Prepass);
+    e.admit();assert_eq!(e.tasks[owner].admit,0);
+    assert!(e.tasks[helper].admit>0);
+    assert!(e.tiles[e.tasks[owner].offset..e.tasks[owner].offset+e.tasks[owner].plan.tiles.len()].iter().all(|t|t.addr.is_none()));
+}
+#[test]
+fn prefetched_next_reserves_current_and_next_activation_arenas_together() {
+    let q=json!({"workload":{"id":"activation-safe-state","batch":4,"hidden":512,"top_k":1,"experts":[{"id":-1,"Me":4,"H":512,"F":16,"is_shared":true},{"id":7,"Me":1,"H":512,"F":16,"is_shared":false}]},"config":{"lanes":[6],"dataflow":["ws_group"],"wor_tiles":[8],"precision":"P0","comp_mode":"none","rank_lanes":0,"pool_bytes":65536,"placement":"fifo","contexts_per_core":2,"control_costs":false}});
+    let mut e=Engine::new(&q).unwrap();e.bind();let cur=e.cores[0].cur.unwrap();e.tasks[cur].predicted=1;e.control_free=0;e.bind();let next=e.cores[0].next.unwrap();
+    let (cz,_)=e.context_footprint(cur);let (nz,_)=e.context_footprint(next);
+    e.z_arena=Pool::new(cz+nz-16,1);e.cores[0].quota=65536;
+    e.admit();assert_eq!(e.tasks[next].admit,0);assert!(e.tasks[next].z_addr.is_none());
+    assert!(e.activate_context(cur));assert!(!e.activate_context(next));
+}
+#[test]
+fn parked_offload_next_preserves_the_future_owners_helper_accumulator() {
+    let q=json!({"workload":{"id":"helper-future-arena","batch":96,"hidden":2048,"top_k":1,"experts":[{"id":-1,"Me":96,"H":2048,"F":2816,"is_shared":true},{"id":7,"Me":1,"H":2048,"F":1408,"is_shared":false},{"id":8,"Me":3,"H":2048,"F":1408,"is_shared":false}]},"config":{"lanes":[4,2],"dataflow":["ws_group","is_stream"],"precision":"P1","comp_mode":"offload","rank_lanes":8,"ranks":{"shared":[32,32,48],"routed":[32,32,24]},"pool_bytes":65536,"t_chunk":96,"z_mode":"streamed","placement":"fifo","control_costs":false}});
+    let mut e=Engine::new(&q).unwrap();e.bind();let owner=e.cores[0].cur.unwrap();
+    e.tasks[owner].action=e.tasks[owner].plan.actions.iter().position(|a|matches!(a,Action::Group(g) if g.kind==Kind::Main)).unwrap();
+    e.cores[0].next=Some(owner);e.control_free=0;e.bind();let helper=e.cores[1].cur.unwrap();e.tasks[helper].predicted=1;e.control_free=0;e.bind();e.cores[0].next=None;e.tasks[owner].action=0;
+    let next=e.cores[1].next.unwrap();assert_eq!(e.accumulator_footprint(helper),11264);assert_eq!(e.accumulator_footprint(next),33792);assert_eq!(e.core_acc_capacity(1),45056);
+    for core in &mut e.cores {core.quota=65536;}
+    e.admit();assert_eq!(e.tasks[next].admit,0);assert!(e.tasks[next].acc_addr.is_none());
+    assert!(e.activate_context(helper));
+    assert!(e.cores[1].acc_arena.alloc(96*32*4).is_some());
+}
+#[test]
 fn refill_admission_keeps_the_entire_current_group_progress_space() {
     let q=json!({"workload":{"id":"retained-refill-group","batch":8,"hidden":512,"top_k":1,"experts":[{"id":-1,"Me":8,"H":512,"F":16,"is_shared":true},{"id":7,"Me":1,"H":512,"F":16,"is_shared":false}]},"config":{"lanes":[4,2],"dataflow":["ws_group","ws_group"],"wor_tiles":[8,8],"precision":"P0","comp_mode":"none","rank_lanes":0,"w_reuse":false,"pipeline_supply":true,"prefetch_quota":true,"pool_bytes":65536,"placement":"fifo"}});
     let mut e=Engine::new(&q).unwrap();e.bind();e.control_free=0;e.bind();

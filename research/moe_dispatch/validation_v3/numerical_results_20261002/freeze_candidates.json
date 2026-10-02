@@ -1,0 +1,10 @@
+{
+  "q0_complete": true,
+  "accuracy_target": {
+    "error_vs_mxint4_rtn_max": 0.5,
+    "cosine_min": 0.999
+  },
+  "passing_candidates": [],
+  "can_freeze": false,
+  "scope": "exact same candidate at all three complete layers; development numeric request subdivisions only"
+}

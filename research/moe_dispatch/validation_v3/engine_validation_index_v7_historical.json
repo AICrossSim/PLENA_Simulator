@@ -1,0 +1,52 @@
+{
+  "schema": "plena_supply_v3_engine_validation_index_v7",
+  "binary_sha256": "1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f",
+  "compiler_commit": "d389b9502c25392acea3dc5e21212efab98876b8",
+  "scope": "Complete implementation correctness and development freeze; main timing/numerical full matrix not yet complete",
+  "receipts": {
+    "tests/rust_74_v7_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/rust_74_v7_receipt.json",
+      "sha256": "848807e112e93500d0ee930fd4d61d823b4f60e451a425fb187a0aa0bf716715"
+    },
+    "tests/legacy_47_v7_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/legacy_47_v7_receipt.json",
+      "sha256": "0d30656e68742d6b53cbe7f476718f2ca415eb1914313bc1da1d9b08f91f8d88"
+    },
+    "tests/timed_numeric_56_v7_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/timed_numeric_56_v7_receipt.json",
+      "sha256": "bd5d04af194362839bd259141edf74342052e8e2f6e6206f1ee3f0bbfdef8f89"
+    },
+    "tests/compiler_reference_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/compiler_reference_receipt.json",
+      "sha256": "e19369ed9675205e0e84cdcfd0ab4ccd2958383df5775372e13a4847b955ea7c"
+    },
+    "tests/repair_freeze_candidate_v7/source_manifest.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/source_manifest_v7.json",
+      "sha256": "291b5207d429b8df7700b60f0aa657d30aeefcb2c4e86b60925b5458b44b8a8f"
+    },
+    "tests/v7_ablation_deadlock_repair/receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/v7_ablation_deadlock_repair_receipt.json",
+      "sha256": "60eadcd379ed34f27aee5a69ead9aff92005674bead83b3a175072936f91aca4"
+    },
+    "frozen_format.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/frozen_format.json",
+      "sha256": "73050cb77f5bc98bbfe8133d1652c3658ceff5025151f4c925db570ae2bb0c61"
+    },
+    "quant/full_numerics/q1_layer13_accuracy_proof.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/q1_layer13_accuracy_proof.json",
+      "sha256": "550c0eba0aa396100cd142f71dbac4d90917f1b0a521554dc2f8c3f9ff9aa527"
+    },
+    "development_freeze_ready_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/development_freeze_ready_receipt.json",
+      "sha256": "ce918dedafe2a14fc30112b3f1f92c3e59557a388fce2fe89094419bccd9f954"
+    },
+    "development_fixed_comparator.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/development_fixed_comparator.json",
+      "sha256": "baab1ecacad66d0a140accdb45eb440ac8ec8116a8e05bc63939acff676be04b"
+    },
+    "final_v7_raw_storage_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/final_v7_raw_storage_receipt.json",
+      "sha256": "1fd553c5b7f2ba4131997ac6c9f2ce6d46d7b26f1c6fb20892f3ea645e40782e"
+    }
+  }
+}

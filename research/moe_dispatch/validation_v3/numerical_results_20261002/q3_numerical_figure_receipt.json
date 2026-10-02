@@ -1,0 +1,26 @@
+[
+  {
+    "name": "q3_gate_weighted_vs_uniform",
+    "status": "generated",
+    "scope": "All96 same-requested-budget group comparisons, each full512 real16-token windows. Requested equal budget does not imply equal actual bytes. Scatter visualizes frozen quality thresholds; no new pass/fail or subset selection.",
+    "helper_sha256": "4f64ca7e4c8fadb9052c56dac9a3515783bc3c58d883a8e57880b16b9bbfa822",
+    "source_qualification_sha256": "9c1dd1888bd0ea183ef55067de41b19639b0446c957521fb177914fccdd773f1",
+    "source_csv_sha256": "11c073f33236dcf00697af8a7b09b8a87ffc3c9b7a09e573faa5195ef7896095",
+    "source_receipt_sha256": "bd18909dfe9f8c40629ecd34f8905b55068c20b1c10eae33e27b63e827e6587e",
+    "post_preregistration_output_only": true,
+    "no_new_thresholds": true,
+    "full_actual_hardware_population": 196608
+  },
+  {
+    "name": "q3_frozen_format_error_and_bytes",
+    "status": "generated",
+    "scope": "Fixed physical format and QERA-approx selected before timing heldout; both requested budgets16/32, all layers2/13/26 and all512 windows retained. Actual payload differences shown beside error; diagnostic numerical FFN scope, not model accuracy qualification.",
+    "helper_sha256": "4f64ca7e4c8fadb9052c56dac9a3515783bc3c58d883a8e57880b16b9bbfa822",
+    "source_qualification_sha256": "9c1dd1888bd0ea183ef55067de41b19639b0446c957521fb177914fccdd773f1",
+    "source_csv_sha256": "11c073f33236dcf00697af8a7b09b8a87ffc3c9b7a09e573faa5195ef7896095",
+    "source_receipt_sha256": "bd18909dfe9f8c40629ecd34f8905b55068c20b1c10eae33e27b63e827e6587e",
+    "post_preregistration_output_only": true,
+    "no_new_thresholds": true,
+    "full_actual_hardware_population": 196608
+  }
+]

@@ -1,0 +1,261 @@
+{
+  "schema": "plena_v3_postheldout_correctness_abort_v1",
+  "campaign": "ff74eaf398763492",
+  "binary_sha256": "1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f",
+  "prereg_commit": "f6c9c5e91b68072fddd3db3975bfc66f44f1b7c9",
+  "reason": "Eight newly observed legal correctness deadlocks in v7 development and authorizedheldout. Universal correctness amendment/newimmutableengine requires fullnewcampaign and recommittedPREREG before furtherheldout. No parameter/performance tuning or outcomes-based selection.",
+  "all_old_raw_preserved": true,
+  "reuse_old_timing_for_new_engine": false,
+  "processes": [
+    {
+      "pid": 3226923,
+      "command": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python research/moe_dispatch/experiments/v3/run_development.py --root outputs/moe_supply_first_v3 --binary outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v7/moe-dispatch-1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f --workers 24 --mode development ",
+      "state_before": "S",
+      "still_exists": false
+    },
+    {
+      "pid": 3227878,
+      "command": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/experiments/v3/study.py run --root outputs/moe_supply_first_v3 --binary outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v7/moe-dispatch-1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f --workers 24 --timeout 3600 --split development --suite all ",
+      "state_before": "S",
+      "still_exists": false
+    },
+    {
+      "pid": 3233737,
+      "command": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python research/moe_dispatch/experiments/v3/run_final.py --root outputs/moe_supply_first_v3 --binary outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v7/moe-dispatch-1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f --workers 12 --format-config outputs/moe_supply_first_v3/frozen_format.json ",
+      "state_before": "S",
+      "still_exists": false
+    },
+    {
+      "pid": 3233782,
+      "command": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/experiments/v3/study.py run --root outputs/moe_supply_first_v3 --binary outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v7/moe-dispatch-1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f --split heldout --suite all --workers 12 --timeout 3600 --format-config outputs/moe_supply_first_v3/frozen_format.json ",
+      "state_before": "S",
+      "still_exists": false
+    },
+    {
+      "pid": 3246282,
+      "status": "already_exited",
+      "still_exists": false
+    },
+    {
+      "pid": 3246361,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_w_reuse/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_w_reuse/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_w_reuse/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246362,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_wide_ports/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_wide_ports/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_wide_ports/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246365,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP0__iso__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP0__iso__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP0__iso__default/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246367,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP0__demand__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP0__demand__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP0__demand__default/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246378,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_inline_silu/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_inline_silu/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_inline_silu/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246382,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward0/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward0/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward0/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246383,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward6/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward6/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward6/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246384,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward7/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward7/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward7/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246386,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward1/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward1/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward1/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246388,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward2/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward2/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward2/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246389,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP1__iso__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP1__iso__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP1__iso__default/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246390,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP0__iso__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP0__iso__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP0__iso__default/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246398,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward2/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward2/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward2/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246399,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP0__demand__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP0__demand__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP0__demand__default/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246400,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward8/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward8/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward8/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246401,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP1__demand__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP1__demand__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP1__demand__default/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246402,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward5/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward5/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward5/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246403,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward3/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward3/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward3/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246405,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward4/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward4/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward4/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246406,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_credit_release/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_credit_release/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_credit_release/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246407,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward3/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward3/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward3/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246410,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward4/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward4/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward4/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246411,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward1/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward1/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward1/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246412,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward0/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward0/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__forward0/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246415,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward5/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward5/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__forward5/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246416,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_prefetch_quota/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_prefetch_quota/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_prefetch_quota/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246417,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP4__iso__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP4__iso__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP4__iso__default/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246418,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_pipeline_supply/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_pipeline_supply/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_pipeline_supply/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246428,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP2__iso__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP2__iso__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP2__iso__default/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246430,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_byte_pool/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_byte_pool/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_byte_pool/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246431,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP2__demand__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP2__demand__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP2__demand__default/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246465,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP3__iso__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP3__iso__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP3__iso__default/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246466,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_x_reuse/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_x_reuse/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__leave_out_x_reuse/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246467,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP3__demand__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP3__demand__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP3__demand__default/repeat2.json ",
+      "state_before": "R",
+      "still_exists": false
+    },
+    {
+      "pid": 3246476,
+      "command": "outputs/moe_supply_first_v3/snapshots/ff74eaf398763492/moe-dispatch-analytical-v1 outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP4__demand__default/workload.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP4__demand__default/config.json outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex53__OP4__demand__default/repeat1.json ",
+      "state_before": "R",
+      "still_exists": false
+    }
+  ],
+  "failures": [
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__iso__default/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__demand__default/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward4/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward5/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__leave_out_w_reuse/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward4/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward5/failure.json",
+    "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__leave_out_w_reuse/failure.json"
+  ],
+  "historical_authorization_sha256": "d6a181e48f703a5faca5dd06c2da6ed1197793bd01e08b9d97d7b952e1b1352e"
+}

@@ -1,0 +1,2292 @@
+{
+  "schema": "plena_v3_hardware_q3_complete_receipt_v1",
+  "complete": true,
+  "coverage": {
+    "complete": true,
+    "actual_ffn_rows": 196608,
+    "causal_sequences": "independent per layer/bit/method/L/uniform budget"
+  },
+  "vector_comparisons": 196608,
+  "summary": [
+    {
+      "strategy": "uniform",
+      "uniform_rank": 16,
+      "windows": 24576,
+      "changed_windows": 0,
+      "changed_expert_decisions": 0,
+      "all_vectors_identical": true
+    },
+    {
+      "strategy": "uniform",
+      "uniform_rank": 32,
+      "windows": 24576,
+      "changed_windows": 0,
+      "changed_expert_decisions": 0,
+      "all_vectors_identical": true
+    },
+    {
+      "strategy": "frequency_static",
+      "uniform_rank": 16,
+      "windows": 24576,
+      "changed_windows": 12870,
+      "changed_expert_decisions": 28769,
+      "all_vectors_identical": false
+    },
+    {
+      "strategy": "frequency_static",
+      "uniform_rank": 32,
+      "windows": 24576,
+      "changed_windows": 0,
+      "changed_expert_decisions": 0,
+      "all_vectors_identical": true
+    },
+    {
+      "strategy": "gate_weighted_budget_oracle",
+      "uniform_rank": 16,
+      "windows": 24576,
+      "changed_windows": 7160,
+      "changed_expert_decisions": 14125,
+      "all_vectors_identical": false
+    },
+    {
+      "strategy": "gate_weighted_budget_oracle",
+      "uniform_rank": 32,
+      "windows": 24576,
+      "changed_windows": 0,
+      "changed_expert_decisions": 0,
+      "all_vectors_identical": true
+    },
+    {
+      "strategy": "gate_weighted_causal",
+      "uniform_rank": 16,
+      "windows": 24576,
+      "changed_windows": 7966,
+      "changed_expert_decisions": 10968,
+      "all_vectors_identical": false
+    },
+    {
+      "strategy": "gate_weighted_causal",
+      "uniform_rank": 32,
+      "windows": 24576,
+      "changed_windows": 0,
+      "changed_expert_decisions": 0,
+      "all_vectors_identical": true
+    }
+  ],
+  "sources": [
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w4_qera_approx_L8.csv",
+      "sha256": "0effe36e81aecf477bb72d85f8e85fdc6908e7e976e1e26819c9370f90e39183"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w4_qera_approx_L8.csv",
+      "sha256": "d5110e8f818a7db3b54c827923b64dd2990e85d1c7489967ec8d1649bef71eae"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w4_qera_exact_L8.csv",
+      "sha256": "8bb12875a1910ca6476069fa420fe58037e8c9c9a7b49115c8c0455be4391ed5"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w4_qera_exact_L8.csv",
+      "sha256": "bb3ebe809425b67e5ae220097a616a16f7bb4b8765fe297a333afd9c056a614b"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w4_lqer_L8.csv",
+      "sha256": "10b7fdca43f6fc39577f58987945e3c42da549c4c71bf4d3af9a93b9b6c1b006"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w4_lqer_L8.csv",
+      "sha256": "2c1f2845616dc4723e72b27c84986e3120a5d5f47aa0ceea0a20a2b777f61624"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w4_l2qer_L8.csv",
+      "sha256": "f991d3ad2663ad50a5526e0fa791190ecc437d67f9938b536e3442693fb7a915"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w4_l2qer_L8.csv",
+      "sha256": "6ccefb93a2164b9ef83b75d7746349bb3fe345baf624471efa1f07b8bf24179d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w3_qera_approx_L8.csv",
+      "sha256": "48ebca9631300ae56e4bac6a6a9f1c88e4fc34af36a2f12817762ca04148fb22"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w3_qera_approx_L8.csv",
+      "sha256": "9f6c7c2aeca09d2461804f5670decd81f52fd19e09b925711aa4749f0bde4cb8"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w3_qera_exact_L8.csv",
+      "sha256": "c6310bcbc4c17827a716cc2a146f51949486afed096d75f1e337f6e7979e8d24"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w3_qera_exact_L8.csv",
+      "sha256": "2358ab1472a43ae46e936d2ab44dad549cb4b315950939f360f7314ebc99cc6f"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w3_lqer_L8.csv",
+      "sha256": "d72b7988d846b2775a88831d0fa397aa497e296d862db7b8e974cc9b6f1859f8"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w3_lqer_L8.csv",
+      "sha256": "7e66dddc365dd3b7890c3be4a3f5970c3686bc54c3e66d9c5b9d65597bdbbc8d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_hardware_bf16_l2_w3_l2qer_L8.csv",
+      "sha256": "4047586a041923152b81640e12800edadf4b51116fffa280f2fafd9170e09869"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/q3_rank_vector_comparison_l2_w3_l2qer_L8.csv",
+      "sha256": "ac06f7814a3ec82e9026791249e3c35735acd3ddd68d1be927df168dc5ef2317"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w4_qera_approx_L16.csv",
+      "sha256": "42b078edaf0b4856877ea91345696be4e074f16ff5a010897998bf1bbe839827"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w4_qera_approx_L16.csv",
+      "sha256": "f312b619367e0d5089308b0d761d0874a0ea6e15a5c3b970e6e59aac95a27139"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w4_qera_exact_L16.csv",
+      "sha256": "a22f0de421fba6b0799398a3220a2e3a8f5ca8b0bd9056355835e495c99d0da7"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w4_qera_exact_L16.csv",
+      "sha256": "b0664bc969c1f4cea4cd694603f5ae8a233a861c80bbd7d69c345b61c24a59dc"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w4_lqer_L16.csv",
+      "sha256": "224ff14c59e0e561a6729f37cca9724b4a59f615fb6defdb97b385d8db118dc7"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w4_lqer_L16.csv",
+      "sha256": "ba055e672c55e2ab3a434b06b045611d2d3c77a9bcaaecfa7297091c41748896"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w4_l2qer_L16.csv",
+      "sha256": "8e3a23472f3f3b439dbe78e64d60afec02dd787ec62b8ffd246f8955f6fdf2d2"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w4_l2qer_L16.csv",
+      "sha256": "3158f66dc671227ca5306defca0b3b96691ccbb99d536af708ec33028b14b4af"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w3_qera_approx_L16.csv",
+      "sha256": "0bf66812e03a24190735e32a4cc47b7f1f6538724c46aa6d045a67b7bc65b650"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w3_qera_approx_L16.csv",
+      "sha256": "8747ec6946a41251d915cc7e82f8a579faa2a01debba7ceebc3f0b024de36d32"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w3_qera_exact_L16.csv",
+      "sha256": "18ce4b4c6ee88d6ff62a7ff02cef7e9242d3368ec49fd1fd7092e69f87fb70ff"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w3_qera_exact_L16.csv",
+      "sha256": "85ccce26af301c0a3610be355ad586f556a9aee4dc4fd7376f24d645079d9bcc"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w3_lqer_L16.csv",
+      "sha256": "617a7bec47be08d336198d8a3290e0e1d51d1bf83d80c0f51dfb91cb93702aab"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w3_lqer_L16.csv",
+      "sha256": "666ace7d7b76eb895eea4a2b85760760297319290f11fc6143be699ff8719f4e"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_hardware_bf16_l2_w3_l2qer_L16.csv",
+      "sha256": "a319f4d6be353c3456af9159d0ad0a9a9db1a60944c4dcb02f1e65ff4e3aba1c"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/q3_rank_vector_comparison_l2_w3_l2qer_L16.csv",
+      "sha256": "5e58d775a9ebf8235437a8a597bd40ca2d073c917c8b1df759de4bd4fd901912"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w4_qera_approx_L8.csv",
+      "sha256": "f178f6922a795b694e68fef73b5dbe606bb29b72fe26e3bc58904d4e55f75406"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w4_qera_approx_L8.csv",
+      "sha256": "0ffa74ed5982e77850ef21d41ac2ebc74faa4c5ee186bd245e8d5888caa92be9"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w4_qera_exact_L8.csv",
+      "sha256": "68b9e073ca7eb6baa2759fa11aa2a30f8cbd51d648139b5aa2f01e79d0e5df0b"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w4_qera_exact_L8.csv",
+      "sha256": "64bfdcf10bd881786cef1e49beaf5bedc8f0c0c9dbf1b24e71f1ffb519a83f2d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w4_lqer_L8.csv",
+      "sha256": "4f69badb21557916fa56fbe93370ce109671c443525f1169eaea74775f5790c9"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w4_lqer_L8.csv",
+      "sha256": "451f459db170009dfb0b8a1e6cc0d3a7696b61fb17777660cdb5484c217cae56"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w4_l2qer_L8.csv",
+      "sha256": "f27954bbece8492e37d71cc7fee09279b0e64c770471f4e22ec752d1e7c4584d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w4_l2qer_L8.csv",
+      "sha256": "1a4b2a88355db88bd797795f3247cfad8bf565a29bdc6eec3eb6a7ac616f5153"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w3_qera_approx_L8.csv",
+      "sha256": "bf1991db3e7d14357bba1325d8ba04d001b1704d8a528a4118dbb8accdfc82bd"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w3_qera_approx_L8.csv",
+      "sha256": "acf4d8bdbdaf1adae904c087eeb1162fb275a6c06854d712d14505a24f838559"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w3_qera_exact_L8.csv",
+      "sha256": "17f6f834c08d090c44d5098589fb81a509239b302cb16d501091ea91efae6bae"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w3_qera_exact_L8.csv",
+      "sha256": "9766c71782b963b52c750226221968599ff8772d2b9ed9530f86daabc0827068"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w3_lqer_L8.csv",
+      "sha256": "8c3765458b58bb981df81d2ab4ecef63f2ffc66c0ae74a426cdc2cfc0ec48137"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w3_lqer_L8.csv",
+      "sha256": "1cb4244b26bb7f4a9a5f13e3c1fc6cf05087e219db0376702700159f2d1b7e42"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_hardware_bf16_l13_w3_l2qer_L8.csv",
+      "sha256": "546865ffa63e5c8ded68d0081402153f0f90f09a7cb0ad788d0234c50a0b092f"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/q3_rank_vector_comparison_l13_w3_l2qer_L8.csv",
+      "sha256": "2040623c70178ca9f24c38547b6d43b9a087c77efed024c621e4ff9e5135be60"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w4_qera_approx_L16.csv",
+      "sha256": "52c1c30b2db6234f7f84a980b2defeca3fbf15021c1e45b630167dba592bcfb0"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w4_qera_approx_L16.csv",
+      "sha256": "0e7e214d9b876700750f3b6785aa85aebe6df48789b52c53c5d770dbd075116a"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w4_qera_exact_L16.csv",
+      "sha256": "12fa586020fd0fdc60565e5202d2d5393d4f80f8dc69786731a58ad7dc78f360"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w4_qera_exact_L16.csv",
+      "sha256": "28babe745ba2966ac450cc1938cb4aa6ada029354a6c434414fff8767abeed8f"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w4_lqer_L16.csv",
+      "sha256": "f0aca8e923ee2c55ddfcc4f1d01cb0215d8f51fe2554d243366391f0abb605c0"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w4_lqer_L16.csv",
+      "sha256": "46c772aa8f2c69355e566977e3b220cc671e5b6d5a9180574b2328ff89057953"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w4_l2qer_L16.csv",
+      "sha256": "d29b9a1fda34054cffc08fa3ca12abf576fd79e4fe2132edf174dbc70a94df31"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w4_l2qer_L16.csv",
+      "sha256": "6d28ef5bd5a8b8b900db288dd497a47c3bf045cedcf23fd412bd81b158f1f0b2"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w3_qera_approx_L16.csv",
+      "sha256": "c7a19660519c4a75af2cc4bae0eb569dc43f276bba357af184cc59fa7d698956"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w3_qera_approx_L16.csv",
+      "sha256": "1f528d6854238870b267d8c8193b82f0da21d238c3440207978106bb5351604a"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w3_qera_exact_L16.csv",
+      "sha256": "f19890e0c8b36ce818b148a46e599a933e297aa9624516dd7475a71e203c13bb"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w3_qera_exact_L16.csv",
+      "sha256": "f2f6337d4a02e0fbdc65a26bef1e0318f1b8a3770268328842ba09ed25cf1ad2"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w3_lqer_L16.csv",
+      "sha256": "8d9dba69aac0c13b55608f9aba8f0db730cef75b634d997fd35953b152c57f00"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w3_lqer_L16.csv",
+      "sha256": "8b5243e26cc25b5f94b8b9a90030d0468d92119a7fdbf3e93d8b2271378f2ebb"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_hardware_bf16_l13_w3_l2qer_L16.csv",
+      "sha256": "6e715740ea4c9e443f62bcb9b297e1e9f8439aa48a05c26d87575a753676120d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/q3_rank_vector_comparison_l13_w3_l2qer_L16.csv",
+      "sha256": "c072748b352fe664820462feda64ef140b9a602431f0a2563c2d33b727f7f801"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w4_qera_approx_L8.csv",
+      "sha256": "c525d8da8b302ed75ac6d7cd2f93958c0b61f6ed3b71555e41fbd8470fff41a3"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w4_qera_approx_L8.csv",
+      "sha256": "53e22554eaecf7bc419ee9ed62d5b6dd8c6bc010495c6885339343af4313a56a"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w4_qera_exact_L8.csv",
+      "sha256": "14f9ed95988fd1d3c40964733cc83541c1a64cf32b75d3a0bd9480e317975891"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w4_qera_exact_L8.csv",
+      "sha256": "3df982490ce33d3a43cbf16d13ee330efbc4ba32c58a14c1371b406e198cd627"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w4_lqer_L8.csv",
+      "sha256": "67ff7033822e3727de8d6ca4f58049984d076d44189f69e890f1a8daeeb61f2e"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w4_lqer_L8.csv",
+      "sha256": "d5f3b2950638fd798a5d4033c50f1bf1aa6576d7b5d69c7c426d10740a11d538"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w4_l2qer_L8.csv",
+      "sha256": "495721bcc81c34dffbf18726f1e650bbad82f3ec047b669a6512ab6cc901d29c"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w4_l2qer_L8.csv",
+      "sha256": "245580ca86cc538c035d57351a25119dd67a097900e8659c9b1c1338812faefb"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w3_qera_approx_L8.csv",
+      "sha256": "a07268fb8372a679e51678981af2ce4b63cd60bfeb693c78870a2281d68e13e9"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w3_qera_approx_L8.csv",
+      "sha256": "e1934c14a46e497d8113590de681268feef92c0960373fa5424ff7cfc61c4f40"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w3_qera_exact_L8.csv",
+      "sha256": "92c23733546948cc63f30b2275376a20999bb71090585bd232f26c7be0272964"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w3_qera_exact_L8.csv",
+      "sha256": "d13a325abb974e812c9521f9164265a9e94885665af79a2949d26cee78092ae7"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w3_lqer_L8.csv",
+      "sha256": "0c12c80eb5c4e6781239a3855e27382c9203eae153e23601dd04e52bc75686ea"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w3_lqer_L8.csv",
+      "sha256": "189d12bc61f72f874ad8311636524b42b4d8f7606e0c85078a125f007b29a248"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_hardware_bf16_l26_w3_l2qer_L8.csv",
+      "sha256": "ec885d4311b33e8a53e620ccc600200aa374e3f354ea7bf1c13db2b22be6c31e"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/q3_rank_vector_comparison_l26_w3_l2qer_L8.csv",
+      "sha256": "1ec599bb394affdac5e574bb56efccfef59c419c16b2c67986e3cdc1d930dce7"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w4_qera_approx_L16.csv",
+      "sha256": "83c02ad4cc78fa5d35af7480c5aeac21cf972b16bc400c10da688d6ca1910d75"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w4_qera_approx_L16.csv",
+      "sha256": "597ea80d33e8ad0969844a94926dd58a4f9fb7800e5b0793153556926379aff2"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w4_qera_exact_L16.csv",
+      "sha256": "d936ad2423043494a182998d89e777092c09088df2fbd0960083b69488ed2f98"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w4_qera_exact_L16.csv",
+      "sha256": "90fd26e3eb5c9cdbd278857673a04c4177f7fda16eeac61243f5df193d69cfcc"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w4_lqer_L16.csv",
+      "sha256": "0371b62a01d863c054f99a0688d3c9d4d65146fa23426342497f706ccad0699d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w4_lqer_L16.csv",
+      "sha256": "1125ed42c2a9b1f4a3074b3e71966be0945c671dd274f833d937ef010fbcc95d"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w4_l2qer_L16.csv",
+      "sha256": "703dbc0848a322fd918c6a3bca9b722f33ec0b0c2413e91ee66bedf7d9f7b360"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w4_l2qer_L16.csv",
+      "sha256": "3e4e036e53b0ee7aa9994a389464152e05f2a5eb44a1830eb6a7a8364133dfdc"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w3_qera_approx_L16.csv",
+      "sha256": "afac5b4c433009aaaefac656fc6eaa9c2bcf0b4c185253b8159905ffd814bdc9"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w3_qera_approx_L16.csv",
+      "sha256": "2bd0420ed8bedb7c5b818453266470db92a235d3db1deeca47d6d17bcc8a3768"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w3_qera_exact_L16.csv",
+      "sha256": "83d9e47acc3c918e65d07b596d267ffdbca5b39ca59cdcc7e096e964587f62c4"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w3_qera_exact_L16.csv",
+      "sha256": "a0633d647a83de54f7f9c7faaf7947f37c8c0236c22fe88ca8353698c5d64120"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w3_lqer_L16.csv",
+      "sha256": "81515bf4f96dec6fe958d49ef3fc70d0dcc990d463086dfddf35631a68faf648"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w3_lqer_L16.csv",
+      "sha256": "aa2a550ed01107502f39da7ae7feb7d258f53a1d265d13f137707e022001ed8c"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_hardware_bf16_l26_w3_l2qer_L16.csv",
+      "sha256": "639b458937105167f4edc9cd1a9845814276a88f5f2ee805468f295d6a957ded"
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/q3_rank_vector_comparison_l26_w3_l2qer_L16.csv",
+      "sha256": "8f1052f8c11a42d28e6b2d36892629a727754e0ed93679f574c952d5c13743c5"
+    }
+  ],
+  "physical_calibration_tables": [
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_qera_approx_uniform16.json",
+      "sha256": "1e923b71d508e25793bf6548cfc131b057b631c81d220a801c9bbb09b8cca9cb",
+      "lambda0": 1.0290328769495752e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924964.375,
+        "byte_delta": -120.75
+      },
+      "software_float_lambda0": 1.031003693865917e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9919734.8125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -5350.3125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_qera_approx_uniform32.json",
+      "sha256": "d45f7a7c6dea9e0567a4353c53a4496c9d75e9da1cee0b7e78b9c6da1339525b",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_qera_exact_uniform16.json",
+      "sha256": "c788e3422942aa7bfb7dbb16cf37332072d8977c580d51e8e1f5a238d31c97f2",
+      "lambda0": 4.9029738421060196e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925034.125,
+        "byte_delta": -51.0
+      },
+      "software_float_lambda0": 4.901845352597624e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9926018.125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 933.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_qera_exact_uniform32.json",
+      "sha256": "562e3d7a705a920c64278ad8c8a763ed5383f618f973266faa7bd9cfc68d137a",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_lqer_uniform16.json",
+      "sha256": "bb628f97a1121cf6d4950ab7f9bc20b22a1cba2900d53c4df8c5945a0988244d",
+      "lambda0": 8.81367754162028e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924987.8125,
+        "byte_delta": -97.3125
+      },
+      "software_float_lambda0": 8.801493163916427e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9932140.3125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 7055.1875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_lqer_uniform32.json",
+      "sha256": "67656ce13a8f021c7a5dbc28a6b045685722b1448c4d4fe9911092e00780f523",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_l2qer_uniform16.json",
+      "sha256": "6c2b6a6a79c2e1a9fd5b06238a2284018161c77a7e30376583303480ce1ded81",
+      "lambda0": 6.988145767392541e-09,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925003.625,
+        "byte_delta": -81.5
+      },
+      "software_float_lambda0": 7.010633942733856e-09,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9915980.75,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -9104.375
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w4_l2qer_uniform32.json",
+      "sha256": "c038717e8da9e8a3cb36573c254dc2445bd56e91cefe4a4d07e96f8e892a2f7b",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_qera_approx_uniform16.json",
+      "sha256": "b246b463387f3b903d3f603929bb55a043e6bd6efeb4789d343f671dea336df0",
+      "lambda0": 5.046711726992149e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924935.1875,
+        "byte_delta": -149.9375
+      },
+      "software_float_lambda0": 5.027665399783075e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9937247.25,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 12162.125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_qera_approx_uniform32.json",
+      "sha256": "3682ec1635229748cb52811f2a88e1ad3581a02766a0c65cf770ed6893b19635",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_qera_exact_uniform16.json",
+      "sha256": "9ad6dd01242d66468473e1cd748e82cad102150c447c49cdaa76f55e0e38ec3b",
+      "lambda0": 2.3915994682989667e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925080.9375,
+        "byte_delta": -4.1875
+      },
+      "software_float_lambda0": 2.3918664614600357e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9924745.75,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -339.375
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_qera_exact_uniform32.json",
+      "sha256": "cde9e29b6f13fc3b597e5a5a9f0101b1b816d262b9827213608966c8339d8874",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_lqer_uniform16.json",
+      "sha256": "c8fc19ab7fd0fe1ba89c4c121edc2bd92b65d8117d7aa8495cb033f35a0fa1c4",
+      "lambda0": 4.3361754973385753e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924987.8125,
+        "byte_delta": -97.3125
+      },
+      "software_float_lambda0": 4.3269232385685535e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9932140.3125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 7055.1875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_lqer_uniform32.json",
+      "sha256": "43f8c756f90c4c29dd6bfbcfee442785c43fae66613649297c1fc8bc34fb29b4",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_l2qer_uniform16.json",
+      "sha256": "6a5904d7cd1603872a8de027b7d8ac63e9307fb14da0e310b74dd6f1ca85f4b8",
+      "lambda0": 3.427236435048864e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925033.8125,
+        "byte_delta": -51.3125
+      },
+      "software_float_lambda0": 3.419232869770562e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9933201.3125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 8116.1875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L8/rank_table_hw_bf16_l2_w3_l2qer_uniform32.json",
+      "sha256": "a643096a595501ad162dd16a5f78b1964f51a8cc16a084cd19659e15068ead86",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "mean_allocated_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 15449221.1875,
+        "mean_uniform_window_bytes": 15449221.1875,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_qera_approx_uniform16.json",
+      "sha256": "b47e49858de25f251cabb22b64cba5a4601c529196c6b4b0ca90f78805f02ed6",
+      "lambda0": 1.3302562712946298e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925064.6875,
+        "byte_delta": -20.4375
+      },
+      "software_float_lambda0": 1.3280143097748596e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9930026.6875,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 4941.5625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_qera_approx_uniform32.json",
+      "sha256": "d72bc48341a007b07a09d6e99d1aa4c3dad61165ed82e8cf7ef9a8d1a30b4851",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_qera_exact_uniform16.json",
+      "sha256": "3cc6cac7fcd6d2d30b5c1614f16083d43169b3d5f402c8ab492d2a7daba539c2",
+      "lambda0": 5.378487250179433e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925039.8125,
+        "byte_delta": -45.3125
+      },
+      "software_float_lambda0": 5.3751541602446314e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9928052.9375,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 2967.8125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_qera_exact_uniform32.json",
+      "sha256": "fa0a8f51e8c0dd30072b71110976906c16af5f0e8bc02801cbd72f4653f4581a",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_lqer_uniform16.json",
+      "sha256": "ca56dbb876b8002dc0a9a8b7fa8ae9413317f2819672084695ea76423b8cd9e5",
+      "lambda0": 1.2374955454372168e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924954.75,
+        "byte_delta": -130.375
+      },
+      "software_float_lambda0": 1.241000848537989e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9915672.0,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -9413.125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_lqer_uniform32.json",
+      "sha256": "cad2cf4b7b1348cae4ab819f4420f84b7300c70e3d3e640acef71d9482aea5a1",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_l2qer_uniform16.json",
+      "sha256": "73e41bb2f39b6595c215ea9dde28a977a0534d3a051ece09e516ff2111afa9e5",
+      "lambda0": 9.06928552713094e-09,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925048.0625,
+        "byte_delta": -37.0625
+      },
+      "software_float_lambda0": 9.071203369256915e-09,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9923627.8125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -1457.3125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w4_l2qer_uniform32.json",
+      "sha256": "86e27f24acc724c0a3b0c9c616f97764093266742b9aa02d9231c0c2c5acdbc2",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_qera_approx_uniform16.json",
+      "sha256": "20800101cf30b79bc78142a8825bc114cfa89ac411eaa53581884251dc396b87",
+      "lambda0": 6.500334183839837e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925044.6875,
+        "byte_delta": -40.4375
+      },
+      "software_float_lambda0": 6.48895894793311e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9930141.5625,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 5056.4375
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_qera_approx_uniform32.json",
+      "sha256": "6f5b26d3fc48e1dfe7e6fae9bf5c52e10926a507610e51baec25cb2acc0ca060",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_qera_exact_uniform16.json",
+      "sha256": "4947306583275e5125cca88ee4148436821878e381d6bfa6309f0574adee9553",
+      "lambda0": 2.6220751487114485e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9925030.9375,
+        "byte_delta": -54.1875
+      },
+      "software_float_lambda0": 2.6248488935858447e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9921709.75,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -3375.375
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_qera_exact_uniform32.json",
+      "sha256": "f9a2854fa156e3e06f69dd53671cf009ea5528818c81c3f1dd103fea3281bb5a",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_lqer_uniform16.json",
+      "sha256": "ab4b8d5094286b91ee35cafac2f8b5656c68cce86f1974a2182ce89b499214cc",
+      "lambda0": 6.114595214101887e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924992.5,
+        "byte_delta": -92.625
+      },
+      "software_float_lambda0": 6.127984179026081e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9918087.875,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": -6997.25
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_lqer_uniform32.json",
+      "sha256": "9f5f91b413c4fe1dd6b3ae7e4b9b3dfc471ffb6f5d12592f3eb1954ab7c5fed9",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_l2qer_uniform16.json",
+      "sha256": "a6c211ecd7e130b8c5f984e1666ad9cec96e1c3186727202ec5947dbe8e94ad9",
+      "lambda0": 4.4444092890851954e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9925085.125,
+        "mean_allocated_window_bytes": 9924904.1875,
+        "byte_delta": -180.9375
+      },
+      "software_float_lambda0": 4.431992492990633e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9932654.125,
+        "mean_uniform_window_bytes": 9925085.125,
+        "byte_delta": 7569.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer2/L16/rank_table_hw_bf16_l2_w3_l2qer_uniform32.json",
+      "sha256": "5a3e09c1826161d74adc5293af0be2593c70f21d6a3a71ae9d45ac4f53d292cf",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 17776594.25,
+        "mean_allocated_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 17776594.25,
+        "mean_uniform_window_bytes": 17776594.25,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_qera_approx_uniform16.json",
+      "sha256": "73f1c61637f9ce1e3706323b7a379bdfa1cd93b85e0c5d1c1d3cfddf720899b6",
+      "lambda0": 4.882836333699958e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347353.625,
+        "byte_delta": -25.125
+      },
+      "software_float_lambda0": 4.8895486740350966e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9340925.8125,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -6452.9375
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_qera_approx_uniform32.json",
+      "sha256": "989792b03dd89d65c901800b9225634c8e376877937570107c384cf464cb3b55",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_qera_exact_uniform16.json",
+      "sha256": "a67a7b28a93e74a1a295fef00d4a44ffb32278d83fdb2474ce5df90d05025750",
+      "lambda0": 1.5475794482251142e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347365.625,
+        "byte_delta": -13.125
+      },
+      "software_float_lambda0": 1.548314133248729e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9344608.4375,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -2770.3125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_qera_exact_uniform32.json",
+      "sha256": "23fd710de98a106c6ae78eb326521ab49e487dad5690032eebf63c737ed7d1b2",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_lqer_uniform16.json",
+      "sha256": "02d16cb8e01c480b96c0d38bb829d4da1a173a51e3aac9635d7beafa15b852b9",
+      "lambda0": 6.666024946898853e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347244.625,
+        "byte_delta": -134.125
+      },
+      "software_float_lambda0": 6.660620050305135e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9351178.5,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": 3799.75
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_lqer_uniform32.json",
+      "sha256": "fb7326d2e1030a1190c3d2057557aeb56687b5513ce0957d74caa40175d9aa7e",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_l2qer_uniform16.json",
+      "sha256": "ab0917438c92717cd35fcb402091cf0baa4e948f4f801ce5df514ead0377c8d6",
+      "lambda0": 3.555053288493306e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347338.5625,
+        "byte_delta": -40.1875
+      },
+      "software_float_lambda0": 3.5561952279989145e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9346040.0625,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -1338.6875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w4_l2qer_uniform32.json",
+      "sha256": "103ca68c87d061a84ed38092fd3b71fcca127247b65f0987c19aeb02a1793a06",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_qera_approx_uniform16.json",
+      "sha256": "cc41809e55cee34848c287e63d3aeb266a50bfc1c67a47d560d9bae9bb625111",
+      "lambda0": 2.4343086813797047e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347357.25,
+        "byte_delta": -21.5
+      },
+      "software_float_lambda0": 2.4357915306005486e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9344204.1875,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -3174.5625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_qera_approx_uniform32.json",
+      "sha256": "c34df9d8403f57b4899c65c077a12063e0860e23143c7a18cb59ad95fe2de76b",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_qera_exact_uniform16.json",
+      "sha256": "5eebb344fed006e459362c18202c6e4f1740584b454556ffbc9ebaf443428a6b",
+      "lambda0": 7.684354403011853e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347372.8125,
+        "byte_delta": -5.9375
+      },
+      "software_float_lambda0": 7.687700225160296e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9344999.8125,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -2378.9375
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_qera_exact_uniform32.json",
+      "sha256": "18541c4cc7ecbf2ca88642fd37af575b4be4dd4e30e66a53ca64b589bb62ca7b",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_lqer_uniform16.json",
+      "sha256": "43eca81a0921fa84a0b538a326219a7f5d5e601da1586d4011ee894262926bd4",
+      "lambda0": 3.358612884530301e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347244.625,
+        "byte_delta": -134.125
+      },
+      "software_float_lambda0": 3.3677518537261745e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9334012.5,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -13366.25
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_lqer_uniform32.json",
+      "sha256": "d2012130f058fb401d7fca871a1c74d4312ce0f5a0373302b63d6a0ae687b4af",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_l2qer_uniform16.json",
+      "sha256": "75d158a1fa84bc1af499f3cdd538f4b1bca43d15be9d46ab91629a297f07fc0a",
+      "lambda0": 1.772433314409289e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347358.3125,
+        "byte_delta": -20.4375
+      },
+      "software_float_lambda0": 1.7728502221380138e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9346512.6875,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -866.0625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L8/rank_table_hw_bf16_l13_w3_l2qer_uniform32.json",
+      "sha256": "a484c752b6f8f90c9a991941a297db631229e4d7f9c6d4c7aba6673bd9f82eac",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 14549973.125,
+        "mean_allocated_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 14549973.125,
+        "mean_uniform_window_bytes": 14549973.125,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_qera_approx_uniform16.json",
+      "sha256": "4e605c1a801debfa2bd712d017d3ba9fb997c058ecfe3b250907dcb31835bb8f",
+      "lambda0": 5.171467764727831e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347298.3125,
+        "byte_delta": -80.4375
+      },
+      "software_float_lambda0": 5.174446094754997e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9343840.0,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -3538.75
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_qera_approx_uniform32.json",
+      "sha256": "4e96318dfdc93b292d0b3369f50692e235a6a3eba23c33084cc2a87d25e8055e",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_qera_exact_uniform16.json",
+      "sha256": "8c8c70cc7e8a2317e8e1213c1665ac4e142c55ea70a8e5fb20d9b700babbb22d",
+      "lambda0": 1.554693360298369e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347322.1875,
+        "byte_delta": -56.5625
+      },
+      "software_float_lambda0": 1.5543722312085625e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9348339.5,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": 960.75
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_qera_exact_uniform32.json",
+      "sha256": "9d9cb72ad06ca2f498bcb871926fa71b4cab294808f1a93c92466db61b395421",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_lqer_uniform16.json",
+      "sha256": "65487b60b5ad868e5cb6d14b3af086181f501ce4babe5f44d74ac3b02def94d9",
+      "lambda0": 7.95755165865104e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347222.5,
+        "byte_delta": -156.25
+      },
+      "software_float_lambda0": 7.954483578779456e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9350308.75,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": 2930.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_lqer_uniform32.json",
+      "sha256": "f6b3b492acb86d963d347e27b1f72c7fa312588d76371bb65788816a868e8845",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_l2qer_uniform16.json",
+      "sha256": "67c87fd9bfd7fc786ed96f4c064a8f9e06694a405a82d3156fe8a0d4b3ff83c2",
+      "lambda0": 3.7540639536981274e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347350.0625,
+        "byte_delta": -28.6875
+      },
+      "software_float_lambda0": 3.755514997518383e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9345458.25,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -1920.5
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w4_l2qer_uniform32.json",
+      "sha256": "f5be4ec47618ea6a534331291f55972418cc09e08dfaa780303ba322c918cfa6",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_qera_approx_uniform16.json",
+      "sha256": "4726ea34ce37be54041477596437007835522af0dab9973b6804ff13a3d790cb",
+      "lambda0": 2.5864134745173935e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347289.25,
+        "byte_delta": -89.5
+      },
+      "software_float_lambda0": 2.586370038632264e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9347539.0,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": 160.25
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_qera_approx_uniform32.json",
+      "sha256": "b286edd89ad9e4995ef419a8968ed038a1cb03f018e527ce175616c182412c69",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_qera_exact_uniform16.json",
+      "sha256": "8910402bdec0d3ad9517eaad770d2605e63683e051ee1c5df51b606cb3b912df",
+      "lambda0": 7.726127237592257e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347362.6875,
+        "byte_delta": -16.0625
+      },
+      "software_float_lambda0": 7.732012016107339e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9343231.6875,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -4147.0625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_qera_exact_uniform32.json",
+      "sha256": "d573d2473b4ee87782ddb063718cfcd66a0dd3371a208d45ee54a34b1e1520b6",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_lqer_uniform16.json",
+      "sha256": "5c5ae21403d77b63c23f0752660d12b8edb1fbefa480e282dc8acc89efa49291",
+      "lambda0": 4.0138457612174763e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347222.5,
+        "byte_delta": -156.25
+      },
+      "software_float_lambda0": 4.0302934464757636e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9326853.25,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -20525.5
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_lqer_uniform32.json",
+      "sha256": "b6f2dd108a64ea8e3c850864fcd39d56c18f91aea872504e05e97e10b8925bc1",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_l2qer_uniform16.json",
+      "sha256": "89f86d23062cdd05301fa233aa834490a90c67272a5c5daa00880873cf3c641d",
+      "lambda0": 1.8724165385143939e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 9347378.75,
+        "mean_allocated_window_bytes": 9347373.625,
+        "byte_delta": -5.125
+      },
+      "software_float_lambda0": 1.8763186293935292e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 9337361.0,
+        "mean_uniform_window_bytes": 9347378.75,
+        "byte_delta": -10017.75
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/hardware_q3_l13/L16/rank_table_hw_bf16_l13_w3_l2qer_uniform32.json",
+      "sha256": "a6d3116b22ef6ef11a203041e69792a2872887389cd4a7d152f21eb93a2bf07f",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16741877.5,
+        "mean_allocated_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16741877.5,
+        "mean_uniform_window_bytes": 16741877.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_qera_approx_uniform16.json",
+      "sha256": "cea5567e601f6a9ab7c0f5715f76c3ab447f8b09d42f2a60f7b6af7c26da84c8",
+      "lambda0": 2.40210160961515e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324942.4375,
+        "byte_delta": -22.5625
+      },
+      "software_float_lambda0": 2.4095147347783807e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10312883.25,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -12081.75
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_qera_approx_uniform32.json",
+      "sha256": "c995468645af40adf5eb8f792889b33c350967a1840ffd5cb583277e4f9d7fb9",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_qera_exact_uniform16.json",
+      "sha256": "8615338fb95ef8dc8fa823189302a20a1f70435072ada544cfd8f394b7e97923",
+      "lambda0": 4.5994400263472026e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324913.4375,
+        "byte_delta": -51.5625
+      },
+      "software_float_lambda0": 4.601875480283807e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10323137.125,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -1827.875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_qera_exact_uniform32.json",
+      "sha256": "52b9b1d91d7ad6590f9607449fd649cb34361a0635217333f1ed7d66b6a3c319",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_lqer_uniform16.json",
+      "sha256": "3e6ced33842b95250ec75d6d5d68757ea213737923f083bd0e5a12c5c2ef495c",
+      "lambda0": 8.468788658844425e-08,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324812.5625,
+        "byte_delta": -152.4375
+      },
+      "software_float_lambda0": 8.477415251697969e-08,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10316050.75,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -8914.25
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_lqer_uniform32.json",
+      "sha256": "c5bdb0aac2c2d688e7a38de9918af89684e35fbe792ef68203c2eb510edb01b4",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_l2qer_uniform16.json",
+      "sha256": "b92b827f5d128345a714c0d91f6a55f9ea881473870ca5063d780c06e46c08fe",
+      "lambda0": 1.787544855960939e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324956.25,
+        "byte_delta": -8.75
+      },
+      "software_float_lambda0": 1.7914423895955312e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10318043.3125,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -6921.6875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w4_l2qer_uniform32.json",
+      "sha256": "bdae01e719ce10689b18a1c70bd14a1009849a975e72bd5021d5eb7de8f7f6c0",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_qera_approx_uniform16.json",
+      "sha256": "0d4324e296ff4a3103f893f7903d8504773c3a0b119e906ebe6a8fe72cef2fbd",
+      "lambda0": 1.1571830208249353e-06,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324919.1875,
+        "byte_delta": -45.8125
+      },
+      "software_float_lambda0": 1.1576161959697817e-06,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10323900.5,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -1064.5
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_qera_approx_uniform32.json",
+      "sha256": "94eb8ec6d383f28d2a6899c76bda2b8457e3cca250f9b59070c77b7b2a2caa54",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_qera_exact_uniform16.json",
+      "sha256": "87b483eeb803d84b1250b04b1d1e79cc9cc68f7126dfc300635e6614303db958",
+      "lambda0": 2.2544677537872494e-06,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324911.125,
+        "byte_delta": -53.875
+      },
+      "software_float_lambda0": 2.2548070837236054e-06,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10324672.8125,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -292.1875
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_qera_exact_uniform32.json",
+      "sha256": "8a2cfa6b7b2b7ff1e20e23165930809a9450a379d2895317480acf7b2aed1eed",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_lqer_uniform16.json",
+      "sha256": "315f7e2f08e633c0545e69288e2318bf7182c3a216a0ec43301babe9b8b6ac9e",
+      "lambda0": 4.289324722139496e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324951.3125,
+        "byte_delta": -13.6875
+      },
+      "software_float_lambda0": 4.294654500012314e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10319586.9375,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -5378.0625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_lqer_uniform32.json",
+      "sha256": "564126dcdff3e3cf56003f04e2c44fc838300a604e95bc8d79a746abd6c88837",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_l2qer_uniform16.json",
+      "sha256": "86e2d32b1baec46706c206f3a52b2d3f8116973794e558c47eabae8ef7ce83ca",
+      "lambda0": 8.624194778485639e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324942.4375,
+        "byte_delta": -22.5625
+      },
+      "software_float_lambda0": 8.639031631665393e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10317029.4375,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -7935.5625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L8/rank_table_hw_bf16_l26_w3_l2qer_uniform32.json",
+      "sha256": "9687f34841a3120b28eafcbdc47b7e75d481d1ca3dae5a794d931a8650ae2175",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 16071667.5,
+        "mean_allocated_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 16071667.5,
+        "mean_uniform_window_bytes": 16071667.5,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_qera_approx_uniform16.json",
+      "sha256": "ac9cce116d32a14214bf5708feb6b31499574982410f33f695cde292e10f8b3e",
+      "lambda0": 2.4274841527785555e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324905.5625,
+        "byte_delta": -59.4375
+      },
+      "software_float_lambda0": 2.43062446507392e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10319348.5,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -5616.5
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_qera_approx_uniform32.json",
+      "sha256": "5871fdba9359463c2abd9ba90eb3642d93827464324b64b9d44447335011f328",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_qera_exact_uniform16.json",
+      "sha256": "4879793f45e0cad2ea2e05c6efc126aa189bdc26596482b03361ce05f5d6b804",
+      "lambda0": 4.665748984568079e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324924.0625,
+        "byte_delta": -40.9375
+      },
+      "software_float_lambda0": 4.6662749244054903e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10324239.9375,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -725.0625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_qera_exact_uniform32.json",
+      "sha256": "2197086c26ed818bfca0f35b6912902ec3deb20afb26fb8020fe99964fd7bc62",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_lqer_uniform16.json",
+      "sha256": "671d6c81430175ebec640e4d4fac6e9de84780ae328c0d225b941d0436c125ca",
+      "lambda0": 1.0287131235492159e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324911.5,
+        "byte_delta": -53.5
+      },
+      "software_float_lambda0": 1.0272421703248479e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10336773.0,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": 11808.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_lqer_uniform32.json",
+      "sha256": "1ead428297df34f4b97700e49b2bc8ad3f284ccdaf0ecda529a4bad4dcdb776d",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_l2qer_uniform16.json",
+      "sha256": "978064ec7a521744cbeb68213dc0ab6618b2260c26807df86f2ab42aa9348220",
+      "lambda0": 1.7868304613299314e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324946.125,
+        "byte_delta": -18.875
+      },
+      "software_float_lambda0": 1.7926612936753607e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10314446.9375,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -10518.0625
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w4_l2qer_uniform32.json",
+      "sha256": "57572900598fd308e6f273b7787f73c623e2de72bf4ce55d9794111cebd58cb5",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_qera_approx_uniform16.json",
+      "sha256": "e7cf4cf39d0b96986ee9659ae0410d7f677d61f3f4d4e77e91c6dc716e669d36",
+      "lambda0": 1.170555502751557e-06,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324946.0625,
+        "byte_delta": -18.9375
+      },
+      "software_float_lambda0": 1.1697564524906434e-06,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10328762.8125,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": 3797.8125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_qera_approx_uniform32.json",
+      "sha256": "253c2523714c18d54d3146234fb6246d3aa67ed341a214473c7d4f8403115dcb",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_qera_exact_uniform16.json",
+      "sha256": "0eebe0a7d7ce953bd650178b81302a7291f776b82a5d7c3f386ee10fd4441819",
+      "lambda0": 2.282368155320071e-06,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324683.6875,
+        "byte_delta": -281.3125
+      },
+      "software_float_lambda0": 2.2828199274154785e-06,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10324272.1875,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -692.8125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_qera_exact_uniform32.json",
+      "sha256": "872316039d7cfa0a5e4479dce9232f4a75a74c7e106a922242ea8e96ff34c4fe",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_lqer_uniform16.json",
+      "sha256": "3626e13ca15e30d7cea5eaeb0a785a62e2c644d8a0691ae5719ae93fd10c2843",
+      "lambda0": 5.186130930875651e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324825.75,
+        "byte_delta": -139.25
+      },
+      "software_float_lambda0": 5.191389530383673e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10318471.5,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -6493.5
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_lqer_uniform32.json",
+      "sha256": "d08e2415718e8c967742aae361402406c738dbb416410c0df901b4a5de54ac80",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_l2qer_uniform16.json",
+      "sha256": "a818c33b3ade5a95abe91d1d6f4f1266f0890a27b3adb060cc45b7e97e5d3c42",
+      "lambda0": 8.639946230777824e-07,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 10324965.0,
+        "mean_allocated_window_bytes": 10324950.9375,
+        "byte_delta": -14.0625
+      },
+      "software_float_lambda0": 8.654498140035978e-07,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 10317272.875,
+        "mean_uniform_window_bytes": 10324965.0,
+        "byte_delta": -7692.125
+      }
+    },
+    {
+      "path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/layer_shards/layer26/L16/rank_table_hw_bf16_l26_w3_l2qer_uniform32.json",
+      "sha256": "dd6fdf963f22dceaf336b8297a91bd8ee3c37e7998f06d06e94202d04fd2c61f",
+      "lambda0": 1e-16,
+      "lambda_fit": {
+        "method": "bisection_on_mean_actual_development_window_bytes",
+        "window_tokens": 16,
+        "window_count": 2048,
+        "mean_uniform_window_bytes": 18492810.0,
+        "mean_allocated_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      },
+      "software_float_lambda0": 1e-16,
+      "float_lambda0_on_hardware_diagnostic": {
+        "mean_allocated_window_bytes": 18492810.0,
+        "mean_uniform_window_bytes": 18492810.0,
+        "byte_delta": 0.0
+      }
+    }
+  ],
+  "table": "BF16 RNE perprojection energies; exact uint32 byte costs; commonexpert rank; Shared stays full",
+  "lambda": "physical BF16 projection energy LUT refit on actual development-window routed-only factor bytes; Shared fixed separate; software float constant retained as diagnostic",
+  "quality_evidence": "actual FFN output reconstructed from resident rank-prefix outputs; software and physical-LUT policy errors kept separate",
+  "no_silent_quality_transfer": true
+}

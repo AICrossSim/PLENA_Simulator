@@ -1,0 +1,116 @@
+{
+  "acceptance_thresholds_unchanged": true,
+  "all_inputs_unchanged": true,
+  "auth_revoked_path": "outputs/moe_supply_first_v3/heldout_authorization.json",
+  "disclosure": "Eight legal correctness deadlocks observed after authorized heldout began. All v7 launchers and workers were stopped and reaped; raw evidence is preserved. The amendment changes general progress correctness, not hardware parameters, selected work, numerical formats, or acceptance thresholds.",
+  "failures": [
+    {
+      "config_sha256": "923ae560fd70494fb69ba2c40bfc686956f63646d4ee2857b63ee78a9a18236d",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward4/failure.json",
+      "failure_sha256": "17d6d347ead7c69778f3fc8bf2458631891ab1c6cf1264b07659e5f0869f6762",
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward4",
+      "workload_sha256": "5cb2ffabb2a966b3f6419cd1ef808849b53d972989c0eac5da864b928231618d"
+    },
+    {
+      "config_sha256": "7d543b2ec166e8dd8032ca71e53c9255cccae8d88a784815661f48155717a89f",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward5/failure.json",
+      "failure_sha256": "767ca6027159ff582b73f5a8d2518248ca6b7ac701c1550436a9c109c93e79b3",
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__forward5",
+      "workload_sha256": "5cb2ffabb2a966b3f6419cd1ef808849b53d972989c0eac5da864b928231618d"
+    },
+    {
+      "config_sha256": "996558a84fd82100cd95396147658494e3fdaf157da8d43f3d12b95e5c8e5cdf",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__leave_out_w_reuse/failure.json",
+      "failure_sha256": "858a797354fbc7c2745c7a12c2d07ef955c2c137afd07a92aeda1377e6ad5447",
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP0__iso__leave_out_w_reuse",
+      "workload_sha256": "5cb2ffabb2a966b3f6419cd1ef808849b53d972989c0eac5da864b928231618d"
+    },
+    {
+      "config_sha256": "8bbc955ed58cb9c465dd07a106f5a9074f78a2eb21aed68350acd06dffc2aae5",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward4/failure.json",
+      "failure_sha256": "b685fadd2ec61ce9a92143af9c05ea7eeec98b437bf1d382026bdf8ef83d4844",
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward4",
+      "workload_sha256": "5cb2ffabb2a966b3f6419cd1ef808849b53d972989c0eac5da864b928231618d"
+    },
+    {
+      "config_sha256": "7d89038beb9a4a63715b8198056fff7f12bc3d5712794eb044450631e6ebdd87",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward5/failure.json",
+      "failure_sha256": "db194785176fc0b23d5bbf69002e51688e3bd730e6742e001cf1e93cc912c3d4",
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__forward5",
+      "workload_sha256": "5cb2ffabb2a966b3f6419cd1ef808849b53d972989c0eac5da864b928231618d"
+    },
+    {
+      "config_sha256": "e42bf61dcc902100848de7fcd589afbd6be0a42f4e2c397bc0823428598b39b7",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__leave_out_w_reuse/failure.json",
+      "failure_sha256": "2ace64c84712161ae0d6d4fede01059a90be75aeacfde6392f5a3573c00a8cf0",
+      "point_key": "ablation__joint_test_gpqa_b16_l13_s7__BL2__OP1__iso__leave_out_w_reuse",
+      "workload_sha256": "5cb2ffabb2a966b3f6419cd1ef808849b53d972989c0eac5da864b928231618d"
+    },
+    {
+      "config_sha256": "68a9505043255725ce3e34eabdcf3901cd6fbb910acc1585d2f95d36b7d86a60",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__demand__default/failure.json",
+      "failure_sha256": "929f744a9278052465948a6fe5b6cb73b746a4a041f2a7bfccd96bca8fc5189e",
+      "point_key": "main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__demand__default",
+      "workload_sha256": "cf0ea8416179ef7bb6e5e17d012ecb9100ec8cc2766fade0ee73c7597e40a2e7"
+    },
+    {
+      "config_sha256": "58f8c0b808f0b654b9ac3b1ee6fe7878a62b7b24c73ad8461612cb08f1811aa2",
+      "failure_path": "outputs/moe_supply_first_v3/raw/ff74eaf398763492/main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__iso__default/failure.json",
+      "failure_sha256": "fdde3322f395feca043776ae795b54a5f1c0021fa331f7e1a0aea4d77a4c32d7",
+      "point_key": "main__heldout_bfcl_b16_l2_s7__M8_flex62__OP3__iso__default",
+      "workload_sha256": "cf0ea8416179ef7bb6e5e17d012ecb9100ec8cc2766fade0ee73c7597e40a2e7"
+    }
+  ],
+  "fresh_development_required": [
+    "Eight original failure configurations under the repaired engine",
+    "84 exact development comparator points with unchanged geometric-mean selection rule",
+    "All development and mixed-development mechanisms",
+    "42 native-wire sensitivity points repeated twice",
+    "M5 causal and temporal integration reruns"
+  ],
+  "frozen_physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+  "heldout_gate": "A new immutable engine, complete correctness receipts, fresh development comparator, and recommitted exact PREREG must be approved by root before new heldout execution.",
+  "historical_authorization": {
+    "path": "outputs/moe_supply_first_v3/heldout_authorization_v7_historical_before_correctness_amendment.json",
+    "sha256": "d6a181e48f703a5faca5dd06c2da6ed1197793bd01e08b9d97d7b952e1b1352e"
+  },
+  "historical_engine_sha256": "1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f",
+  "historical_timing_campaign": "ff74eaf398763492",
+  "invariants_to_revalidate": [
+    "Physical transactional first-fit allocation of complete required groups",
+    "Actual allocator-fit preservation for selected Current heads before speculation, including helper service dependencies",
+    "Finite accumulator/Z/U leases reserved before speculative context becomes resumable",
+    "Blocked-head switching in both pool allocation modes without evicting live WOR state",
+    "Partial one-tile policy cannot prevent Current full-frame completion",
+    "Accepted DMA responses retain their original finite leases until consumed or explicitly drained"
+  ],
+  "matrix_unchanged": {
+    "constructed": 5469,
+    "development": 4140,
+    "heldout": 36504,
+    "legal_points": 55012,
+    "mixed_development": 1618,
+    "mixed_heldout": 7281,
+    "original_raw_runs_per_point": 2,
+    "total_required_original_raw_runs": 110024
+  },
+  "original_prereg_commit": "f6c9c5e91b68072fddd3db3975bfc66f44f1b7c9",
+  "quality_file": {
+    "path": "outputs/moe_supply_first_v3/frozen_format.json",
+    "sha256": "73050cb77f5bc98bbfe8133d1652c3658ceff5025151f4c925db570ae2bb0c61",
+    "status": "diagnostic_non_accuracy_preserving"
+  },
+  "reuse_v7_timing": false,
+  "schema": "plena_v3_postheldout_correctness_amendment_v1",
+  "status": "engine_correctness_validated_fresh_development_and_recommitted_prereg_pending",
+  "binary_sha256": "23d91e9300eba984b2b1d5b4a83766f3b5c23e347c63830588bccf107fc5b161",
+  "rust_tests_passed": 79,
+  "timed_numeric_cases": 56,
+  "legacy_cases": 47,
+  "legacy_subtests": 271,
+  "original_failure_points": 14,
+  "original_failure_runs": 28,
+  "all_original_failure_outputs_bit_identical": true,
+  "heldout_authorized": false,
+  "finalized_unix": 1790925791.8726544
+}

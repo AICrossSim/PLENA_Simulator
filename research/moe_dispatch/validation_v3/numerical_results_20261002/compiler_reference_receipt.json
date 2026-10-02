@@ -1,0 +1,92 @@
+{
+  "schema": "plena_v3_compiler_reference_test_receipt_v1",
+  "timestamp_utc": "2026-10-02T05:34:50.548788+00:00",
+  "python": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "measured_results": {
+    "supplied_reference": 17,
+    "hardware_gold": 6,
+    "quant_helpers": 14,
+    "compiler_and_legacy": 24,
+    "compiler_subtests": 3,
+    "passed_tests_total": 67,
+    "merge_guards": 3,
+    "recovery_guards": 2,
+    "quality_population_guards": 1
+  },
+  "commands": [
+    {
+      "cwd": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator",
+      "args": [
+        "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "research/moe_dispatch/v3_reference/test_ref.py",
+        "research/moe_dispatch/v3_reference/test_ref_hw.py",
+        "research/moe_dispatch/quant/test_quant.py",
+        "research/moe_dispatch/quant/test_layer_shards.py"
+      ],
+      "exit_code": 0,
+      "output": "39 passed in 12.66s"
+    },
+    {
+      "cwd": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler",
+      "args": [
+        "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "research/moe_dispatch/test_compiler.py",
+        "research/moe_dispatch/test_robust_space.py",
+        "research/moe_dispatch/test_compiler_v3.py"
+      ],
+      "environment": {
+        "PLENA_V3_REFERENCE_DIR": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/v3_reference"
+      },
+      "exit_code": 0,
+      "output": "24 passed, 3 subtests passed in 2.55s"
+    }
+  ],
+  "test_source_sha256": {
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/v3_reference/test_ref.py": "02a709eb4afaa0aab848ad6db7fdb48dd2615cd0d0ac4101b2245ad8d9d6a7d5",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/v3_reference/test_ref_hw.py": "b6bd65041ae2466ec47910d8bbaabe059168a76ed10980507feb34a765952112",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/test_quant.py": "632524fe4b5ad2e489049cfaaecc845dd44c0ff3afcb79fa036bae2bb8526bde",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch/test_compiler.py": "0569ad630e1f9b1e6a9b6c1cb20d28a91eab04e79074437dfa03aca5088fb5f3",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch/test_robust_space.py": "6487afa2c8e8c8b77a2aa1cf3e90f2b380ba93ab31eb347c77ba11a94597e75a",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch/test_compiler_v3.py": "ad730bf4740f2124d2517874a89fe4b48d0f81f7da2cf81c36ba7fb72d138d15",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/test_layer_shards.py": "d0c8d50d84442884c6cdf097a1cc76aa9cc4ff3f596228488e8c278b014f34fd",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/test_recovery.py": "1c5e3de54a751365053473b11484ad2cf61386cab1d73cafba7c55ade43df3ec",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/test_q3_qualification.py": "5a1174aedc811b8b9b7aefb8e81eff93fff2f78537b9a7bc0c5d1ab18c421231"
+  },
+  "scope": "compiler payload packing, hardware reference math, helper correctness; excludes root-owned Rust timed numeric tests and full Q1/Q3 completion",
+  "additional_merge_guard_tests": {
+    "source": "research/moe_dispatch/quant/test_layer_shards.py",
+    "sha256": "d0c8d50d84442884c6cdf097a1cc76aa9cc4ff3f596228488e8c278b014f34fd",
+    "exit_code": 0,
+    "output": "included in 39 passed in 12.66s",
+    "scope": "per-candidate65expert195projection completeness; mixed candidate provenance rejection; all per-layer Q3 sequences and duplicate rejection"
+  },
+  "passed_tests_total_with_merge_guards": 67,
+  "latest_rerun_scope": "unchanged compiler pin; host-failure exact-prefix recovery and atomic-publish plus strict full-population Q3 qualification",
+  "tested_implementation_sha256": {
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch/compiler_v3.py": "537b6b7841d021714243e5daf1f5efacd04e312d9fee858ac6bb76f80062029b",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/v3_reference/ref_numerics.py": "be90c46fe1c2ddae4591d5e8f7ddc78a296c4add9eae68a8db050e6053589710",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/v3_reference/budget_v3.py": "86919a14d421362a3791d691c7fe813a444f64b8c1972cab5655830594641fb3",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/evaluate.py": "6cfff0756ebc1ac665d69f3e05d63e8078e0af0881fb815c909f4ef1323f9428",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/recover_campaign.py": "aa92541b6f983c2860f49068c79e802f1943883a64ec50acdeda4d7f8eedf0ae",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/q3_qualification.py": "b7f463c379bad6f1784f5956548442998f999f5c2e7b62762a22827c26bb2c29",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/quant/freeze_after_proof.py": "8c3fc77b1a6a445a9761bbc4474b5ba918fac4a6ff748cd7b87913c90d06d91d"
+  },
+  "additional_tests_after_host_recovery": [
+    {
+      "output": "42 passed in10.14s",
+      "exit_code": 0,
+      "scope": "17 supplied,6 hardwaregold,14 quanthelpers,3shardguards,2 recovery guards; TMPDIR=/tmp"
+    },
+    {
+      "output": "1 passed in4.31s",
+      "exit_code": 0,
+      "scope": "N5full-population/Sharedbytes/coverage/canonicalphysicalhash correctness"
+    }
+  ]
+}
