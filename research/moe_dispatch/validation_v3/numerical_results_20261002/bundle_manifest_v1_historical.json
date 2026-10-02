@@ -1,5 +1,5 @@
 {
-  "schema": "plena_v3_numerical_bundle_v2",
+  "schema": "plena_v3_numerical_bundle_v1",
   "files": {
     "NUMERICAL_RESULTS.md": "3591c1a9d0d875518c8860631681d356eaa617d5b50ff5d24c5a662bdba7b559",
     "compiler_reference_receipt.json": "e19369ed9675205e0e84cdcfd0ab4ccd2958383df5775372e13a4847b955ea7c",
@@ -18,11 +18,7 @@
     "q3_hardware_complete_receipt.json": "bd18909dfe9f8c40629ecd34f8905b55068c20b1c10eae33e27b63e827e6587e",
     "q3_numerical_figure_receipt.json": "03a3dfacdf607705b6484f2d7c80110bc62c36e72ef5253ce23318b221bab028",
     "q3_qualification_summary.json": "9c1dd1888bd0ea183ef55067de41b19639b0446c957521fb177914fccdd773f1",
-    "supplemental_mxint4_b_quality.json": "352b0a260e738c2036d8ea267c3a05327e9dc2a7094cdf0361a2984ea6692ff8",
-    "figures/q3_gate_weighted_vs_uniform.png": "fb2266d249d9152a9661f2ea08132137d3c5d82cf61463d17ad6d5fcfb278bab",
-    "figures/q3_frozen_format_error_and_bytes.png": "5e26716ac034435699caa7fe82d2d207babd43b2156bcb6ff35246ae163acbbf",
-    "bundle_manifest_v1_historical.json": "c017c159b93b66149d5d6defd44249e4adec531484e8f9eb4bafffc8981c816a"
+    "supplemental_mxint4_b_quality.json": "352b0a260e738c2036d8ea267c3a05327e9dc2a7094cdf0361a2984ea6692ff8"
   },
-  "contains_model_or_private_token_payload": false,
-  "packaging_amendment": "Include the two already-generated Q3 images at the documented relative paths; no numerical values, source, input or thresholds changed. The original v1 archive and its SHA remain preserved."
+  "contains_model_or_private_token_payload": false
 }

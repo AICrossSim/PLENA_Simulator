@@ -1,0 +1,9 @@
+{
+  "scope": "Packaging only: original v1 numerical summary plus two verified existing Q3 figures",
+  "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/quant/numerical_summary_bundle_20261002_v2.tar.gz",
+  "bytes": 532120,
+  "sha256": "d39911a136c8027965960ba2350de33ead3e0b692b18dc237b403b3abec599b4",
+  "original_v1_archive_sha256": "d10a190bd011e3c43d1031d0ef2fbcca1c410a130bb20fb0417210ff6eadf829",
+  "numerical_values_changed": false,
+  "frozen_format_changed": false
+}
