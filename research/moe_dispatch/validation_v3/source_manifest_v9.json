@@ -1,0 +1,23 @@
+{
+  "binary_path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v9/moe-dispatch-447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+  "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+  "source_hashes": {
+    "research/moe_dispatch/rust/Cargo.lock": "26f321bd748f7cd629596d4a740060afed428a70d162462d07a02365a4bae9cb",
+    "research/moe_dispatch/rust/Cargo.toml": "1b0c36c0a12cc1fb9a26ef8f0b404277bdffc82c0db64558b337d2dac662b1ec",
+    "research/moe_dispatch/rust/src/compute.rs": "d88ed5e4218792db0346e20c2c01debc685f9f51f8a81d60e441865febb683c3",
+    "research/moe_dispatch/rust/src/joint.rs": "bb3cb62138ef6b64f5312086c33c626f4fbd89dc0c760db7dbd422e4b68a7893",
+    "research/moe_dispatch/rust/src/legacy_chunks.rs": "5d17c74a987f02e9c61852ed9573ff8e3244a0f8a949d6ec50d661e2b25cc057",
+    "research/moe_dispatch/rust/src/main.rs": "dcd5225076ed67093793f06a35c940728dcbdd9526c3db705b721b2ec1cddef1",
+    "research/moe_dispatch/rust/src/plan.rs": "10fa98a5608b446a077f1147017b5d7fe655b6fcb6a0735a46068e21448740a8",
+    "research/moe_dispatch/rust/src/profile_v3.rs": "881d62b8a3fd087ad218771c8dbbd672dcd18197d4da584ceef84afae52dfb7c",
+    "research/moe_dispatch/rust/src/runtime.rs": "b72fb31354f72ed49e2e71cdcc8d0321ed07a7dd1edf573dcb70385377056048",
+    "research/moe_dispatch/rust/src/surplus.rs": "a197678d4ac00793c34f8fb9fc362e4835e7532b5fe50ffd169bb8ebe8e481a1",
+    "research/moe_dispatch/rust/src/v3/joint_policy.rs": "3386f23bd6afd08bef4d6354caa3eaf47e62e62859e99ca17fa54879af73945f",
+    "research/moe_dispatch/rust/src/v3/memory.rs": "277fa04eb06bd0e756ea54056dce80916c07024637108dbcc41359a9bd429a12",
+    "research/moe_dispatch/rust/src/v3/mod.rs": "253e522006797a9818278c9a9e35f3967ab0f0be5708254601f2fd3807f3539d",
+    "research/moe_dispatch/rust/src/v3/plan.rs": "8db265c0b99f4d56bef3cc407d4159c25333870da35030351a374ce990c4092b",
+    "research/moe_dispatch/rust/src/v3/replay.rs": "98cbb15a120e7b3e9e96e22434bb8e5062bcded73283c0194f08c3efc322e0c0",
+    "research/moe_dispatch/rust/src/v3/tests_extra.rs": "ea2c0faeb7b2048f812329e513e45ad050f4d1963a45ee103e9e8d37ace647aa",
+    "research/moe_dispatch/rust/src/v3/timed_numeric.rs": "878270207e831e1b2a004140e142eea7bacb79fffadd32ce95673e3555ddfbbe"
+  }
+}

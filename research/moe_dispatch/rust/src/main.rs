@@ -14,6 +14,7 @@ macro_rules! trace {
 
 mod compute;
 mod joint;
+mod legacy_chunks;
 #[allow(dead_code)]
 mod plan;
 mod profile_v3;
@@ -364,6 +365,9 @@ enum Event {
 }
 
 struct Sim {
+    // Host/kernel clock origin for serial outer token chunks. The original
+    // single invocation keeps zero; the physical DMA ready pattern never resets.
+    time_origin: u64,
     w: Workload,
     cfg: Config,
     cores: Vec<Core>,
@@ -413,6 +417,11 @@ struct Sim {
 }
 
 impl Sim {
+    fn dma_ready_now(&self) -> bool {
+        let absolute = self.time_origin + self.now;
+        absolute >= self.cfg.dma_ready_after
+            && absolute % self.cfg.dma_ready_period < self.cfg.dma_ready_cycles
+    }
     fn event(&mut self, t: u64, e: Event) {
         assert!(t >= self.now);
         self.seq += 1;
@@ -1679,6 +1688,7 @@ impl Sim {
         }
         let ne = w.experts.len();
         let mut sim = Self {
+            time_origin: 0,
             w,
             cfg,
             cores,
@@ -1954,9 +1964,13 @@ fn main() {
         config_value["credits"] = json!((cr as f64 / scale).ceil() as u64);
         config_value["diagnostic_credit_expansion"] = json!(true);
     }
-    let w: Workload = serde_json::from_value(workload_value).unwrap();
     let cfg: Config = serde_json::from_value(config_value).unwrap();
-    let mut report = Sim::new(w, cfg).run();
+    let mut report = if workload_value.get("legacy_batch_execution").is_some() {
+        legacy_chunks::run(&workload_value, cfg)
+    } else {
+        let w: Workload = serde_json::from_value(workload_value).unwrap();
+        Sim::new(w, cfg).run()
+    };
     if scale < 1.0 {
         report["compression_oracle"] = json!({"weight_bytes_scale":scale,
             "original_config":original_config,"logical_weight_bytes":report["weight_bytes"],

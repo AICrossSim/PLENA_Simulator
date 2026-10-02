@@ -166,7 +166,7 @@ archived. A source/input or actual-format change starts a separate campaign;
 identical-format qualification metadata updates can retain their physical timing.
 Older signatures without explicit canonical physical proof are not retroactively
 merged into the new campaign.
-The selected legacy planner's `compiler.py`, loader `frontend.py` and frozen
+The selected legacy planner's `compiler.py`, additive `legacy_chunks.py`, loader `frontend.py` and frozen
 resource-layout JSON also enter the timing signature and are snapshotted;
 external planner changes cannot silently reuse prior raw results. The final
 manifest verifies the immutable binary's Rust source manifest and freezes
@@ -174,6 +174,18 @@ Compiler-v3 sources plus actual Compiler/Rust numerical correctness receipts.
 `--binary-sha` selects an explicit campaign. Every accepted point requires all
 eight invariant flags, exclusive state sums, transaction drainage and peak
 capacity checks. Timeouts and unsupported points remain explicit records.
+
+Large legacy windows whose whole-layer component inboxes do not fit now use a
+generic finite-capacity outer token-chunk plan. This does not change the original
+routes, weight addresses, private budgets or unchanged per-chunk legacy kernels.
+Whole-layer X/final Y/routes stay resident; child X/Y addresses alias their global
+row ranges. Each chunk fully drains before the next, with real repeated HBM reads
+and charged descriptor setup. Already feasible B2/B4/B8/B16 workloads have no
+wrapper and retain byte-identical outputs. The new helper is explicitly source
+pinned; a new binary/planner signature requires a full fresh campaign. CSV/report
+fields `legacy_batch_*` expose chunk size/count, unique/refetched bytes and setup
+cost; recursive validation checks aliases, route preservation, full token
+coverage, physical private peaks, drained requests and exclusive profile sums.
 
 Compensation comparisons set `comp_equal_bytes=true`. If a mode needs fewer
 physical payload bytes, actual 32-byte padding transfers consume HBM credit,

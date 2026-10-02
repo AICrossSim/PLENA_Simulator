@@ -1,0 +1,19 @@
+{
+  "all_passed": true,
+  "binary_sha256": "23d91e9300eba984b2b1d5b4a83766f3b5c23e347c63830588bccf107fc5b161",
+  "bit_identical": true,
+  "config_sha256": "ce19fd5188987583102d0c08ae7ada0b34efc77aa5e74b48cb6db63e216b88a8",
+  "cycles": 1267024,
+  "host_seconds_repeat2": 1.8809494357556105,
+  "initial_validation_issue": "minimal crafted config omitted credits/ingress; first actual valid engine output retained and checked against exact unchanged Cfg defaults, then compared to independent second execution",
+  "original_raw_runs": 2,
+  "raw_config_unchanged": true,
+  "raw_json_sha256": "cd0a499145aad3175d7a499109dc4531adef6e61f00c0472c44946579e9fe719",
+  "scope": "crafted developer correctness stress of offload T96; not independent real data or heldout performance",
+  "validation_defaults_only": {
+    "credits": 544,
+    "ingress_bytes": 8192,
+    "reference_source_sha256": "253e522006797a9818278c9a9e35f3967ab0f0be5708254601f2fd3807f3539d"
+  },
+  "workload_sha256": "1c6d31d94dbd2426cb90729c62a295af4195bb8a3a38f54007d4be16210913e6"
+}

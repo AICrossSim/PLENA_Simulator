@@ -1,0 +1,84 @@
+{
+  "included_in_primary_six_or_N5_gain": false,
+  "independent_requests_added": 0,
+  "original_raw_reports_identical_across_reset_sequences": true,
+  "provenance": "temporal_replay_of_one_real_development_BFCL_B2_window",
+  "purpose": "test actual same-budget causal lambda carry; no convergence or generalization claim",
+  "repeats_per_point": 2,
+  "signature": {
+    "binary_sha256": "23d91e9300eba984b2b1d5b4a83766f3b5c23e347c63830588bccf107fc5b161",
+    "development_inputs_sha256": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "m5_sha256": "e3b09f0209ceb6ac0cb4121d89646ba1ed8db156199863b0da11089a437889e0",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "rank_table_sha256": "e8f458780b118b1d3142a24e4c1653bc4aa8dee88a92574ed1965b9ec0b01179",
+    "study_sha256": "ccced4bd2b0d264e839ca80206c9f2edfac8620d2ac3059fcef2dd85836c319b"
+  },
+  "two_actual_reset_sequences": [
+    [
+      {
+        "cycles": 157925,
+        "lambda_after": 6.449598548152563e-08,
+        "lambda_before": 4.882836333699958e-08,
+        "lambda_reset_reason": "sequence_start",
+        "raw_sha256": "1f1df9ebdecaa37d6a5da67843c7b3fb15b09dd65de21e73f57a5f04a388abc1",
+        "routed_budget_bytes": 1411584,
+        "routed_spent_bytes": 2197248,
+        "step": 0,
+        "workload": "joint_test_bfcl_b2_l13_s7"
+      },
+      {
+        "cycles": 157925,
+        "lambda_after": 8.519089846456387e-08,
+        "lambda_before": 6.449598548152563e-08,
+        "lambda_reset_reason": "carry_same_budget",
+        "raw_sha256": "4d85bc83076f58e19623c7733b8d5bf0c139d1969fcf06907929344941b7cea6",
+        "routed_budget_bytes": 1411584,
+        "routed_spent_bytes": 2197248,
+        "step": 1,
+        "workload": "joint_test_bfcl_b2_l13_s7"
+      }
+    ],
+    [
+      {
+        "cycles": 157925,
+        "lambda_after": 6.449598548152563e-08,
+        "lambda_before": 4.882836333699958e-08,
+        "lambda_reset_reason": "sequence_start",
+        "raw_sha256": "1f1df9ebdecaa37d6a5da67843c7b3fb15b09dd65de21e73f57a5f04a388abc1",
+        "routed_budget_bytes": 1411584,
+        "routed_spent_bytes": 2197248,
+        "step": 0,
+        "workload": "joint_test_bfcl_b2_l13_s7"
+      },
+      {
+        "cycles": 157925,
+        "lambda_after": 8.519089846456387e-08,
+        "lambda_before": 6.449598548152563e-08,
+        "lambda_reset_reason": "carry_same_budget",
+        "raw_sha256": "4d85bc83076f58e19623c7733b8d5bf0c139d1969fcf06907929344941b7cea6",
+        "routed_budget_bytes": 1411584,
+        "routed_spent_bytes": 2197248,
+        "step": 1,
+        "workload": "joint_test_bfcl_b2_l13_s7"
+      }
+    ]
+  ]
+}

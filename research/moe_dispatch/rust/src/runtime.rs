@@ -889,8 +889,7 @@ impl Sim {
                 break;
             };
             self.dma_tile(&r); // Reservation persists under DMA backpressure.
-            let ready = self.now >= self.cfg.dma_ready_after
-                && self.now % self.cfg.dma_ready_period < self.cfg.dma_ready_cycles;
+            let ready = self.dma_ready_now();
             if !ready {
                 self.cores[r.core].stats.dma_backpressure_cycles += 1;
                 break; // No AGU advance, charge, new selection or changed tag.

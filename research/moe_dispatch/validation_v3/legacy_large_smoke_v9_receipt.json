@@ -1,0 +1,255 @@
+{
+  "all_passed": true,
+  "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+  "host_elapsed_seconds": 589.0007644649595,
+  "manifest_sha256": "c8eac54f81a95bfce5771135fd2c3c876d37a8bb7b71076e3a108961a15c7325",
+  "points": 8,
+  "rows": [
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 15,
+      "chunks": 5,
+      "cycles": 16837418,
+      "host_seconds_repeats": [
+        128.11160348542035,
+        116.7857406847179
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t64_l13__BL1__OP1__iso__default",
+      "private_capacities": [
+        2097152
+      ],
+      "private_peaks": [
+        2017792
+      ],
+      "profile_core_sums": [
+        16837418
+      ],
+      "profile_hbm_sum": 16837418,
+      "raw_byte_identical": true,
+      "raw_sha256": "637d0b81b9d2d55ce6f78ec20bb39f7e0dfecc7f0aa816ba3608ecc666c9c7ce",
+      "refetch_bytes": 1678245888,
+      "setup_cycles": 659,
+      "setup_sram_bytes": 15840,
+      "unique_weight_bytes": 986185728,
+      "weight_bytes": 2664431616
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 15,
+      "chunks": 5,
+      "cycles": 24724139,
+      "host_seconds_repeats": [
+        128.90717325545847,
+        123.89253587089479
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t64_l13__BL1__OP0__iso__default",
+      "private_capacities": [
+        2097152
+      ],
+      "private_peaks": [
+        2017792
+      ],
+      "profile_core_sums": [
+        24724139
+      ],
+      "profile_hbm_sum": 24724139,
+      "raw_byte_identical": true,
+      "raw_sha256": "4ead3e05815e8bfd5153983aee63477b734f67c9411e5f9c7d0c97684757ce99",
+      "refetch_bytes": 1678245888,
+      "setup_cycles": 659,
+      "setup_sram_bytes": 15840,
+      "unique_weight_bytes": 986185728,
+      "weight_bytes": 2664431616
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 13,
+      "chunks": 5,
+      "cycles": 17059263,
+      "host_seconds_repeats": [
+        154.3669856376946,
+        139.39005848951638
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t64_l13__BL0__OP1__iso__default",
+      "private_capacities": [
+        1398080,
+        699072
+      ],
+      "private_peaks": [
+        1341696,
+        650784
+      ],
+      "profile_core_sums": [
+        17059263,
+        17059263
+      ],
+      "profile_hbm_sum": 17059263,
+      "raw_byte_identical": true,
+      "raw_sha256": "031d90d5a1c2233d5a4a616b0a806636b5d35a1ccdbf7d2d5e212f99bd593648",
+      "refetch_bytes": 1799356416,
+      "setup_cycles": 824,
+      "setup_sram_bytes": 16288,
+      "unique_weight_bytes": 986185728,
+      "weight_bytes": 2785542144
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 13,
+      "chunks": 5,
+      "cycles": 25830673,
+      "host_seconds_repeats": [
+        163.58805577643216,
+        149.37115424126387
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t64_l13__BL0__OP0__iso__default",
+      "private_capacities": [
+        1398080,
+        699072
+      ],
+      "private_peaks": [
+        1341696,
+        650784
+      ],
+      "profile_core_sums": [
+        25830673,
+        25830673
+      ],
+      "profile_hbm_sum": 25830673,
+      "raw_byte_identical": true,
+      "raw_sha256": "4612ad7358b96f010078c8645c4e85b482c0690272b2d31617a371473a3f745d",
+      "refetch_bytes": 1799356416,
+      "setup_cycles": 824,
+      "setup_sram_bytes": 16288,
+      "unique_weight_bytes": 986185728,
+      "weight_bytes": 2785542144
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 11,
+      "chunks": 9,
+      "cycles": 27100406,
+      "host_seconds_repeats": [
+        230.93038660287857,
+        193.5969611555338
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t96_l13__BL1__OP1__iso__default",
+      "private_capacities": [
+        2097152
+      ],
+      "private_peaks": [
+        2089728
+      ],
+      "profile_core_sums": [
+        27100406
+      ],
+      "profile_hbm_sum": 27100406,
+      "raw_byte_identical": true,
+      "raw_sha256": "d4933c845221a9cc3cf200014f2858b5920d40b4a471367720d4d96b21b3f1d6",
+      "refetch_bytes": 3875536896,
+      "setup_cycles": 1067,
+      "setup_sram_bytes": 27168,
+      "unique_weight_bytes": 1055391744,
+      "weight_bytes": 4930928640
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 11,
+      "chunks": 9,
+      "cycles": 42991348,
+      "host_seconds_repeats": [
+        235.0344074126333,
+        205.16258859820664
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t96_l13__BL1__OP0__iso__default",
+      "private_capacities": [
+        2097152
+      ],
+      "private_peaks": [
+        2089728
+      ],
+      "profile_core_sums": [
+        42991348
+      ],
+      "profile_hbm_sum": 42991348,
+      "raw_byte_identical": true,
+      "raw_sha256": "30874ee71c3846073e78a94705666e9ffdeedca93ff78d2ae5a2d5e57034c2ab",
+      "refetch_bytes": 3875536896,
+      "setup_cycles": 1067,
+      "setup_sram_bytes": 27168,
+      "unique_weight_bytes": 1055391744,
+      "weight_bytes": 4930928640
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 9,
+      "chunks": 11,
+      "cycles": 28607491,
+      "host_seconds_repeats": [
+        292.81263192370534,
+        253.58526075072587
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t96_l13__BL0__OP1__iso__default",
+      "private_capacities": [
+        1398080,
+        699072
+      ],
+      "private_peaks": [
+        1358912,
+        690656
+      ],
+      "profile_core_sums": [
+        28607491,
+        28607491
+      ],
+      "profile_hbm_sum": 28607491,
+      "raw_byte_identical": true,
+      "raw_sha256": "5957928f35b3dccb3b47d63282a31124dfba015fa4da983b6ab43beb82402c7b",
+      "refetch_bytes": 4481089536,
+      "setup_cycles": 1409,
+      "setup_sram_bytes": 29344,
+      "unique_weight_bytes": 1055391744,
+      "weight_bytes": 5536481280
+    },
+    {
+      "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+      "chunk_size": 9,
+      "chunks": 11,
+      "cycles": 49193895,
+      "host_seconds_repeats": [
+        313.7081327531487,
+        267.7992734797299
+      ],
+      "passed": true,
+      "point": "legacy_large_smoke_v9__v3_captured_mixed_development_t96_l13__BL0__OP0__iso__default",
+      "private_capacities": [
+        1398080,
+        699072
+      ],
+      "private_peaks": [
+        1358912,
+        690656
+      ],
+      "profile_core_sums": [
+        49193895,
+        49193895
+      ],
+      "profile_hbm_sum": 49193895,
+      "raw_byte_identical": true,
+      "raw_sha256": "1a08783999b7f91341b9179f239936a63810784790ed0981d526c0275f8159ee",
+      "refetch_bytes": 4481089536,
+      "setup_cycles": 1409,
+      "setup_sram_bytes": 29344,
+      "unique_weight_bytes": 1055391744,
+      "weight_bytes": 5536481280
+    }
+  ],
+  "runner_sha256": "5ea61fc947701112bd223f93eec707b3ef21c1fb1d5f0b844f9ae9335c473b5c",
+  "runs": 16
+}

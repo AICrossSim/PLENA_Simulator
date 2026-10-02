@@ -1,0 +1,37 @@
+{
+  "schema": "plena_legacy_token_chunks_readonly_audit_v1",
+  "status": "no_remaining_blocking_issue_found_after_fixes",
+  "date": "2026-10-02",
+  "scope": "Independent source review of legacy outer execution, aggregation, physical storage/control accounting, global DMA phase, study validation and flattening",
+  "method": "Read source/diffs and SHA256 metadata only; no simulation, tests or campaign jobs launched during this audit phase",
+  "rust_source_sha256": {
+    "research/moe_dispatch/rust/src/legacy_chunks.rs": "5d17c74a987f02e9c61852ed9573ff8e3244a0f8a949d6ec50d661e2b25cc057",
+    "research/moe_dispatch/rust/src/main.rs": "dcd5225076ed67093793f06a35c940728dcbdd9526c3db705b721b2ec1cddef1",
+    "research/moe_dispatch/rust/src/profile_v3.rs": "881d62b8a3fd087ad218771c8dbbd672dcd18197d4da584ceef84afae52dfb7c",
+    "research/moe_dispatch/rust/src/runtime.rs": "b72fb31354f72ed49e2e71cdcc8d0321ed07a7dd1edf573dcb70385377056048"
+  },
+  "simulator_root": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator",
+  "study_source_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a",
+  "compiler_root": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler",
+  "legacy_helper_source_sha256": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+  "original_compiler_source_sha256": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+  "new_readme_sha256": "57cb6d52bd3d6c75fb503ddbfe7d6330a83747be5bca312e1500d06b2438b48e",
+  "verified_after_fixes": [
+    "Maximum eligible wait is merged by maximum rather than summation",
+    "Setup HBM states distinguish eligible-request absence from actual DMA backpressure; owner control and inactive cores are distinct",
+    "32-byte wrapper state begins after original occupied controller state; child accounting/headroom deltas are checked",
+    "Inactive cores retain full persistent reservations and remain capacity checked without changing raw original child statistics",
+    "Original no-wrapper invocation retains zero time origin; outer kernels preserve the physical global DMA-ready phase",
+    "Serial elapsed times include all setup and child kernels; useful MACs and actual refetched weights sum; peaks remain maxima",
+    "Study validation recognizes inactive-core reserves, explicitly scoped compression credit expansion, and complete persistent token coverage",
+    "Flattened scalar fields identify the distinct outer chunk protocol and actual refetch/setup costs"
+  ],
+  "remaining_blocking_findings": [],
+  "limitations": [
+    "This receipt records a source review, not runtime or numerical validation",
+    "It applies to the listed source hashes; later source changes require renewed review of the affected code"
+  ],
+  "reviewer_source_edits": "Only new legacy_chunks_README.md; root Rust/study modules were read only",
+  "git_commit_created": false,
+  "large_jobs_launched": false
+}

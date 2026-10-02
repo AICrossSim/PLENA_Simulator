@@ -1,0 +1,313 @@
+{
+  "scope": "capacity algebra proposal only; no changed source/config/simulation/route; all-route worst inbox and Shared workspace upper bound",
+  "assumptions": [
+    "global X/Y and original router/control persistent in existing column-owner accumulator arenas",
+    "chunk originalX and combinedY alias global row slices, no extra chunk X/Y payload",
+    "all chunk component inboxes reserved only for max(topK+Shared)*chunk rows",
+    "unchanged whole-expert workspace data types and group4 scratch",
+    "actual shape-specific compound alignment must be verified by implementation before any timing claim"
+  ],
+  "rows": [
+    {
+      "workload": "v3_captured_mixed_development_t64_l13",
+      "design": "BL0",
+      "source_workload_sha256": "59cbcc2e7aa1ed374b805fca42b87eeb75b8979d723286a7d56fdacf381fc4ee",
+      "cores": [
+        {
+          "core": 0,
+          "columns": 1364,
+          "capacity": 1398080,
+          "original_full_reserved": 2979968,
+          "proposed_persistent_global_X_Y_route_control": 535680,
+          "max_chunk_inbox_bytes_per_token": 38192
+        },
+        {
+          "core": 1,
+          "columns": 684,
+          "capacity": 699072,
+          "original_full_reserved": 1500288,
+          "proposed_persistent_global_X_Y_route_control": 274560,
+          "max_chunk_inbox_bytes_per_token": 19152
+        }
+      ],
+      "conservative_maximum_chunk": 13,
+      "examples": [
+        {
+          "chunk": 8,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 841216,
+              "shared_whole_peak": 1031680,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 427776,
+              "shared_whole_peak": 618240,
+              "capacity": 699072
+            }
+          ]
+        },
+        {
+          "chunk": 13,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1032192,
+              "shared_whole_peak": 1341696,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 523552,
+              "shared_whole_peak": 833056,
+              "capacity": 699072
+            }
+          ]
+        },
+        {
+          "chunk": 14,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1070368,
+              "shared_whole_peak": 1403680,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 542688,
+              "shared_whole_peak": 876000,
+              "capacity": 699072
+            }
+          ]
+        },
+        {
+          "chunk": 16,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1146752,
+              "shared_whole_peak": 1527680,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 580992,
+              "shared_whole_peak": 961920,
+              "capacity": 699072
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "v3_captured_mixed_development_t64_l13",
+      "design": "BL1",
+      "source_workload_sha256": "59d727770667bb08674b4f53098c1b806a90c655712e8a48d550fc4122674b10",
+      "cores": [
+        {
+          "core": 0,
+          "columns": 2048,
+          "capacity": 2097152,
+          "original_full_reserved": 4470528,
+          "proposed_persistent_global_X_Y_route_control": 800512,
+          "max_chunk_inbox_bytes_per_token": 57344
+        }
+      ],
+      "conservative_maximum_chunk": 15,
+      "examples": [
+        {
+          "chunk": 8,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1259264,
+              "shared_whole_peak": 1449728,
+              "capacity": 2097152
+            }
+          ]
+        },
+        {
+          "chunk": 15,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1660672,
+              "shared_whole_peak": 2017792,
+              "capacity": 2097152
+            }
+          ]
+        },
+        {
+          "chunk": 16,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1718016,
+              "shared_whole_peak": 2098944,
+              "capacity": 2097152
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "v3_captured_mixed_development_t96_l13",
+      "design": "BL0",
+      "source_workload_sha256": "d033eb692cc20c2d019af2f150e9de13405f3ac91e41907c728ef2e4ca522675",
+      "cores": [
+        {
+          "core": 0,
+          "columns": 1364,
+          "capacity": 1398080,
+          "original_full_reserved": 4467328,
+          "proposed_persistent_global_X_Y_route_control": 800896,
+          "max_chunk_inbox_bytes_per_token": 38192
+        },
+        {
+          "core": 1,
+          "columns": 684,
+          "capacity": 699072,
+          "original_full_reserved": 2247808,
+          "proposed_persistent_global_X_Y_route_control": 409216,
+          "max_chunk_inbox_bytes_per_token": 19152
+        }
+      ],
+      "conservative_maximum_chunk": 9,
+      "examples": [
+        {
+          "chunk": 8,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1106432,
+              "shared_whole_peak": 1296896,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 562432,
+              "shared_whole_peak": 752896,
+              "capacity": 699072
+            }
+          ]
+        },
+        {
+          "chunk": 9,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1144640,
+              "shared_whole_peak": 1358912,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 581600,
+              "shared_whole_peak": 795872,
+              "capacity": 699072
+            }
+          ]
+        },
+        {
+          "chunk": 10,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1182816,
+              "shared_whole_peak": 1420896,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 600736,
+              "shared_whole_peak": 838816,
+              "capacity": 699072
+            }
+          ]
+        },
+        {
+          "chunk": 16,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1411968,
+              "shared_whole_peak": 1792896,
+              "capacity": 1398080
+            },
+            {
+              "core": 1,
+              "reserved_with_worst_chunk_inboxes": 715648,
+              "shared_whole_peak": 1096576,
+              "capacity": 699072
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "v3_captured_mixed_development_t96_l13",
+      "design": "BL1",
+      "source_workload_sha256": "0206ef26dbab523a5eb4c0c3a117abef3c80856e3aa87d0988960d4c549760f7",
+      "cores": [
+        {
+          "core": 0,
+          "columns": 2048,
+          "capacity": 2097152,
+          "original_full_reserved": 6702080,
+          "proposed_persistent_global_X_Y_route_control": 1197056,
+          "max_chunk_inbox_bytes_per_token": 57344
+        }
+      ],
+      "conservative_maximum_chunk": 11,
+      "examples": [
+        {
+          "chunk": 8,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1655808,
+              "shared_whole_peak": 1846272,
+              "capacity": 2097152
+            }
+          ]
+        },
+        {
+          "chunk": 11,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1827840,
+              "shared_whole_peak": 2089728,
+              "capacity": 2097152
+            }
+          ]
+        },
+        {
+          "chunk": 12,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 1885184,
+              "shared_whole_peak": 2170880,
+              "capacity": 2097152
+            }
+          ]
+        },
+        {
+          "chunk": 16,
+          "cores": [
+            {
+              "core": 0,
+              "reserved_with_worst_chunk_inboxes": 2114560,
+              "shared_whole_peak": 2495488,
+              "capacity": 2097152
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

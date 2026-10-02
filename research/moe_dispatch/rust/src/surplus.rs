@@ -261,9 +261,7 @@ impl Sim {
                 0
             } else if self.credit_used >= self.cfg.credits {
                 1
-            } else if self.now < self.cfg.dma_ready_after
-                || self.now % self.cfg.dma_ready_period >= self.cfg.dma_ready_cycles
-            {
+            } else if !self.dma_ready_now() {
                 2
             } else {
                 3

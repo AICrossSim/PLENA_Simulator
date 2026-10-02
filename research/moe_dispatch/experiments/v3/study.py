@@ -6,7 +6,7 @@ routes are kept verbatim. True mixed inputs must carry ordered prompt routes;
 constructed inputs have an explicit provenance category and separate tables.
 """
 from __future__ import annotations
-import argparse,copy,csv,gzip,hashlib,json,math,os,re,shutil,subprocess,sys,tempfile,time
+import argparse,copy,csv,gzip,hashlib,importlib.util,json,math,os,re,shutil,subprocess,sys,tempfile,time
 from concurrent.futures import ThreadPoolExecutor,as_completed
 from pathlib import Path
 import numpy as np
@@ -44,6 +44,7 @@ DESIGNS={
 }
 _LEGACY_LAYOUT_CACHE={}
 _LEGACY_RESOURCE_CACHE=None
+_LEGACY_CHUNKS_MODULE=None
 FROZEN_FORMAT={}
 FORMAT_RECEIPT=None
 FORMAT_KEYS=('main_bits','factor_a','factor_b','rank_lanes','ranks')
@@ -99,8 +100,19 @@ def physical_format():
 
 def planner_artifacts():
  selected=Path(os.environ.get('PLENA_DISPATCH_COMPILER','/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch')).resolve()
- return {'compiler.py':selected/'compiler.py','frontend.py':RESEARCH/'frontend.py',
+ return {'compiler.py':selected/'compiler.py','legacy_chunks.py':selected/'legacy_chunks.py','frontend.py':RESEARCH/'frontend.py',
   'legacy_frozen_designs.json':Path('/scratch/shared/mcl123/plena/outputs/moe_robust_fixed_20260930/frozen_designs.json')}
+
+def prepare_legacy_workload(workload,lanes,group,resources):
+ """Pinned finite-memory outer plan; legacy kernels and original routes remain intact."""
+ global _LEGACY_CHUNKS_MODULE
+ selected=planner_artifacts()['legacy_chunks.py'].resolve()
+ if _LEGACY_CHUNKS_MODULE is None:
+  spec=importlib.util.spec_from_file_location('plena_dispatch_legacy_chunks',selected)
+  module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=module;spec.loader.exec_module(module)
+  _LEGACY_CHUNKS_MODULE=module
+ assert Path(_LEGACY_CHUNKS_MODULE.__file__).resolve()==selected,'Cached legacy chunk planner differs from the frozen selected source'
+ return _LEGACY_CHUNKS_MODULE.prepare_legacy_workload(workload,lanes,group,resources)
 
 def campaign_signature(root,binary):
  root=Path(root)
@@ -253,8 +265,10 @@ def point(w,d,op,port='iso',variant='default',changes=None,suite='main'):
   design=next(x for x in _LEGACY_RESOURCE_CACHE if x['lanes']==cfg['lanes']);resources=copy.deepcopy(design['resources'])
   resources.update(joint_state_bytes=256,control_bytes=[4352//len(cfg['lanes'])]*len(cfg['lanes']))
   cache_key=(w['id'],tuple(cfg['lanes']))
-  if cache_key not in _LEGACY_LAYOUT_CACHE:_LEGACY_LAYOUT_CACHE[cache_key]=compiler.engine_layout(w,cfg['lanes'],design['group'],resources)
-  w['engine_layout']=_LEGACY_LAYOUT_CACHE[cache_key]
+  # The cache now retains the complete prepared workload, including any finite
+  # outer token-chunk plan; storing only engine_layout would discard that plan.
+  if cache_key not in _LEGACY_LAYOUT_CACHE:_LEGACY_LAYOUT_CACHE[cache_key]=prepare_legacy_workload(w,cfg['lanes'],design['group'],resources)
+  w=_LEGACY_LAYOUT_CACHE[cache_key]
   cfg['group']=design['group']
  key='__'.join((suite,w['id'],d,op,port,variant))
  return dict(key=key,suite=suite,workload=w,design=d,op=op,port=port,variant=variant,config=cfg,
@@ -315,6 +329,70 @@ def validate(report,cfg):
  if isinstance(inv,dict):
   failed={k:v for k,v in inv.items() if v is False}
   assert not failed,f'Invariant failure: {failed}'
+ if cfg.get('arch')=='joint_v1':
+  cycles=report['cycles'];assert type(cycles) is int and cycles>0
+  assert report.get('drained') is True,'Legacy requests/contexts did not drain'
+  assert report.get('ownership_k_order_capacity_checks') is True,'Legacy ownership/K/capacity checks missing'
+  accepted=report['dma_transactions_accepted'];landed=report['dma_transactions_landed']
+  assert accepted==landed,'Legacy accepted DMA did not all land'
+  if cfg.get('runtime_fsm',True):assert accepted*32==report['weight_bytes'],'Legacy DMA wire bytes do not match accepted 32B requests'
+  scale=cfg.get('weight_bytes_scale',1.0);effective_credits=cfg['credits']
+  if scale<1:
+   assert 0<scale and (cfg.get('diagnostic_credit_expansion') or cfg.get('diagnostic_profile')),'Compression credit expansion requires explicit diagnostic scope'
+   effective_credits=math.ceil(cfg['credits']/scale)
+   assert report['config']['credits']==effective_credits and report['config']['diagnostic_credit_expansion'] is True
+  assert report['credit_peak']<=effective_credits,'Legacy credit peak exceeds installed diagnostic/physical credits'
+  cores=report['cores'];assert len(cores)==len(cfg['lanes'])
+  hardware=report['physical_budget']
+  assert sum(c['stats']['weight_bytes'] for c in cores)==report['weight_bytes']
+  assert sum(c['stats']['useful_macs'] for c in cores)==report['useful_macs']
+  for i,core in enumerate(cores):
+   stats=core['stats'];assert core['m']==cfg['lanes'][i]
+   assert core['capacity']==hardware['acc_bytes'][i]
+   assert 0<=core['reserved_input_result_control']<=core['capacity']
+   # The original observer only updates workspace_peak_bytes on a binding;
+   # an inactive core can still own a fully resident persistent arena.
+   assert 0<=stats['workspace_peak_bytes'] and max(core['reserved_input_result_control'],stats['workspace_peak_bytes'])<=core['capacity'],'Legacy private result/workspace peak exceeds capacity'
+   assert stats['weight_peak_bytes']<=hardware['weight_slots'][i]*4096
+   assert stats['x_peak_bytes']<=cfg['lanes'][i]*512*2*2
+   assert stats['dma_accepted']==stats['dma_landed']
+  profile=report.get('m0_profile')
+  if cfg.get('diagnostic_profile'):assert isinstance(profile,dict),'Requested legacy profile missing'
+  if profile is not None:
+   assert profile.get('mutually_exclusive') is True
+   assert sum(profile['hbm_states'].values())==cycles==profile['hbm_sum']
+   assert len(profile['core_states'])==len(cores)
+   assert profile['core_sums']==[cycles]*len(cores)
+   assert all(sum(states.values())==cycles for states in profile['core_states'])
+  wrapper=report.get('legacy_chunks')
+  if wrapper is not None:
+   assert wrapper.get('schema')=='plena_legacy_token_chunks_v1'
+   assert wrapper.get('global_routes_and_scores_preserved') is True
+   assert wrapper.get('persistent_addresses_checked') is True
+   assert type(wrapper['chunk_size']) is int and wrapper['chunk_size']>0
+   parts=wrapper['parts'];assert wrapper['chunks']==len(parts)>1
+   assert report['unique_weight_bytes']>0
+   assert report['weight_bytes']==report['unique_weight_bytes']+report['refetch_bytes']
+   assert report['refetch_bytes']==wrapper['refetch_bytes']>0,'Chunk refetch traffic must be real and reported'
+   persistent=wrapper['full_layer_persistent_cores'];assert len(persistent)==len(cores)
+   full_batch=persistent[0]['original_x']['shape'][0]
+   assert type(full_batch) is int and full_batch>0
+   for i,arena in enumerate(persistent):
+    assert arena['capacity']==cores[i]['capacity'] and arena['reserved']<=arena['capacity']
+    assert arena['original_x']['shape'][0]==arena['combined_output']['shape'][0]==full_batch
+   next_row=elapsed=setup_cycles=setup_bytes=total_weight=total_macs=0
+   for part in parts:
+    start,end=part['token_range'];assert start==next_row and 0<end-start<=wrapper['chunk_size'];next_row=end
+    assert part['start_cycle']==elapsed
+    assert part['kernel_start_cycle']==elapsed+part['setup_cycles']
+    child=part['kernel_report'];assert 'legacy_chunks' not in child
+    assert validate(child,cfg),'Legacy child cannot be unsupported'
+    elapsed=part['kernel_start_cycle']+child['cycles']
+    setup_cycles+=part['setup_cycles'];setup_bytes+=part['setup_sram_bytes']
+    total_weight+=child['weight_bytes'];total_macs+=child['useful_macs']
+   assert next_row==full_batch,'Legacy chunks must cover the full original token window'
+   assert elapsed==cycles and setup_cycles==wrapper['setup_cycles']
+   assert setup_bytes==wrapper['setup_sram_bytes'] and total_weight==report['weight_bytes'] and total_macs==report['useful_macs']
  if cfg.get('arch')=='supply_v3':
   cycles=report['cycles'];assert isinstance(cycles,int) and cycles>0
   required=('unique_task_owner','requests_drained','pool_references_released','unique_weight_bytes_exact','main_useful_macs_exact','stall_states_exclusive','rank_capacity_checked_by_plan','storage_fits')
@@ -468,6 +546,13 @@ def flatten(item):
  if not row['dataset'] and w['id'].startswith('joint_test_'):row['dataset']=w['id'].split('_')[2]
  for key in ('cycles','time_ms_at_1ghz','weight_bytes','unique_weight_bytes','refetch_bytes','useful_macs','issued_macs','supply_efficiency','onchip_bytes','padding_macs','bank_conflict_cycles','control_cycles'):
   if key in r:row[key]=r[key]
+ if p['config'].get('arch')=='joint_v1':
+  wrapper=r.get('legacy_chunks',{})
+  row.update(legacy_batch_chunked=bool(wrapper),legacy_batch_chunk_size=wrapper.get('chunk_size',w['batch']),
+   legacy_batch_chunk_count=wrapper.get('chunks',1),legacy_batch_refetch_bytes=r.get('refetch_bytes',0),
+   legacy_batch_unique_weight_bytes=r.get('unique_weight_bytes',r.get('weight_bytes',0)),
+   legacy_batch_setup_cycles=wrapper.get('setup_cycles',0),legacy_batch_setup_sram_bytes=wrapper.get('setup_sram_bytes',0),
+   legacy_batch_reset_policy=wrapper.get('reset_policy','unchanged feasible whole-window legacy kernel'))
  if 'onchip_traffic_bytes' in r:row['onchip_bytes']=r['onchip_traffic_bytes']
  for key in ('onchip_bytes_per_useful_mac','all_onchip_traffic_bytes','legacy_onchip_subset_bytes','onchip_traffic_definition','hbm_bytes_per_token','cross_core_bytes','pool_read_bytes','pool_bank_conflicts','activation_bank_conflicts','prediction_mean_absolute_error_cycles','prediction_worst_underestimate_cycles','dma_transactions_accepted','pool_peak_bytes','ingress_peak_bytes','credit_peak','comp_padding_bytes','work_steal_waste_bytes','work_steal_attempts','work_steal_successes','actual_storage_peak_bytes','baseline_bf16_weight_bytes','offload_helper_cycles','rank_factor_bytes','weight_retake_bytes','native_expert_bytes','pool_write_bytes','combine_bank_conflicts','quota_updates','quota_denials','pool_capacity_denials','latency_ewma_cycles','issued_main_macs','issued_aux_macs','useful_aux_macs','padding_main_macs','padding_aux_macs'):
   if key in r:row[key]=r[key]

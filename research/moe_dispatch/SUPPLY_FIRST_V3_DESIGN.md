@@ -134,3 +134,13 @@ before held-out timing. Every legal final point is run twice and raw JSON
 equality is required. Missing real captures are reported as missing; constructed
 workloads never replace real workloads without an explicit label. N1–N5 use
 the supplied fixed thresholds, including negative outcomes.
+
+The original legacy full-window output-retention layout cannot fit the declared
+T64/T96 mixed windows in its frozen private SRAM. D033 introduces a separately
+labeled finite outer token-chunk capacity extension for those formerly
+unsupported cases. Full-layer X/final Y/routes stay resident; unchanged legacy
+kernels run serially on the largest fitting chunks, and all repeated HBM reads
+and descriptor setup are charged. Supported old plans and their timing remain
+unchanged. Large-window comparison tables explicitly report this extension;
+no point is silently removed, given extra storage, or described as an original
+full-window legacy measurement.

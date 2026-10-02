@@ -146,7 +146,7 @@ def test_every_actual_format_key_changes_timing_signature(tmp_path):
 
 def test_external_planner_source_changes_timing_signature(tmp_path,monkeypatch):
  binary=tmp_path/'engine';binary.write_bytes(b'frozen-engine');s.write(tmp_path/'input_manifest.json',{'immutable':True})
- sources={name:tmp_path/name for name in ('compiler.py','frontend.py','legacy_frozen_designs.json')}
+ sources={name:tmp_path/name for name in ('compiler.py','legacy_chunks.py','frontend.py','legacy_frozen_designs.json')}
  for name,path in sources.items():path.write_text(name)
  monkeypatch.setattr(s,'planner_artifacts',lambda:sources)
  baseline=s.campaign_signature(tmp_path,binary)
@@ -154,6 +154,120 @@ def test_external_planner_source_changes_timing_signature(tmp_path,monkeypatch):
   before=path.read_text();path.write_text(before+'changed')
   assert s.campaign_signature(tmp_path,binary)!=baseline,name
   path.write_text(before)
+
+def test_legacy_outer_plan_survives_point_cache_without_changing_routes(monkeypatch):
+ import copy
+ workload={'id':'large_legacy_plan_cache_case','batch':96,'tokens':[{'token_index':0,'sample_id':'unchanged','routes':[]}],'experts':[]}
+ original=copy.deepcopy(workload);calls=[]
+ def prepare(value,lanes,group,resources):
+  calls.append((copy.deepcopy(value),lanes[:],group,copy.deepcopy(resources)))
+  return {**copy.deepcopy(value),'engine_layout':{'frozen_arena':True},'legacy_batch_execution':{'schema':'plena_legacy_token_chunks_v1','chunk_size':11,'chunks':[{'token_range':[0,11],'workload':{'batch':11}}]}}
+ monkeypatch.setattr(s,'prepare_legacy_workload',prepare)
+ monkeypatch.setattr(s,'_LEGACY_LAYOUT_CACHE',{})
+ monkeypatch.setattr(s,'_LEGACY_RESOURCE_CACHE',[{'lanes':[6],'group':4,'resources':{'acc_bytes':[2097152]}}])
+ first=s.point(workload,'BL1','OP0');second=s.point(workload,'BL1','OP1')
+ assert len(calls)==1 and calls[0][0]==original
+ assert first['workload']['tokens']==original['tokens'] and workload==original
+ assert first['workload']['legacy_batch_execution']==second['workload']['legacy_batch_execution']
+ assert first['workload']['legacy_batch_execution']['chunks'][0]['workload']['batch']==11
+ assert first['config']['dispatch']=='fifo' and first['config']['lanes']==[6]
+ assert second['config']['credits']==544 and second['config']['legacy_diagnostic_overbudget'] is True
+
+def legacy_validation_fixture():
+ cfg={'arch':'joint_v1','lanes':[6],'credits':256,'runtime_fsm':True,'diagnostic_profile':True}
+ report={'cycles':10,'drained':True,'ownership_k_order_capacity_checks':True,
+  'dma_transactions_accepted':2,'dma_transactions_landed':2,'weight_bytes':64,'useful_macs':10,'credit_peak':2,
+  'physical_budget':{'acc_bytes':[1000],'weight_slots':[10]},
+  'cores':[{'m':6,'capacity':1000,'reserved_input_result_control':100,
+   'stats':{'workspace_peak_bytes':200,'weight_peak_bytes':4096,'x_peak_bytes':6144,
+    'weight_bytes':64,'useful_macs':10,'dma_accepted':2,'dma_landed':2}}],
+  'm0_profile':{'mutually_exclusive':True,'hbm_states':{'H0':8,'H4':2},'hbm_sum':10,
+   'core_states':[{'C0':8,'C8':2}],'core_sums':[10]}}
+ return report,cfg
+
+def test_legacy_validation_requires_drain_and_true_dma_bytes():
+ import copy,pytest
+ report,cfg=legacy_validation_fixture();assert s.validate(report,cfg)
+ for key,value in [('drained',False),('dma_transactions_landed',1),('weight_bytes',32)]:
+  bad=copy.deepcopy(report);bad[key]=value
+  with pytest.raises(AssertionError):s.validate(bad,cfg)
+
+def test_legacy_validation_checks_physical_private_peaks_and_profile():
+ import copy,pytest
+ report,cfg=legacy_validation_fixture()
+ for key,value in [('workspace_peak_bytes',1001),('weight_peak_bytes',40961),('x_peak_bytes',12289)]:
+  bad=copy.deepcopy(report);bad['cores'][0]['stats'][key]=value
+  with pytest.raises(AssertionError):s.validate(bad,cfg)
+ bad=copy.deepcopy(report);bad['m0_profile']['core_states'][0]['C0']=7
+ with pytest.raises(AssertionError):s.validate(bad,cfg)
+
+def test_legacy_inactive_core_still_reserves_persistent_arena():
+ import copy,pytest
+ report,cfg=legacy_validation_fixture();cfg.update(lanes=[4,2])
+ report['cores'][0]['m']=4;report['physical_budget'].update(acc_bytes=[1000,500],weight_slots=[5,5])
+ inactive=copy.deepcopy(report['cores'][0]);inactive.update(m=2,capacity=500,reserved_input_result_control=300)
+ inactive['stats'].update(workspace_peak_bytes=0,weight_peak_bytes=0,x_peak_bytes=0,weight_bytes=0,useful_macs=0,dma_accepted=0,dma_landed=0)
+ report['cores'].append(inactive)
+ report['m0_profile'].update(core_states=[{'C0':8,'C8':2},{'C0':10}],core_sums=[10,10])
+ assert s.validate(report,cfg)
+ bad=copy.deepcopy(report);del bad['m0_profile']
+ with pytest.raises(AssertionError):s.validate(bad,cfg)
+
+def test_legacy_compression_credit_expansion_is_explicit_counterfactual():
+ import copy,pytest
+ report,cfg=legacy_validation_fixture();cfg['weight_bytes_scale']=.25
+ report.update(credit_peak=300,config={'credits':1024,'diagnostic_credit_expansion':True})
+ assert s.validate(report,cfg)
+ bad=copy.deepcopy(report);bad['config']['credits']=256
+ with pytest.raises(AssertionError):s.validate(bad,cfg)
+ cfg['diagnostic_profile']=False
+ with pytest.raises(AssertionError):s.validate(report,cfg)
+
+def test_legacy_chunk_validation_checks_aliases_refetch_and_serial_time():
+ import copy,pytest
+ child,cfg=legacy_validation_fixture();report=copy.deepcopy(child)
+ report.update(cycles=24,weight_bytes=128,useful_macs=20,dma_transactions_accepted=4,dma_transactions_landed=4,unique_weight_bytes=64,refetch_bytes=64)
+ report['cores'][0]['stats'].update(weight_bytes=128,useful_macs=20,dma_accepted=4,dma_landed=4)
+ report['m0_profile'].update(hbm_states={'H0':16,'H4':8},hbm_sum=24,core_states=[{'C0':16,'C8':8}],core_sums=[24])
+ report['legacy_chunks']={'schema':'plena_legacy_token_chunks_v1','chunk_size':2,'chunks':2,
+  'global_routes_and_scores_preserved':True,'persistent_addresses_checked':True,'refetch_bytes':64,
+  'full_layer_persistent_cores':[{'capacity':1000,'reserved':100,'original_x':{'shape':[4,2]},'combined_output':{'shape':[4,2]}}], 'setup_cycles':4,'setup_sram_bytes':128,
+  'parts':[{'token_range':[i*2,i*2+2],'start_cycle':i*12,'setup_cycles':2,'setup_sram_bytes':64,
+   'kernel_start_cycle':i*12+2,'kernel_report':copy.deepcopy(child)} for i in range(2)]}
+ assert s.validate(report,cfg)
+ for mutate in ('alias','refetch','time','route','truncated'):
+  bad=copy.deepcopy(report)
+  if mutate=='alias':bad['legacy_chunks']['persistent_addresses_checked']=False
+  elif mutate=='refetch':bad['refetch_bytes']=0
+  elif mutate=='time':bad['legacy_chunks']['parts'][1]['kernel_start_cycle']=13
+  elif mutate=='route':bad['legacy_chunks']['parts'][1]['token_range']=[1,3]
+  else:
+   bad['legacy_chunks']['full_layer_persistent_cores'][0]['original_x']['shape'][0]=5
+   bad['legacy_chunks']['full_layer_persistent_cores'][0]['combined_output']['shape'][0]=5
+  with pytest.raises(AssertionError):s.validate(bad,cfg)
+
+def test_legacy_flatten_exposes_capacity_extension():
+ report,cfg=legacy_validation_fixture();cfg=s.config('BL1','OP0')
+ report.update(unique_weight_bytes=64,refetch_bytes=128)
+ report['legacy_chunks']={'chunk_size':11,'chunks':9,'setup_cycles':77,'setup_sram_bytes':512,'reset_policy':'full drain and refetch'}
+ workload={'id':'large','batch':96,'experts':[]}
+ point={'key':'p','suite':'main','workload':workload,'design':'BL1','op':'OP0','port':'iso','variant':'default','config':cfg}
+ row=s.flatten({'point':point,'report':report,'status':'complete'})
+ assert row['legacy_batch_chunked'] and row['legacy_batch_chunk_size']==11 and row['legacy_batch_chunk_count']==9
+ assert row['legacy_batch_refetch_bytes']==128 and row['legacy_batch_unique_weight_bytes']==64
+ assert row['legacy_batch_setup_cycles']==77 and row['legacy_batch_setup_sram_bytes']==512
+
+def test_report_legacy_capacity_table_separates_current_real_mixed_baseline():
+ import math
+ sys.path.insert(0,str(p.parent));from render_report import legacy_capacity_groups
+ base={'evaluation_split':'mixed_heldout','suite':'main','op':'OP0','port':'iso','design':'BL1','tokens':96,
+  'legacy_batch_chunk_size':11,'legacy_batch_chunk_count':9,'legacy_batch_unique_weight_bytes':1048576,
+  'legacy_batch_refetch_bytes':2097152,'legacy_batch_setup_cycles':2000,'ms':20.0}
+ values=[base,{**base,'legacy_batch_chunk_size':10,'ms':5.0},{**base,'evaluation_split':'mixed_development'},{**base,'op':'OP1'}]
+ result=legacy_capacity_groups(values);assert len(result)==1
+ assert result[0]['windows']==2 and result[0]['chunk_size_range']=='10–11'
+ assert result[0]['unique_weight_mib_mean']==1 and result[0]['refetch_mib_mean']==2
+ assert result[0]['setup_ms_mean']==.002 and math.isclose(result[0]['ms_geomean'],10)
 
 def test_heldout_qualification_sha_is_independently_frozen(tmp_path):
  import pytest

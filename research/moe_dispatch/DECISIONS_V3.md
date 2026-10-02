@@ -485,3 +485,47 @@ The finalized host implementation searches group descriptors only from the
 task's current action, omitting retired prefix descriptors. This changes no
 cycle, allocator decision or simulated hardware state; the interim v8a release
 and all original raw replays are retained for exact equivalence checking.
+
+## D033 — finite legacy capacity extension for previously unsupported mixed windows
+
+Fresh v8b development completed all 4,056 legal points plus the 84 comparator
+points, but its mixed-development stage found a specification/implementation
+gap: BL0/BL1 T64 and T96 were declared legal even though the original legacy
+planner retained every routed expert output until layer combine. A T64 single
+core reserved 4,470,528 B before any expert workspace against a 2,097,152-B
+private arena. These points had no physically executable original baseline;
+they are failures, not missing measurements or newly excluded configurations.
+All 34 owned campaign processes were paused, their in-flight artifacts copied
+and hash-verified, then terminated and reaped. No new v8b heldout was authorized.
+The earlier D032 post-heldout exposure remains disclosed.
+
+The original compiler and joint_v1 inner kernel remain intact. A separate
+compiler module extends only originally infeasible windows using contiguous
+token chunks. The full-layer original X, final Y and original router metadata
+remain protected in each existing private accumulator arena, including idle
+cores. Child original-X/final-Y views directly alias their global row ranges;
+only current-chunk component inboxes and original expert workspaces are reused.
+The compiler selects the largest chunk size for which every actual chunk expert
+has a legal whole-core placement. This is a capacity-derived tiling rule, not
+hardware retuning, route replacement or a new dispatch policy. All original
+expert IDs, token indices, route slots and gate scores are conserved.
+
+Each child runs the complete old gather/Gate/Up/SiLU/Down/retire/ordered-combine
+sequence and fully drains DMA, contexts and ports before reuse. There is no
+cross-chunk weight cache or free overlap; repeated native BF16 weight streams
+are actual, reported HBM refetches. Old adaptive state restarts per kernel, while
+the physical DMA-ready pattern follows the global cycle. A 32-B loop record
+uses explicitly checked headroom inside the existing control reservation.
+Chunk setup reads resident route/expert descriptors through real bank ports,
+charges serial descriptor service and writes that loop record. No wrapper X/Y
+payload copy is necessary because row views alias resident data.
+
+This distinct large-window execution extension is labeled in raw reports,
+tables and the final report, including chunk size/count, setup costs, persistent
+addresses and unique versus refetched weights. It must not be presented as
+the unchanged, previously runnable full-window baseline or as a free streaming
+combine optimization. Supported legacy plans use the original code path and
+are checked for full raw JSON identity against v8b. The v3 model, physical
+budgets, inputs, formats, legal matrix, policies, comparator rule and N1–N5
+thresholds remain unchanged. The complete timing population is repeated using
+one newly validated immutable binary and a recommitted preregistration.

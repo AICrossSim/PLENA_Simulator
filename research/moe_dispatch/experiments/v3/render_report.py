@@ -40,6 +40,24 @@ def organization_groups(rs):
   result.append((provenance,tokens,len(common),values))
  return result
 
+def legacy_capacity_groups(rs):
+ """Expose the finite-capacity baseline extension, never blend old campaigns."""
+ grouped=defaultdict(list)
+ for row in rs:
+  population=row.get('evaluation_split',row.get('split'))
+  if population!='mixed_heldout' or row.get('suite')!='main' or row.get('op')!='OP0' or row.get('port')!='iso' or row.get('design') not in ('BL0','BL1'):continue
+  grouped[(int(row['tokens']),row['design'])].append(row)
+ result=[]
+ for (tokens,design),values in sorted(grouped.items()):
+  sizes=[int(row['legacy_batch_chunk_size']) for row in values]
+  result.append(dict(tokens=tokens,design=design,windows=len(values),chunk_size_range=f'{min(sizes)}–{max(sizes)}',
+   chunk_count_mean=sum(float(row['legacy_batch_chunk_count']) for row in values)/len(values),
+   unique_weight_mib_mean=sum(float(row['legacy_batch_unique_weight_bytes']) for row in values)/len(values)/1048576,
+   refetch_mib_mean=sum(float(row['legacy_batch_refetch_bytes']) for row in values)/len(values)/1048576,
+   setup_ms_mean=sum(float(row['legacy_batch_setup_cycles']) for row in values)/len(values)/1e6,
+   ms_geomean=report.gm([float(row['ms']) for row in values])))
+ return result
+
 def render(root):
  root=Path(root).resolve();rs=report.rows(root)
  claims=jsonfile(root/'claim_timing_evidence.json');coverage=report.coverage(root)
@@ -87,6 +105,9 @@ def render(root):
  for provenance,tokens,count,values in organization_groups(rs):
   alt=fixed.get('selected');ratio=values['BL4']/values[alt] if values.get('BL4') and values.get(alt) else None
   organizations.append('| '+' | '.join([('真实解码' if provenance=='captured_decode' else '真实混合'),str(tokens),str(count)]+[number(values[d],6) for d in DESIGN_ORDER]+[number(ratio)])+' |')
+ legacy_capacity=[]
+ for value in legacy_capacity_groups(rs):
+  legacy_capacity.append('| '+' | '.join([str(value['tokens']),value['design'],str(value['windows']),value['chunk_size_range'],number(value['chunk_count_mean'],2),number(value['unique_weight_mib_mean'],2),number(value['refetch_mib_mean'],2),number(value['setup_ms_mean'],6),number(value['ms_geomean'],6)])+' |')
  selected=fixed.get('selected_by_budget',{})
  comparator=[]
  for d,cycles in fixed.get('geometric_mean_cycles',{}).items():
@@ -107,7 +128,11 @@ def render(root):
  '## 真实留出结果：相同OP2、ISO端口',
  '每行对同一组真实窗口求几何平均。比值小于1表示BL4更快，大于1表示冻结替代更快。只有四种组织全部完成才形成完整配对；T128属于单列压力测试，N4/N5主要比较T64/96。',
  '| 来源 | Token数T | 已配对窗口 | 单核6 ms | 同构3+3 ms | 特化4+2 ms | 可切换4+2 ms | 特化/冻结替代 |\n|---|---:|---:|---:|---:|---:|---:|---:|\n'+('\n'.join(organizations) if organizations else '| 留出尚未运行／完成 | — | 0 | — | — | — | — | — |'),
- '## M0–M6交付证据',
+  '## 旧基线的有限容量扩展必须单独解释',
+  'BL0/BL1原有实现把整层专家输出保留到最后合并，真实T64/T96窗口超出其固定私有存储。新比较为这些原本无法执行的窗口加入通用、按容量选择最大合法Token块的外层串行执行器：整层X、最终Y和路由记录始终驻留原私有预算；块内运行原核函数，完全排空后复用暂存。原来能执行的B2/B4/B8/B16行为保持不变。子块X/Y是原地址的行切片，不增加隐含搬运或存储；跨块权重重新从HBM读取，实际字节和控制设置时间全部计入。因此它是明确披露的容量扩展基线，不能假装成原实现的一个无代价大批次运行。',
+  '| Token数T | 旧组织 | 窗口数 | 容量决定的块大小 | 平均块数 | 唯一权重MiB均值 | 额外重取MiB均值 | 设置ms均值 | 完整层ms几何平均 |\n|---|---|---:|---:|---:|---:|---:|---:|---:|\n'+('\n'.join(legacy_capacity) if legacy_capacity else '| 留出尚未完成 | — | 0 | — | — | — | — | — | — |'),
+  '该表只使用OP0真实混合留出的当前完整重复报告，保持单套256 B/周期HBM及256个信用。OP1旧基线的544信用属于额外返回区/标签的超预算诊断，另列在完整CSV；不能据此作严格等面积结论。CSV中的legacy_batch_*字段公开块大小、块数、重取、唯一字节及设置周期，每点原始报告保留完整子块排空和私有峰值核验。',
+  '## M0–M6交付证据',
  '实现与测量完成，不代表论文门槛通过；负结果同样保留。',
  '| 里程碑 | 当前完成状态 | 证据 |\n|---|---|---|\n'+'\n'.join('| '+' | '.join(r)+' |' for r in milestone),
  '## N1–N5：按原阈值判定',

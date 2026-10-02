@@ -1,0 +1,87 @@
+{
+  "schema": "plena_supply_v3_engine_validation_index_v8b",
+  "binary_sha256": "23d91e9300eba984b2b1d5b4a83766f3b5c23e347c63830588bccf107fc5b161",
+  "compiler_commit": "d389b9502c25392acea3dc5e21212efab98876b8",
+  "scope": "Complete final-engine correctness; fresh development and complete final timing campaign remain pending; historical v7 evidence preserved separately",
+  "receipts": {
+    "tests/rust_79_v8b_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/rust_79_v8b_receipt.json",
+      "sha256": "df582a6fe5880628b99408d742978a838ef669caf3627fd3809b8864b94884df"
+    },
+    "tests/legacy_47_v8b_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/legacy_47_v8b_receipt.json",
+      "sha256": "4466e48cffd00cbe8f7400c23fb31d475e46ab8e684ce4489b372c0fabfa4cb0"
+    },
+    "tests/timed_numeric_56_v8b_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/timed_numeric_56_v8b_receipt.json",
+      "sha256": "8939aea04f78fe9041d40a07b4905359c8b637147d0925695a367579d5f12ad6"
+    },
+    "tests/repair_freeze_candidate_v8b/source_manifest.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/source_manifest_v8b.json",
+      "sha256": "f4558499357162b6a144007dfb410eb627781e7b3401918163b18fe1905b4718"
+    },
+    "tests/v8b_original_failure_regressions/receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/v8b_original_failure_regressions_receipt.json",
+      "sha256": "c978548412d49d812cc7a3a2854c94812dc7744be5506b7ef94787fd149f769d"
+    },
+    "tests/v8b_original_failure_regressions/raw_equivalence_to_v8a.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/v8b_raw_equivalence_to_v8a.json",
+      "sha256": "1b98036de8fe5c60ea1ccb596919a5326e64de13b6c2937e0a189347eaec344b"
+    },
+    "development_and_heldout_v7_aborted_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/v7_aborted_receipt.json",
+      "sha256": "e66c1b0daf3a45325da1387e48ecc9f8f1bdc5411d16382d317ed92be53f93d6"
+    },
+    "history/v7_before_v8_correctness_amendment/preservation_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/v7_history_preservation_receipt.json",
+      "sha256": "f830dca45955f237182f25f2a648e57938429b85b324613e489c53a86a00d9d6"
+    },
+    "heldout_authorization_v7_historical_before_correctness_amendment.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/heldout_authorization_v7_historical.json",
+      "sha256": "d6a181e48f703a5faca5dd06c2da6ed1197793bd01e08b9d97d7b952e1b1352e"
+    },
+    "tests/timed_numeric_56_v8b_originals_archive_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/timed_numeric_56_v8b_originals_archive_receipt.json",
+      "sha256": "647172ac553681f1457b6e651364133d3e50419292b1ccf60a4ee2c2f8b272f0"
+    },
+    "development_all_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/development_all_v8b_receipt.json",
+      "sha256": "28643f0cf387c2390469ab49ed6f51eae9ae02bedbdbc941c7d0c0c2b0d9ef24"
+    },
+    "development_fixed_comparator.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/development_fixed_comparator_v8b.json",
+      "sha256": "51aff928ebe611e44e5115623c9d459b2d28863a64840a08dc6154e24d407c72"
+    },
+    "development_freeze_ready_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/development_freeze_ready_v8b_receipt.json",
+      "sha256": "41e4a74411662512042a5d39cb7b22166ca7cec37a867a148635547a99d9fa92"
+    },
+    "compensation_native/receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/compensation_native_v8b_receipt.json",
+      "sha256": "8101af950f5ae1d6a24517f970dc95697ad86fa2dab28a686bdada93201aaf15"
+    },
+    "m5_causal/causal_sequence.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/m5_causal_sequence_v8b.json",
+      "sha256": "eda7aaf4428182408e98d01991be43f184af7ffe8071121dc382962fabf029ca"
+    },
+    "m5_causal/temporal_replay.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/m5_temporal_replay_v8b.json",
+      "sha256": "7e588706c1e33e5569ea8ba928c41ad4d240125f7a2fdd6477b94fb8a38cb56e"
+    },
+    "tests/v8b_offload_96_audit/receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/v8b_offload_96_audit_receipt.json",
+      "sha256": "964b0d3d9d1da3c1f83bfe6f842749c826a79473e8fb22c09c8217c0bc5b0d9e"
+    }
+  },
+  "postheldout_correctness_amendment_sha256": "3501f0877e41e37c40acecc3067faf842db6072c6b0c39d9a7d17258ea01b083",
+  "numerical_summary": {
+    "versioned_file": "research/moe_dispatch/validation_v3/numerical_results_20261002/numerical_summary.json",
+    "sha256": "084f18e43141170634245146d54cc96babea7bcb9589fee7202f09f603df21d1",
+    "q1_candidates": 2178,
+    "q1_rows": 568458,
+    "q3_software_rows": 196608,
+    "q3_physical_bf16_rows": 196608,
+    "accuracy_preserving_qualified": false,
+    "scope": "Real-weight numerical campaign complete; no same W3/W4 candidate passes all three layers; Q2 naturally <32-token expert absent, Q4 GPU unavailable. These do not authorize a qualified-speedup claim."
+  }
+}

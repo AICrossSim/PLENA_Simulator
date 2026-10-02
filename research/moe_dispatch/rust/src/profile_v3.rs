@@ -61,8 +61,7 @@ impl Sim {
         let p = &self.profile_v3;
         let fired =
             self.dma_serial > p.prev_dma || self.diagnostics.accepted_this_cycle.iter().any(|&x| x);
-        let dma_ready = self.now >= self.cfg.dma_ready_after
-            && self.now % self.cfg.dma_ready_period < self.cfg.dma_ready_cycles;
+        let dma_ready = self.dma_ready_now();
         let blocked_slots = self
             .cores
             .iter()

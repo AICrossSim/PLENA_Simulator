@@ -1,0 +1,1241 @@
+{
+  "state": "aborted known failing mixed-development stage after preserving all owned in-flight files; no new heldout",
+  "utc": "2026-10-02T08:28:25.503127+00:00",
+  "binary_sha256": "23d91e9300eba984b2b1d5b4a83766f3b5c23e347c63830588bccf107fc5b161",
+  "timing_signature": "d5e9ae22cb6b593d",
+  "complete_decode_development_legal_points": 4056,
+  "complete_comparator_points": 84,
+  "no_old_raw_deleted_or_overwritten": true,
+  "archive_sha_verified": true,
+  "preserved_stage_files": [
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/active_result_signature.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/active_result_signature.json",
+      "bytes": 1406,
+      "sha256": "45b2dd5a4472038d33725c93a25fcf137feafe8552931b86c519b6031a1f8c86"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_all_receipt.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_all_receipt.json",
+      "bytes": 1674,
+      "sha256": "b97207a8e2e78e4ffbaeccff09338e1eb14e9d23927a8ad1656318a03bd2ae13"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_all.csv",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_all.csv",
+      "bytes": 13751700,
+      "sha256": "72d7bfd4b472396138bd5d4f8e03542a1062c865b2d7006eb785adaeef3849d3"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_dev_comparator.csv",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_dev_comparator.csv",
+      "bytes": 306554,
+      "sha256": "e14d5fc4db770c7bcfe33efdae561d4c2cbdbad9d586ce8d7ad52c9199262a8c"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_fixed_comparator.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_fixed_comparator.json",
+      "bytes": 2069,
+      "sha256": "51aff928ebe611e44e5115623c9d459b2d28863a64840a08dc6154e24d407c72"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_freeze_ready_receipt.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_freeze_ready_receipt.json",
+      "bytes": 17663,
+      "sha256": "41e4a74411662512042a5d39cb7b22166ca7cec37a867a148635547a99d9fa92"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_pipeline_progress.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_pipeline_progress.json",
+      "bytes": 5908,
+      "sha256": "96b20582f23126def4b9d51304cdf4cb247c736fba33d0cb6ea5353bf1154a9e"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_final_v8b_32.log",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_final_v8b_32.log",
+      "bytes": 9572,
+      "sha256": "dd2b4eee48e2b2afeaeea9faf60c9669e8723d84b7b49d53f021782b940f244d"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_v8b_mixed_failure_pause_receipt.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_v8b_mixed_failure_pause_receipt.json",
+      "bytes": 38492,
+      "sha256": "4b59d3e77f8b6d05edd612a2e41d75f238de7acaf76aeb3aa24e30c883f915c6"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_v8b_host_boundary_control_receipt.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/development_v8b_host_boundary_control_receipt.json",
+      "bytes": 4733,
+      "sha256": "448f8bf1c455a102169f4030b449d3d329290e61a57b6e9e5f9890d94ba740de"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/compensation_native/receipt.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/compensation_native/receipt.json",
+      "bytes": 10287,
+      "sha256": "e2313c2e145369d311ba10afad71ab52293d5803e31d3d9af635328385365d87"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/compensation_native/native_wire_sensitivity.csv",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/compensation_native/native_wire_sensitivity.csv",
+      "bytes": 17312,
+      "sha256": "e097f1f7aed0e63e7aa01dc8acf29ed95711ebe07cebd9214595cba609fe5ebb"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/m5_causal/causal_sequence.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/m5_causal/causal_sequence.json",
+      "bytes": 97073,
+      "sha256": "eda7aaf4428182408e98d01991be43f184af7ffe8071121dc382962fabf029ca"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/m5_causal/causal_sequence.csv",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/m5_causal/causal_sequence.csv",
+      "bytes": 2610,
+      "sha256": "29dbf8e3f5c3097eb9adf094f4b42287ca4f79ddc33a04cdbe0e1675510d6821"
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/m5_causal/temporal_replay.json",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/m5_causal/temporal_replay.json",
+      "bytes": 2984,
+      "sha256": "7e588706c1e33e5569ea8ba928c41ad4d240125f7a2fdd6477b94fb8a38cb56e"
+    }
+  ],
+  "preserved_inflight_points": [
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/point.json",
+          "bytes": 1869,
+          "sha256": "cde4b3d43c0adf635d07a1fc7e08036e8692363c825bf8220f976ea0e5258627"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/config.json",
+          "bytes": 1321,
+          "sha256": "86ff317157804e5bd262d3c2b05069bf1fd986b7e9ebe1ff4b50395526d0d5c2"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/workload.json",
+          "bytes": 145432,
+          "sha256": "8783b986ae1006cb1a124921ee480e9a8fffdad65909472cd507459514da5dc1"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex62__OP0__demand__default/repeat1.json",
+          "bytes": 72050,
+          "sha256": "c20774b9f91477ba7c36e61051b583e4767640270abde617730d8b3c0d30a84f"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "f0ba68ffc760de221248675ce4937193d548933abb7797e4cc3f556318c1fefa"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default/config.json",
+          "bytes": 1345,
+          "sha256": "9a643765166d5efdabecd464520dc3f3cab37f1e66b62f0e724b595fb84f4b9a"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "4faa4e8efd2ab11067ce76d0be1e021ef79c9e645faa71bcbeacc69329d31a97"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default/config.json",
+          "bytes": 1321,
+          "sha256": "78844dd4ab53cd1e392fba03a78fa6585b6d133708d2945436912a893d0d48ae"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP0__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "b3f99eff33fdbd6b3f7448005a6d2bc701c0287362978b8f456503c0416ff02b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default/config.json",
+          "bytes": 1345,
+          "sha256": "ac4a3177a6cac84b093b3247f120b9edafd5cc3ccf47d4232b73558d7514d023"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "44664f002c2c024ed90d4b99e0d0626eeb0e28c59061251ea1386548e09fdb17"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default/config.json",
+          "bytes": 1321,
+          "sha256": "427adde4534ca027b25016c51ffc129216eafd040fbd4d83e6d2b382c56698f8"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP1__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "15a7ae7f262822f4201dd4642fdc892e7095af0079676b7c9bb57816fb9b209b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default/config.json",
+          "bytes": 1342,
+          "sha256": "3d1e420fb0959e01ffe3d86a8423d404b36259ef70ce9ed94ec3c0e7c6fcc703"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "a4eaaa2fb23aa4c9e364815cfbfd454225eec741183e691c3e51413076658840"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default/config.json",
+          "bytes": 1318,
+          "sha256": "13576331e2b30a368fa467aabaa0ebc75717305c0ec82eb0d689924f9023c5e8"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP0__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "f113fa15be0571f6606b2e7df20faf1cbb5fa2c197269972af576cbf3e199320"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/config.json",
+          "bytes": 1296,
+          "sha256": "df2ac60e445ec221555188fc35c070a35b9e5abe3d372dbad7d9c1b7c1e51a17"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__iso__default/repeat1.json",
+          "bytes": 46351,
+          "sha256": "68018d27e6de0eca2f855723ee97373c44f6fc855b9b092c23478be8071b450d"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "7582f12483dbdf12d18fb902d2eeec73fa675806e4f8baf13b8bf792d06eb58d"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default/config.json",
+          "bytes": 1342,
+          "sha256": "83a859165008397ecf6c4a629b0cc94599cfcedc1d64f771a4a10ce76b540fb7"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "762eb2694d0e34801b14d66eb92c2f6aef569f5a77824017462e1f642c6ff7c2"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default/config.json",
+          "bytes": 1318,
+          "sha256": "e444a902d3f1213ae967c39ecc9c3a343a2f5c53d4000e365e746afce1741e4e"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP1__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "bbf4979c0ab05a00072c3a53f3ad14253baf603dad42f7b57ed973cdf62f67c3"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/config.json",
+          "bytes": 1296,
+          "sha256": "ae44d9d9118da15be77686b07c6452107da6441e4d216dfa3c9aa179a9168733"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP1__iso__default/repeat1.json",
+          "bytes": 48452,
+          "sha256": "8adb56cd0963d7acbdaeafbda18ac4bba84d4d649a12539c9e0d59d90b5deb23"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "e843b869ea7f2633f7847c885ff401e19b88ebb7f2f644875512a1dd05b86b8e"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default/config.json",
+          "bytes": 1344,
+          "sha256": "96dc2251628709e002d11f4232ba44b6e12ac7ba441d99ad4601f96dbd085643"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "a2ed33ce36deb6e9e7edfd293cffb8df67127267c769ed61b6d107714c8c84c5"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default/config.json",
+          "bytes": 1346,
+          "sha256": "0b4518b575c321419d44b793f56f179c56f8bc3d955bc9d8b5ad3a68224725a2"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "fa4b2f7d3641c6b2e8738b625c2f1f4565e43ef7253e93936adf32557d4efb9e"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default/config.json",
+          "bytes": 1322,
+          "sha256": "b798ebef5a1b579bd43a63778c521bfc92b362049f20f5b45e1295b200707aa8"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP3__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/point.json",
+          "bytes": 1863,
+          "sha256": "96c81eb28147378647fe0c7ec3fccc375a83ada7f5dfb1695af8f9e60f64f0e2"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/config.json",
+          "bytes": 1345,
+          "sha256": "8d51557bf2cf44255c061f34dededbb7c6d4db3dd38504fb91ee798d3184e7d9"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/workload.json",
+          "bytes": 145432,
+          "sha256": "8783b986ae1006cb1a124921ee480e9a8fffdad65909472cd507459514da5dc1"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__iso__default/repeat1.json",
+          "bytes": 70295,
+          "sha256": "78678b969e62e61440e658d7f8883c433536b0fec1c61322d95b6855488f3481"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "4cb0fe2647ea6e4fdbb05b59947bc28806b1facfa4640787540230177f66fd9d"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/config.json",
+          "bytes": 1349,
+          "sha256": "c468ce8a0a74348c05d769f6cb933059ef0b1ed9eb8f4ba9db81beae029c1909"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__iso__default/repeat1.json",
+          "bytes": 57534,
+          "sha256": "bca4a4d7a89248076786d4659a5b18fe15a75dab10f55bdd8d7ada5a037fd4e1"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/point.json",
+          "bytes": 1869,
+          "sha256": "cdfdba96d66337501f6259848238f6036ecf1fa2963205f474a4190f4d3675f3"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/config.json",
+          "bytes": 1321,
+          "sha256": "f620a71282fc20bbc3d60cd588d3203dce00be39f83169942a0aed4b7a630586"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/workload.json",
+          "bytes": 145432,
+          "sha256": "8783b986ae1006cb1a124921ee480e9a8fffdad65909472cd507459514da5dc1"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t64_l13__M8_flex53__OP0__demand__default/repeat1.json",
+          "bytes": 70269,
+          "sha256": "d871e991f4bd9f35c663ca78f50041160eea15d4a7d7b1872fbdb3de8ae9f186"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "404aaff05fc175dfb7a0482abf110dddf39ed4e2f5255966cddea492bc00515e"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default/config.json",
+          "bytes": 1344,
+          "sha256": "bae384f423aaab753614fd9df8d5dd66a53bfba3c49903349d1726dd47669189"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "f66b75f3dd44a6c25d6755a59f0019574b8f9aad425d4312861feb4f0b1be5ee"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default/config.json",
+          "bytes": 1320,
+          "sha256": "7d36ec11c4aef2a8b8fd115f41df1e9ea9ce1ac5bf6436a0c8e080d72851451f"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP4__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "99c67392af46a37521f3e4b1c4015bf8f60ccb725b81965d01bc6e821982b7d1"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/config.json",
+          "bytes": 1323,
+          "sha256": "74055170a0f7384273f72e5934200b5bb2e5d4ccdae997efbbb2e09ca6b4e108"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__demand__default/repeat1.json",
+          "bytes": 57498,
+          "sha256": "b98ada314ca9bbc3ff7ae6c245195d056a83217f739f7fe53805ea54ff0b5a92"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "0b56fd389e5cf4284573739dcc11fd1d609b825f43c6c44e5dda6d5539e8730c"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/config.json",
+          "bytes": 1272,
+          "sha256": "11f949c567b651f5eb31f5701ef8f158f83483542213d3518ca385e7911c6f24"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL2__OP0__demand__default/repeat1.json",
+          "bytes": 46367,
+          "sha256": "d63070c045f4b4a77753eb6556ac0f6eead6f41a2c12c924c71cd6df8febaa58"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "8cbcab5e4779060f034e71018a94bd614d4b55d4c1cc90e20a37e1749f62f547"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/config.json",
+          "bytes": 1347,
+          "sha256": "aab04c2d8c9d9627f141c2e7ee348c1ffa2ee99add888a64719f07b0a28befd8"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP2__iso__default/repeat1.json",
+          "bytes": 57375,
+          "sha256": "45b6e7e4c756b38026fbf1b9f8c62954df762e68968c6c5d44b11a3b396e4bed"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "66fb1e301f1374f492091c25f18dda57e5921a24cda67812d613ed2be0e6fb3b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/config.json",
+          "bytes": 1347,
+          "sha256": "d5ed2ab8424cda0fb1fdbbdf7d4b3ff254f979396a00d81f51f9fdccb6713675"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__iso__default/repeat1.json",
+          "bytes": 56204,
+          "sha256": "bd6718a68b95c527365490cbc505f4a6a6470e28bc87131d2fe4bf9d662faaf0"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "6a6dd0539ad78c095b4f5add26838871b6799562db0e2b68e9db0285b45e73c9"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default/config.json",
+          "bytes": 1343,
+          "sha256": "304a2387d5dc15d7a2fc804cf8e542252aac400357c714cdbc9b96f95710a0e5"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "d4bf947770c1c8f56f02839af1a9b410036a95ce1ae91a9fa9bf1716f2bb6637"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/config.json",
+          "bytes": 1325,
+          "sha256": "1c66ea6764fbc1d9a614c80fbdb0423a3b635370d3748b1a9581d70003f4f99a"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP3__demand__default/repeat1.json",
+          "bytes": 57147,
+          "sha256": "973fe539eea87e694ef5c51d511396883beb65ae0ab6314e09032d90792a1def"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "46348620e78a2f8001a23c039fc98d69f6e7e24e8cdb5efb91f089e5ee00f2bc"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default/config.json",
+          "bytes": 1319,
+          "sha256": "7b186237ea20aa8f9efbeaf77521cb559e65b3f14b15f3ddab1f656a4c75803a"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP5__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "53ba750ddaad7624e88c97264f7dd10ae6f1844e3b475a1099840933915b291b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default/config.json",
+          "bytes": 1345,
+          "sha256": "3d5821131ac4a5380bbc443abe2d4887d947c5c4cf654d2487acfbceb4fa68f7"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "359e27404700cc7d40c75e76d539263c2b42162f97376fcdedffe0a781a748a2"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/config.json",
+          "bytes": 1322,
+          "sha256": "4024da22bf9cd32fa45046510669c4959de1f3c518cc6ce02b0b6b856d5bb44b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__demand__default/repeat1.json",
+          "bytes": 56864,
+          "sha256": "21a0654545d64768f010f8d12caef30bdf965125113321c0da6d3c9667f9b897"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "3f796a5f05c62c18f76d901a3f2d9277308d0208e24b2e0d030025b81ff586e5"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/config.json",
+          "bytes": 1323,
+          "sha256": "7c18ffad11f9ada2091a779f90ce25ba16093825211d28db95196bc7537a903a"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP4__demand__default/repeat1.json",
+          "bytes": 55807,
+          "sha256": "02c7860f84beb761c7034f997b5fda6e8b70a58072b1efdf48a655153054bd00"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "9dd3fd02de877a93f13702bf99dc76bdecda1cb18e8b3af8a5c937e1bb526a8f"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default/config.json",
+          "bytes": 1321,
+          "sha256": "e0ec1401f942202983fabc40907e9f5a9d4ac1151c144c4eeefbc05d1044c83b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL5__OP0__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/point.json",
+          "bytes": 1857,
+          "sha256": "ef25d99febafc0cce28e046c251391afad456080255e039d3aa6a48e67fc82b7"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/config.json",
+          "bytes": 1320,
+          "sha256": "3c32546c2875404ae2bc875b98bc94c8dc93ac9c263772f967ff2c5050489e3b"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL4__OP2__demand__default/repeat1.json",
+          "bytes": 59457,
+          "sha256": "549225fa84ef019c9e3c0ba954dc30dbf71bfd2ab0db2def9628739dcc638134"
+        }
+      ]
+    },
+    {
+      "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default",
+      "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default",
+      "members": [
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/point.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/point.json",
+          "bytes": 1851,
+          "sha256": "66acf180bd84d4863a8d3a809f07999f9a9d5c5da920cf2b90a057f80667f954"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/config.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/config.json",
+          "bytes": 1346,
+          "sha256": "98894a047373e11542c9dc6357a1bcc59d6136927ed7c49e1ff04e0d4b06f616"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/workload.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/workload.json",
+          "bytes": 187336,
+          "sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863"
+        },
+        {
+          "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/repeat1.json",
+          "archive": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/history/v8b_before_legacy_finite_chunk_repair/inflight/main__v3_captured_mixed_development_t96_l13__BL3__OP5__iso__default/repeat1.json",
+          "bytes": 58537,
+          "sha256": "b594e23f4538ee6c042aedbca6d7d1c73e5bb7cd18aaa07c5d517d3ec8c68c0f"
+        }
+      ]
+    }
+  ],
+  "terminated_owned_pids": [
+    3298559,
+    3298558,
+    3298556,
+    3298555,
+    3298554,
+    3298553,
+    3298551,
+    3298550,
+    3298549,
+    3298548,
+    3298547,
+    3298546,
+    3298538,
+    3298537,
+    3298506,
+    3298505,
+    3298504,
+    3298502,
+    3298501,
+    3298500,
+    3298498,
+    3298497,
+    3298496,
+    3298487,
+    3298486,
+    3298484,
+    3298482,
+    3298431,
+    3298335,
+    3298333,
+    3298328,
+    3298315,
+    3297403,
+    3296818
+  ],
+  "original_pause_receipt_sha256": "4b59d3e77f8b6d05edd612a2e41d75f238de7acaf76aeb3aa24e30c883f915c6",
+  "failures": [
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL0__OP0__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__iso__default/failure.json",
+      "sha256": "724f7c569799f84d87c9b6ce9062467df024a545606afe371d26c0b263f5a091",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298289) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL0__OP0__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__demand__default/failure.json",
+      "sha256": "225e46fed1b90432ef68744fd53fe361c5e57d7982afa9d61f01cd9f7680e665",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP0__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298290) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL0__OP1__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__iso__default/failure.json",
+      "sha256": "3fe3decad999b4f081085974c5a485e46f72ad2b8f53e245fb48ba8122db777a",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298291) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL0__OP1__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__demand__default/failure.json",
+      "sha256": "4b03fb8cbb01dfcd0cd12c55c0fcaf48e59abda87ef5c59b05012e3f2e3ed69f",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL0__OP1__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298292) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL1__OP0__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__iso__default/failure.json",
+      "sha256": "22bb7221acb0846323948b01458b2a854aff938d50b93b33e6937809f03786dd",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298293) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL1__OP0__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__demand__default/failure.json",
+      "sha256": "aefd2b60693ec216fdfc7dbfce3bbe5788e4bcb65d766454f89c7eb100148f3d",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP0__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298294) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL1__OP1__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__iso__default/failure.json",
+      "sha256": "e79a789b4d512dcb1f4558c8b245f3c1e6388492a092c92fc5d5bae99c6a41b6",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298295) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t96_l13__BL1__OP1__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__demand__default/failure.json",
+      "sha256": "1f6a079a622e4936f819f1990805b96e372d079c53fc6ff090fcbba318f4d8d4",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t96_l13__BL1__OP1__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3298296) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL0__OP1__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__iso__default/failure.json",
+      "sha256": "de24cf127fabf813a6bb5f52e260f101e6a3f4954a7c7bb91b463fbb91304574",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297466) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL0__OP1__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__demand__default/failure.json",
+      "sha256": "adcafec71dfbd88f74743f5865d6e08bf82c4a125a231a658361556b2a3b5910",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP1__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297472) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL1__OP0__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__iso__default/failure.json",
+      "sha256": "d9bd7e6551e458d000bf74112a70a82d23855b6d85d77f69267276a5fa268d03",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297482) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL1__OP0__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__demand__default/failure.json",
+      "sha256": "9eff06ea7aa7a22ee091ae78a465fa32a0a3c6474d0325f668ea1a4da5418fc4",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP0__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297480) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL1__OP1__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__iso__default/failure.json",
+      "sha256": "592d5cfcea80eb5720aa88936255ea74b84f986e7fe6e8e737b950682a9c9831",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297476) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL1__OP1__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__demand__default/failure.json",
+      "sha256": "8cc9cc95982ad3c9ca6fc6a5e43ed382e6cba9d2c5715b4cf3b69d77e8385973",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL1__OP1__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297484) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL0__OP0__iso__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__iso__default/failure.json",
+      "sha256": "7dc34a8f7be639620a8040563ea341f989a265c5362c371c5552d4d33f853f89",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__iso__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__iso__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__iso__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297457) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    {
+      "point": "main__v3_captured_mixed_development_t64_l13__BL0__OP0__demand__default",
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__demand__default/failure.json",
+      "sha256": "f210422cd013d9345027c3819ddba57e723323e5720fe5fc5731fcf158e86ad2",
+      "failure": {
+        "command": [
+          "outputs/moe_supply_first_v3/snapshots/d5e9ae22cb6b593d/moe-dispatch-analytical-v1",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__demand__default/workload.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__demand__default/config.json",
+          "outputs/moe_supply_first_v3/raw/d5e9ae22cb6b593d/main__v3_captured_mixed_development_t64_l13__BL0__OP0__demand__default/repeat1.json"
+        ],
+        "returncode": 101,
+        "stderr": "\nthread 'main' (3297473) panicked at src/main.rs:1734:18:\nno legal whole-expert core\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    }
+  ]
+}

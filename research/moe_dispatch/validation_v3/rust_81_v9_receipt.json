@@ -1,0 +1,9 @@
+{
+  "all_passed": true,
+  "binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v9/moe-dispatch-447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+  "binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+  "log_sha256": "6a124a5cfc7f4c9869b288e0806c637c0696c1f31a897761a94df97d56993f98",
+  "rust_unit_tests_passed": 81,
+  "scope": "v8b universal engine plus bounded outer token-chunk extension of previously infeasible legacy windows; original supported legacy kernels unchanged",
+  "source_manifest_sha256": "c051b79dde6fb6093ac2ed35bff58b6dc08b5449070dd1d399435c8410c6c7a2"
+}
