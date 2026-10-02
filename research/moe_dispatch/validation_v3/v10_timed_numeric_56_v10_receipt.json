@@ -1,0 +1,38 @@
+{
+  "PLENA_V3_BINARY": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "actual_executed_binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "actual_executed_binary_sha256_after_tests": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "actual_executed_binary_sha256_before_tests": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_unchanged": true,
+  "command": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "research/moe_dispatch/quant/test_timed_numeric.py",
+    "--basetemp",
+    "/tmp/plena-timed_numeric_56_v10-temp",
+    "-o",
+    "cache_dir=/tmp/plena-timed_numeric_56_v10-cache",
+    "--junitxml",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/timed_numeric_56_v10.xml"
+  ],
+  "created_utc": "2026-10-02T10:52:39.468859+00:00",
+  "exit_code": 0,
+  "host_seconds": 182.89134264178574,
+  "junit_xml_sha256": "5448fac51043fc49ce5809f66caf2a4019d9077a2047375bb81e30d7239a9fd9",
+  "log_sha256": "c7cef65f61ecefce0456fff1b559bd785f442a5564d38b9386f16d2870a91e8f",
+  "original_directory": "/tmp/plena-timed_numeric_56_v10-temp",
+  "pytest_counts_including_subtests": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 56
+  },
+  "pytest_passed_cases": 56,
+  "pytest_passed_subtests": 0,
+  "schema": "plena_v3_timed_numerical_v10_v1",
+  "xml_sha256": "5448fac51043fc49ce5809f66caf2a4019d9077a2047375bb81e30d7239a9fd9"
+}

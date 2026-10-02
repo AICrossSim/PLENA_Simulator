@@ -940,6 +940,42 @@ impl Engine {
             self.input += 1;
         }
     }
+    fn binding_z_mode(&self,e:usize)->String {
+        if self.cfg.z_mode!="auto"{return self.cfg.z_mode.clone();}
+        let t=n(&self.cfg.raw,"t_chunk",if self.cfg.precision=="P2"&&self.cfg.rank_lanes<=8&&self.cfg.bw<=256{128}else{96});
+        let sh=self.experts.iter().find(|e|e.shared).map_or_else(||self.experts.iter().map(|e|e.f).max().unwrap_or(1408),|e|e.f);
+        let budget=if t<=64{t*sh*2}else{2*t*512*2};
+        if self.experts[e].m*self.experts[e].f*2>budget{"streamed".into()}else{"full".into()}
+    }
+    fn binding_ranks(&self,e:usize)->[usize;3] {
+        if self.cfg.rank_alloc=="gate_weighted"&&!self.experts[e].shared{self.allocate_ranks(e)}else{self.cfg.ranks(self.experts[e].shared)}
+    }
+    fn binding_context_footprint(&self,e:usize,c:usize)->(usize,usize,usize) {
+        // Eligibility needs only plan metadata, not a rebuilt tile/action
+        // stream. Padding affects DMA bytes, never these context footprints.
+        let x=&self.experts[e];let flow=self.flow(e,c);
+        let r=if self.cfg.precision=="P0"||self.cfg.comp=="none"{[0;3]}else{self.binding_ranks(e)};
+        let acc=if flow=="is_stream"{x.m*(2*x.f).max(x.h)*4}else{x.m*32*4*if self.cfg.inline{1}else{2}};
+        let z=align(if self.binding_z_mode(e)=="streamed"{x.m*1024*2}else{x.m*x.f*2},16);
+        let u=align(x.m*r.iter().sum::<usize>()*2+x.m*r[2]*4,16);(acc,z,u)
+    }
+    fn binding_plan(&self,e:usize,c:usize)->Option<(String,Plan)> {
+        let flow=self.flow(e,c);let g=if flow=="is_stream"{1}else{self.cfg.g[c]};
+        let mut taskcfg=self.cfg.clone();
+        if taskcfg.rank_alloc=="gate_weighted"&&!self.experts[e].shared{taskcfg.ranks_rt=self.binding_ranks(e);}
+        taskcfg.z_mode=self.binding_z_mode(e);
+        let mut plan=plan::build(&self.experts[e],&taskcfg,c,&flow,g).ok()?;
+        if flag(&self.cfg.raw,"comp_equal_bytes",false)||flag(&self.cfg.raw,"equal_comp_payload",false) {
+            let mut maximum=plan.bytes;
+            for mode in ["none","lanes","separate","kext","offload"] {
+                let mut cmp=taskcfg.clone();cmp.comp=mode.into();
+                if (cmp.precision=="P2"&&(mode=="kext"||((mode=="separate"||mode=="offload")&&cmp.factor_b!="mxint4")))||(mode=="offload"&&cmp.lanes.len()<2){continue;}
+                if let Ok(variant)=plan::build(&self.experts[e],&cmp,c,&flow,g){maximum=maximum.max(variant.bytes);}
+            }
+            let padding=maximum-plan.bytes;plan.append_padding(padding);
+        }
+        Some((flow,plan))
+    }
     fn bind(&mut self) {
         self.refill();
         if self.now < self.control_free || self.pending.is_empty() {
@@ -952,6 +988,7 @@ impl Engine {
                 continue;
             }
             let isnext = core.cur.is_some();
+            if !isnext && core.next.is_some() {continue;}
             if isnext && (self.cfg.contexts < 2 || core.next.is_some()) {
                 continue;
             }
@@ -966,6 +1003,9 @@ impl Engine {
             for (pos, &e) in self.pending.iter().enumerate() {
                 if !self.legal(e, c) {
                     continue;
+                }
+                if !isnext {
+                    if self.context_reservation_sizes(c,self.binding_context_footprint(e,c)).is_none(){continue;}
                 }
                 let pred = self.estimate(e, c);
                 let remaining = core.cur.map_or(0, |t| {
@@ -1021,7 +1061,7 @@ impl Engine {
             }
             let (e,c)=self.joint_pending[0];
             if let Some(chosen)=candidates.iter().cloned().find(|x|x.2==e&&x.3==c){candidates=vec![chosen];self.joint_pending.pop_front();}
-            else if self.status[e]!=0||!self.legal(e,c){self.joint_pending.pop_front();self.joint_cancellations+=1;return;}
+            else if self.status[e]!=0||!self.legal(e,c)||(self.cores[c].cur.is_none()&&self.cores[c].next.is_none()&&self.context_reservation_sizes(c,self.binding_context_footprint(e,c)).is_none()){self.joint_pending.pop_front();self.joint_cancellations+=1;return;}
             else{return;}
         }
         if candidates.is_empty() {
@@ -1065,51 +1105,13 @@ impl Engine {
         }
         candidates.sort_by_key(|a| a.0);
         let (_, pos, e, c, pred, isnext) = candidates[0];
-        let flow = self.flow(e, c);
-        let g = if flow == "is_stream" {
-            1
-        } else {
-            self.cfg.g[c]
+        let Some((flow,plan))=self.binding_plan(e,c)else{return;};
+        // Current is a physical execution context, not just a descriptor.
+        // Failed contiguous allocation leaves the descriptor in Pending.
+        let reservation=if isnext{None}else{
+            let Some((acc,z,u,aa,za,ua))=self.context_reservation(e,c,&plan)else{return;};
+            self.cores[c].acc_arena=acc;self.z_arena=z;self.u_arena=u;Some((aa,za,ua))
         };
-        let mut taskcfg = self.cfg.clone();
-        if taskcfg.rank_alloc == "gate_weighted" && !self.experts[e].shared {
-            taskcfg.ranks_rt = self.allocate_ranks(e);
-        }
-        if taskcfg.z_mode == "auto" {
-            let zbudget = self.storage()["structures"]["Z_dense"]
-                .as_u64()
-                .unwrap_or(0) as usize;
-            taskcfg.z_mode = if self.experts[e].m * self.experts[e].f * 2 > zbudget {
-                "streamed".into()
-            } else {
-                "full".into()
-            };
-        }
-        let mut plan = match plan::build(&self.experts[e], &taskcfg, c, &flow, g) {
-            Ok(x) => x,
-            Err(_) => return,
-        };
-        if flag(&self.cfg.raw, "comp_equal_bytes", false)
-            || flag(&self.cfg.raw, "equal_comp_payload", false)
-        {
-            let mut maximum = plan.bytes;
-            for mode in ["none", "lanes", "separate", "kext", "offload"] {
-                let mut cmp = taskcfg.clone();
-                cmp.comp = mode.into();
-                if (cmp.precision == "P2"
-                    && (mode == "kext"
-                        || ((mode == "separate" || mode == "offload") && cmp.factor_b != "mxint4")))
-                    || (mode == "offload" && cmp.lanes.len() < 2)
-                {
-                    continue;
-                }
-                if let Ok(variant) = plan::build(&self.experts[e], &cmp, c, &flow, g) {
-                    maximum = maximum.max(variant.bytes);
-                }
-            }
-            let padding = maximum - plan.bytes;
-            plan.append_padding(padding);
-        }
         let waiting = self.cores[c].cur.map_or(0, |t| {
             (self.tasks[t].born + self.tasks[t].predicted).saturating_sub(self.now)
         });
@@ -1167,7 +1169,7 @@ impl Engine {
             row_block: 0,
             pass: 0,
             born: self.now,
-            z_addr:None,u_addr:None,acc_addr:None,helper_acc:None,helper_copy:None,consumer_read:0,copy_owner_read:0,copy_write:0,copy_ready:None,spill_written:0,spill_source_read:0,spill_read:0,
+            z_addr:reservation.map(|x|x.1),u_addr:reservation.map(|x|x.2),acc_addr:reservation.map(|x|x.0),helper_acc:None,helper_copy:None,consumer_read:0,copy_owner_read:0,copy_write:0,copy_ready:None,spill_written:0,spill_source_read:0,spill_read:0,
             bound_at: self.now,
             predicted_completion,
             start: if isnext { None } else { Some(self.now) },
@@ -1285,15 +1287,21 @@ impl Engine {
                 continue;
             }
             let old_offset=task.offset;let old_count=task.plan.tiles.len();let mut wasted=0;
+            let old_acc=self.accumulator_footprint(t);let (old_z,old_u)=self.context_footprint(t);
+            // Prove the destination before changing ownership or discarding
+            // accepted responses. Only unstarted source contexts are empty.
+            let mut z=self.z_arena.clone();let mut u=self.u_arena.clone();
+            if let Some(a)=task.z_addr{z.release(a,old_z);}
+            if let Some(a)=task.u_addr{if old_u>0{u.release(a,old_u);}}
+            let Some((acc,z,u,aa,za,ua))=self.plan_context_reservation(e,&plan,self.cores[dst].acc_arena.clone(),z,u)else{continue;};
             // Next now holds a real activation reservation before prefetch.
             // A steal is restricted above to an unstarted, action-zero task:
             // these arenas contain no produced values and can be returned.
             // Accepted weight response leases remain with the original owner
             // until the normal discard drain; they are never released here.
-            let old_acc=self.accumulator_footprint(t);let (old_z,old_u)=self.context_footprint(t);
             if let Some(a)=self.tasks[t].acc_addr.take(){self.cores[src].acc_arena.release(a,old_acc);}
-            if let Some(a)=self.tasks[t].z_addr.take(){self.z_arena.release(a,old_z);}
-            if let Some(a)=self.tasks[t].u_addr.take(){if old_u>0{self.u_arena.release(a,old_u);}}
+            self.cores[dst].acc_arena=acc;self.z_arena=z;self.u_arena=u;
+            self.tasks[t].acc_addr=Some(aa);self.tasks[t].z_addr=Some(za);self.tasks[t].u_addr=Some(ua);
             for idx in old_offset..old_offset+old_count{
                 if self.tiles[idx].addr.is_some(){self.tiles[idx].discarded=true;wasted+=self.tiles[idx].sent as u64;if self.tiles[idx].landed==self.tiles[idx].sent{self.release_discarded(idx);}}
             }
@@ -1305,9 +1313,9 @@ impl Engine {
             self.control_free = self.now + cost;
             self.cores[dst].stats.control += cost;
             self.cores[src].next = None;
-            self.cores[dst].cur = Some(t);
             self.tasks[t].core = dst;
             self.tasks[t].plan = plan;
+            self.cores[dst].cur = Some(t);
             self.tasks[t].born = self.now;
             self.tasks[t].start = Some(self.now);
             self.tasks[t].predicted = pred;
@@ -1883,18 +1891,39 @@ impl Engine {
             },
         }
     }
+    fn plan_context_footprint(&self,e:usize,plan:&Plan)->(usize,usize) {
+        let e=&self.experts[e];
+        (align(if plan.z_mode=="streamed"{e.m*1024*2}else{e.m*e.f*2},16),align(e.m*plan.ranks.iter().sum::<usize>()*2+e.m*plan.ranks[2]*4,16))
+    }
     fn context_footprint(&self,t:usize)->(usize,usize) {
-        let x=&self.tasks[t];let e=&self.experts[x.expert];
-        (align(if x.plan.z_mode=="streamed"{e.m*1024*2}else{e.m*e.f*2},16),align(e.m*x.plan.ranks.iter().sum::<usize>()*2+e.m*x.plan.ranks[2]*4,16))
+        self.plan_context_footprint(self.tasks[t].expert,&self.tasks[t].plan)
+    }
+    fn plan_context_reservation(&self,e:usize,plan:&Plan,mut acc:Pool,mut z:Pool,mut u:Pool)->Option<(Pool,Pool,Pool,usize,usize,usize)> {
+        let aa=acc.alloc(self.plan_accumulator_footprint(e,plan))?;
+        let (zb,ub)=self.plan_context_footprint(e,plan);let za=z.alloc(zb)?;let ua=if ub>0{u.alloc(ub)?}else{0};
+        Some((acc,z,u,aa,za,ua))
+    }
+    fn context_reservation_sizes(&self,c:usize,(ab,zb,ub):(usize,usize,usize))->Option<(Pool,Pool,Pool,usize,usize,usize)> {
+        let mut acc=self.cores[c].acc_arena.clone();let mut z=self.z_arena.clone();let mut u=self.u_arena.clone();
+        let aa=acc.alloc(ab)?;let za=z.alloc(zb)?;let ua=if ub>0{u.alloc(ub)?}else{0};Some((acc,z,u,aa,za,ua))
+    }
+    fn context_reservation(&self,e:usize,c:usize,plan:&Plan)->Option<(Pool,Pool,Pool,usize,usize,usize)> {
+        self.plan_context_reservation(e,plan,self.cores[c].acc_arena.clone(),self.z_arena.clone(),self.u_arena.clone())
     }
     fn activate_context(&mut self,t:usize)->bool {
         if self.tasks[t].z_addr.is_some(){return true;}
-        let c=self.tasks[t].core;let acc=self.accumulator_footprint(t);
-        let Some(aa)=self.cores[c].acc_arena.alloc(acc)else{return false;};
-        let (z,u)=self.context_footprint(t);
-        let Some(za)=self.z_arena.alloc(z)else{self.cores[c].acc_arena.release(aa,acc);return false;};
-        let ua=if u>0{match self.u_arena.alloc(u){Some(a)=>a,None=>{self.z_arena.release(za,z);self.cores[c].acc_arena.release(aa,acc);return false;}}}else{0};
+        let c=self.tasks[t].core;
+        let Some((acc,z,u,aa,za,ua))=self.context_reservation(self.tasks[t].expert,c,&self.tasks[t].plan)else{return false;};
+        self.cores[c].acc_arena=acc;self.z_arena=z;self.u_arena=u;
         self.tasks[t].z_addr=Some(za);self.tasks[t].u_addr=Some(ua);self.tasks[t].acc_addr=Some(aa);true
+    }
+    fn promote_next(&mut self,c:usize)->bool {
+        if self.cores[c].cur.is_some()||self.helper_owner().is_some_and(|o|o!=c){return false;}
+        let Some(t)=self.cores[c].next else{return false;};
+        if !self.activate_context(t){return false;}
+        self.cores[c].cur=self.cores[c].next.take();
+        if self.tasks[t].start.is_none(){self.tasks[t].born=self.now;self.tasks[t].start=Some(self.now);}
+        true
     }
     fn z_base(&self,t:usize)->usize {self.batch*self.hidden*2+self.tasks[t].z_addr.expect("executing context has Z reservation")}
     fn u_base(&self,t:usize)->usize {self.batch*self.hidden*2+self.z_arena.capacity+self.tasks[t].u_addr.expect("executing context has U reservation")}
@@ -1933,9 +1962,12 @@ impl Engine {
         let x=&self.tasks[t];let e=&self.experts[x.expert];
         self.u_base(t)+align(e.m*x.plan.ranks.iter().sum::<usize>()*2,16)
     }
+    fn plan_accumulator_footprint(&self,e:usize,plan:&Plan)->usize {
+        let e=&self.experts[e];
+        if plan.dataflow=="is_stream"{e.m*(2*e.f).max(e.h)*4}else{e.m*32*4*if self.cfg.inline{1}else{2}}
+    }
     fn accumulator_footprint(&self,t:usize)->usize {
-        let e=&self.experts[self.tasks[t].expert];
-        if self.tasks[t].plan.dataflow=="is_stream"{e.m*(2*e.f).max(e.h)*4}else{e.m*32*4*if self.cfg.inline{1}else{2}}
+        self.plan_accumulator_footprint(self.tasks[t].expert,&self.tasks[t].plan)
     }
     fn z_row_offset(&self,t:usize,row:usize,kseg:usize)->usize {
         let e=&self.experts[self.tasks[t].expert];
@@ -2722,11 +2754,8 @@ impl Engine {
         if self.cfg.trace {
             self.log(json!({"event":"expert_complete","cycle":self.now,"expert":self.experts[e].id,"core":c}));
         }
-        self.cores[c].cur = if self.helper_owner().is_some_and(|o| o != c) {
-            None
-        } else {
-            self.cores[c].next.take()
-        };
+        self.cores[c].cur=None;
+        self.promote_next(c);
         if let Some(next) = self.cores[c].cur {
             if self.tasks[next].start.is_none(){self.tasks[next].born = self.now;self.tasks[next].start = Some(self.now);}
             self.tasks[next].blocked = self.tasks[next]
@@ -2805,15 +2834,7 @@ impl Engine {
             self.returns();
             self.land(&mut busy);
             for c in 0..self.cores.len() {
-                if self.cores[c].cur.is_none()
-                    && self.cores[c].next.is_some()
-                    && !self.helper_owner().is_some_and(|o| o != c)
-                {
-                    self.cores[c].cur = self.cores[c].next.take();
-                    if let Some(t) = self.cores[c].cur {
-                        if self.tasks[t].start.is_none(){self.tasks[t].born = self.now;self.tasks[t].start = Some(self.now);}
-                    }
-                }
+                self.promote_next(c);
             }
             self.work_steal();
             self.bind();

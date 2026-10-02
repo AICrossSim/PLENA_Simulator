@@ -1,0 +1,79 @@
+{
+  "accepted_dma_responses_still_drain_original_owner": true,
+  "actual_target_replay": {
+    "actual_storage_peak_bytes": 1601184,
+    "bit_identical": true,
+    "budget_total_bytes": 1691712,
+    "cycles": 6643437,
+    "dma_accepted": 9472704,
+    "dma_landed": 9472704,
+    "repeats": 2,
+    "report_sha256": "b96222d46a7470d4b0036240e5161559a1c083bcaa40e97753429be076d878a0"
+  },
+  "amendment_record": "D034 in DECISIONS_V3.md",
+  "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "cause": "Current identity installed before contiguous Z/U activation succeeded; Shared helper offload then excluded blocked Current, causing circular wait",
+  "compiler_commit": "480d558c72f8fce19572b2408eb02a1ae52c40eb",
+  "disproved_hypothesis": "Helper RF was free, with no retained helper result or copy; outstanding HBM requests were zero",
+  "entire_new_campaign_rerun_required": true,
+  "matrix_threshold_hardware_input_format_policy_changes": false,
+  "new_v9_heldout_authorized": false,
+  "no_compaction_or_free_payload_copy": true,
+  "no_extra_storage": true,
+  "old_timing_not_reused": true,
+  "original_config_sha256": "abf4e4592e3d90712fb8cf7b36b80122096aed05f055f6ea25681d46b7ed3fe1",
+  "original_failure_sha256": "a3719a05918a4d92c8cd0253052e3431e3bdad38ab7aa57e6814db278d0ae39d",
+  "original_matrix_legal_points": 55012,
+  "original_point": "compensation__v3_captured_mixed_development_t96_l13__BL4__OP5__iso__offload",
+  "original_workload_sha256": "9278e90d3058f46bf59b3ff064dca57217bfcd710f78f8f63a89d2bba617a863",
+  "prior_binary_sha256": "447f78bae6ac6d3516ab0aadcd4c6a83d5d83555094021f05412d1ce7a635185",
+  "prior_heldout_exposure_disclosed": true,
+  "required_final_repeats": 2,
+  "reservation": "Atomic first-fit accumulator/Z/U reservation before every Current installation; failed descriptor remains Pending/Next; destination steal proven before ownership mutation",
+  "rust_test_log_sha256": "9cd95d0e5bb66319c489f43eac1163cecbf6a5125cb56546eb9a25e10a845178",
+  "rust_tests_passed": 88,
+  "schema": "plena_v3_disclosed_development_context_eligibility_repair_v10",
+  "source_manifest_sha256": "97568c97669ed2d41cb5877ece2bd174ee039688d9a30583baf8e4e5c06dfaab",
+  "status": "rust_numerical_legacy_and_independent_failures_validated_fresh_full_development_pending",
+  "target_replay_receipt_sha256": "e998eaea9b5b430138e402478a703c10a0a1f901923f99ad29b317d5a2796486",
+  "timestamp_utc": "2026-10-02T10:51:29.960987+00:00",
+  "universal_eligibility_rule_for_all_organizations": true,
+  "validation_receipts": {
+    "tests/compiler_33_v10_receipt.json": {
+      "sha256": "5111234fa28bb6cb711f06ed669b8b3325c18ca594ef88761ea00ff795758093",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_compiler_33_v10_receipt.json"
+    },
+    "tests/legacy_47_v10_receipt.json": {
+      "sha256": "58c70b62a2131a13850c99e9d8877c3186ec6bb374d67c4d5258a8ed947b269e",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_legacy_47_v10_receipt.json"
+    },
+    "tests/legacy_chunks_v10_receipt.json": {
+      "sha256": "262cbc874ff5bf51a1660a471aa20d72f4ca04c25c3fae2e6438b22440420b2b",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_legacy_chunks_v10_receipt.json"
+    },
+    "tests/legacy_old_decode_equivalence_v10/receipt.json": {
+      "sha256": "87ab238af58efa336af95609b1c472c90668a60110ee9e477359480d0de27ff8",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_legacy_old_decode_equivalence_v10__receipt.json"
+    },
+    "tests/repair_freeze_candidate_v10/source_manifest.json": {
+      "sha256": "97568c97669ed2d41cb5877ece2bd174ee039688d9a30583baf8e4e5c06dfaab",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_repair_freeze_candidate_v10__source_manifest.json"
+    },
+    "tests/rust_88_v10_receipt.json": {
+      "sha256": "9b5020323eff3ca3173e3bb4bf7b6b567b813c0da885690ad045bc7224b8613e",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_rust_88_v10_receipt.json"
+    },
+    "tests/timed_numeric_56_v10_receipt.json": {
+      "sha256": "efd318f233d54166bf18bc3630e885624270f6ce5079ece758bc2db5a4bdbfe4",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_timed_numeric_56_v10_receipt.json"
+    },
+    "tests/v10_current_activation_repair/receipt.json": {
+      "sha256": "e998eaea9b5b430138e402478a703c10a0a1f901923f99ad29b317d5a2796486",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_v10_current_activation_repair__receipt.json"
+    },
+    "tests/v10_original_failure_regressions/receipt.json": {
+      "sha256": "931715a2f70e9e9d962a95fca3912fe4a775540326a83b337331b9221b787842",
+      "versioned_file": "research/moe_dispatch/validation_v3/v10_v10_original_failure_regressions__receipt.json"
+    }
+  }
+}

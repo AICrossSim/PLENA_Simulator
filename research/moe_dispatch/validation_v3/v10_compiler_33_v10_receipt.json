@@ -1,0 +1,32 @@
+{
+  "command": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "research/moe_dispatch/test_compiler.py",
+    "research/moe_dispatch/test_compiler_v3.py",
+    "research/moe_dispatch/test_robust_space.py",
+    "research/moe_dispatch/test_legacy_chunks.py",
+    "--basetemp",
+    "/tmp/plena-compiler_33_v10-temp",
+    "-o",
+    "cache_dir=/tmp/plena-compiler_33_v10-cache",
+    "--junitxml",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/compiler_33_v10.xml"
+  ],
+  "compiler_commit": "480d558c72f8fce19572b2408eb02a1ae52c40eb",
+  "exit_code": 0,
+  "host_seconds": 5.989801127463579,
+  "junit_sha256": "1c31d4cdc019d7df7c396d512a1adf03912e401a28b7238f5434e746081b489d",
+  "log_sha256": "026620463f5d3f94bd8ec3c2eec32ba15c8cda1841cb2c764c3f1893c7682245",
+  "scope": "All legacy/v3/robust compiler checks plus9 new large-window planner boundary checks; original compiler source unchanged",
+  "source_sha256": {
+    "research/moe_dispatch/compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+    "research/moe_dispatch/compiler_v3.py": "537b6b7841d021714243e5daf1f5efacd04e312d9fee858ac6bb76f80062029b",
+    "research/moe_dispatch/legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+    "research/moe_dispatch/test_legacy_chunks.py": "187d79813f17f035278046fb97dd9c6f0e91f3e1b4d1286e3903a711e7838dac"
+  },
+  "subtests_passed": 3,
+  "tests_passed": 33
+}

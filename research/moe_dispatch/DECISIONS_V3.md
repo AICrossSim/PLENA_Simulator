@@ -529,3 +529,37 @@ are checked for full raw JSON identity against v8b. The v3 model, physical
 budgets, inputs, formats, legal matrix, policies, comparator rule and N1–N5
 thresholds remain unchanged. The complete timing population is repeated using
 one newly validated immutable binary and a recommitted preregistration.
+
+## D034 — transactional Current activation under fragmented context arenas
+
+Fresh v9 development completed all 4,056 legal decode-development points and
+84 fixed-comparator points. Mixed development then exposed a legal T96/layer13
+BL4/OP5/ISO/offload no-progress failure. The 41 isolated owned campaign jobs
+were stopped, all completed and in-flight artifacts and the original failure
+preserved, and the completion driver refused further evaluation. No new v9
+heldout authorization was issued. D032's earlier heldout exposure remains
+disclosed; no failed point is reclassified or removed from the frozen matrix.
+
+The stopped-state diagnostic disproved an initially suspected retained helper
+RF lease: the helper accumulator was entirely free and the Shared task had no
+live helper result or copy. Instead, Shared held a 196,608-B Z allocation at
+offset 2,816 in the 207,872-B arena. Its remaining 11,264 B consisted of holes
+of 2,816 and 8,448 B. Similarly, the U arena's remaining 1,088 B consisted of
+272- and 816-B holes. The helper's Me=4 IS task needed contiguous 11,264-B Z
+and 1,088-B U allocations. It could not activate despite sufficient aggregate
+free bytes, but had already been installed as Current. Shared's next Gate
+rank-tail group required an idle helper, creating a circular wait.
+
+Current installation must therefore prove and reserve the actual finite
+accumulator/Z/U placements atomically. A bound task that cannot activate stays
+queued; it must not occupy the Current identity that excludes helper service.
+Every direct installation and Next promotion follows this requirement. Failed
+reservation rolls back completely. Existing first-fit ranges, lifetimes,
+physical capacities, transfer costs and dependency order remain unchanged;
+there is no compaction, free copy, extra memory or early release of live data.
+This is a universal eligibility repair, not a dispatch-policy parameter change.
+
+The repair requires a new immutable executable, targeted fragmented-context
+and offload regressions, fresh numerical/legacy checks, complete development
+and the entire 55,012-point matrix repeated twice before final claims. All v9
+timing is historical evidence and cannot be merged into the new campaign.

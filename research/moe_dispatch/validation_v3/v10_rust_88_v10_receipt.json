@@ -1,0 +1,11 @@
+{
+  "all_passed": true,
+  "binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "log_sha256": "9cd95d0e5bb66319c489f43eac1163cecbf6a5125cb56546eb9a25e10a845178",
+  "rust_unit_tests_passed": 88,
+  "scope": "Actual D034 Rust full suite; unchanged finite hardware and previous 81 plus7 meaningful regression tests",
+  "source_execution_receipt": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/v10_current_activation_repair/receipt.json",
+  "source_execution_receipt_sha256": "e998eaea9b5b430138e402478a703c10a0a1f901923f99ad29b317d5a2796486",
+  "source_manifest_sha256": "97568c97669ed2d41cb5877ece2bd174ee039688d9a30583baf8e4e5c06dfaab"
+}

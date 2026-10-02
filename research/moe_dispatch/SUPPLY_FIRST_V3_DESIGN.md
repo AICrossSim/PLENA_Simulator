@@ -68,6 +68,13 @@ be evicted. Offloaded frames wait for helper availability and cannot pin the
 helper's independent task. D032 records the post-heldout correctness amendment
 and the required complete new-engine rerun.
 
+Current installation and Next promotion require successful transactional
+allocation of the actual contiguous accumulator/Z/U ranges. Aggregate free
+bytes do not prove physical eligibility. A bound context that cannot acquire
+its ranges stays queued and cannot exclude helper service by occupying Current.
+No live context is compacted or moved to satisfy admission. D034 records the
+fragmented-context offload failure and the required new-engine validation.
+
 BF16 U is stored in a fixed K-segment rank permutation and is read through the
 physical activation banks. Two bounded local rank-input SRAM cache entries per
 core use the existing control reserve; external reads, local reads and fills

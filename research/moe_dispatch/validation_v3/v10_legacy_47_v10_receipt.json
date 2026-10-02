@@ -1,0 +1,37 @@
+{
+  "binary": "/tmp/plena-moe-supply-first-v3-output-20261002/tests/v10_current_activation_repair/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_unchanged": true,
+  "command": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "research/moe_dispatch/test_engine.py",
+    "research/moe_dispatch/test_joint.py",
+    "research/moe_dispatch/test_numerical.py",
+    "research/moe_dispatch/test_robust.py",
+    "research/moe_dispatch/test_runtime.py",
+    "--basetemp",
+    "/tmp/plena-legacy_47_v10-temp",
+    "-o",
+    "cache_dir=/tmp/plena-legacy_47_v10-cache",
+    "--junitxml",
+    "/tmp/plena-moe-supply-first-v3-output-20261002/tests/legacy_47_v10.xml"
+  ],
+  "compiler_pin": "480d558c72f8fce19572b2408eb02a1ae52c40eb",
+  "elapsed_seconds": 67.37893894687295,
+  "exit_code": 0,
+  "junit_xml_sha256": "678cacbe4474a8687fd02c3b444daa6065810bb7f895acb055dc6bf88b48ff21",
+  "log_sha256": "a6047696dc151fd1a82f328e44e5f8a6f922c991b2ea3cc32ef5b81a3f0a3814",
+  "pytest_counts_including_subtests": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 318
+  },
+  "pytest_passed_cases": 47,
+  "pytest_passed_subtests": 271,
+  "scope": "Fresh immutable v10 compatibility check of existing supported legacy and finite chunk boundary tests; no new performance holdout"
+}
