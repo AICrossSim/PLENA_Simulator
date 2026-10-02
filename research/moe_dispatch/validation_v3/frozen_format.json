@@ -1,0 +1,40 @@
+{
+  "schema": "plena_v3_physical_format_freeze_v1",
+  "config": {
+    "main_bits": 4,
+    "factor_a": "mxint4",
+    "factor_b": "bf16",
+    "rank_lanes": 8,
+    "ranks": {
+      "routed": [
+        32,
+        32,
+        24
+      ],
+      "shared": [
+        32,
+        32,
+        48
+      ]
+    }
+  },
+  "quality_status": "diagnostic_non_accuracy_preserving",
+  "accuracy_preserving_qualified": false,
+  "qualification": {
+    "measured": "all726 requested layer13 candidates evaluated on real numerical-validation data",
+    "deduced": "no candidate can satisfy the same all-three-layer conjunction because none passes layer13",
+    "not_claimed": "full three-layer matrix completion, model perplexity, downstream accuracy, or impossibility of future methods"
+  },
+  "quality_receipt_path": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/q1_layer13_accuracy_proof.json",
+  "quality_receipt_sha256": "550c0eba0aa396100cd142f71dbac4d90917f1b0a521554dc2f8c3f9ff9aa527",
+  "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+  "accuracy_targets": {
+    "error_vs_w4_rtn_max": 0.5,
+    "cosine_min": 0.999
+  },
+  "full_three_layer_candidates_expected": 2178,
+  "full_matrix_continues": true,
+  "numeric_split": "request-hash-disjoint32k/8k subdivisions within development identities; heldout folder is not architectural timing heldout",
+  "gold_contract": "supplied expert_ffn_hw BF16X/U/Z plus FP32 accumulation and gate folding; not HF end-to-end model accuracy",
+  "frozen_at_utc": "2026-10-02T05:59:37.444274+00:00"
+}

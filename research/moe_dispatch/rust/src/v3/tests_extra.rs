@@ -1,5 +1,31 @@
 //! Causal integration checks, including cases absent from the large shape study.
 use super::*;
+#[test]
+fn refill_admission_keeps_the_entire_current_group_progress_space() {
+    let q=json!({"workload":{"id":"retained-refill-group","batch":8,"hidden":512,"top_k":1,"experts":[{"id":-1,"Me":8,"H":512,"F":16,"is_shared":true},{"id":7,"Me":1,"H":512,"F":16,"is_shared":false}]},"config":{"lanes":[4,2],"dataflow":["ws_group","ws_group"],"wor_tiles":[8,8],"precision":"P0","comp_mode":"none","rank_lanes":0,"w_reuse":false,"pipeline_supply":true,"prefetch_quota":true,"pool_bytes":65536,"placement":"fifo"}});
+    let mut e=Engine::new(&q).unwrap();e.bind();e.control_free=0;e.bind();
+    let current=e.cores[0].cur.unwrap();
+    let next=e.cores[1].cur.take().or(e.cores[0].next).unwrap();
+    e.cores[0].next=Some(next);e.tasks[next].core=0;e.cores[0].quota=65536;
+    let group=e.group_at(current,0).unwrap();assert_eq!(group.tile_count,8);
+    assert_eq!(e.group_at(next,0).unwrap().tile_count,8);
+    // Seven live retained weights and another consumer's 4-KiB lease leave
+    // 32 KiB free. An eight-tile Next would fit alone, but pin the missing
+    // Current tile. Its reservation must wait as a complete group.
+    e.pool.alloc(4096).unwrap();
+    for i in 0..7 {
+        let tile=e.tasks[current].offset+group.first_tile+i;
+        let bytes=e.tiles[tile].spec.bytes;assert_eq!(bytes,4096);
+        e.tiles[tile].addr=Some(e.pool.alloc(bytes).unwrap());
+        e.tiles[tile].reserved_bytes=bytes;e.tiles[tile].ready=true;
+        e.tasks[current].admit+=1;e.tasks[current].bytes_live+=bytes;e.cores[0].live+=bytes;
+    }
+    e.admit();
+    assert_eq!(e.tasks[current].admit,8);
+    assert_eq!(e.tasks[next].admit,0);
+    assert_eq!(e.pool.used,9*4096);
+    assert!(e.tiles[e.tasks[current].offset+7].addr.is_some());
+}
 fn input() -> Value {
     json!({"workload":{"id":"causal","batch":10,"hidden":544,"top_k":1,"experts":[{"id":1,"Me":2,"H":544,"F":32,"is_shared":false,"token_indices":[0,9]}]},"config":{"lanes":[6],"dataflow":["ws_group"],"precision":"P0","comp_mode":"none","rank_lanes":0,"record_trace":true,"trace_limit":20000,"t_chunk":96,"dot_latency":20}})
 }

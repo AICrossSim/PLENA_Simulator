@@ -380,3 +380,47 @@ assertion remains unchanged; no approximate tolerance hides the discrepancy.
 Cargo manifests and lockfile enter the compiled-source freeze in addition to
 Rust sources. All old runtime regression tests are rerun on this dependency
 configuration; prior executable signatures remain separate.
+
+
+## D030 — recover exact experiments after shared scratch exhaustion
+
+An external shared-filesystem capacity exhaustion interrupted CSV publication
+and test temporary files. Failed logs and truncated originals are preserved.
+The task output tree, immutable captures, historical M0 originals and one model
+shard were copied to local storage, individually SHA-verified and exposed through
+the same logical paths. Each relocation has a receipt; no tensor, routing trace,
+physical configuration, timing byte string or acceptance threshold was changed.
+Numerical CSV publication now uses an atomic temporary write and rename. Recovery
+reuses only complete Q1 candidate blocks (195 projections +65 experts +1 layer)
+and complete Q3 window/policy groups, with unchanged provenance. Incomplete tails
+are re-evaluated, and all 2,178 required candidates remain required. Synthetic
+timed tests were rerun using a local temporary/cache directory: all56 cases
+passed, each executing two identical reports. Their224 original files were
+losslessly archived and verified before temporary originals were reclaimed.
+Host storage recovery and completed-work reuse are not architectural speedups.
+
+## D031 — protect a complete progress group when weight reuse is disabled
+
+Six real BFCL B8 ablation points (OP0/OP1, forward4/forward5/leave-out-W-reuse)
+exposed a hard pool-capacity cycle before heldout evaluation. With W reuse off,
+Current retains packed bytes until its final M-block refill. Seven of eight
+Current weights could therefore be resident while a partially admitted Next
+head consumed the last capacity needed by the eighth. A one-tile quota reserve
+was insufficient; unused soft quota cannot create hard storage.
+
+For this refill-disabled path, Current admits only its immediate required
+group and receives admission priority. A Next head is admitted atomically only
+when the physically free pool can contain that head and all missing immediate
+Current group bytes. The test is a bounded check of existing head descriptors
+and live leases, with no added SRAM or context. Quotas, partition bounds, reads,
+refills, dependencies and lease retirement remain charged and unchanged. No
+live bytes are evicted or released early. The default W-reuse-enabled path is
+unchanged. The same rule applies to all organizations and affected ablations.
+
+All six original configurations passed twice with byte-identical reports,
+including drain and capacity invariants; originals and old deadlocks remain
+archived under separate signatures. A regression constructs the exact missing
+Current tile versus complete Next-group capacity condition. All 74 Rust tests
+pass. Because affected timing changed, v7 restarts the complete timing campaign;
+v6 points are not reused as final measurements. Timed numerical and legacy
+regressions are repeated on the immutable v7 binary before final authorization.

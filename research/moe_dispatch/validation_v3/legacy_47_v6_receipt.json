@@ -1,0 +1,29 @@
+{
+  "command": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "research/moe_dispatch/test_engine.py",
+    "research/moe_dispatch/test_joint.py",
+    "research/moe_dispatch/test_numerical.py",
+    "research/moe_dispatch/test_robust.py",
+    "research/moe_dispatch/test_runtime.py",
+    "--junitxml",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/legacy_47_v6.xml"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 163.63864137604833,
+  "binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v6/moe-dispatch-2e2e811df4d4d7abda70710c0ec8a0d9428a798c411f1e26476455d1073e29fe",
+  "binary_sha256": "2e2e811df4d4d7abda70710c0ec8a0d9428a798c411f1e26476455d1073e29fe",
+  "binary_unchanged": true,
+  "scope": "Final v6 regression; timed numerical cases independently repeated twice; original logs retained",
+  "pytest_counts_including_subtests": {
+    "tests": 318,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "pytest_passed_cases": 47,
+  "pytest_passed_subtests": 271
+}

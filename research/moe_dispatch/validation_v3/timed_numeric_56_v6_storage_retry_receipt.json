@@ -1,0 +1,18 @@
+{
+  "exit_code": 0,
+  "pytest_passed_cases": 56,
+  "pytest_passed_subtests": 0,
+  "pytest_counts_including_subtests": {
+    "tests": 56,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v6/moe-dispatch-2e2e811df4d4d7abda70710c0ec8a0d9428a798c411f1e26476455d1073e29fe",
+  "binary_sha256": "2e2e811df4d4d7abda70710c0ec8a0d9428a798c411f1e26476455d1073e29fe",
+  "test_source_sha256": "ca74e3486b969351449104dd34167ffb8516f6de5626f80c8727d36ec41afbc8",
+  "junit_xml_sha256": "2f7ceb7928987df6038a3840b8aff2f3e0cbd3aa57f7cfdd6b4a306f85550b38",
+  "log_sha256": "f174ceb2f1fd5853a48f864b9a6067ec0d02b0dd0a46fe54be5d2f95df9dc521",
+  "elapsed_seconds": 213.72,
+  "scope": "Final v6 actual timed issue/vector/combine numerical execution, 56 cases each independently repeated twice; includes full-IS helper scratch retirement regression. Storage retry with /tmp temp/cache; failed ENOSPC attempts preserved."
+}

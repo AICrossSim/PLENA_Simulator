@@ -1408,12 +1408,28 @@ impl Engine {
     fn pool_partition(&self,c:usize)->(usize,usize){let slots=self.cfg.pool/4096;let per=slots/self.cores.len();let lo=c*per*4096;let hi=if c+1==self.cores.len(){slots*4096}else{(c+1)*per*4096};(lo,hi)}
     fn admit(&mut self) {
         let mut active=self.active_tasks();
-        active.sort_by_key(|&t|usize::from(self.cores[self.tasks[t].core].cur==Some(t)));
+        active.sort_by_key(|&t|if self.cfg.w_reuse{usize::from(self.cores[self.tasks[t].core].cur==Some(t))}else{usize::from(self.cores[self.tasks[t].core].cur!=Some(t))});
         for tid in active {
             let c = self.tasks[tid].core;
             let offset = self.tasks[tid].offset;
             let no_ahead=!self.cfg.quota||!self.cfg.pipeline;
             if no_ahead && self.cores[c].cur!=Some(tid){continue;}
+            if !self.cfg.w_reuse&&self.cores[c].cur!=Some(tid){
+                // A refill group keeps its pool bytes until every M block has
+                // consumed them. Partial Next admission must not use the hard
+                // capacity needed to finish either Current's immediate group.
+                // Admission is atomic for this bounded Next group; no live
+                // payload is evicted or released to repair a capacity wait.
+                let target=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);
+                let next_bytes=(self.tasks[tid].admit..target).map(|i|self.pool_reservation(self.tiles[offset+i].spec.bytes)).sum::<usize>();
+                let current_bytes=self.cores.iter().filter_map(|core|core.cur).map(|current|{
+                    let task=&self.tasks[current];
+                    task.plan.actions[task.action..].iter().find_map(|a|if let Action::Group(g)=a{Some((g.first_tile..g.first_tile+g.tile_count).filter(|&i|i>=task.admit).map(|i|self.pool_reservation(self.tiles[task.offset+i].spec.bytes)).sum::<usize>())}else{None}).unwrap_or(0)
+                }).sum::<usize>();
+                let (lo,hi)=if self.cfg.byte_pool{(0,self.cfg.pool)}else{self.pool_partition(c)};
+                let free=self.pool.ranges.iter().map(|&(a,b)|(a+b).min(hi).saturating_sub(a.max(lo))).sum::<usize>();
+                if next_bytes+current_bytes>free||self.cores[c].live+next_bytes>self.cores[c].quota{continue;}
+            }
             if !self.cfg.byte_pool&&self.cores[c].cur!=Some(tid){
                 // A static partition cannot lend another core's idle slots.
                 // Admit a Next head only as an entire bounded group, and only
@@ -1428,6 +1444,7 @@ impl Engine {
                 if needed>free||self.cores[c].live+needed>self.cores[c].quota{continue;}
             }
             let mut count=self.tasks[tid].plan.tiles.len();
+            if !self.cfg.w_reuse {count=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);}
             if self.cores[c].cur!=Some(tid){count=self.tasks[tid].plan.actions[self.tasks[tid].action..].iter().find_map(|a|if let Action::Group(g)=a{Some(g.first_tile+g.tile_count)}else{None}).unwrap_or(self.tasks[tid].admit);}
             if no_ahead {
                 count=self.group_at(tid,self.tasks[tid].action).map_or(self.tasks[tid].admit,|g|g.first_tile+g.tile_count);

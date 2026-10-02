@@ -1,0 +1,57 @@
+{
+  "binary_sha256": "1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f",
+  "points": 6,
+  "runs": 12,
+  "all_valid_and_byte_identical": true,
+  "scope": "Six original v6 captured BFCL B8 failed ablation configurations unchanged; fixes only refill group admission",
+  "results": [
+    {
+      "point": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__forward4",
+      "cycles": 4563688,
+      "raw_sha256": "9eff1a32f9848376d2ddf26a6348db3f1e6e733c0555f9dfb5162d31ef44b270",
+      "pool_peak": 40960,
+      "requests": 16220160,
+      "landed": 16220160
+    },
+    {
+      "point": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__forward5",
+      "cycles": 4420731,
+      "raw_sha256": "3e6929a69f353f6b6e73f4be8f8d21a343e127c0dba259a353510993f9b2a3e8",
+      "pool_peak": 40960,
+      "requests": 16220160,
+      "landed": 16220160
+    },
+    {
+      "point": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP0__iso__leave_out_w_reuse",
+      "cycles": 4415983,
+      "raw_sha256": "2827a7c1398a213c69e4f94a408fa3ea62539ad5ed63f549772c0c89db878488",
+      "pool_peak": 40960,
+      "requests": 16220160,
+      "landed": 16220160
+    },
+    {
+      "point": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__forward4",
+      "cycles": 2710743,
+      "raw_sha256": "0fce812920f1a285135c084e889c670723d13f972b760a5c0abe389fe7117153",
+      "pool_peak": 40960,
+      "requests": 16220160,
+      "landed": 16220160
+    },
+    {
+      "point": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__forward5",
+      "cycles": 2766596,
+      "raw_sha256": "dfb2b6de662ffa38a8c13ec4d1083d8a9e5251c981e99f63432bfcecd36dd3ab",
+      "pool_peak": 40960,
+      "requests": 16220160,
+      "landed": 16220160
+    },
+    {
+      "point": "ablation__joint_test_bfcl_b8_l13_s7__BL4__OP1__iso__leave_out_w_reuse",
+      "cycles": 2722945,
+      "raw_sha256": "3f7869ea0ad1c28aaf59053b9a624e10ae522d0c78585a118dc9eb8605405782",
+      "pool_peak": 40960,
+      "requests": 16220160,
+      "landed": 16220160
+    }
+  ]
+}

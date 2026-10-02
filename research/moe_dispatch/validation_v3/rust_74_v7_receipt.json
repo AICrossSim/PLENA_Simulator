@@ -1,0 +1,10 @@
+{
+  "exit_code": 0,
+  "rust_unit_tests_passed": 74,
+  "all_passed": true,
+  "binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v7/moe-dispatch-1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f",
+  "binary_sha256": "1e92da786cc03301f6951a72657bdfa1f444cd5a39ed54c999a0dbfb101b678f",
+  "log_sha256": "7a3eb644ba2bdc1ca1f2a1252476d7a71c941eff617529d1c9bd4bd5c1c708c6",
+  "source_manifest_sha256": "291b5207d429b8df7700b60f0aa657d30aeefcb2c4e86b60925b5458b44b8a8f",
+  "scope": "v7 finite refill admission repair; all 74 Rust tests pass. Six original deadlocks also run twice with unchanged inputs; separate receipt preserves all original outputs."
+}

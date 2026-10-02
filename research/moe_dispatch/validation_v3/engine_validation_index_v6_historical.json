@@ -1,0 +1,33 @@
+{
+  "schema": "plena_supply_v3_engine_validation_v1",
+  "engine_source_commit": "451be0ca",
+  "compiler_commit": "d389b9502c25392acea3dc5e21212efab98876b8",
+  "binary_sha256": "2e2e811df4d4d7abda70710c0ec8a0d9428a798c411f1e26476455d1073e29fe",
+  "scope": "Completed exact immutable v6 correctness only; full timing matrix and model quality separate",
+  "receipts": {
+    "tests/rust_73_v6_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/rust_73_v6_receipt.json",
+      "sha256": "2f115ab22d528c1f8314ed09d338f059fa86a6ac9bb3fbabe423ea83a1bd9898"
+    },
+    "tests/legacy_47_v6_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/legacy_47_v6_receipt.json",
+      "sha256": "52c361c5582a6c2e35db4a5afefbd37f24794616e51668d6006230235836d945"
+    },
+    "tests/timed_numeric_56_v6_storage_retry_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/timed_numeric_56_v6_storage_retry_receipt.json",
+      "sha256": "feb37b80a41ce13011345ce29cf4b3ad03c3a709bc796b63318f70ad54315892"
+    },
+    "tests/compiler_reference_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/compiler_reference_receipt.json",
+      "sha256": "8e8494096dc9d7ffa7b26dcb3ece5d09e209cf5db9fe4908e38be5af9c1caa52"
+    },
+    "tests/timed_numeric_56_v6_originals_archive_receipt.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/timed_numeric_56_v6_originals_archive_receipt.json",
+      "sha256": "8b20601d09d13fbd7d76a1b8582b6c9e3e20c8c291cd72ac761e9e1dfa7c708f"
+    },
+    "tests/repair_freeze_candidate_v6/source_manifest.json": {
+      "versioned_file": "research/moe_dispatch/validation_v3/source_manifest.json",
+      "sha256": "4a5657b0370352dacac0d470055f077b8b73dd47913c2ea8e66b8cf64db964c6"
+    }
+  }
+}
