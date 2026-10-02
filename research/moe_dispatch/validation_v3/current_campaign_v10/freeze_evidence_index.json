@@ -1,0 +1,130 @@
+{
+  "accuracy_preserving_qualified": false,
+  "complete_development": true,
+  "disclosure": {
+    "D034_failure_sha256": "a3719a05918a4d92c8cd0253052e3431e3bdad38ab7aa57e6814db278d0ae39d",
+    "D034_history_manifest_sha256": "81d83208b2cb2c48d8a2de3268cb05479489cc42a9b86aedf21b3a5c5dd18edf",
+    "acceptance_thresholds_hardware_format_and_matrix_unchanged": true,
+    "amendments": [
+      {
+        "path": "research/moe_dispatch/validation_v3/postheldout_correctness_amendment_v8.json",
+        "sha256": "3501f0877e41e37c40acecc3067faf842db6072c6b0c39d9a7d17258ea01b083"
+      },
+      {
+        "path": "research/moe_dispatch/validation_v3/postheldout_capacity_amendment_v9.json",
+        "sha256": "8e60c2e5590bc617529a4ebf9f2858960d724e181e0239ef77a67333becd85a7"
+      },
+      {
+        "path": "research/moe_dispatch/validation_v3/postdevelopment_context_amendment_v10.json",
+        "sha256": "0d9734724e8019cc28730e0d56b6ce39d62300d8d08efa8cf598165472f71275"
+      }
+    ],
+    "current_campaign_not_pristine_unseen_holdout": true,
+    "legacy_capacity_extension": "Only originally infeasible large legacy windows use capacity-derived serial token chunks. All global X/Y/routes stay resident; original kernels, physical budgets, actual weight refetches and setup are charged. This is an explicit changed baseline execution extension; supported small windows retain original raw reports byte-exact.",
+    "new_v9_heldout_authorized": false,
+    "new_v9_heldout_executed": false,
+    "no_old_binary_timing_mixed": true,
+    "original_prereg_commit": "f6c9c5e91b68072fddd3db3975bfc66f44f1b7c9",
+    "prior_architectural_heldout_exposure": true,
+    "v9_failed_in_development": true
+  },
+  "receipts": [
+    {
+      "bytes": 8618,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_pipeline_receipt.json",
+      "sha256": "4e6f7b79557c9cec60e3105a8c6119eb603ef84a0a05609efcac28386ce3c0ff",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/development_pipeline_receipt.json"
+    },
+    {
+      "bytes": 1768,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_all_receipt.json",
+      "sha256": "c8d678a7b118fc3c41679ebe1a51be748659f31ea62cd9531e0a7ce89711fc7e",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/development_all_receipt.json"
+    },
+    {
+      "bytes": 1763,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_dev_comparator_receipt.json",
+      "sha256": "d7e9b1eb8aee856b7994702585ef75f3fdd3e86f95fd6455e4cfc5dcc604abb6",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/development_dev_comparator_receipt.json"
+    },
+    {
+      "bytes": 1768,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/mixed_development_all_receipt.json",
+      "sha256": "6cde72edbb4d464a485e2bdd59487b18cd9664e7fd98eccfbde379822ca6f0fd",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/mixed_development_all_receipt.json"
+    },
+    {
+      "bytes": 17757,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_freeze_ready_receipt.json",
+      "sha256": "ae4330829fb0db700755531bc098281b607635246f5131e5a5f2ba24cf69d508",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/development_freeze_ready_receipt.json"
+    },
+    {
+      "bytes": 2163,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_fixed_comparator.json",
+      "sha256": "4b8c9c6923afa0a3d4b020157fb76319d421cf1f5a437845a3e00fbf4ae337dd",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/development_fixed_comparator.json"
+    },
+    {
+      "bytes": 10381,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/compensation_native/receipt.json",
+      "sha256": "bc39cc9c5db82cae6202109c83cafcb72dc5f14b0a5b3a16fdc78ddb5313a8df",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/compensation_native__receipt.json"
+    },
+    {
+      "bytes": 97073,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/m5_causal/causal_sequence.json",
+      "sha256": "03d220a492be451704b218382264b5824aad3b15cc3aa1caaf5e5350d11cde79",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/m5_causal__causal_sequence.json"
+    },
+    {
+      "bytes": 2984,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/m5_causal/temporal_replay.json",
+      "sha256": "3bc204f1ab9eea69b20a69ba7cf67233c37a8aef1350e7c935abfe7d08ad33ab",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/m5_causal__temporal_replay.json"
+    },
+    {
+      "bytes": 3305,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_v10_launch_receipt.json",
+      "sha256": "dd74dd30b914d932698a002b66d87c416c913501c212529c1da58ee45bf0f7ba",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/development_v10_launch_receipt.json"
+    }
+  ],
+  "signature": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "input_bundle_sha256": {
+      "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+      "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+    },
+    "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "planner_artifacts_sha256": {
+      "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+      "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+      "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+      "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+    },
+    "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+  }
+}

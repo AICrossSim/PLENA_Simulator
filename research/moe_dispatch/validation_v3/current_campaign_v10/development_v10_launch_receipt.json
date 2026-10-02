@@ -1,0 +1,76 @@
+{
+  "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "command": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/experiments/v3/run_development.py",
+    "--root",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3",
+    "--binary",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "--workers",
+    "40",
+    "--timeout",
+    "3600",
+    "--format-config",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/frozen_format.json",
+    "--mode",
+    "development"
+  ],
+  "core_commit": "55bd9449574e5e6372dc649bf1eb9c08924d38d2",
+  "correctness_proof": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "independent_original_failure_points": 15,
+    "independent_raw_runs": 30,
+    "no_new_timing": true,
+    "numerical_cases": 56,
+    "rust_tests": 88
+  },
+  "development_only_authorized": true,
+  "heldout_authorized": false,
+  "main_host_workers": 40,
+  "main_launcher_pid": 3435898,
+  "maximum_total_host_workers": 40,
+  "prior_generated_history": "history/v9_before_v10_fresh",
+  "raw_signature_directory": "dcfaacff72cd6fb8",
+  "schema": "plena_v3_development_launch_v10",
+  "signature": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "input_bundle_sha256": {
+      "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+      "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+    },
+    "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "planner_artifacts_sha256": {
+      "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+      "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+      "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+      "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+    },
+    "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+  },
+  "source_manifest_sha256": "97568c97669ed2d41cb5877ece2bd174ee039688d9a30583baf8e4e5c06dfaab",
+  "timeout_seconds": 3600,
+  "unix_launch_receipt_time": 1790938666.9987926
+}

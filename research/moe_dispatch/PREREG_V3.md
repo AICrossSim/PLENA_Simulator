@@ -103,7 +103,7 @@ rank vectors differ require their own accuracy evidence.
 
 ## Comparator frozen from development
 
-M6 comparator: **BL2**. M8 comparator: **M8_flex62**.
+M6 comparator: **BL5**. M8 comparator: **M8_flex62**.
 Select minimum geometric mean cycles over all 12 development windows at OP2 ISO
 from BL2/BL3/BL5 or M8 single/homogeneous/flex62/flex53, respectively. All 84
 candidate points require two original identical valid raw JSONs. Never choose a
@@ -228,3 +228,35 @@ runner, analysis scripts, actual format, final quality receipt, comparator and
 84 original development JSON hashes. Root commit and heldout authorization must
 match those exact records. Any future substantive correction requires a new
 campaign and explicit disclosure; older failed or provisional artifacts remain.
+
+## V10 correctness re-freeze disclosure
+
+The original v7 freeze preceded architectural heldout execution. Legal finite-resource deadlocks subsequently required universal correctness repairs (D032). Previously infeasible large legacy windows required an explicitly charged finite-capacity execution extension (D033). The same inputs, designs, physical budgets, numerical format, comparator rule, matrix and acceptance thresholds remain fixed; Fresh v9 mixed development then failed because a helper Current could be published before contiguous context activation (D034). Its original failure/config/workload and stopped campaign are preserved; no new v9 heldout was authorized or executed. All final timing is rerun using v10, after transactional Current eligibility is universally repaired. Earlier timing is retained as history, never merged. This population was observed for correctness debugging and is **not pristine unseen holdout**. Large BL0/BL1 results are capacity-extension baselines, with serial chunks and all real weight refetch/setup costs; they are not unchanged original large-window measurements.
+
+{
+  "prior_architectural_heldout_exposure": true,
+  "v9_failed_in_development": true,
+  "new_v9_heldout_authorized": false,
+  "new_v9_heldout_executed": false,
+  "D034_history_manifest_sha256": "81d83208b2cb2c48d8a2de3268cb05479489cc42a9b86aedf21b3a5c5dd18edf",
+  "D034_failure_sha256": "a3719a05918a4d92c8cd0253052e3431e3bdad38ab7aa57e6814db278d0ae39d",
+  "original_prereg_commit": "f6c9c5e91b68072fddd3db3975bfc66f44f1b7c9",
+  "current_campaign_not_pristine_unseen_holdout": true,
+  "amendments": [
+    {
+      "path": "research/moe_dispatch/validation_v3/postheldout_correctness_amendment_v8.json",
+      "sha256": "3501f0877e41e37c40acecc3067faf842db6072c6b0c39d9a7d17258ea01b083"
+    },
+    {
+      "path": "research/moe_dispatch/validation_v3/postheldout_capacity_amendment_v9.json",
+      "sha256": "8e60c2e5590bc617529a4ebf9f2858960d724e181e0239ef77a67333becd85a7"
+    },
+    {
+      "path": "research/moe_dispatch/validation_v3/postdevelopment_context_amendment_v10.json",
+      "sha256": "0d9734724e8019cc28730e0d56b6ce39d62300d8d08efa8cf598165472f71275"
+    }
+  ],
+  "no_old_binary_timing_mixed": true,
+  "acceptance_thresholds_hardware_format_and_matrix_unchanged": true,
+  "legacy_capacity_extension": "Only originally infeasible large legacy windows use capacity-derived serial token chunks. All global X/Y/routes stay resident; original kernels, physical budgets, actual weight refetches and setup are charged. This is an explicit changed baseline execution extension; supported small windows retain original raw reports byte-exact."
+}

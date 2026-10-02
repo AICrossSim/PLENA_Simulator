@@ -1,0 +1,189 @@
+{
+  "heldout_started": false,
+  "host_elapsed_seconds": 7003.218295317143,
+  "launcher_sha256": "1672eed9e5ce93af5cbb1afefcde02f37a3c016539f99cc029b07425199d970f",
+  "mode": "development",
+  "receipts": [
+    {
+      "complete": 8,
+      "excluded": 0,
+      "host_elapsed_seconds": 21.17784926109016,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/mixed_development_main_763077c7_receipt.json",
+      "points": 8,
+      "sha256": "39f99f44f3838ca0c6c126cd82e3b550f77ed3c5a16601a339f721ca3f956e97",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    },
+    {
+      "complete": 84,
+      "excluded": 0,
+      "host_elapsed_seconds": 12.616134447976947,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_dev_comparator_receipt.json",
+      "points": 84,
+      "sha256": "d7e9b1eb8aee856b7994702585ef75f3fdd3e86f95fd6455e4cfc5dcc604abb6",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    },
+    {
+      "complete": 4056,
+      "excluded": 204,
+      "host_elapsed_seconds": 2211.178973879665,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/development_all_receipt.json",
+      "points": 4260,
+      "sha256": "c8d678a7b118fc3c41679ebe1a51be748659f31ea62cd9531e0a7ce89711fc7e",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    },
+    {
+      "complete": 1618,
+      "excluded": 512,
+      "host_elapsed_seconds": 4687.000923922285,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/mixed_development_all_receipt.json",
+      "points": 2130,
+      "sha256": "6cde72edbb4d464a485e2bdd59487b18cd9664e7fd98eccfbde379822ca6f0fd",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    }
+  ],
+  "status": "complete"
+}

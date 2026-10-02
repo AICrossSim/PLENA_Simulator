@@ -1,0 +1,219 @@
+{
+  "changes_to_main_inventory": false,
+  "complete_equal_comparison": true,
+  "equal_total_wire_pairs_observed": 42,
+  "heldout_executed": false,
+  "native_all_valid_bit_identical": true,
+  "native_points": 42,
+  "native_raw_runs": 84,
+  "no_new_N2_gate": true,
+  "original_json_receipts": [
+    {
+      "original_json_sha256": "60c53e821259f2568e53b4f567bc4a664f6f34d449606457f7cfd987c7014fb8",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP2__iso__lanes"
+    },
+    {
+      "original_json_sha256": "ca635667e8681e68b42b1a80a3497d529e10321263de31d9a2ec7341e834dc28",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP2__iso__none"
+    },
+    {
+      "original_json_sha256": "8c8d9889ab84207216c71c87ecc42a0f5782edd5b4b4612da9a623b388c4efa7",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP5__iso__kext"
+    },
+    {
+      "original_json_sha256": "343e6fdf8e9f80244a44854220f9b7eb74ffcd5f8823b0387abfd7aaa9174d3d",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP5__iso__lanes"
+    },
+    {
+      "original_json_sha256": "ef9283dadd7b3a40a927077d3692c488fc111c0af057ad8e507021ec742da348",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP5__iso__none"
+    },
+    {
+      "original_json_sha256": "1de34b069081d0a12efef23ef854d07933ef235fb42fcd114348529bf2480c1f",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP5__iso__offload"
+    },
+    {
+      "original_json_sha256": "820c826184554e59eadff97da343e18d5a69b49af8ed39a6cf0e674df88bc612",
+      "point": "compensation_native__joint_test_bfcl_b16_l13_s7__BL4__OP5__iso__separate"
+    },
+    {
+      "original_json_sha256": "f3fa76926dcbbbebb0b8c18bf21c4ba2ffccf75af5820776949b92790906c2eb",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP2__iso__lanes"
+    },
+    {
+      "original_json_sha256": "2fcc67ba934fa8ffdb85f7b65a2fca81e94ee91b9057a83fbbad7ef91e20e459",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP2__iso__none"
+    },
+    {
+      "original_json_sha256": "aaad81af66dfafcf2ada2b02a8a0e55848cc422f683030fdf584cd40f86db7ad",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP5__iso__kext"
+    },
+    {
+      "original_json_sha256": "2a85ae1d6942108f49f5493572b7335f85f7ee3984e9602ded4d088cc1c8aac9",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP5__iso__lanes"
+    },
+    {
+      "original_json_sha256": "0e7e719a6fc049b7f532ffd915b1f42cafd111b55b879d916eb13d15439a82fa",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP5__iso__none"
+    },
+    {
+      "original_json_sha256": "bacc5a4eaad215453c89de38ebd6b5031628987dd9a80db49a541a8b8b3b8a3f",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP5__iso__offload"
+    },
+    {
+      "original_json_sha256": "315da85addfc01f3e857e1d4d7fc6c7267e9eded4d1abb534b5d66ec86c9a291",
+      "point": "compensation_native__joint_test_bfcl_b2_l13_s7__BL4__OP5__iso__separate"
+    },
+    {
+      "original_json_sha256": "0573b28e976247706c79c3ae48130eac201026a689646039b7fd2c449930eaa7",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP2__iso__lanes"
+    },
+    {
+      "original_json_sha256": "261e3ec7e954d227edfe0a4b30976103b9ea94450eb975cb00d2c85af5fd50f8",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP2__iso__none"
+    },
+    {
+      "original_json_sha256": "c8001767d7892ba3c2b7ff7b77044c0e87a3cc4559f5ef1783ab3a4b30185708",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP5__iso__kext"
+    },
+    {
+      "original_json_sha256": "0993ebf2e1e8e876bafba4a0285497c87fc3f7d1d1641b0b53a32599e7addf5d",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP5__iso__lanes"
+    },
+    {
+      "original_json_sha256": "a09c5728b154aa5f17ba9c4f93c76eb43c8032093da382833c0db493f9ac6ed7",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP5__iso__none"
+    },
+    {
+      "original_json_sha256": "a19be163031ed4d3e59e80da6e7ca081fb43e75378a1ad3c197f8be6aac3c83a",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP5__iso__offload"
+    },
+    {
+      "original_json_sha256": "d712c7e0a3925e944799b29b45ca1924414ee3b695fc3d4aaef3dab6e00f0e7e",
+      "point": "compensation_native__joint_test_gpqa_b16_l13_s7__BL4__OP5__iso__separate"
+    },
+    {
+      "original_json_sha256": "84dc193c03132f2fe260492e31c3674811e38cdfda730e8480bd7df3472d5608",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP2__iso__lanes"
+    },
+    {
+      "original_json_sha256": "2d4242c3c496cec1670114ff9e0495ccef722062b57204a3aa50cc82ad113597",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP2__iso__none"
+    },
+    {
+      "original_json_sha256": "cfab120e18cb07144a71be91109da5a5d81feb90b5bbe462e0f952e7373f1957",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP5__iso__kext"
+    },
+    {
+      "original_json_sha256": "fb2e4bb6c2a49364966afb2e827fb88947c683c6b29e8118a9a24751a675ef46",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP5__iso__lanes"
+    },
+    {
+      "original_json_sha256": "f838a42fe4142e7bceae14172ed6f16bec5e727173fba0ac6115d1bc7b41c2f5",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP5__iso__none"
+    },
+    {
+      "original_json_sha256": "8bdd588e7d0f88addd90a8569879619084e5a7576bccc9247ef2f54c8a930ef1",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP5__iso__offload"
+    },
+    {
+      "original_json_sha256": "f56c3fb868fa6d4a6ec64a99b593df68804663eb4d9a481d44e028bda481da3a",
+      "point": "compensation_native__joint_test_gpqa_b2_l13_s7__BL4__OP5__iso__separate"
+    },
+    {
+      "original_json_sha256": "2acd81ef3664740292489bd7574615e991b61ea5150aeda0c5e153ef2eb057f5",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP2__iso__lanes"
+    },
+    {
+      "original_json_sha256": "a1c0d487bee8ffeb2918f684dbf7f34ddf3a6b8d38b4f4aafda3a25ec0a709dd",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP2__iso__none"
+    },
+    {
+      "original_json_sha256": "c4bb80117c2f9926ccc33c5bcc193d8eb4acef8020480348fa89492e98f16c01",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP5__iso__kext"
+    },
+    {
+      "original_json_sha256": "20fb010d8ea56c7adfc90d28576f63d7c21e2e27b6504d5d3c79395a81c4e4c9",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP5__iso__lanes"
+    },
+    {
+      "original_json_sha256": "612866469db3a8fafa549ff0314b3c5fcbeac7ab1e02776bf416b626d8fd05e3",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP5__iso__none"
+    },
+    {
+      "original_json_sha256": "dae4e839d5d478a4a67d99a6cb90586a5992509008014aab3f8fe0821a1e6422",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP5__iso__offload"
+    },
+    {
+      "original_json_sha256": "faf958f206a59e0fbd8a9f91d8d0d772abc9679b4eeb4a1269f348ffbfa453e3",
+      "point": "compensation_native__joint_test_swe_b16_l13_s7__BL4__OP5__iso__separate"
+    },
+    {
+      "original_json_sha256": "3b6eda1e6f3971f5ad17de307c664a3a895606747eca3b65117f4ad73cc0b8c5",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP2__iso__lanes"
+    },
+    {
+      "original_json_sha256": "5869e16a2ed526f7655307c2764f1a7b91eb3c58ca9898c662c8bbd372e33277",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP2__iso__none"
+    },
+    {
+      "original_json_sha256": "87897f892b6829239df08e80d829ebfd91df0eadb9976cae76df39e99d6569a6",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP5__iso__kext"
+    },
+    {
+      "original_json_sha256": "398cf9789b5d529e4059679b8ad4f1262c97761dc5cc2aa3d205616927974606",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP5__iso__lanes"
+    },
+    {
+      "original_json_sha256": "a01076a37f8be770bf6cec51034a7062a275b27402d50012cc20a58dd309875d",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP5__iso__none"
+    },
+    {
+      "original_json_sha256": "bc0746a16a411b0fa77d85531b956f9d6273ac41d33d3cb07f68c9e0135cd9e8",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP5__iso__offload"
+    },
+    {
+      "original_json_sha256": "1eb4131b04a66f16a47d1d254a3af4b4ad19f9bc80208314663afa842e8b2728",
+      "point": "compensation_native__joint_test_swe_b2_l13_s7__BL4__OP5__iso__separate"
+    }
+  ],
+  "quality_receipt_sha256": "73050cb77f5bc98bbfe8133d1652c3658ceff5025151f4c925db570ae2bb0c61",
+  "signature": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "input_bundle_sha256": {
+      "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+      "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+    },
+    "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+    "native_sensitivity_runner_sha256": "07809a1a689de4bd649bd5ada5ac8e422e4841de9709fc20e9750b9e328f0ab8",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "planner_artifacts_sha256": {
+      "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+      "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+      "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+      "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+    },
+    "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+  }
+}
