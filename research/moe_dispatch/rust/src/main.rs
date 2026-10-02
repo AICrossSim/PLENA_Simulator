@@ -16,8 +16,10 @@ mod compute;
 mod joint;
 #[allow(dead_code)]
 mod plan;
+mod profile_v3;
 mod runtime;
 mod surplus;
+mod v3;
 use plan::{Issue, Projection, build_groups};
 use runtime::{DmaRequest, NextTask};
 use serde::{Deserialize, Serialize};
@@ -60,6 +62,10 @@ struct Workload {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 struct Config {
+    arch: String,
+    diagnostic_profile: bool,
+    profile_issue_limit: usize,
+    weight_bytes_scale: f64,
     lanes: Vec<usize>,
     group: usize,
     dispatch: String,
@@ -100,6 +106,10 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            arch: "joint_v1".into(),
+            diagnostic_profile: false,
+            profile_issue_limit: 4096,
+            weight_bytes_scale: 1.0,
             lanes: vec![4, 2],
             group: 4,
             dispatch: "dynamic".into(),
@@ -399,6 +409,7 @@ struct Sim {
     tail_decision_ready: Option<u64>,
     tail_partition_count: u64,
     joint: joint::JointState,
+    profile_v3: profile_v3::Profile,
 }
 
 impl Sim {
@@ -940,6 +951,7 @@ impl Sim {
             Event::RuntimeReturn(req) => self.return_runtime(req),
             Event::RuntimeAck(req) => self.ack_runtime(req),
             Event::Return(c, t, offset) => {
+                self.profile_return();
                 let tile = &self.cores[c].run.as_ref().unwrap().tiles[t];
                 let slot = tile.slot.unwrap();
                 let row_stride = align(tile.kv * 2, 32);
@@ -957,6 +969,7 @@ impl Sim {
                 self.event(end, Event::Ack(c, t));
             }
             Event::Ack(c, t) => {
+                self.profile_landed();
                 assert!(self.credit_used > 0);
                 self.credit_used -= 1;
                 let tile = &mut self.cores[c].run.as_mut().unwrap().tiles[t];
@@ -964,6 +977,10 @@ impl Sim {
                 assert!(tile.acks <= tile.bytes);
                 if tile.acks == tile.bytes {
                     tile.ready = true;
+                }
+                if tile.ready {
+                    let s = self.cores[c].session.as_ref().unwrap();
+                    self.profile_weight_ready(c, s.e, s.phase, t);
                 }
             }
             Event::Feed(c, t, x, last) => {
@@ -981,6 +998,7 @@ impl Sim {
                 }
             }
             Event::Dot(c, i) => {
+                self.profile_dot(c, i);
                 let spec = self.cores[c].run.as_ref().unwrap().issues[i].spec.clone();
                 let s = self.cores[c].session.as_ref().unwrap();
                 let start = if s.phase < 2 { s.f0 } else { s.h0 };
@@ -1005,6 +1023,7 @@ impl Sim {
                 self.event(done, Event::Commit(c, i));
             }
             Event::Commit(c, i) => {
+                self.profile_commit(c, i);
                 let run = self.cores[c].run.as_mut().unwrap();
                 let s = &run.issues[i].spec;
                 let v = run.committed.entry((s.m_start, s.n_start)).or_default();
@@ -1459,6 +1478,7 @@ impl Sim {
             .contexts_peak
             .max(self.cores[c].contexts);
         self.cores[c].stats.issues += 1;
+        self.profile_issue(c, i, tid, xs, end);
         self.last_progress = self.now;
         if self.cfg.record_trace {
             let session = self.cores[c].session.as_ref().unwrap();
@@ -1549,7 +1569,7 @@ impl Sim {
                 && cfg.credits > 0
                 && cfg.credits
                     <= if cfg.diagnostic_credit_expansion {
-                        1024
+                        4096
                     } else {
                         256
                     }
@@ -1704,6 +1724,7 @@ impl Sim {
             tail_decision_ready: None,
             tail_partition_count: 0,
             joint: joint::JointState::default(),
+            profile_v3: profile_v3::Profile::new(nc),
         };
         let mut load = vec![0u64; nc];
         for e in 0..ne {
@@ -1762,8 +1783,10 @@ impl Sim {
             }
             self.diagnostics.accepted_this_cycle.fill(false);
             self.hbm_issue();
+            self.profile_hbm_cycle();
             for c in 0..self.cores.len() {
                 let state = self.step_core(c);
+                self.profile_core_cycle(c, state);
                 self.diagnostics.front_wait_code[c] = match state {
                     "previous_k_commit" => 1,
                     "x_not_ready" => 2,
@@ -1824,6 +1847,7 @@ impl Sim {
         }
         self.combine_cycles = done - experts_done;
         self.now = done;
+        self.profile_combine_tail(experts_done, done);
         let expected: u64 = self
             .w
             .experts
@@ -1852,7 +1876,7 @@ impl Sim {
             assert!(self.pending.is_empty() && self.input_cursor == self.w.experts.len());
             assert_eq!(self.dma_serial * 32, weight);
         }
-        json!({"schema":"plena_dispatch_analytical_v1","workload":self.w.id,"config":self.cfg,
+        let mut report = json!({"schema":"plena_dispatch_analytical_v1","workload":self.w.id,"config":self.cfg,
    "scope":"routed MoE from resident inputs/routes to ordered combine; analytical HBM, not Ramulator; timing metadata, separate payload tests",
    "cycles":self.now,"time_ms_at_1ghz":self.now as f64/1e6,"experts_done_cycles":experts_done,"combine_tail_cycles":self.combine_cycles,
    "useful_macs":useful,"issued_macs":self.cores.iter().map(|c|c.stats.issued_macs).sum::<u64>(),
@@ -1876,7 +1900,11 @@ impl Sim {
    "numerical_validation":"separate address-payload tests; this timing run does not execute numerical tensors",
    "model_limitations":["HBM is aggregate bandwidth plus fixed response latency, not channel/row timing", "vector and copy phases are conservatively charged as read/service/write without overlap", "candidate scalar cost heuristic, not optimal dispatch", "timing/payload are separately verified, not a unified native emulator"],
    "cores":self.cores.iter().map(|c|json!({"m":c.m,"capacity":c.capacity,"reserved_input_result_control":c.reserved,"stats":c.stats,
-    "weight_bank_words":c.wb.words,"x_bank_words":c.xb.words,"workspace_bank_words":c.ab.words})).collect::<Vec<_>>(),"trace":self.trace})
+    "weight_bank_words":c.wb.words,"x_bank_words":c.xb.words,"workspace_bank_words":c.ab.words})).collect::<Vec<_>>(),"trace":self.trace});
+        if self.cfg.diagnostic_profile {
+            report["m0_profile"] = self.profile_v3.report(self.now);
+        }
+        report
     }
 }
 fn main() {
@@ -1892,9 +1920,49 @@ fn main() {
         std::fs::write(&args[3], serde_json::to_vec_pretty(&report).unwrap()).unwrap();
         return;
     }
-    let w: Workload = serde_json::from_slice(&std::fs::read(&args[1]).unwrap()).unwrap();
-    let cfg: Config = serde_json::from_slice(&std::fs::read(&args[2]).unwrap()).unwrap();
-    let report = Sim::new(w, cfg).run();
+    if args[1] == "--v3-replay" {
+        let input: Value = serde_json::from_slice(&std::fs::read(&args[2]).unwrap()).unwrap();
+        let report = v3::replay(&input).expect("v3 numerical replay failed");
+        std::fs::write(&args[3], serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        return;
+    }
+    let workload_value: Value = serde_json::from_slice(&std::fs::read(&args[1]).unwrap()).unwrap();
+    let mut config_value: Value =
+        serde_json::from_slice(&std::fs::read(&args[2]).unwrap()).unwrap();
+    if config_value["arch"] == "supply_v3" {
+        let numeric_payload = config_value.get("numeric_payload")
+            .or_else(|| workload_value.get("numeric_payload"))
+            .cloned().unwrap_or(Value::Null);
+        let report = v3::run(&json!({"workload":workload_value,"config":config_value,"numeric_payload":numeric_payload}))
+            .expect("supply_v3 failed");
+        std::fs::write(&args[3], serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        return;
+    }
+    let original_config = config_value.clone();
+    let scale = config_value["weight_bytes_scale"].as_f64().unwrap_or(1.0);
+    assert!(
+        scale > 0.0 && scale <= 1.0,
+        "weight byte timing oracle must be in (0,1]"
+    );
+    // Diagnostic-only uniform compression oracle. Logical BF16 transfers and
+    // all landing/read/compute costs remain unchanged. Scale shared wire service
+    // and effective wire-credit occupancy together, never SRAM allocations.
+    if scale < 1.0 {
+        let bw = config_value["hbm_bytes_per_ns"].as_u64().unwrap_or(256);
+        let cr = config_value["credits"].as_u64().unwrap_or(256);
+        config_value["hbm_bytes_per_ns"] = json!((bw as f64 / scale).floor() as u64);
+        config_value["credits"] = json!((cr as f64 / scale).ceil() as u64);
+        config_value["diagnostic_credit_expansion"] = json!(true);
+    }
+    let w: Workload = serde_json::from_value(workload_value).unwrap();
+    let cfg: Config = serde_json::from_value(config_value).unwrap();
+    let mut report = Sim::new(w, cfg).run();
+    if scale < 1.0 {
+        report["compression_oracle"] = json!({"weight_bytes_scale":scale,
+            "original_config":original_config,"logical_weight_bytes":report["weight_bytes"],
+            "scaled_wire_bytes":(report["weight_bytes"].as_u64().unwrap() as f64 * scale).ceil() as u64,
+            "scope":"nonphysical uniform wire-service/credit scaling; same logical BF16 SRAM moves and issued operations; no dequant cost; not packed P1/P2"});
+    }
     std::fs::write(&args[3], serde_json::to_vec_pretty(&report).unwrap()).unwrap();
 }
 

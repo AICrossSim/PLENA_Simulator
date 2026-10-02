@@ -938,6 +938,7 @@ impl Sim {
         }
     }
     pub(super) fn return_runtime(&mut self, r: DmaRequest) {
+        self.profile_return();
         assert_eq!(self.outstanding_dma.get(&r.serial), Some(&r));
         let t = self.dma_tile(&r);
         let row_stride = align(t.kv * 2, 32);
@@ -952,12 +953,16 @@ impl Sim {
         self.event(end, Event::RuntimeAck(r));
     }
     pub(super) fn ack_runtime(&mut self, r: DmaRequest) {
+        self.profile_landed();
         assert_eq!(self.outstanding_dma.remove(&r.serial), Some(r.clone()));
         self.record_dma_landing(&r);
         let t = self.dma_tile_mut(&r);
         t.acks += 32;
         assert!(t.acks <= t.sent && t.acks <= t.bytes);
         t.ready = t.acks == t.bytes;
+        if t.ready {
+            self.profile_weight_ready(r.core, r.task, r.phase, r.tile);
+        }
         self.credit_used -= 1; // Return SRAM -> reserved W slot has completed.
         self.cores[r.core].stats.dma_landed += 1;
         assert_eq!(self.credit_used, self.outstanding_dma.len());
