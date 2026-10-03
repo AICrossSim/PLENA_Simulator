@@ -1,0 +1,68 @@
+[
+  {
+    "K": 512,
+    "MAC_budget": 12288,
+    "M_experts": [
+      4,
+      2
+    ],
+    "M_waves_per_expert": [
+      1,
+      1
+    ],
+    "N": 128,
+    "cycles": 224,
+    "geometry": "6x4x512",
+    "issued_tiles": 64,
+    "latency_ms_at_1ghz": 0.000224,
+    "padding_macs": 393216,
+    "scope": "teacher fixed-owner projection; ideal operands",
+    "spatial_utilization": 0.5,
+    "useful_macs": 393216,
+    "wall_mac_utilization": 0.14285714285714285
+  },
+  {
+    "K": 512,
+    "MAC_budget": 12288,
+    "M_experts": [
+      4,
+      2
+    ],
+    "M_waves_per_expert": [
+      2,
+      1
+    ],
+    "N": 128,
+    "cycles": 144,
+    "geometry": "3x4x512+3x4x512",
+    "issued_tiles": 96,
+    "latency_ms_at_1ghz": 0.000144,
+    "padding_macs": 196608,
+    "scope": "teacher fixed-owner projection; ideal operands",
+    "spatial_utilization": 0.6666666666666666,
+    "useful_macs": 393216,
+    "wall_mac_utilization": 0.2222222222222222
+  },
+  {
+    "K": 512,
+    "MAC_budget": 12288,
+    "M_experts": [
+      4,
+      2
+    ],
+    "M_waves_per_expert": [
+      1,
+      1
+    ],
+    "N": 128,
+    "cycles": 112,
+    "geometry": "4x4x512+2x4x512",
+    "issued_tiles": 64,
+    "latency_ms_at_1ghz": 0.000112,
+    "padding_macs": 0,
+    "scope": "teacher fixed-owner projection; ideal operands",
+    "spatial_utilization": 1.0,
+    "useful_macs": 393216,
+    "wall_mac_utilization": 0.2857142857142857
+  }
+]

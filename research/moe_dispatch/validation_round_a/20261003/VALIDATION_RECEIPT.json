@@ -1,0 +1,91 @@
+{
+  "complete": true,
+  "current_artifacts": [
+    {
+      "bytes": 2616,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/CONCLUSIONS.json",
+      "sha256": "0aaf3d350ccd8bcb9555416e132ff044719730464174b35a036a56f502e9d947"
+    },
+    {
+      "bytes": 4385,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/FROZEN_ROUND_A.json",
+      "sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468"
+    },
+    {
+      "bytes": 2008,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/REPORT.md",
+      "sha256": "2818a2990bac782f7ea0685a5aa4b97efb5e117f4ece2ad743ebeda267d3c597"
+    },
+    {
+      "bytes": 1537,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/SOURCE_PINS.json",
+      "sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8"
+    },
+    {
+      "bytes": 271928,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/development_search.csv",
+      "sha256": "2ccaf64e370b089cbd85805c0192c099645017c8ff7f8612651f91a8ee0ec2d1"
+    },
+    {
+      "bytes": 877158,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/development_search.json",
+      "sha256": "b0ffffd8f7eeedc4838cc667f92d51a9a5d4228d16d91fe17b41ed86521e911b"
+    },
+    {
+      "bytes": 252486,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_layers.csv",
+      "sha256": "ff4d57a624bbdede80ff8fe6e68f7d563cd66f938f1d016871e96d827264cb8a"
+    },
+    {
+      "bytes": 732607,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_layers.json",
+      "sha256": "b3678a080e4894971ca5caee6eb1d46ed6ab6a1fa9137a3687b942eff7488123"
+    },
+    {
+      "bytes": 6628,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_summary.csv",
+      "sha256": "c8317e6b07922ae4673f391d1a69352280c805ee27c8757ec1a84c371d63c828"
+    },
+    {
+      "bytes": 19139,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_summary.json",
+      "sha256": "2f99a5e08979203fa3a7dfd3153a65699d064ecf5e87ab4421c23d5eaec5d2a0"
+    },
+    {
+      "bytes": 2177,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/input_provenance.json",
+      "sha256": "7b642732c6894ba30b25ae05a350cfb6add56b94ebb3031a1105935556f8f166"
+    },
+    {
+      "bytes": 1916,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/latency_utilization_frontier.csv",
+      "sha256": "5cab9059f6af758855071b8cadc7fc33bc5a8845882a9fbea3e155546c2e05fc"
+    },
+    {
+      "bytes": 615,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/teacher_toy.csv",
+      "sha256": "4d5e330fd6e6bd4af505c1065a20b08ea8d442d174bda6d8b5cef9aebd30bf7c"
+    },
+    {
+      "bytes": 1410,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/teacher_toy.json",
+      "sha256": "538c652f20785fa5ad47d21fe0610eedf17d93ee1fbdc5e36c5c3656ebc7321b"
+    }
+  ],
+  "development_layer_evaluations_x2": 31104,
+  "errors": 0,
+  "failures": 0,
+  "frozen_before_first_heldout_read": true,
+  "full_point_repeats_equal": true,
+  "heldout_layer_evaluations_x2": 2430,
+  "pytest_junit": "/tmp/plena-round-a-dse-tests-20261003-v2.xml",
+  "pytest_junit_sha256": "71c5845db2ad4108959b529ac6c02da694356296ed60ff58d6eb9b31de526731",
+  "schema": "round_a_v2_validation_receipt",
+  "tests": 9,
+  "v1_result_directory_preserved": "/tmp/plena-round-a-dse-20261003",
+  "v2_corrections": [
+    "threshold applies when equal M but unequal N; only physically identical shapes exempt",
+    "captured input provenance required",
+    "timing sources pinned before selection freeze"
+  ]
+}

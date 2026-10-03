@@ -1,0 +1,46 @@
+{
+  "development": {
+    "development": {
+      "distinct_request_identifiers": 90,
+      "independence_warning": "decode windows/prefixes/layers are correlated; workload count is not independent model executions",
+      "real_capture_routes_only": true,
+      "sha256": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "source_path": "/tmp/plena-moe-supply-first-v3-output-20261002/inputs/development.json",
+      "token_id_and_expert_population_coherent": true,
+      "useful_macs": 6228541440,
+      "workloads": 12
+    },
+    "mixed_development": {
+      "distinct_request_identifiers": 34,
+      "independence_warning": "decode windows/prefixes/layers are correlated; workload count is not independent model executions",
+      "real_capture_routes_only": true,
+      "sha256": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "source_path": "/tmp/plena-moe-supply-first-v3-output-20261002/inputs/mixed_development.json",
+      "token_id_and_expert_population_coherent": true,
+      "useful_macs": 39862665216,
+      "workloads": 6
+    }
+  },
+  "heldout": {
+    "heldout": {
+      "distinct_request_identifiers": 90,
+      "independence_warning": "decode windows/prefixes/layers are correlated; workload count is not independent model executions",
+      "real_capture_routes_only": true,
+      "sha256": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "source_path": "/tmp/plena-moe-supply-first-v3-output-20261002/inputs/heldout.json",
+      "token_id_and_expert_population_coherent": true,
+      "useful_macs": 56056872960,
+      "workloads": 108
+    },
+    "mixed_heldout": {
+      "distinct_request_identifiers": 51,
+      "independence_warning": "decode windows/prefixes/layers are correlated; workload count is not independent model executions",
+      "real_capture_routes_only": true,
+      "sha256": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f",
+      "source_path": "/tmp/plena-moe-supply-first-v3-output-20261002/inputs/mixed_heldout.json",
+      "token_id_and_expert_population_coherent": true,
+      "useful_macs": 179381993472,
+      "workloads": 27
+    }
+  }
+}

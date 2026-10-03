@@ -1,0 +1,27 @@
+{
+  "context_limit": "up to8 N tiles times ceil(Me/PM) independent output records per group; no separate8-in-flight cap",
+  "old_projection_oracle_limit_difference": "old compute.rs has8 in-flight slots; this is a different prospective context hypothesis",
+  "python_model": {
+    "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round_a_dse.py",
+    "sha256": "b9f3dbbb5ceca14e7619e5adf8ec63e6add31837e7bf8ba75f796799ddc8dfd6"
+  },
+  "scope": "only dot20/II1/resultcommit1/vector64 constants are inherited; not exact Rust event timing",
+  "test_source": {
+    "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/test_round_a_dse.py",
+    "sha256": "1a306fc1c1e560a9033a5fc8728c4ce7bd4963cdc0acc969f8ffe3b85994eea8"
+  },
+  "timing_sources": [
+    {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/rust/src/v3/mod.rs",
+      "sha256": "5fd74918d6c4c18afdcdc95a3065b1d1492d3884e6e6e1543e57e68238499d91"
+    },
+    {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/rust/src/v3/IMPLEMENTATION_CONTRACT.md",
+      "sha256": "4e88519754d6c1c21e0c5f8496225de7d72b1ff575d012c3b4e83003eaf763c2"
+    },
+    {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/rust/src/compute.rs",
+      "sha256": "d88ed5e4218792db0346e20c2c01debc685f9f51f8a81d60e441865febb683c3"
+    }
+  ]
+}

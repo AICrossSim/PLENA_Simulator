@@ -1,0 +1,80 @@
+{
+  "all_generated_original_campaign_files_byte_exact": true,
+  "artifact_count": 14,
+  "checks": [
+    {
+      "artifact": "CONCLUSIONS.json",
+      "bytes": 2616,
+      "sha256": "0aaf3d350ccd8bcb9555416e132ff044719730464174b35a036a56f502e9d947"
+    },
+    {
+      "artifact": "FROZEN_ROUND_A.json",
+      "bytes": 4385,
+      "sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468"
+    },
+    {
+      "artifact": "REPORT.md",
+      "bytes": 2008,
+      "sha256": "2818a2990bac782f7ea0685a5aa4b97efb5e117f4ece2ad743ebeda267d3c597"
+    },
+    {
+      "artifact": "SOURCE_PINS.json",
+      "bytes": 1537,
+      "sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8"
+    },
+    {
+      "artifact": "development_search.csv",
+      "bytes": 271928,
+      "sha256": "2ccaf64e370b089cbd85805c0192c099645017c8ff7f8612651f91a8ee0ec2d1"
+    },
+    {
+      "artifact": "development_search.json",
+      "bytes": 877158,
+      "sha256": "b0ffffd8f7eeedc4838cc667f92d51a9a5d4228d16d91fe17b41ed86521e911b"
+    },
+    {
+      "artifact": "heldout_layers.csv",
+      "bytes": 252486,
+      "sha256": "ff4d57a624bbdede80ff8fe6e68f7d563cd66f938f1d016871e96d827264cb8a"
+    },
+    {
+      "artifact": "heldout_layers.json",
+      "bytes": 732607,
+      "sha256": "b3678a080e4894971ca5caee6eb1d46ed6ab6a1fa9137a3687b942eff7488123"
+    },
+    {
+      "artifact": "heldout_summary.csv",
+      "bytes": 6628,
+      "sha256": "c8317e6b07922ae4673f391d1a69352280c805ee27c8757ec1a84c371d63c828"
+    },
+    {
+      "artifact": "heldout_summary.json",
+      "bytes": 19139,
+      "sha256": "2f99a5e08979203fa3a7dfd3153a65699d064ecf5e87ab4421c23d5eaec5d2a0"
+    },
+    {
+      "artifact": "input_provenance.json",
+      "bytes": 2177,
+      "sha256": "7b642732c6894ba30b25ae05a350cfb6add56b94ebb3031a1105935556f8f166"
+    },
+    {
+      "artifact": "latency_utilization_frontier.csv",
+      "bytes": 1916,
+      "sha256": "5cab9059f6af758855071b8cadc7fc33bc5a8845882a9fbea3e155546c2e05fc"
+    },
+    {
+      "artifact": "teacher_toy.csv",
+      "bytes": 615,
+      "sha256": "4d5e330fd6e6bd4af505c1065a20b08ea8d442d174bda6d8b5cef9aebd30bf7c"
+    },
+    {
+      "artifact": "teacher_toy.json",
+      "bytes": 1410,
+      "sha256": "538c652f20785fa5ad47d21fe0610eedf17d93ee1fbdc5e36c5c3656ebc7321b"
+    }
+  ],
+  "complete": true,
+  "first_directory": "/tmp/plena-round-a-dse-20261003-v2",
+  "independent_full_campaign_reproduction": true,
+  "second_directory": "/tmp/plena-round-a-dse-20261003-v2-independent-repeat"
+}

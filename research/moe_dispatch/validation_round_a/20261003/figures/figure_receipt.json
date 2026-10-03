@@ -1,0 +1,283 @@
+{
+  "artifacts": [
+    {
+      "bytes": 9581,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/development_eft_plot_data.csv",
+      "sha256": "98617dcc3ab1632e27630e507de647d0d395248a16094b2211801c43205ede39"
+    },
+    {
+      "bytes": 983,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/heldout_six_configuration_plot_data.csv",
+      "sha256": "7a431f853d101bb7b013a213a00b26cb14c5f4965bdd137e62ece7285cf09f92"
+    },
+    {
+      "bytes": 7734,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/matched_heldout_windows.json",
+      "sha256": "a10c9095de95871eeb9058f14fccd5fa4d2eee74ded398656ac9474ea0198746"
+    },
+    {
+      "bytes": 77899,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_development_latency_utilization.pdf",
+      "sha256": "eaac3c00604845c7d0782cd10396a541ce34b9dc23c34fb2b3175a8801efbbbc"
+    },
+    {
+      "bytes": 156722,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_development_latency_utilization.png",
+      "sha256": "da5ece4f60d008a7829c9dfbc5eb26c64a074328e612243ea3d4dd8570b0b5f4"
+    },
+    {
+      "bytes": 33165,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_development_latency_utilization.svg",
+      "sha256": "d267a3f3e98179e82d0007a2bde0b8df8327fd39f936bf7e98c6e10117911097"
+    },
+    {
+      "bytes": 76640,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_heldout_shape_comparison.pdf",
+      "sha256": "da1227f34bc1997eeb8a7801482131bd6fe244131dfd45116acc35e05d8bff3c"
+    },
+    {
+      "bytes": 189086,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_heldout_shape_comparison.png",
+      "sha256": "b1909c0095edeb901aa14eda4c8f5f6a9da39c28cfab2322abd5edae3a41ba6a"
+    },
+    {
+      "bytes": 15717,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_heldout_shape_comparison.svg",
+      "sha256": "ed8f957732c1118221af2b80b3371e20bc0d0c0da950d827f3111e7c4ef157b3"
+    },
+    {
+      "bytes": 125996,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/figures/selected_shape_isolated_expert_Me_sweep.csv",
+      "sha256": "adebffdaaa52662c0a1a5126b561fa55cad2f8005af95405a1eb35741ada09be"
+    }
+  ],
+  "created_utc": "2026-10-03T20:35:19.159391+00:00",
+  "figures": [
+    {
+      "HBM_E2E_claim": false,
+      "area_equivalence_claim": false,
+      "configurations": 6,
+      "hardware_selection": "development only; frozen before heldout read",
+      "layers_per_configuration": 135,
+      "main_MACs_per_configuration": 12288,
+      "name": "round_a_heldout_shape_comparison",
+      "outputs": [
+        {
+          "bytes": 189086,
+          "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_heldout_shape_comparison.png",
+          "sha256": "b1909c0095edeb901aa14eda4c8f5f6a9da39c28cfab2322abd5edae3a41ba6a"
+        },
+        {
+          "bytes": 15717,
+          "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_heldout_shape_comparison.svg",
+          "sha256": "ed8f957732c1118221af2b80b3371e20bc0d0c0da950d827f3111e7c4ef157b3"
+        },
+        {
+          "bytes": 76640,
+          "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_heldout_shape_comparison.pdf",
+          "sha256": "da1227f34bc1997eeb8a7801482131bd6fe244131dfd45116acc35e05d8bff3c"
+        }
+      ],
+      "policy": "eft",
+      "scope": "Matched135 captured post-Router layer windows; ideal-operand compute/vector only",
+      "source_artifacts": [
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/CONCLUSIONS.json",
+          "sha256": "0aaf3d350ccd8bcb9555416e132ff044719730464174b35a036a56f502e9d947"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/FROZEN_ROUND_A.json",
+          "sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/SOURCE_PINS.json",
+          "sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/VALIDATION_RECEIPT.json",
+          "sha256": "7027dbc4c1e9f57287c10206979d3972e185854f099543ca3663ce19a19b1189"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/input_provenance.json",
+          "sha256": "7b642732c6894ba30b25ae05a350cfb6add56b94ebb3031a1105935556f8f166"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_summary.json",
+          "sha256": "2f99a5e08979203fa3a7dfd3153a65699d064ecf5e87ab4421c23d5eaec5d2a0"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_layers.json",
+          "sha256": "b3678a080e4894971ca5caee6eb1d46ed6ab6a1fa9137a3687b942eff7488123"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/development_search.json",
+          "sha256": "b0ffffd8f7eeedc4838cc667f92d51a9a5d4228d16d91fe17b41ed86521e911b"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/latency_utilization_frontier.csv",
+          "sha256": "5cab9059f6af758855071b8cadc7fc33bc5a8845882a9fbea3e155546c2e05fc"
+        }
+      ],
+      "status": "generated"
+    },
+    {
+      "area_or_energy_Pareto_claim": false,
+      "frontier_geometry_ids": [
+        "1x24x512",
+        "1x2x512+1x22x512",
+        "1x4x512+1x20x512",
+        "1x6x512+1x18x512",
+        "1x8x512+1x16x512"
+      ],
+      "geometry_search_not_extended": true,
+      "layers_per_point": 18,
+      "name": "round_a_development_latency_utilization",
+      "outputs": [
+        {
+          "bytes": 156722,
+          "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_development_latency_utilization.png",
+          "sha256": "da5ece4f60d008a7829c9dfbc5eb26c64a074328e612243ea3d4dd8570b0b5f4"
+        },
+        {
+          "bytes": 33165,
+          "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_development_latency_utilization.svg",
+          "sha256": "d267a3f3e98179e82d0007a2bde0b8df8327fd39f936bf7e98c6e10117911097"
+        },
+        {
+          "bytes": 77899,
+          "path": "/tmp/plena-round-a-dse-20261003-v2/figures/round_a_development_latency_utilization.pdf",
+          "sha256": "eaac3c00604845c7d0782cd10396a541ce34b9dc23c34fb2b3175a8801efbbbc"
+        }
+      ],
+      "points": 96,
+      "policy": "eft",
+      "scope": "All96 development-only geometry points under common EFT; fixed MAC, not fixed area",
+      "source_artifacts": [
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/CONCLUSIONS.json",
+          "sha256": "0aaf3d350ccd8bcb9555416e132ff044719730464174b35a036a56f502e9d947"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/FROZEN_ROUND_A.json",
+          "sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/SOURCE_PINS.json",
+          "sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/VALIDATION_RECEIPT.json",
+          "sha256": "7027dbc4c1e9f57287c10206979d3972e185854f099543ca3663ce19a19b1189"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/input_provenance.json",
+          "sha256": "7b642732c6894ba30b25ae05a350cfb6add56b94ebb3031a1105935556f8f166"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_summary.json",
+          "sha256": "2f99a5e08979203fa3a7dfd3153a65699d064ecf5e87ab4421c23d5eaec5d2a0"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_layers.json",
+          "sha256": "b3678a080e4894971ca5caee6eb1d46ed6ab6a1fa9137a3687b942eff7488123"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/development_search.json",
+          "sha256": "b0ffffd8f7eeedc4838cc667f92d51a9a5d4228d16d91fe17b41ed86521e911b"
+        },
+        {
+          "path": "/tmp/plena-round-a-dse-20261003-v2/latency_utilization_frontier.csv",
+          "sha256": "5cab9059f6af758855071b8cadc7fc33bc5a8845882a9fbea3e155546c2e05fc"
+        }
+      ],
+      "status": "generated"
+    },
+    {
+      "H_F_populations": [
+        {
+          "F": 1408,
+          "H": 2048,
+          "is_shared": false,
+          "observed_expert_descriptors": 599
+        },
+        {
+          "F": 2816,
+          "H": 2048,
+          "is_shared": true,
+          "observed_expert_descriptors": 18
+        }
+      ],
+      "crossings": {
+        "H2048_F1408_shared0": [],
+        "H2048_F2816_shared1": []
+      },
+      "exact_model_source": {
+        "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round_a_dse.py",
+        "sha256": "b9f3dbbb5ceca14e7619e5adf8ec63e6add31837e7bf8ba75f796799ddc8dfd6"
+      },
+      "name": "round_a_selected_shape_crossover",
+      "reason": "No fastest isolated selected-core service crossover in Me1..128 at the captured H/F dimensions; no threshold is inferred.",
+      "retained_sweep_csv": {
+        "path": "/tmp/plena-round-a-dse-20261003-v2/figures/selected_shape_isolated_expert_Me_sweep.csv",
+        "sha256": "adebffdaaa52662c0a1a5126b561fa55cad2f8005af95405a1eb35741ada09be"
+      },
+      "scope": "Optional synthetic sensitivity, not extra captured workload observations",
+      "status": "not_generated"
+    }
+  ],
+  "frozen_v3_outputs_touched": false,
+  "geometry_policy_or_result_changes": false,
+  "matplotlib_version": "3.11.0",
+  "new_hardware_selection_performed": false,
+  "original_results_hash_and_mtime_unchanged": true,
+  "reproducible_cli": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "/tmp/plena-round-a-figures-source-20261003.py",
+    "--root",
+    "/tmp/plena-round-a-dse-20261003-v2"
+  ],
+  "schema": "plena_round_a_v2_scientific_figures_v1",
+  "scope": "Ideal compute/vector diagnostic geometry screening; no HBM/PPA/area Pareto claim",
+  "script_path": "/tmp/plena-round-a-figures-source-20261003.py",
+  "script_sha256": "f1e356740632c4d657b7c474208ea53df6cbf5ed232114474ff8dcb0f434841f",
+  "simulator_campaigns_launched": 0,
+  "source_artifacts": [
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/CONCLUSIONS.json",
+      "sha256": "0aaf3d350ccd8bcb9555416e132ff044719730464174b35a036a56f502e9d947"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/FROZEN_ROUND_A.json",
+      "sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/SOURCE_PINS.json",
+      "sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/VALIDATION_RECEIPT.json",
+      "sha256": "7027dbc4c1e9f57287c10206979d3972e185854f099543ca3663ce19a19b1189"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/input_provenance.json",
+      "sha256": "7b642732c6894ba30b25ae05a350cfb6add56b94ebb3031a1105935556f8f166"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_summary.json",
+      "sha256": "2f99a5e08979203fa3a7dfd3153a65699d064ecf5e87ab4421c23d5eaec5d2a0"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/heldout_layers.json",
+      "sha256": "b3678a080e4894971ca5caee6eb1d46ed6ab6a1fa9137a3687b942eff7488123"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/development_search.json",
+      "sha256": "b0ffffd8f7eeedc4838cc667f92d51a9a5d4228d16d91fe17b41ed86521e911b"
+    },
+    {
+      "path": "/tmp/plena-round-a-dse-20261003-v2/latency_utilization_frontier.csv",
+      "sha256": "5cab9059f6af758855071b8cadc7fc33bc5a8845882a9fbea3e155546c2e05fc"
+    }
+  ],
+  "status": "complete"
+}

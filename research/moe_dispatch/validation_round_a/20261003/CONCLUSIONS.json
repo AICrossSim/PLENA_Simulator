@@ -1,0 +1,65 @@
+{
+  "best_heterogeneous_beats_best_homogeneous_eft": true,
+  "best_heterogeneous_beats_best_single_eft": false,
+  "complete": true,
+  "development_geometry_policy_points": 864,
+  "development_layer_evaluations_x2": 31104,
+  "five_requested_outputs": {
+    "average_MAC_spatial_utilization": 0.96742167886787,
+    "best_heterogeneous_config": {
+      "geometry": "1x2x512+1x22x512",
+      "policy": "eft"
+    },
+    "p95_layer_latency_ms": 0.847256,
+    "speedup_vs_6U_single": 2.4761609161850644,
+    "total_MoE_compute_layer_latency_ms": 25.323792
+  },
+  "freeze_sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468",
+  "full_system_or_architectural_necessity_proven": false,
+  "geometry_configs": 96,
+  "heldout_selected_layer_evaluations_x2": 2430,
+  "repeat_full_json_exact": true,
+  "scope": {
+    "HBM": "ideal/infinite; no bandwidth performance comparison in Round A",
+    "clock_hz": 1000000000,
+    "dataflow": "bounded output-group ideal-operand ordering, not a WS/OS/RS sweep",
+    "functional_work": "Gate/Up concatenated same-X GEMM, SiLU-product, Down GEMM, weighted combine",
+    "geometry_search": {
+      "PK": 512,
+      "PM": [
+        1,
+        8
+      ],
+      "PN": [
+        1,
+        24
+      ],
+      "asymmetric_geometries": 85,
+      "homogeneous_geometries": 5,
+      "mirrors_canonicalized": true,
+      "single_geometries": 6,
+      "two_core_geometries": 90
+    },
+    "limitations": [
+      "new PN widths are prospective, unsupported by frozen compiler/Rust datapath",
+      "minimum footprint is necessary only; actual X ports, accumulator banking and persistent Z/U not modeled",
+      "logical MAC equality is not physical area/PPA equality",
+      "vector uses one shared64-element/cycle service; no nonlinear numerical replay",
+      "EFT ignores future shared vector contention while binding; contention is scheduled in actual layer time",
+      "same v3 heldout traces were exposed for correctness; not pristine blind holdout",
+      "trace datasets are correlated captured windows/prefixes, not whole models"
+    ],
+    "main_MAC_budget": 12288,
+    "model": {
+      "commit_cycles": 1,
+      "dot_latency": 20,
+      "initiation_interval": 1,
+      "n_group_tiles": 8,
+      "vector_elements_per_cycle": 64
+    },
+    "precision": "BF16 input/weights, FP32 accumulation",
+    "runtime": "FIFO descriptor order, whole-expert owner, no cross-expert row packing, no splitting/steal",
+    "scope": "post-Router compute/vector analytical layer makespan, ideal memory; not HBM E2E or complete inference",
+    "total_SRAM_bytes_nominal_only": 2158592
+  }
+}

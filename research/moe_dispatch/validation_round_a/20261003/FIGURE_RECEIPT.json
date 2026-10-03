@@ -1,0 +1,27 @@
+{
+  "figures": [
+    {
+      "bytes": 85178,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/round_a_fixed_vs_searched_geometry.png",
+      "sha256": "067735451bcf88e3f0f3efef6a56b7ee48d9a2dd0800c7b789996494afaf91fd"
+    },
+    {
+      "bytes": 130529,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/round_a_latency_utilization_frontier.png",
+      "sha256": "e4bb97453015cddd63385a2fc51056de78c038d62b2587510e2e2612ecf1d530"
+    },
+    {
+      "bytes": 53969,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/round_a_fixed_vs_searched_geometry.svg",
+      "sha256": "cfacd85e2cf01be4935d4a935327add43d13aa608e18337f1585a4dfc3bd2df6"
+    },
+    {
+      "bytes": 76075,
+      "path": "/tmp/plena-round-a-dse-20261003-v2/round_a_latency_utilization_frontier.svg",
+      "sha256": "1f4e7fa52a2db4c949dd26242a3a6ecb1d779375d202d6d9cbf18d466bd0fc35"
+    }
+  ],
+  "heldout_summary_sha256": "2f99a5e08979203fa3a7dfd3153a65699d064ecf5e87ab4421c23d5eaec5d2a0",
+  "scope": "derived scientific figures; no physical-area Pareto claim",
+  "source_csv_sha256": "2ccaf64e370b089cbd85805c0192c099645017c8ff7f8612651f91a8ee0ec2d1"
+}

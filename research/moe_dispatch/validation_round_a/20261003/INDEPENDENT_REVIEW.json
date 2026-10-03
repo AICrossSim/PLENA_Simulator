@@ -1,0 +1,34 @@
+{
+  "all_864_geometry_mac_counts_and_minimum_footprints_checked": true,
+  "code_sha256": "b9f3dbbb5ceca14e7619e5adf8ec63e6add31837e7bf8ba75f796799ddc8dfd6",
+  "development_config_policy_rows": 864,
+  "freeze_sha256": "0cf61e48ffc8755c2888a3dcbd4a571b96d2cb6c99cccaaea3a4fe4000829468",
+  "geometry_count": 96,
+  "heldout_aggregates_recomputed": true,
+  "heldout_rows": 1215,
+  "heldout_speedups_spatial_wall_mean_recomputed": true,
+  "independent_real_mixed_selected_replays": 9,
+  "input_provenance_files_sha256_verified": true,
+  "main_mac_budget": 12288,
+  "pins_sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8",
+  "remaining_limits": [
+    "actualports/banks/operandbandwidth omitted",
+    "minimum residency footprint only; passing does notcertify physicalSRAM feasibility",
+    "up to8Ntile*ceilMe/PM records vs oldcompute8 in-flight limit",
+    "new PN widthsunsupportedby frozenRustdatapath",
+    "logical MAC countnot equalPPA",
+    "sameheldout historically exposed forcorrectness"
+  ],
+  "resolved_findings": [
+    "equalPM unequalPN thresholdsemanticbug fixed; oldv1retained",
+    "capturedprovenance checked; coherentconstructedinputs rejected",
+    "timing sourceSHA pins added; old8inflightoracle difference explicit"
+  ],
+  "selection_recomputed_from_development": true,
+  "source_pins_actual_file_hashes_match": true,
+  "status": "independently_reviewed",
+  "tests_passed": 9,
+  "tests_sha256": "1a306fc1c1e560a9033a5fc8728c4ce7bd4963cdc0acc969f8ffe3b85994eea8",
+  "v2_artifact_root": "/tmp/plena-round-a-dse-20261003-v2",
+  "valid_scope": "prospective compute/vector geometry hypothesis screening, not finite-memory E2E"
+}

@@ -1,0 +1,113 @@
+{
+  "architecture_selection": "minimum sum of development makespans, EFT only, tie by geometry name",
+  "development_points_repeated_twice": 15552,
+  "development_repeat_full_json_exact": true,
+  "development_sources": {
+    "development": {
+      "distinct_request_identifiers": 90,
+      "independence_warning": "decode windows/prefixes/layers are correlated; workload count is not independent model executions",
+      "real_capture_routes_only": true,
+      "sha256": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "source_path": "/tmp/plena-moe-supply-first-v3-output-20261002/inputs/development.json",
+      "token_id_and_expert_population_coherent": true,
+      "useful_macs": 6228541440,
+      "workloads": 12
+    },
+    "mixed_development": {
+      "distinct_request_identifiers": 34,
+      "independence_warning": "decode windows/prefixes/layers are correlated; workload count is not independent model executions",
+      "real_capture_routes_only": true,
+      "sha256": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "source_path": "/tmp/plena-moe-supply-first-v3-output-20261002/inputs/mixed_development.json",
+      "token_id_and_expert_population_coherent": true,
+      "useful_macs": 39862665216,
+      "workloads": 6
+    }
+  },
+  "heldout_opened_in_this_run_before_freeze": false,
+  "runtime_selection": "threshold tuning only after geometry selection, development only",
+  "schema": "plena_round_a_geometry_freeze_v1",
+  "scope": {
+    "HBM": "ideal/infinite; no bandwidth performance comparison in Round A",
+    "clock_hz": 1000000000,
+    "dataflow": "bounded output-group ideal-operand ordering, not a WS/OS/RS sweep",
+    "functional_work": "Gate/Up concatenated same-X GEMM, SiLU-product, Down GEMM, weighted combine",
+    "geometry_search": {
+      "PK": 512,
+      "PM": [
+        1,
+        8
+      ],
+      "PN": [
+        1,
+        24
+      ],
+      "asymmetric_geometries": 85,
+      "homogeneous_geometries": 5,
+      "mirrors_canonicalized": true,
+      "single_geometries": 6,
+      "two_core_geometries": 90
+    },
+    "limitations": [
+      "new PN widths are prospective, unsupported by frozen compiler/Rust datapath",
+      "minimum footprint is necessary only; actual X ports, accumulator banking and persistent Z/U not modeled",
+      "logical MAC equality is not physical area/PPA equality",
+      "vector uses one shared64-element/cycle service; no nonlinear numerical replay",
+      "EFT ignores future shared vector contention while binding; contention is scheduled in actual layer time",
+      "same v3 heldout traces were exposed for correctness; not pristine blind holdout",
+      "trace datasets are correlated captured windows/prefixes, not whole models"
+    ],
+    "main_MAC_budget": 12288,
+    "model": {
+      "commit_cycles": 1,
+      "dot_latency": 20,
+      "initiation_interval": 1,
+      "n_group_tiles": 8,
+      "vector_elements_per_cycle": 64
+    },
+    "precision": "BF16 input/weights, FP32 accumulation",
+    "runtime": "FIFO descriptor order, whole-expert owner, no cross-expert row packing, no splitting/steal",
+    "scope": "post-Router compute/vector analytical layer makespan, ideal memory; not HBM E2E or complete inference",
+    "total_SRAM_bytes_nominal_only": 2158592
+  },
+  "selected_points": {
+    "best_heterogeneous_eft": {
+      "geometry": "1x2x512+1x22x512",
+      "policy": "eft"
+    },
+    "best_heterogeneous_threshold": {
+      "geometry": "1x2x512+1x22x512",
+      "policy": "threshold_1"
+    },
+    "best_homogeneous_eft": {
+      "geometry": "1x12x512+1x12x512",
+      "policy": "eft"
+    },
+    "best_homogeneous_threshold": {
+      "geometry": "1x12x512+1x12x512",
+      "policy": "threshold_1"
+    },
+    "best_single_eft": {
+      "geometry": "1x24x512",
+      "policy": "eft"
+    },
+    "best_single_threshold": {
+      "geometry": "1x24x512",
+      "policy": "threshold_1"
+    },
+    "fixed_heterogeneous_4_2": {
+      "geometry": "2x4x512+4x4x512",
+      "policy": "eft"
+    },
+    "fixed_homogeneous_3_3": {
+      "geometry": "3x4x512+3x4x512",
+      "policy": "eft"
+    },
+    "fixed_single_6": {
+      "geometry": "6x4x512",
+      "policy": "eft"
+    }
+  },
+  "source_pins_sha256": "33f74674d0d3f248f95ed5178d7d5bca7e75223dc1e0990d490bef6c344190c8",
+  "source_sha256": "b9f3dbbb5ceca14e7619e5adf8ec63e6add31837e7bf8ba75f796799ddc8dfd6"
+}
