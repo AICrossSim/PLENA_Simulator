@@ -80,6 +80,31 @@ build-perf-model model batch="4" input_seq="2048" output_seq="1024":
         --config "$(pwd)/plena_settings.toml" \
         --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
+# ==================== Stacked 3D DRAM ====================
+
+# Bandwidth, capacity and clock scale of a memory profile, optionally over stack heights:
+#   just stacked-dram-describe analytic_models/stacked_dram/examples/fictional_stacked_dram.json --total-layers 4,8,12
+stacked-dram-describe profile *args:
+    python3 -m analytic_models.stacked_dram describe --profile {{profile}} {{args}}
+
+# Memory-aware TTFT/TPS on one PLENA chip with a stacked_dram or fixed_bandwidth profile:
+#   just stacked-dram-estimate <model> <profile> [batch] [input_seq] [output_seq] [--overlap serial] [--json] ...
+stacked-dram-estimate model profile batch="4" input_seq="2048" output_seq="1024" *args:
+    python3 -m analytic_models.stacked_dram estimate \
+        --model {{model}} \
+        --profile {{profile}} \
+        --batch-size {{batch}} \
+        --input-seq {{input_seq}} \
+        --output-seq {{output_seq}} \
+        --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json" \
+        {{args}}
+
+# Unit tests of the stacked-DRAM model (no checkpoint, no emulator build)
+test-stacked-dram *args:
+    python3 -m pytest -q analytic_models/stacked_dram {{args}}
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable

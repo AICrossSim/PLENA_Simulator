@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "kind": "fixed_bandwidth",
+  "name": "fictional-fixed-bandwidth",
+  "provenance": {
+    "source": "fictional values that only illustrate the profile format",
+    "notes": "Not representative of any device. For a baseline, enter the sustained bandwidth and capacity of the memory you want to compare against, with their source."
+  },
+  "bandwidth_bytes_per_s": 98765432100.0,
+  "capacity_bytes": 12345678901
+}
