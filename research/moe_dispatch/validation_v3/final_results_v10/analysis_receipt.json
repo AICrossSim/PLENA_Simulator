@@ -1,0 +1,6 @@
+{
+  "duplicated_raw_json_verification": "See point receipts",
+  "input_manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+  "rows": 55012,
+  "simulator_scope": "analytical discrete-event FFN; not native HBM/RTL/full model"
+}

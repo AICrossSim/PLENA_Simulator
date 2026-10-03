@@ -1,0 +1,2774 @@
+{
+  "N1": {
+    "decode": {
+      "complete": true,
+      "geomean_R_v3": 1.0224096320731242,
+      "minimum_R_v3": 0.9969082926174213,
+      "paired_windows": 108,
+      "timing_threshold_pass": true
+    },
+    "legacy": {
+      "complete": true,
+      "fallback_historical_joint_not_FIFO": false,
+      "maximum_R_legacy": 0.7138305084966797,
+      "threshold_pass": false,
+      "windows": 126
+    },
+    "passed": false,
+    "real_mixed": {
+      "complete": true,
+      "geomean_R_v3": 0.711448256673609,
+      "minimum_R_v3": 0.5020241005625831,
+      "paired_windows": 18,
+      "timing_threshold_pass": false
+    }
+  },
+  "N2": {
+    "P1_primary_timing_passed": false,
+    "P2_primary_timing_passed": false,
+    "all_equal_wire_bytes": true,
+    "by_mode": {
+      "OP2/lanes": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 0.5977366456538358,
+        "cold_throughput_loss_max": 0.49101296788485005,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 0.3301669154566427,
+        "threshold_pass": false
+      },
+      "OP5/kext": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 0.12499656716626206,
+        "cold_throughput_loss_max": 0.1158429304633265,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 0.12487536256716436,
+        "threshold_pass": true,
+        "witnesses": [
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l2"
+          }
+        ]
+      },
+      "OP5/lanes": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 0.1797369075872317,
+        "cold_throughput_loss_max": 0.17726918792991808,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 0.14398983963709666,
+        "threshold_pass": false
+      },
+      "OP5/offload": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 2.378388187768304,
+        "cold_throughput_loss_max": 0.7072936670219782,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 3.3721081184522266,
+        "threshold_pass": true,
+        "witnesses": [
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_bfcl_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_gpqa_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "heldout_swe_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l2"
+          }
+        ]
+      },
+      "OP5/separate": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 0.13635762404958784,
+        "cold_throughput_loss_max": 0.12784870614236077,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 0.15184455095749239,
+        "threshold_pass": true,
+        "witnesses": [
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": false,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l2"
+          }
+        ]
+      }
+    },
+    "byte_matching_scope": "Equal total accepted wire bytes via actual expert-tail DMA/pool padding; per-tile layout/A placement and phase timing are not identical, so this is not pure arithmetic isolation",
+    "cold_metric": "Routed Me<=2 rows / (last cold completion - first cold binding); queueing included, equal descriptor populations required",
+    "complete": true,
+    "expected_comparisons": 630,
+    "observed_comparisons": 630,
+    "onchip_focus": "Real mixed T=96, Shared Me>=16; frozen source population is correlated across layers",
+    "passed": false,
+    "primary_busy_metric": "Sum of mutually exclusive C1+C4+C5+C6+C7 across cores; per-core values are diagnostics of placement as well as service",
+    "reason": "Measured frozen thresholds applied"
+  },
+  "N2_P2_B4_supplement": {
+    "P1_primary_timing_passed": null,
+    "P2_primary_timing_passed": false,
+    "all_equal_wire_bytes": true,
+    "by_mode": {
+      "OP2/lanes": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 0.6150201697112108,
+        "cold_throughput_loss_max": 0.5167121438783252,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 0.3509920013663146,
+        "threshold_pass": false
+      },
+      "OP2/offload": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 2.5829049234574954,
+        "cold_throughput_loss_max": 0.717547965952866,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 4.187900249986053,
+        "threshold_pass": true,
+        "witnesses": [
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l2"
+          }
+        ]
+      },
+      "OP2/separate": {
+        "T96_focus_windows": 9,
+        "T96_layer_overhead_max": 0.16005829588887077,
+        "cold_throughput_loss_max": 0.1489121601889356,
+        "complete": true,
+        "equal_wire_bytes": true,
+        "paired_windows": 126,
+        "rank_multiplier_overhead_max": 0.015625,
+        "required_T96_focus_windows": 9,
+        "required_paired_windows": 126,
+        "sum_core_busy_overhead_max": 0.27110787337270414,
+        "threshold_pass": true,
+        "witnesses": [
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_bfcl_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_gpqa_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b16_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b2_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b4_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l13_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l26_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s11"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s3"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "heldout_swe_b8_l2_s7"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_bfcl_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": true,
+            "workload": "v3_captured_mixed_heldout_gpqa_t96_l2"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l13"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l26"
+          },
+          {
+            "T96_layer": false,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t64_l2"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l13"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l26"
+          },
+          {
+            "T96_layer": true,
+            "busy": true,
+            "cold": false,
+            "workload": "v3_captured_mixed_heldout_swe_t96_l2"
+          }
+        ]
+      }
+    },
+    "byte_matching_scope": "Equal total accepted wire bytes via actual expert-tail DMA/pool padding; per-tile layout/A placement and phase timing are not identical, so this is not pure arithmetic isolation",
+    "cold_metric": "Routed Me<=2 rows / (last cold completion - first cold binding); queueing included, equal descriptor populations required",
+    "complete": true,
+    "expected_comparisons": 378,
+    "observed_comparisons": 378,
+    "onchip_focus": "Real mixed T=96, Shared Me>=16; frozen source population is correlated across layers",
+    "passed": false,
+    "primary_busy_metric": "Sum of mutually exclusive C1+C4+C5+C6+C7 across cores; per-core values are diagnostics of placement as well as service",
+    "quality_status": "Separate B MXINT4 numerical validation required; default B BF16 qualification does not transfer",
+    "reason": "Measured frozen thresholds applied",
+    "scope": "Supplementary precision diagnostic, not a tightened primary pass criterion"
+  },
+  "N3": {
+    "OP0": {
+      "complete": true,
+      "eta_min": 0.9933897865859991,
+      "observed_points": 81,
+      "required_eta": 0.95,
+      "threshold_pass": true
+    },
+    "OP1": {
+      "complete": true,
+      "eta_min": 0.8959259051176954,
+      "observed_points": 324,
+      "required_eta": 0.9,
+      "threshold_pass": false
+    },
+    "mechanisms": {
+      "byte_pool": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.5542267398604492,
+        "maximum_latency_loss": 1.2432929235974064,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "credit_release": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.05004994602436019,
+        "maximum_latency_loss": 0.05268692371235284,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "inline_silu": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.035204108170473924,
+        "maximum_latency_loss": 0.036488658864122,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "pipeline_supply": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.9360700903505585,
+        "maximum_latency_loss": 14.642130662838136,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "prefetch_quota": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.9360700758264208,
+        "maximum_latency_loss": 14.642127109127351,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "w_reuse": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.9106443519765023,
+        "maximum_latency_loss": 10.191234377675055,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "wide_ports": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.1863366213398887,
+        "maximum_latency_loss": 0.22900947274625505,
+        "points": 972,
+        "threshold_pass": true
+      },
+      "x_reuse": {
+        "criterion": "At least one working point loses >=3% latency or supply efficiency when disabled",
+        "maximum_eta_loss": 0.6499625399510791,
+        "maximum_latency_loss": 1.8568370935506189,
+        "points": 972,
+        "threshold_pass": true
+      }
+    },
+    "passed": false
+  },
+  "N4": {
+    "area_based_claim_type_conditional": false,
+    "area_condition_robust_to_type": true,
+    "area_proxy_scope": "Same measured timing, alternate physical-type estimates; no implemented RF/SRAM split or PPA claim",
+    "area_type_robust_pass": false,
+    "latency_threshold_pass": false,
+    "local_RF_broadcast_scope": "Supplementary hypothetical operand-delivery port proxy; does not alter original nominal N4 criterion or establish synthesized RF fanout cost",
+    "maximum_area_difference": 0.0246509151170774,
+    "maximum_area_difference_by_accumulator_type": {
+      "proxy_accumulator_all_rf": 0.0024650915117077066,
+      "proxy_accumulator_all_sram": 0.0025862217018348677,
+      "proxy_accumulator_hybrid": 0.01738420152480402,
+      "proxy_default": 0.0246509151170774
+    },
+    "maximum_area_difference_with_local_RF_broadcast_port_sensitivity": 0.021005559088391523,
+    "nominal_passed": false,
+    "paired_windows": 18,
+    "passed": false,
+    "time_ratio_geomean": 0.976225757284967,
+    "traffic_ratio_geomean": 0.9435089736152695,
+    "unconditional_organization_evidence": false
+  },
+  "N5": {
+    "Q3_gate_weighted": "See real-weight numerical report; never inferred from scheduling timing",
+    "p95_ratio": 0.9854257072480552,
+    "paired_windows": 18,
+    "time_ratio_geomean": 0.9760865406285867,
+    "timing_passed": false
+  },
+  "coverage": {
+    "SWE_mixed_available": true,
+    "heldout_decode_windows_observed": 108,
+    "independent_mixed_prompt_requests": 3,
+    "real_mixed_windows_observed": 18,
+    "required_available_real_mixed_windows": 18,
+    "required_decode_windows": 108
+  },
+  "fixed_comparator": {
+    "criterion": "minimum development geometric mean within each MAC budget, fixed before heldout; no pointwise alternative selection",
+    "development_windows": 12,
+    "geometric_mean_cycles": {
+      "BL2": 416759.89325546916,
+      "BL3": 421444.5934750417,
+      "BL5": 411560.45741672494,
+      "M8_flex53": 420444.69675905333,
+      "M8_flex62": 409020.0195813883,
+      "M8_homogeneous": 418904.82032630494,
+      "M8_single": 415046.48242643214
+    },
+    "port": "iso",
+    "selected": "BL5",
+    "selected_by_budget": {
+      "M6": "BL5",
+      "M8": "M8_flex62"
+    },
+    "signature": {
+      "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+      "input_bundle_sha256": {
+        "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+        "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+        "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+        "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+        "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+      },
+      "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+      "physical_format": {
+        "factor_a": "mxint4",
+        "factor_b": "bf16",
+        "main_bits": 4,
+        "rank_lanes": 8,
+        "ranks": {
+          "routed": [
+            32,
+            32,
+            24
+          ],
+          "shared": [
+            32,
+            32,
+            48
+          ]
+        }
+      },
+      "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+      "planner_artifacts_sha256": {
+        "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+        "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+        "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+        "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+      },
+      "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+    },
+    "working_point": "OP2"
+  },
+  "scope": "conditional analytical timing; Q1 accuracy and coverage checked separately"
+}

@@ -1,0 +1,80 @@
+{
+  "schema": "plena_v3_v10_final_report_render_v1",
+  "status": "complete",
+  "created_utc": "2026-10-03T20:24:51.667708+00:00",
+  "scope": "Unchanged frozen report renderer after full timing matrix; output-only wrapper",
+  "signature": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "input_bundle_sha256": {
+      "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+      "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+    },
+    "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "planner_artifacts_sha256": {
+      "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+      "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+      "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+      "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+    },
+    "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+  },
+  "prereg_commit": "073a26d31ce72954b50c72027f877295bf8c4170",
+  "raw_coverage": {
+    "complete": 55012,
+    "excluded": 5777,
+    "raw_runs": 110024,
+    "scope": "all point manifests/receipts and original-file presence; archive separately hashes every raw member"
+  },
+  "final_pipeline_receipt_sha256": "464b11df7df18f5051436d01542e6bfdc9a117f60f9dc42ab5e24bf007b3df00",
+  "renderer": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/experiments/v3/render_report.py",
+  "renderer_sha256": "db3f87d5967131f5748a3e573049ab3116e90363eaba9235de16b7b0ea96b8d3",
+  "renderer_command": [
+    "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/experiments/v3/render_report.py",
+    "--root",
+    "/tmp/plena-moe-supply-first-v3-output-20261002"
+  ],
+  "renderer_exit_code": 0,
+  "report_sha256": "f76b8fc846b195cc9df8ec6ce97ba892c7b3db8e7838283e0d23339c9d678a0a",
+  "figure_receipt_sha256": "da957d5f563ef53e4d728cadf56757ea4f65c97f5b0d3a8e0723776bb4126286",
+  "Q3_restored_before_renderer": true,
+  "Q3_figure_names": [
+    "q3_frozen_format_error_and_bytes",
+    "q3_gate_weighted_vs_uniform"
+  ],
+  "Q3_artifacts_sha256": {
+    "figures/q3_frozen_format_error_and_bytes.png": "5e26716ac034435699caa7fe82d2d207babd43b2156bcb6ff35246ae163acbbf",
+    "figures/q3_frozen_format_error_and_bytes.svg": "1a829faa208134cef5e9cfb3369c0707a3eb8b32241fb24fcb8006834daa7893",
+    "figures/q3_gate_weighted_vs_uniform.png": "fb2266d249d9152a9661f2ea08132137d3c5d82cf61463d17ad6d5fcfb278bab",
+    "figures/q3_gate_weighted_vs_uniform.svg": "51ccfb205e54b7f1b4dd3b1a86274e60077181eb591a346105a253e16ea103ec"
+  },
+  "Q3_qualification_sha256": "9c1dd1888bd0ea183ef55067de41b19639b0446c957521fb177914fccdd773f1",
+  "Q3_source_csv_sha256": "11c073f33236dcf00697af8a7b09b8a87ffc3c9b7a09e573faa5195ef7896095",
+  "Q3_source_receipt_sha256": "bd18909dfe9f8c40629ecd34f8905b55068c20b1c10eae33e27b63e827e6587e",
+  "helper_sha256": "94ed1187ca38abb72760a68dddc4c81283afce5190bd6f64efb80082b424b0ea",
+  "support_helper_sha256": "be37928a343c1c06bee65e94214a51c2786c27e3f27216fa14e53a3a89ca6418",
+  "no_new_timing": true,
+  "no_source_or_acceptance_changes": true
+}

@@ -1,0 +1,616 @@
+{
+  "coverage": [
+    {
+      "complete": 2448,
+      "declared_legal": "2448",
+      "declared_points": "2754",
+      "evaluation_split": "constructed",
+      "excluded": 306,
+      "failed": 0,
+      "observed_points": 2754,
+      "pending_points": 0,
+      "suite": "ablation",
+      "unsupported": 0
+    },
+    {
+      "complete": 183,
+      "declared_legal": "183",
+      "declared_points": "216",
+      "evaluation_split": "constructed",
+      "excluded": 33,
+      "failed": 0,
+      "observed_points": 216,
+      "pending_points": 0,
+      "suite": "compensation",
+      "unsupported": 0
+    },
+    {
+      "complete": 270,
+      "declared_legal": "270",
+      "declared_points": "324",
+      "evaluation_split": "constructed",
+      "excluded": 54,
+      "failed": 0,
+      "observed_points": 324,
+      "pending_points": 0,
+      "suite": "m0",
+      "unsupported": 0
+    },
+    {
+      "complete": 60,
+      "declared_legal": "60",
+      "declared_points": "72",
+      "evaluation_split": "constructed",
+      "excluded": 12,
+      "failed": 0,
+      "observed_points": 72,
+      "pending_points": 0,
+      "suite": "m0_baseline",
+      "unsupported": 0
+    },
+    {
+      "complete": 2100,
+      "declared_legal": "2100",
+      "declared_points": "2592",
+      "evaluation_split": "constructed",
+      "excluded": 492,
+      "failed": 0,
+      "observed_points": 2592,
+      "pending_points": 0,
+      "suite": "main",
+      "unsupported": 0
+    },
+    {
+      "complete": 132,
+      "declared_legal": "132",
+      "declared_points": "144",
+      "evaluation_split": "constructed",
+      "excluded": 12,
+      "failed": 0,
+      "observed_points": 144,
+      "pending_points": 0,
+      "suite": "policies",
+      "unsupported": 0
+    },
+    {
+      "complete": 276,
+      "declared_legal": "276",
+      "declared_points": "288",
+      "evaluation_split": "constructed",
+      "excluded": 12,
+      "failed": 0,
+      "observed_points": 288,
+      "pending_points": 0,
+      "suite": "sensitivity",
+      "unsupported": 0
+    },
+    {
+      "complete": 1836,
+      "declared_legal": "1836",
+      "declared_points": "1836",
+      "evaluation_split": "development",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 1836,
+      "pending_points": 0,
+      "suite": "ablation",
+      "unsupported": 0
+    },
+    {
+      "complete": 132,
+      "declared_legal": "132",
+      "declared_points": "144",
+      "evaluation_split": "development",
+      "excluded": 12,
+      "failed": 0,
+      "observed_points": 144,
+      "pending_points": 0,
+      "suite": "compensation",
+      "unsupported": 0
+    },
+    {
+      "complete": 84,
+      "declared_legal": "84",
+      "declared_points": "84",
+      "evaluation_split": "development",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 84,
+      "pending_points": 0,
+      "suite": "dev_comparator",
+      "unsupported": 0
+    },
+    {
+      "complete": 216,
+      "declared_legal": "216",
+      "declared_points": "216",
+      "evaluation_split": "development",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 216,
+      "pending_points": 0,
+      "suite": "m0",
+      "unsupported": 0
+    },
+    {
+      "complete": 48,
+      "declared_legal": "48",
+      "declared_points": "48",
+      "evaluation_split": "development",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 48,
+      "pending_points": 0,
+      "suite": "m0_baseline",
+      "unsupported": 0
+    },
+    {
+      "complete": 1536,
+      "declared_legal": "1536",
+      "declared_points": "1728",
+      "evaluation_split": "development",
+      "excluded": 192,
+      "failed": 0,
+      "observed_points": 1728,
+      "pending_points": 0,
+      "suite": "main",
+      "unsupported": 0
+    },
+    {
+      "complete": 96,
+      "declared_legal": "96",
+      "declared_points": "96",
+      "evaluation_split": "development",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 96,
+      "pending_points": 0,
+      "suite": "policies",
+      "unsupported": 0
+    },
+    {
+      "complete": 192,
+      "declared_legal": "192",
+      "declared_points": "192",
+      "evaluation_split": "development",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 192,
+      "pending_points": 0,
+      "suite": "sensitivity",
+      "unsupported": 0
+    },
+    {
+      "complete": 16524,
+      "declared_legal": "16524",
+      "declared_points": "16524",
+      "evaluation_split": "heldout",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 16524,
+      "pending_points": 0,
+      "suite": "ablation",
+      "unsupported": 0
+    },
+    {
+      "complete": 1188,
+      "declared_legal": "1188",
+      "declared_points": "1296",
+      "evaluation_split": "heldout",
+      "excluded": 108,
+      "failed": 0,
+      "observed_points": 1296,
+      "pending_points": 0,
+      "suite": "compensation",
+      "unsupported": 0
+    },
+    {
+      "complete": 1944,
+      "declared_legal": "1944",
+      "declared_points": "1944",
+      "evaluation_split": "heldout",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 1944,
+      "pending_points": 0,
+      "suite": "m0",
+      "unsupported": 0
+    },
+    {
+      "complete": 432,
+      "declared_legal": "432",
+      "declared_points": "432",
+      "evaluation_split": "heldout",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 432,
+      "pending_points": 0,
+      "suite": "m0_baseline",
+      "unsupported": 0
+    },
+    {
+      "complete": 13824,
+      "declared_legal": "13824",
+      "declared_points": "15552",
+      "evaluation_split": "heldout",
+      "excluded": 1728,
+      "failed": 0,
+      "observed_points": 15552,
+      "pending_points": 0,
+      "suite": "main",
+      "unsupported": 0
+    },
+    {
+      "complete": 864,
+      "declared_legal": "864",
+      "declared_points": "864",
+      "evaluation_split": "heldout",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 864,
+      "pending_points": 0,
+      "suite": "policies",
+      "unsupported": 0
+    },
+    {
+      "complete": 1728,
+      "declared_legal": "1728",
+      "declared_points": "1728",
+      "evaluation_split": "heldout",
+      "excluded": 0,
+      "failed": 0,
+      "observed_points": 1728,
+      "pending_points": 0,
+      "suite": "sensitivity",
+      "unsupported": 0
+    },
+    {
+      "complete": 714,
+      "declared_legal": "714",
+      "declared_points": "918",
+      "evaluation_split": "mixed_development",
+      "excluded": 204,
+      "failed": 0,
+      "observed_points": 918,
+      "pending_points": 0,
+      "suite": "ablation",
+      "unsupported": 0
+    },
+    {
+      "complete": 56,
+      "declared_legal": "56",
+      "declared_points": "72",
+      "evaluation_split": "mixed_development",
+      "excluded": 16,
+      "failed": 0,
+      "observed_points": 72,
+      "pending_points": 0,
+      "suite": "compensation",
+      "unsupported": 0
+    },
+    {
+      "complete": 72,
+      "declared_legal": "72",
+      "declared_points": "108",
+      "evaluation_split": "mixed_development",
+      "excluded": 36,
+      "failed": 0,
+      "observed_points": 108,
+      "pending_points": 0,
+      "suite": "m0",
+      "unsupported": 0
+    },
+    {
+      "complete": 16,
+      "declared_legal": "16",
+      "declared_points": "24",
+      "evaluation_split": "mixed_development",
+      "excluded": 8,
+      "failed": 0,
+      "observed_points": 24,
+      "pending_points": 0,
+      "suite": "m0_baseline",
+      "unsupported": 0
+    },
+    {
+      "complete": 632,
+      "declared_legal": "632",
+      "declared_points": "864",
+      "evaluation_split": "mixed_development",
+      "excluded": 232,
+      "failed": 0,
+      "observed_points": 864,
+      "pending_points": 0,
+      "suite": "main",
+      "unsupported": 0
+    },
+    {
+      "complete": 40,
+      "declared_legal": "40",
+      "declared_points": "48",
+      "evaluation_split": "mixed_development",
+      "excluded": 8,
+      "failed": 0,
+      "observed_points": 48,
+      "pending_points": 0,
+      "suite": "policies",
+      "unsupported": 0
+    },
+    {
+      "complete": 88,
+      "declared_legal": "88",
+      "declared_points": "96",
+      "evaluation_split": "mixed_development",
+      "excluded": 8,
+      "failed": 0,
+      "observed_points": 96,
+      "pending_points": 0,
+      "suite": "sensitivity",
+      "unsupported": 0
+    },
+    {
+      "complete": 3213,
+      "declared_legal": "3213",
+      "declared_points": "4131",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 918,
+      "failed": 0,
+      "observed_points": 4131,
+      "pending_points": 0,
+      "suite": "ablation",
+      "unsupported": 0
+    },
+    {
+      "complete": 252,
+      "declared_legal": "252",
+      "declared_points": "324",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 72,
+      "failed": 0,
+      "observed_points": 324,
+      "pending_points": 0,
+      "suite": "compensation",
+      "unsupported": 0
+    },
+    {
+      "complete": 324,
+      "declared_legal": "324",
+      "declared_points": "486",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 162,
+      "failed": 0,
+      "observed_points": 486,
+      "pending_points": 0,
+      "suite": "m0",
+      "unsupported": 0
+    },
+    {
+      "complete": 72,
+      "declared_legal": "72",
+      "declared_points": "108",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 36,
+      "failed": 0,
+      "observed_points": 108,
+      "pending_points": 0,
+      "suite": "m0_baseline",
+      "unsupported": 0
+    },
+    {
+      "complete": 2844,
+      "declared_legal": "2844",
+      "declared_points": "3888",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 1044,
+      "failed": 0,
+      "observed_points": 3888,
+      "pending_points": 0,
+      "suite": "main",
+      "unsupported": 0
+    },
+    {
+      "complete": 180,
+      "declared_legal": "180",
+      "declared_points": "216",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 36,
+      "failed": 0,
+      "observed_points": 216,
+      "pending_points": 0,
+      "suite": "policies",
+      "unsupported": 0
+    },
+    {
+      "complete": 396,
+      "declared_legal": "396",
+      "declared_points": "432",
+      "evaluation_split": "mixed_heldout",
+      "excluded": 36,
+      "failed": 0,
+      "observed_points": 432,
+      "pending_points": 0,
+      "suite": "sensitivity",
+      "unsupported": 0
+    }
+  ],
+  "frozen_signature": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "input_bundle_sha256": {
+      "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+      "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+    },
+    "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "planner_artifacts_sha256": {
+      "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+      "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+      "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+      "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+    },
+    "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+  },
+  "host_elapsed_seconds": 57104.33890334144,
+  "launcher_sha256": "91d9394625a6cec7f6295ad92ec839db202686d348dbe120e2a2209ae7eb5ea6",
+  "prereg_commit": "073a26d31ce72954b50c72027f877295bf8c4170",
+  "receipts": [
+    {
+      "complete": 36504,
+      "excluded": 1836,
+      "host_elapsed_seconds": 21229.598314557225,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/heldout_all_receipt.json",
+      "points": 38340,
+      "sha256": "e79fe31fc1b5715be5f530b4492962329cfff083f2ad52a2b4cc9b214afe2093",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    },
+    {
+      "complete": 7281,
+      "excluded": 2304,
+      "host_elapsed_seconds": 21808.110909787938,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/mixed_heldout_all_receipt.json",
+      "points": 9585,
+      "sha256": "1f35de6b49ee5cb5bd1cf68473c43cdb07d91b74ab9a85dc330cddf5be53eb33",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    },
+    {
+      "complete": 5469,
+      "excluded": 921,
+      "host_elapsed_seconds": 13636.847992315888,
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/constructed_all_receipt.json",
+      "points": 6390,
+      "sha256": "e2d79917724eaccee693fab61a518cd3570d0c959c56a606472bd037d13647ae",
+      "signature": {
+        "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+        "input_bundle_sha256": {
+          "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+          "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+          "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+          "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+          "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+        },
+        "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+        "physical_format": {
+          "factor_a": "mxint4",
+          "factor_b": "bf16",
+          "main_bits": 4,
+          "rank_lanes": 8,
+          "ranks": {
+            "routed": [
+              32,
+              32,
+              24
+            ],
+            "shared": [
+              32,
+              32,
+              48
+            ]
+          }
+        },
+        "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+        "planner_artifacts_sha256": {
+          "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+          "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+          "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+          "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+        },
+        "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+      }
+    }
+  ],
+  "reporting_amendment_receipt": "/tmp/plena-moe-supply-first-v3-output-20261002/reporting_only_amendment_v10_receipt.json",
+  "reporting_continuation_helper_sha256": "b23ca3c8b27a5209341b01df96398b5f92ebb625123f8ba0072caef87fbe74b8",
+  "status": "complete"
+}

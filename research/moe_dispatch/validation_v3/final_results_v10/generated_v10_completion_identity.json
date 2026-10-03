@@ -1,0 +1,19 @@
+{
+  "D034_amendment_relative": "research/moe_dispatch/validation_v3/postdevelopment_context_amendment_v10.json",
+  "actual_test_binary": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_relative": "tests/repair_freeze_candidate_v10/moe-dispatch-cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+  "campaign_index_relative": "tests/v10_current_campaign_failure_regression_index/receipt.json",
+  "development_launch_receipt_relative": "development_v10_launch_receipt.json",
+  "heldout_authorization_preparation_is_not_authorization": true,
+  "independent_replay_relative": "tests/v10_original_failure_regressions/receipt.json",
+  "numeric_original_directory": "/tmp/plena-timed_numeric_56_v10-temp",
+  "root_pin_is_not_correctness_completion_or_heldout_authorization": true,
+  "root_pin_required_before_any_execution": true,
+  "root_pin_utc": "2026-10-02T10:52:38.315566+00:00",
+  "rust_unit_tests_passed": 88,
+  "schema": "plena_v3_v10_completion_identity_v1",
+  "signature_short": "dcfaacff72cd6fb8",
+  "source_manifest_sha256": "97568c97669ed2d41cb5877ece2bd174ee039688d9a30583baf8e4e5c06dfaab",
+  "status": "pinned_by_root"
+}

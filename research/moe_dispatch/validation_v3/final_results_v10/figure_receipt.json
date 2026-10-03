@@ -1,0 +1,135 @@
+[
+  {
+    "name": "legacy_fit",
+    "note": "Frozen Joint single6 developmental M0 throughput fit; not a measured per-issue serial handshake",
+    "scope": "historical developmental M0; no heldout observations",
+    "status": "generated",
+    "scope_annotation": "output-only correction of inherited global figure scope; underlying plot and data unchanged"
+  },
+  {
+    "name": "organization",
+    "note": "Analytical event simulation; captured decode and constructed workloads labeled separately",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "organization_iso",
+    "note": "Task-specified aggregate supply ports fixed in ISO; private accumulator source ports and demand ports separately charged. Traffic is an energy proxy, not joules.",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "organization_demand",
+    "note": "Task-specified aggregate supply ports fixed in ISO; private accumulator source ports and demand ports separately charged. Traffic is an energy proxy, not joules.",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "legacy_source_sha256": "5d154c09704545b6ef6927f6f01a655e76c289b043e2b00e8e92cc8297c9ec3e",
+    "name": "realization",
+    "note": "Left: M0 old BF16 onchip unchanged, wire-only oracle at six developmental windows. Right: actual OP1 BF16 versus OP2 P2 paired organization/port. Different cohorts and interventions, not a direct one-variable comparison.",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "ablation",
+    "note": "Leave-one mechanism loss; overlapping counters not added",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "stalls",
+    "note": "Exclusive cycles, averaged dense core; not a global additive latency decomposition",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "stalls_historical_vs_v3",
+    "note": "Only identical six B2/B16 development routing windows are paired. Old BF16 M0 repeats in each OP panel; v3 OP0/1 BF16 and OP2 quantized differ in ports/dataflow/precision. Counters use each engine's exclusive classification; not equal instruction semantics or global additive latency.",
+    "paired_v3_points": [
+      "main__joint_test_bfcl_b16_l13_s7__BL4__OP0__iso__default",
+      "main__joint_test_bfcl_b16_l13_s7__BL4__OP1__iso__default",
+      "main__joint_test_bfcl_b16_l13_s7__BL4__OP2__iso__default",
+      "main__joint_test_bfcl_b2_l13_s7__BL4__OP0__iso__default",
+      "main__joint_test_bfcl_b2_l13_s7__BL4__OP1__iso__default",
+      "main__joint_test_bfcl_b2_l13_s7__BL4__OP2__iso__default",
+      "main__joint_test_gpqa_b16_l13_s7__BL4__OP0__iso__default",
+      "main__joint_test_gpqa_b16_l13_s7__BL4__OP1__iso__default",
+      "main__joint_test_gpqa_b16_l13_s7__BL4__OP2__iso__default",
+      "main__joint_test_gpqa_b2_l13_s7__BL4__OP0__iso__default",
+      "main__joint_test_gpqa_b2_l13_s7__BL4__OP1__iso__default",
+      "main__joint_test_gpqa_b2_l13_s7__BL4__OP2__iso__default",
+      "main__joint_test_swe_b16_l13_s7__BL4__OP0__iso__default",
+      "main__joint_test_swe_b16_l13_s7__BL4__OP1__iso__default",
+      "main__joint_test_swe_b16_l13_s7__BL4__OP2__iso__default",
+      "main__joint_test_swe_b2_l13_s7__BL4__OP0__iso__default",
+      "main__joint_test_swe_b2_l13_s7__BL4__OP1__iso__default",
+      "main__joint_test_swe_b2_l13_s7__BL4__OP2__iso__default"
+    ],
+    "paired_window_count": 6,
+    "scope": "Historical/development comparison only; separate from heldout",
+    "sources": {
+      "joint_test_bfcl_b16_l13_s7": "acc1a5d7e48cdd9136392122cd1e488599687dc9f7a8dc5d732c895b571109d3",
+      "joint_test_bfcl_b2_l13_s7": "c76768d88cabbddb16c227d1d2643a9c5bf3bfe682eff9ac552d9bc4b527e6c8",
+      "joint_test_gpqa_b16_l13_s7": "dc753836a9a952f796c8a21031ae461295248cfe912f3776951930c8232a7977",
+      "joint_test_gpqa_b2_l13_s7": "9b824fafb47d13caa15d1e0242875d568da8a1d873e975ff571c990cedac58c7",
+      "joint_test_swe_b16_l13_s7": "14bcc248a82b644f5c5cf03849475ecb11e828808947bc11f28275357cd9cf8c",
+      "joint_test_swe_b2_l13_s7": "bd56058116ea1070cfe5aa0edd1369eb60f0a87196219f20f97156869fdc2739"
+    },
+    "status": "generated"
+  },
+  {
+    "name": "compensation",
+    "note": "Timing modes retain installed rank channels; x-axis shows active dedicated rank arithmetic, not a synthesized area reduction",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "sensitivity",
+    "note": "Bandwidth and response latency remain explicit; credit adjusted by Little law",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "name": "ablation_forward",
+    "note": "Full forward mechanism staircase paired with leave-one results",
+    "scope": "heldout and separately labeled constructed",
+    "status": "generated"
+  },
+  {
+    "candidates": 2178,
+    "coverage_sha256": "c76c7b6cc1388449b1ca6a248577e51f44e060f63c7678b74fef82278d4ae933",
+    "expected_candidates": 2178,
+    "name": "numerical_pareto",
+    "note": "Actual full-validation Q1 candidate scatter, main payload from budget_v3 r=0 plus measured factor bytes; no Q3 window errors, interpolation, or qualification inferred.",
+    "quality_campaign_complete": true,
+    "scope": "Actual full-validation Q1 numerical data. Candidate scatter/Pareto is descriptive, not accuracy qualification or causal N5 evidence.",
+    "source": "/tmp/plena-moe-supply-first-v3-output-20261002/quant/full_numerics/q1_metrics.csv",
+    "source_sha256": "313e173bc29f92b4923229e1baa17929b242c9525673c795cd252781c8e1a5f0",
+    "status": "generated"
+  },
+  {
+    "name": "q3_gate_weighted_vs_uniform",
+    "status": "generated",
+    "scope": "All96 same-requested-budget group comparisons, each full512 real16-token windows. Requested equal budget does not imply equal actual bytes. Scatter visualizes frozen quality thresholds; no new pass/fail or subset selection.",
+    "helper_sha256": "4f64ca7e4c8fadb9052c56dac9a3515783bc3c58d883a8e57880b16b9bbfa822",
+    "source_qualification_sha256": "9c1dd1888bd0ea183ef55067de41b19639b0446c957521fb177914fccdd773f1",
+    "source_csv_sha256": "11c073f33236dcf00697af8a7b09b8a87ffc3c9b7a09e573faa5195ef7896095",
+    "source_receipt_sha256": "bd18909dfe9f8c40629ecd34f8905b55068c20b1c10eae33e27b63e827e6587e",
+    "post_preregistration_output_only": true,
+    "no_new_thresholds": true,
+    "full_actual_hardware_population": 196608
+  },
+  {
+    "name": "q3_frozen_format_error_and_bytes",
+    "status": "generated",
+    "scope": "Fixed physical format and QERA-approx selected before timing heldout; both requested budgets16/32, all layers2/13/26 and all512 windows retained. Actual payload differences shown beside error; diagnostic numerical FFN scope, not model accuracy qualification.",
+    "helper_sha256": "4f64ca7e4c8fadb9052c56dac9a3515783bc3c58d883a8e57880b16b9bbfa822",
+    "source_qualification_sha256": "9c1dd1888bd0ea183ef55067de41b19639b0446c957521fb177914fccdd773f1",
+    "source_csv_sha256": "11c073f33236dcf00697af8a7b09b8a87ffc3c9b7a09e573faa5195ef7896095",
+    "source_receipt_sha256": "bd18909dfe9f8c40629ecd34f8905b55068c20b1c10eae33e27b63e827e6587e",
+    "post_preregistration_output_only": true,
+    "no_new_thresholds": true,
+    "full_actual_hardware_population": 196608
+  }
+]

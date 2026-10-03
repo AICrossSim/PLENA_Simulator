@@ -1,6 +1,59 @@
 {
   "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
   "compiler_commit": "480d558c72f8fce19572b2408eb02a1ae52c40eb",
+  "current_final_evidence": [
+    {
+      "bytes": 18786,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/final_pipeline_receipt.json",
+      "sha256": "464b11df7df18f5051436d01542e6bfdc9a117f60f9dc42ab5e24bf007b3df00",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/final_pipeline_receipt.json"
+    },
+    {
+      "bytes": 1772,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/heldout_all_receipt.json",
+      "sha256": "e79fe31fc1b5715be5f530b4492962329cfff083f2ad52a2b4cc9b214afe2093",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/heldout_all_receipt.json"
+    },
+    {
+      "bytes": 1770,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/mixed_heldout_all_receipt.json",
+      "sha256": "1f35de6b49ee5cb5bd1cf68473c43cdb07d91b74ab9a85dc330cddf5be53eb33",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/mixed_heldout_all_receipt.json"
+    },
+    {
+      "bytes": 1769,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/constructed_all_receipt.json",
+      "sha256": "e2d79917724eaccee693fab61a518cd3570d0c959c56a606472bd037d13647ae",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/constructed_all_receipt.json"
+    },
+    {
+      "bytes": 3743,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/heldout_authorization.json",
+      "sha256": "541e6995d7d41775c35855ddf96a2780f498d483f3d578fa249faa1d67597ea8",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/heldout_authorization.json"
+    },
+    {
+      "bytes": 29655,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/v10_current_campaign_failure_regression_index/receipt.json",
+      "sha256": "927a31c7a474df4b3c98254eaa9013f699f1f4827402b855b299af4516f24013",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/tests__v10_current_campaign_failure_regression_index__receipt.json"
+    },
+    {
+      "bytes": 74271,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/v10_original_failure_regressions/receipt.json",
+      "sha256": "931715a2f70e9e9d962a95fca3912fe4a775540326a83b337331b9221b787842",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/tests__v10_original_failure_regressions__receipt.json"
+    },
+    {
+      "bytes": 42639,
+      "original": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/outputs/moe_supply_first_v3/tests/timed_numeric_56_v10_originals_archive_receipt.json",
+      "sha256": "e74580af87d8a30da0ff16032cc81af53a30bbb6e94b081abcfb8d905929d3e4",
+      "versioned": "research/moe_dispatch/validation_v3/current_campaign_v10/tests__timed_numeric_56_v10_originals_archive_receipt.json"
+    }
+  ],
+  "final_legal_points": 55012,
+  "final_pipeline_receipt_sha256": "464b11df7df18f5051436d01542e6bfdc9a117f60f9dc42ab5e24bf007b3df00",
+  "final_raw_runs": 110024,
   "historical_v9_validation_index": {
     "path": "research/moe_dispatch/validation_v3/engine_validation_index_v9_historical.json",
     "sha256": "86bc2acfef55069daf56afb1ad86cf76c837e0d28cb7ce795898c861485a2cd1"
@@ -55,5 +108,5 @@
     }
   },
   "schema": "plena_supply_v3_engine_validation_index_v10",
-  "scope": "D034 correctness validated with new immutable binary; all new development and full final matrix still pending"
+  "scope": "Complete fresh v10 development and final declared population; old histories retained without result mixing"
 }

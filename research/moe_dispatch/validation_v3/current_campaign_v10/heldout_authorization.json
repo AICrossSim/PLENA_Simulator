@@ -1,0 +1,72 @@
+{
+  "authorized": true,
+  "created_unix": 1790946081.7570865,
+  "frozen_signature": {
+    "binary_sha256": "cb86a53a63bd15acbd027da4941f8fa496e1dfe4eb3f16e71f167ccf2aa057d5",
+    "input_bundle_sha256": {
+      "constructed": "410ae98d81d3cd87f34a2cae3b59aba7d5855346e3ef80976b46cb4980268c9e",
+      "development": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+      "heldout": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+      "mixed_development": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+      "mixed_heldout": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+    },
+    "manifest_sha256": "234cdbf921b4ce029f8a63abe7f0851d4d729269e225bc5c2b70bff960eb369c",
+    "physical_format": {
+      "factor_a": "mxint4",
+      "factor_b": "bf16",
+      "main_bits": 4,
+      "rank_lanes": 8,
+      "ranks": {
+        "routed": [
+          32,
+          32,
+          24
+        ],
+        "shared": [
+          32,
+          32,
+          48
+        ]
+      }
+    },
+    "physical_format_sha256": "d38b472f954f9dee23881b0c37549f3c1c21736347f3c358bbd466fbef5c54e1",
+    "planner_artifacts_sha256": {
+      "compiler.py": "34faf30584318ca4eff0aeed0779ecf37637777934d804099821c335412b0a77",
+      "frontend.py": "d12e7371c5b23ebfb70ffdc30487605c5f055d78ee70ddfe039be14fef2a3780",
+      "legacy_chunks.py": "6b21b10aa643c1dd8b1abac62273811c8bf4a85f85afb6ef309fbbb3d5b5cafd",
+      "legacy_frozen_designs.json": "e09bb81a161e2f036105ee6fa126a18aa35d48e6c8082c84ce0d08fda8ed55cd"
+    },
+    "study_sha256": "63373147e3bc4846aa95462929447d5ce8a58d04fdf48d083bfb011d10a9558a"
+  },
+  "postheldout_protocol_disclosure": {
+    "D034_failure_sha256": "a3719a05918a4d92c8cd0253052e3431e3bdad38ab7aa57e6814db278d0ae39d",
+    "D034_history_manifest_sha256": "81d83208b2cb2c48d8a2de3268cb05479489cc42a9b86aedf21b3a5c5dd18edf",
+    "acceptance_thresholds_hardware_format_and_matrix_unchanged": true,
+    "amendments": [
+      {
+        "path": "research/moe_dispatch/validation_v3/postheldout_correctness_amendment_v8.json",
+        "sha256": "3501f0877e41e37c40acecc3067faf842db6072c6b0c39d9a7d17258ea01b083"
+      },
+      {
+        "path": "research/moe_dispatch/validation_v3/postheldout_capacity_amendment_v9.json",
+        "sha256": "8e60c2e5590bc617529a4ebf9f2858960d724e181e0239ef77a67333becd85a7"
+      },
+      {
+        "path": "research/moe_dispatch/validation_v3/postdevelopment_context_amendment_v10.json",
+        "sha256": "0d9734724e8019cc28730e0d56b6ce39d62300d8d08efa8cf598165472f71275"
+      }
+    ],
+    "current_campaign_not_pristine_unseen_holdout": true,
+    "legacy_capacity_extension": "Only originally infeasible large legacy windows use capacity-derived serial token chunks. All global X/Y/routes stay resident; original kernels, physical budgets, actual weight refetches and setup are charged. This is an explicit changed baseline execution extension; supported small windows retain original raw reports byte-exact.",
+    "new_v9_heldout_authorized": false,
+    "new_v9_heldout_executed": false,
+    "no_old_binary_timing_mixed": true,
+    "original_prereg_commit": "f6c9c5e91b68072fddd3db3975bfc66f44f1b7c9",
+    "prior_architectural_heldout_exposure": true,
+    "v9_failed_in_development": true
+  },
+  "prereg_commit": "073a26d31ce72954b50c72027f877295bf8c4170",
+  "prereg_manifest_sha256": "ceff70a1c63615bd40f4e1b8711d008a542bd7bab9f0a3e06926e648b97ba2f1",
+  "quality_receipt_sha256": "73050cb77f5bc98bbfe8133d1652c3658ceff5025151f4c925db570ae2bb0c61",
+  "scope": "Entire frozen analytical architectural evaluation matrix; no tuning or point removal; D032/v7 exposure and D033/D034 failures explicitly disclosed; no v9 heldout was authorized"
+}
