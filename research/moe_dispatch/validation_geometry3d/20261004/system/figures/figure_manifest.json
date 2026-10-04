@@ -1,0 +1,26 @@
+{
+  "figures": [
+    "/tmp/plena-geometry3d-20261004-v6/figures/fullspace_development_and_timing.png",
+    "/tmp/plena-geometry3d-20261004-v6/figures/fullspace_development_and_timing.pdf",
+    "/tmp/plena-geometry3d-20261004-v6/figures/heldout_batch_selected_vs_fixed.png",
+    "/tmp/plena-geometry3d-20261004-v6/figures/heldout_batch_selected_vs_fixed.pdf"
+  ],
+  "metrics": {
+    "development": "development_total_ms under primary screening settings",
+    "heldout": "total_ms/layers per recorded batch",
+    "timing": "total_ms for frozen selected families across recorded hypotheses"
+  },
+  "not_claimed": [
+    "area Pareto frontier",
+    "PPA",
+    "silicon measurements",
+    "physical frequency validation"
+  ],
+  "scope": "Analytical / prospective / hypothetical 1 GHz",
+  "source_sha256": {
+    "FROZEN_SELECTION.json": "438e8a46b33db89da99134ccd1662ac804e3c1dd8169d724ab2984778bf6adcc",
+    "all_geometry_development.csv": "2a71d59994925617b39e89d76ef687d85fdc85507f65f75e94221816ec3bc367",
+    "heldout_summary.csv": "55beb65805c6c93f4f4c58643452a0a5d1fff053bde658ea359393d32dedca2f",
+    "timing_sensitivity.csv": "da517bf927355f0fab860752f9e1f699946db1371850bd1f8cba53665774ce02"
+  }
+}

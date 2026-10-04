@@ -1,0 +1,141 @@
+{
+  "allocation_dataflow_search": "top four primary candidates per family only; not joint global optimum",
+  "compute_selected": {
+    "selected_heterogeneous": {
+      "X_sram_GiB": "1.1792542934417725",
+      "batch": "all",
+      "geometry": "4x2x32+8x47x32",
+      "hbm_GiB": "98.806640625",
+      "hbm_reload_ratio": "1.4099793055874914",
+      "label": "selected_heterogeneous",
+      "layers": "135",
+      "p95_layer_ms": "1.299475",
+      "spatial_utilization": "0.5559324604281478",
+      "total_ms": "49.824023",
+      "wall_mac_utilization": "0.38455473577474864"
+    },
+    "selected_homogeneous": {
+      "X_sram_GiB": "1.8233528137207031",
+      "batch": "all",
+      "geometry": "8x24x32+8x24x32",
+      "hbm_GiB": "98.806640625",
+      "hbm_reload_ratio": "1.4099793055874914",
+      "label": "selected_homogeneous",
+      "layers": "135",
+      "p95_layer_ms": "1.449093",
+      "spatial_utilization": "0.551270772711014",
+      "total_ms": "52.199002",
+      "wall_mac_utilization": "0.3670580521826835"
+    },
+    "selected_single": {
+      "X_sram_GiB": "1.6862125396728516",
+      "batch": "all",
+      "geometry": "3x128x32",
+      "hbm_GiB": "74.3466796875",
+      "hbm_reload_ratio": "1.0609335479420556",
+      "label": "selected_single",
+      "layers": "135",
+      "p95_layer_ms": "1.260916",
+      "spatial_utilization": "0.8232304900181489",
+      "total_ms": "48.35812",
+      "wall_mac_utilization": "0.39621192883428885"
+    },
+    "selected_unequal_PK": {
+      "X_sram_GiB": "2.7625513076782227",
+      "batch": "all",
+      "geometry": "1x4x64+8x47x32",
+      "hbm_GiB": "70.748046875",
+      "hbm_reload_ratio": "1.0095807465317697",
+      "label": "selected_unequal_PK",
+      "layers": "135",
+      "p95_layer_ms": "1.28872",
+      "spatial_utilization": "0.5558063326184426",
+      "total_ms": "49.64739",
+      "wall_mac_utilization": "0.38592288537222197"
+    }
+  },
+  "declared_geometries": 16763,
+  "development_layers": 18,
+  "domain": {
+    "PK": [
+      32,
+      64,
+      128,
+      256,
+      512,
+      1024
+    ],
+    "PM": [
+      1,
+      16
+    ],
+    "PN": [
+      1,
+      192
+    ]
+  },
+  "excluded_primary": 1656,
+  "geometry_order": "PM x PN x PK",
+  "geometry_search_exhaustive_in_declared_domain": true,
+  "heldout_layers": 135,
+  "heterogeneous_time_increase_vs_single_percent": 3.486688930271842,
+  "heterogeneous_time_reduction_vs_homogeneous_percent": 4.258022605552581,
+  "historically_exposed_heldout": true,
+  "installed_bytes": 2158592,
+  "interpretation": {
+    "bottleneck": "Native HBM disable produces largest single-resource improvement; no additive wall-clock attribution to overlapping service counters.",
+    "me4_me2_toy": "4+2 needs112cycles vs224 for fixed6 and3+3 under finite8 ideal operands; supports restricted shape-match mechanism",
+    "overall_supply": "Selected heterogeneous beats selected homogeneous by4.26percent but does not beat selected single.",
+    "physical_best": "Not established; native timing, physical bank conflicts, RTL/PPA, actual clock and trained-model numerical quality remain unvalidated.",
+    "small_batches": "B2/B4/B8 heterogeneity wins by only about0.03percent in this approximation; cannot claim a material physical benefit."
+  },
+  "legal_primary": 15107,
+  "main_multipliers": 12288,
+  "primary_supply_selected": {
+    "selected_heterogeneous": {
+      "X_sram_GiB": "6.135509490966797",
+      "batch": "all",
+      "geometry": "2x23x32+13x13x64",
+      "hbm_GiB": "71.23681640625",
+      "hbm_reload_ratio": "1.0165555300068982",
+      "label": "selected_heterogeneous",
+      "layers": "135",
+      "p95_layer_ms": "10.986138306679992",
+      "spatial_utilization": "0.437231541601388",
+      "total_ms": "638.7946387371065",
+      "wall_mac_utilization": "0.02999409017877692"
+    },
+    "selected_homogeneous": {
+      "X_sram_GiB": "8.937667846679688",
+      "batch": "all",
+      "geometry": "6x16x64+6x16x64",
+      "hbm_GiB": "72.7353515625",
+      "hbm_reload_ratio": "1.0379397562658081",
+      "label": "selected_homogeneous",
+      "layers": "135",
+      "p95_layer_ms": "11.742230423747754",
+      "spatial_utilization": "0.6370786516853932",
+      "total_ms": "667.2043508202637",
+      "wall_mac_utilization": "0.028716935038634775"
+    },
+    "selected_single": {
+      "X_sram_GiB": "9.108367919921875",
+      "batch": "all",
+      "geometry": "6x16x128",
+      "hbm_GiB": "71.865234375",
+      "hbm_reload_ratio": "1.0255231087606347",
+      "label": "selected_single",
+      "layers": "135",
+      "p95_layer_ms": "10.032306666666667",
+      "spatial_utilization": "0.6370786516853932",
+      "total_ms": "617.2722746666667",
+      "wall_mac_utilization": "0.03103989080077609"
+    }
+  },
+  "repeats": 2,
+  "schema": "plena_geometry3d_analytical_conclusions_v6",
+  "scope": "prospective analytical fluid model, hypothetical common 1GHz; not native Rust/Ramulator/RTL/silicon/full-model inference",
+  "single_ideal_HBM_time_reduction_percent": 55.08422489631728,
+  "single_zero_control_time_reduction_percent": 0.0027307236517448708,
+  "unit_tests_passed": 51
+}

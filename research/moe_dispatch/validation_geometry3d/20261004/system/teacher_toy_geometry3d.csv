@@ -1,0 +1,4 @@
+label,geometry,main_multipliers,M_experts,N,K,M_waves_per_expert,groups_per_expert,cycles_per_expert,core_finish_cycles,cycles,estimated_latency_ms_at_1ghz,issues,useful_macs,issued_macs,padding_macs,spatial_utilization,wall_mac_utilization,oracle_verified
+fixed_6,6x4x512,12288,"[4, 2]",128,512,"[1, 1]","[4, 4]","[112, 112]",[224],224,0.000224,64,393216,786432,393216,0.5,0.14285714285714285,True
+fixed_3+3,3x4x512+3x4x512,12288,"[4, 2]",128,512,"[2, 1]","[8, 4]","[224, 112]","[224, 112]",224,0.000224,96,393216,589824,196608,0.6666666666666666,0.14285714285714285,True
+fixed_4+2,2x4x512+4x4x512,12288,"[4, 2]",128,512,"[1, 1]","[4, 4]","[112, 112]","[112, 112]",112,0.000112,64,393216,393216,0,1.0,0.2857142857142857,True

@@ -1,0 +1,11 @@
+{
+  "all_member_hashes_verified": true,
+  "archive": "/scratch/shared/mcl123/plena/final_artifacts/moe_geometry3d_20261004_v6/moe_geometry3d_20261004_v6.tar.gz",
+  "branch": "research/moe-supply-first-v3",
+  "bytes": 10590426,
+  "compiler_pinned_commit": "480d558c72f8fce19572b2408eb02a1ae52c40eb",
+  "payload_files": 74,
+  "sha256": "74e03eaad78be24b5a5819fee4c17e8984a1b46c064876ff937e236a02e9e07d",
+  "simulator_parent_commit": "4b9f7a2c51c27be694bfe2c2d95db35851e63866",
+  "timing_source_frozen": true
+}

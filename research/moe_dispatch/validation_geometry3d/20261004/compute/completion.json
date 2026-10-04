@@ -1,0 +1,27 @@
+{
+  "complete": true,
+  "frozen_selection_sha256": "a3396e916e0e50241fd67bbf92c48b2980f57adb1c066278c2fdccf88821e73a",
+  "heldout_hashes": {
+    "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+    "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+  },
+  "heldout_layers": 135,
+  "repeats": 2,
+  "scope": "prospective 3D analytical fluid DSE, not native Rust/Ramulator/RTL",
+  "source_hashes": {
+    "__init__.py": "ec1cdf4f951a8250943c689f7f3155396d89de23c84ce31762222cc37fe23fc2",
+    "compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "figures.py": "4d2c28f3f980bf4c2e39533afdbf49c498c47da19c537df66f7926ef8124d11c",
+    "memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+    "model.py": "16818817148a0d4dc601229983c36751898d05576a402d7273ef557775d2f725",
+    "numerical.py": "6a892421d03ab76a2bcc7a25b467f7f43a3d54110fc2cdadbe9e7d354d132557",
+    "report.py": "1a6d1c41fb44978f6587fa898c300930478f03099e0f472a22db3717372e3235",
+    "study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+    "test_compute.py": "fffad6ccfa068ebd1cb62fea0a8feec36b130920e303a9c171330fe22ed11097",
+    "test_memory.py": "4e97072ec1bf47b820ef9dec68a0af2fc927ad518966f79c932e231e65e65e63",
+    "test_model.py": "355223ee2fc7177f9edf3760af13e0d6ccfbf28cbe00f1af02a662b7b9e8c38b",
+    "test_numerical.py": "d97b515a769b3e011d54d9b754021a4b9dddad416bc2e8b772ec669a23f25586",
+    "test_toy.py": "1052bbed6843a8f811e67121a388e487768c432cf3473bc4519c1ad481b42b9c",
+    "toy.py": "f57cc288c65a2e52375a3226f499e94dbbbd12d828c7f3b847c446cfeffa01fb"
+  }
+}

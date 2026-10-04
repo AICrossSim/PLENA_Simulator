@@ -1,0 +1,6 @@
+{
+  "identical_core_threshold_equalities": 5,
+  "no_spare_native_tail_occupancy": 9,
+  "single_owner_estimator_equalities": 48,
+  "spare_native_wire_window": 4
+}

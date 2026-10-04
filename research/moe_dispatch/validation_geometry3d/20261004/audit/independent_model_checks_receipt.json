@@ -1,0 +1,9 @@
+{
+  "capacity_rejections": 1656,
+  "core_shapes_checked": 2341,
+  "geometries": 16763,
+  "phases_checked": 58800,
+  "shared_rate_cases": 500,
+  "tail_toy_cycles": 465.02083333333337,
+  "tail_toy_native_bytes": 4224
+}

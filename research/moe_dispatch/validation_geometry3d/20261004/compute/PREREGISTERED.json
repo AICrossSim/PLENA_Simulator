@@ -1,0 +1,238 @@
+{
+  "clock": "hypothetical 1GHz; estimated cycles/1e6 = ms",
+  "compute_only": true,
+  "counts": {
+    "dual": 16719,
+    "heterogeneous": 16678,
+    "heterogeneous_same_pk": 4662,
+    "heterogeneous_unequal_pk": 12016,
+    "homogeneous": 41,
+    "single": 44,
+    "total": 16763
+  },
+  "development_hashes": {
+    "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55"
+  },
+  "domain": {
+    "PK": [
+      32,
+      64,
+      128,
+      256,
+      512,
+      1024
+    ],
+    "PM": [
+      1,
+      16
+    ],
+    "PN": [
+      1,
+      192
+    ]
+  },
+  "execution_boundary": "routed expert lists/X available, zero combined-Y explicitly charged; cold weights each layer; excludes Router/attention/full generation",
+  "heldout_warning": "historically exposed v3/RoundA captures; split respected for this selection but not a pristine blind dataset",
+  "installed_SRAM_bytes": 2158592,
+  "main_multiplier_budget": 12288,
+  "native_layout": "BF16 W[N,K], per-row32B stride; no zero-padding HBM transfers",
+  "not_claimed": [
+    "measured silicon frequency",
+    "equal area",
+    "PPA",
+    "full model E2E",
+    "hardware global optimum",
+    "guaranteed heterogeneity speedup"
+  ],
+  "numeric": "physical PK tree changes grouping; tolerance/reference evidence, not cross-PK bitexact or pretrained accuracy",
+  "primary_settings": {
+    "allocation": "proportional",
+    "control": false,
+    "fabric": {
+      "accumulator_banks": 12,
+      "control_bytes": 16384,
+      "hbm_bytes_per_cycle": 256,
+      "hbm_credits": 256,
+      "hbm_latency_cycles": 64,
+      "ingress_bytes": 8192,
+      "landing_bytes_per_cycle": 256,
+      "landing_pool_bytes": 40960,
+      "w_banks": 64,
+      "x_banks": 24
+    },
+    "flow": "bounded_ws",
+    "hbm": false,
+    "ports": false,
+    "prefetch_slots": 32,
+    "records": 8,
+    "timing": {
+      "commit_cycles": 1,
+      "hypothesis": "Ldot(PK)=20-2*log2(512/PK); PK512 anchor only; no physical validation",
+      "initiation_interval": 1,
+      "latency_by_pk": [
+        [
+          32,
+          12
+        ],
+        [
+          64,
+          14
+        ],
+        [
+          128,
+          16
+        ],
+        [
+          256,
+          18
+        ],
+        [
+          512,
+          20
+        ],
+        [
+          1024,
+          22
+        ]
+      ],
+      "name": "log2_stage2"
+    }
+  },
+  "resource_model": "finite grouped FP32 outputs/pairedGU/Zchunks, installed private quotas and banks, shared credits/ingress; fluid service overlap approximates native scheduling",
+  "runtime_search": "after geometry selection: EFT, idle, RR, thresholds1/2/4/8/16, prefetch slots2/6/32 on development only",
+  "scope": "prospective 3D analytical fluid DSE, not native Rust/Ramulator/RTL",
+  "secondary_search": "top 4 development designs per family, equal/proportional allocation, bounded WS/OS; no claim of exhaustive allocation/dataflow optimum",
+  "selection": "nominal fullspace development score, Round B refine finalists, freeze hardware, then development runtime tune, then heldout",
+  "timing_profiles": {
+    "conservative_flat20": {
+      "commit_cycles": 1,
+      "hypothesis": "all PK retain inherited 20-cycle dot; conservative sensitivity, unvalidated",
+      "initiation_interval": 1,
+      "latency_by_pk": [
+        [
+          32,
+          20
+        ],
+        [
+          64,
+          20
+        ],
+        [
+          128,
+          20
+        ],
+        [
+          256,
+          20
+        ],
+        [
+          512,
+          20
+        ],
+        [
+          1024,
+          20
+        ]
+      ],
+      "name": "conservative_flat20"
+    },
+    "log2_stage1": {
+      "commit_cycles": 1,
+      "hypothesis": "Ldot(PK)=20-1*log2(512/PK); PK512 anchor only; no physical validation",
+      "initiation_interval": 1,
+      "latency_by_pk": [
+        [
+          32,
+          16
+        ],
+        [
+          64,
+          17
+        ],
+        [
+          128,
+          18
+        ],
+        [
+          256,
+          19
+        ],
+        [
+          512,
+          20
+        ],
+        [
+          1024,
+          21
+        ]
+      ],
+      "name": "log2_stage1"
+    },
+    "log2_stage2": {
+      "commit_cycles": 1,
+      "hypothesis": "Ldot(PK)=20-2*log2(512/PK); PK512 anchor only; no physical validation",
+      "initiation_interval": 1,
+      "latency_by_pk": [
+        [
+          32,
+          12
+        ],
+        [
+          64,
+          14
+        ],
+        [
+          128,
+          16
+        ],
+        [
+          256,
+          18
+        ],
+        [
+          512,
+          20
+        ],
+        [
+          1024,
+          22
+        ]
+      ],
+      "name": "log2_stage2"
+    },
+    "log2_stage4": {
+      "commit_cycles": 1,
+      "hypothesis": "Ldot(PK)=20-4*log2(512/PK); PK512 anchor only; no physical validation",
+      "initiation_interval": 1,
+      "latency_by_pk": [
+        [
+          32,
+          4
+        ],
+        [
+          64,
+          8
+        ],
+        [
+          128,
+          12
+        ],
+        [
+          256,
+          16
+        ],
+        [
+          512,
+          20
+        ],
+        [
+          1024,
+          24
+        ]
+      ],
+      "name": "log2_stage4"
+    }
+  },
+  "timing_sensitivity": "four explicit PK latency hypotheses, frozen selected hardware; not fullspace reranking"
+}

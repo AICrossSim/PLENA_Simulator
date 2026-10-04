@@ -1,0 +1,101 @@
+{
+  "contract_sha256": "79eb6ae988922c126c9c4fceec21330c967f2958a9589bd334943267f79a7814",
+  "excluded_geometries": 1656,
+  "legal_geometries": 15107,
+  "points": [
+    {
+      "X_sram_GiB": 0.35400390625,
+      "allocation": "equal",
+      "development_selected_ms": 8.310837,
+      "family": "single",
+      "flow": "bounded_ws",
+      "geometry": "3x128x32",
+      "hbm_GiB": 11.4404296875,
+      "hbm_reload_ratio": 1.1181102362204725,
+      "label": "selected_single",
+      "layers": 18,
+      "p95_layer_ms": 1.285462,
+      "policy": "eft",
+      "prefetch_slots": 6,
+      "spatial_utilization": 0.8753080335140463,
+      "total_ms": 8.310837,
+      "wall_mac_utilization": 0.4513278265474344
+    },
+    {
+      "X_sram_GiB": 0.3569526672363281,
+      "allocation": "equal",
+      "development_selected_ms": 9.079593,
+      "family": "homogeneous",
+      "flow": "bounded_os",
+      "geometry": "8x24x32+8x24x32",
+      "hbm_GiB": 16.64501953125,
+      "hbm_reload_ratio": 1.626771653543307,
+      "label": "selected_homogeneous",
+      "layers": 18,
+      "p95_layer_ms": 1.446753,
+      "policy": "eft",
+      "prefetch_slots": 32,
+      "spatial_utilization": 0.6406291737517259,
+      "total_ms": 9.079593,
+      "wall_mac_utilization": 0.4131145526016419
+    },
+    {
+      "X_sram_GiB": 0.23262691497802734,
+      "allocation": "proportional",
+      "development_selected_ms": 8.473045,
+      "family": "heterogeneous",
+      "flow": "bounded_os",
+      "geometry": "4x2x32+8x47x32",
+      "hbm_GiB": 16.64501953125,
+      "hbm_reload_ratio": 1.626771653543307,
+      "label": "selected_heterogeneous",
+      "layers": 18,
+      "p95_layer_ms": 1.299085,
+      "policy": "eft",
+      "prefetch_slots": 32,
+      "spatial_utilization": 0.6464249471999228,
+      "total_ms": 8.473045,
+      "wall_mac_utilization": 0.4426876052233878
+    },
+    {
+      "allocation": "proportional",
+      "development_selected_ms": 14.523792,
+      "family": "single",
+      "flow": "bounded_ws",
+      "geometry": "6x4x512",
+      "label": "fixed_6",
+      "policy": "eft",
+      "prefetch_slots": 32
+    },
+    {
+      "allocation": "proportional",
+      "development_selected_ms": 16.33532,
+      "family": "homogeneous",
+      "flow": "bounded_ws",
+      "geometry": "3x4x512+3x4x512",
+      "label": "fixed_3+3",
+      "policy": "eft",
+      "prefetch_slots": 6
+    },
+    {
+      "allocation": "proportional",
+      "development_selected_ms": 16.913031,
+      "family": "heterogeneous",
+      "flow": "bounded_ws",
+      "geometry": "2x4x512+4x4x512",
+      "label": "fixed_4+2",
+      "policy": "eft",
+      "prefetch_slots": 6
+    },
+    {
+      "allocation": "proportional",
+      "development_selected_ms": 8.541748,
+      "family": "heterogeneous",
+      "flow": "bounded_ws",
+      "geometry": "1x4x64+8x47x32",
+      "label": "selected_unequal_PK",
+      "policy": "eft",
+      "prefetch_slots": 32
+    }
+  ]
+}

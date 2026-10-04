@@ -1,0 +1,9 @@
+{
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "numpy": "2.4.6",
+  "matplotlib": "3.11.0",
+  "pytest": "9.1.1",
+  "interpreter": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "simulator_parent_commit": "4b9f7a2c51c27be694bfe2c2d95db35851e63866",
+  "compiler_pinned_commit": "480d558c72f8fce19572b2408eb02a1ae52c40eb"
+}

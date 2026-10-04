@@ -1,0 +1,465 @@
+{
+  "counterexample": {
+    "fp32_outputs_by_pk": {
+      "1024": 0.0,
+      "128": 0.0,
+      "256": 0.0,
+      "32": -1.0,
+      "512": 0.0,
+      "64": 0.0
+    },
+    "fp64_reference": 0.0,
+    "nonzero_w_indices": [
+      0,
+      32,
+      64,
+      96
+    ],
+    "nonzero_w_values": [
+      16777216,
+      1,
+      -16777216,
+      -1
+    ],
+    "shape_mnk": [
+      1,
+      1,
+      97
+    ],
+    "x": "all ones"
+  },
+  "limitations": [
+    "No numerical claim about trained-model task quality",
+    "No functional payload replay of the supply timeline",
+    "No guarantee about fused MAC or physical RTL rounding"
+  ],
+  "precision": "BF16 RNE inputs/weights; separate FP32 multiply and addition",
+  "random_matrix_cases": [
+    {
+      "physical_pm_pn": [
+        2,
+        3
+      ],
+      "results_by_pk": [
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 0.030720233917236328,
+            "max_error_scaled_by_max1_abs_reference": 0.0034993242328864842,
+            "mean_absolute_error": 0.008813700576623281,
+            "relative_l2_error": 0.001255423365643182,
+            "rmse": 0.012172934327757295
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 1.9073486328125e-06,
+            "max_error_scaled_by_max1_abs_reference": 2.980232238769531e-07,
+            "mean_absolute_error": 4.455447196960449e-07,
+            "relative_l2_error": 6.590818602671514e-08,
+            "rmse": 6.390641134465263e-07
+          },
+          "pk": 32
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 0.030720233917236328,
+            "max_error_scaled_by_max1_abs_reference": 0.0034993242328864842,
+            "mean_absolute_error": 0.008813700576623281,
+            "relative_l2_error": 0.001255423365643182,
+            "rmse": 0.012172934327757295
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 1.9073486328125e-06,
+            "max_error_scaled_by_max1_abs_reference": 2.980232238769531e-07,
+            "mean_absolute_error": 4.455447196960449e-07,
+            "relative_l2_error": 6.590818602671514e-08,
+            "rmse": 6.390641134465263e-07
+          },
+          "pk": 64
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 0.030720233917236328,
+            "max_error_scaled_by_max1_abs_reference": 0.0034993242328864842,
+            "mean_absolute_error": 0.008813700576623281,
+            "relative_l2_error": 0.001255423365643182,
+            "rmse": 0.012172934327757295
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 1.9073486328125e-06,
+            "max_error_scaled_by_max1_abs_reference": 2.980232238769531e-07,
+            "mean_absolute_error": 4.455447196960449e-07,
+            "relative_l2_error": 6.590818602671514e-08,
+            "rmse": 6.390641134465263e-07
+          },
+          "pk": 128
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 0.030720233917236328,
+            "max_error_scaled_by_max1_abs_reference": 0.0034993242328864842,
+            "mean_absolute_error": 0.008813700576623281,
+            "relative_l2_error": 0.001255423365643182,
+            "rmse": 0.012172934327757295
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 1.9073486328125e-06,
+            "max_error_scaled_by_max1_abs_reference": 2.980232238769531e-07,
+            "mean_absolute_error": 4.455447196960449e-07,
+            "relative_l2_error": 6.590818602671514e-08,
+            "rmse": 6.390641134465263e-07
+          },
+          "pk": 256
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 0.030720233917236328,
+            "max_error_scaled_by_max1_abs_reference": 0.0034993242328864842,
+            "mean_absolute_error": 0.008813700576623281,
+            "relative_l2_error": 0.001255423365643182,
+            "rmse": 0.012172934327757295
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 1.9073486328125e-06,
+            "max_error_scaled_by_max1_abs_reference": 2.980232238769531e-07,
+            "mean_absolute_error": 4.455447196960449e-07,
+            "relative_l2_error": 6.590818602671514e-08,
+            "rmse": 6.390641134465263e-07
+          },
+          "pk": 512
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 0.030720233917236328,
+            "max_error_scaled_by_max1_abs_reference": 0.0034993242328864842,
+            "mean_absolute_error": 0.008813700576623281,
+            "relative_l2_error": 0.001255423365643182,
+            "rmse": 0.012172934327757295
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 15,
+            "max_absolute_error": 1.9073486328125e-06,
+            "max_error_scaled_by_max1_abs_reference": 2.980232238769531e-07,
+            "mean_absolute_error": 4.455447196960449e-07,
+            "relative_l2_error": 6.590818602671514e-08,
+            "rmse": 6.390641134465263e-07
+          },
+          "pk": 1024
+        }
+      ],
+      "shape_mnk": [
+        3,
+        5,
+        79
+      ],
+      "useful_macs": 1185
+    },
+    {
+      "physical_pm_pn": [
+        2,
+        3
+      ],
+      "results_by_pk": [
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 0.2206549197435379,
+            "max_error_scaled_by_max1_abs_reference": 0.003305640230504777,
+            "mean_absolute_error": 0.03619646720056023,
+            "relative_l2_error": 0.001887956162822454,
+            "rmse": 0.05424627263910235
+          },
+          "fp32_different_bits_vs_pk512": 15,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 4.291534423828125e-06,
+            "max_error_scaled_by_max1_abs_reference": 7.382215906326391e-07,
+            "mean_absolute_error": 1.5520357659884861e-06,
+            "relative_l2_error": 6.484991059196846e-08,
+            "rmse": 1.863319710418593e-06
+          },
+          "pk": 32
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 0.2206549197435379,
+            "max_error_scaled_by_max1_abs_reference": 0.003305640230504777,
+            "mean_absolute_error": 0.03619646720056023,
+            "relative_l2_error": 0.001887956162822454,
+            "rmse": 0.05424627263910235
+          },
+          "fp32_different_bits_vs_pk512": 6,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 3.777444362640381e-06,
+            "max_error_scaled_by_max1_abs_reference": 7.382215906326391e-07,
+            "mean_absolute_error": 1.4755608780043466e-06,
+            "relative_l2_error": 6.233548210676887e-08,
+            "rmse": 1.791073131909191e-06
+          },
+          "pk": 64
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 0.2206549197435379,
+            "max_error_scaled_by_max1_abs_reference": 0.003305640230504777,
+            "mean_absolute_error": 0.03619646720056023,
+            "relative_l2_error": 0.001887956162822454,
+            "rmse": 0.05424627263910235
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 3.337860107421875e-06,
+            "max_error_scaled_by_max1_abs_reference": 7.382215906326391e-07,
+            "mean_absolute_error": 1.2963211962154934e-06,
+            "relative_l2_error": 5.82909782833651e-08,
+            "rmse": 1.6748632000184759e-06
+          },
+          "pk": 128
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 0.2206549197435379,
+            "max_error_scaled_by_max1_abs_reference": 0.003305640230504777,
+            "mean_absolute_error": 0.03619646720056023,
+            "relative_l2_error": 0.001887956162822454,
+            "rmse": 0.05424627263910235
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 3.337860107421875e-06,
+            "max_error_scaled_by_max1_abs_reference": 7.382215906326391e-07,
+            "mean_absolute_error": 1.2963211962154934e-06,
+            "relative_l2_error": 5.82909782833651e-08,
+            "rmse": 1.6748632000184759e-06
+          },
+          "pk": 256
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 0.2206549197435379,
+            "max_error_scaled_by_max1_abs_reference": 0.003305640230504777,
+            "mean_absolute_error": 0.03619646720056023,
+            "relative_l2_error": 0.001887956162822454,
+            "rmse": 0.05424627263910235
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 3.337860107421875e-06,
+            "max_error_scaled_by_max1_abs_reference": 7.382215906326391e-07,
+            "mean_absolute_error": 1.2963211962154934e-06,
+            "relative_l2_error": 5.82909782833651e-08,
+            "rmse": 1.6748632000184759e-06
+          },
+          "pk": 512
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 0.2206549197435379,
+            "max_error_scaled_by_max1_abs_reference": 0.003305640230504777,
+            "mean_absolute_error": 0.03619646720056023,
+            "relative_l2_error": 0.001887956162822454,
+            "rmse": 0.05424627263910235
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 35,
+            "max_absolute_error": 3.337860107421875e-06,
+            "max_error_scaled_by_max1_abs_reference": 7.382215906326391e-07,
+            "mean_absolute_error": 1.2963211962154934e-06,
+            "relative_l2_error": 5.82909782833651e-08,
+            "rmse": 1.6748632000184759e-06
+          },
+          "pk": 1024
+        }
+      ],
+      "shape_mnk": [
+        5,
+        7,
+        257
+      ],
+      "useful_macs": 8995
+    },
+    {
+      "physical_pm_pn": [
+        2,
+        3
+      ],
+      "results_by_pk": [
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 0.09316712617874146,
+            "max_error_scaled_by_max1_abs_reference": 0.003112985224159479,
+            "mean_absolute_error": 0.03662651176273357,
+            "relative_l2_error": 0.0010742927353302326,
+            "rmse": 0.050439225673435464
+          },
+          "fp32_different_bits_vs_pk512": 7,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 1.1354684829711914e-05,
+            "max_error_scaled_by_max1_abs_reference": 2.3450061901237754e-06,
+            "mean_absolute_error": 4.535962943919003e-06,
+            "relative_l2_error": 1.1665514271303757e-07,
+            "rmse": 5.477087274038961e-06
+          },
+          "pk": 32
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 0.09316712617874146,
+            "max_error_scaled_by_max1_abs_reference": 0.003112985224159479,
+            "mean_absolute_error": 0.03662651176273357,
+            "relative_l2_error": 0.0010742927353302326,
+            "rmse": 0.050439225673435464
+          },
+          "fp32_different_bits_vs_pk512": 7,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 1.1354684829711914e-05,
+            "max_error_scaled_by_max1_abs_reference": 2.179320401843716e-06,
+            "mean_absolute_error": 3.927896614186466e-06,
+            "relative_l2_error": 1.0862297593440313e-07,
+            "rmse": 5.09996820819172e-06
+          },
+          "pk": 64
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 0.09316712617874146,
+            "max_error_scaled_by_max1_abs_reference": 0.003112985224159479,
+            "mean_absolute_error": 0.03662651176273357,
+            "relative_l2_error": 0.0010742927353302326,
+            "rmse": 0.050439225673435464
+          },
+          "fp32_different_bits_vs_pk512": 2,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 6.977934390306473e-06,
+            "max_error_scaled_by_max1_abs_reference": 3.3104020498355885e-06,
+            "mean_absolute_error": 2.9304501367732882e-06,
+            "relative_l2_error": 7.829157636467754e-08,
+            "rmse": 3.675875633072285e-06
+          },
+          "pk": 128
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 0.09316712617874146,
+            "max_error_scaled_by_max1_abs_reference": 0.003112985224159479,
+            "mean_absolute_error": 0.03662651176273357,
+            "relative_l2_error": 0.0010742927353302326,
+            "rmse": 0.050439225673435464
+          },
+          "fp32_different_bits_vs_pk512": 2,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 4.263478331267834e-06,
+            "max_error_scaled_by_max1_abs_reference": 1.5006714130485922e-06,
+            "mean_absolute_error": 2.38422944676131e-06,
+            "relative_l2_error": 5.947600643236836e-08,
+            "rmse": 2.7924639271387834e-06
+          },
+          "pk": 256
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 0.09316712617874146,
+            "max_error_scaled_by_max1_abs_reference": 0.003112985224159479,
+            "mean_absolute_error": 0.03662651176273357,
+            "relative_l2_error": 0.0010742927353302326,
+            "rmse": 0.050439225673435464
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 3.904104232788086e-06,
+            "max_error_scaled_by_max1_abs_reference": 8.220224242534685e-07,
+            "mean_absolute_error": 1.7285783542320132e-06,
+            "relative_l2_error": 4.605364275193191e-08,
+            "rmse": 2.1622691873965035e-06
+          },
+          "pk": 512
+        },
+        {
+          "bf16_different_bits_vs_pk512": 0,
+          "bf16_output_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 0.09316712617874146,
+            "max_error_scaled_by_max1_abs_reference": 0.003112985224159479,
+            "mean_absolute_error": 0.03662651176273357,
+            "relative_l2_error": 0.0010742927353302326,
+            "rmse": 0.050439225673435464
+          },
+          "fp32_different_bits_vs_pk512": 0,
+          "fp32_error_vs_fp64_same_bf16_operands": {
+            "elements": 8,
+            "max_absolute_error": 3.904104232788086e-06,
+            "max_error_scaled_by_max1_abs_reference": 8.220224242534685e-07,
+            "mean_absolute_error": 1.7285783542320132e-06,
+            "relative_l2_error": 4.605364275193191e-08,
+            "rmse": 2.1622691873965035e-06
+          },
+          "pk": 1024
+        }
+      ],
+      "shape_mnk": [
+        2,
+        4,
+        1031
+      ],
+      "useful_macs": 8248
+    }
+  ],
+  "reference": "FP64 dot of the same BF16-rounded operands",
+  "same_precision_does_not_require_bitwise_equivalence": true,
+  "schema": "plena_geometry3d_numerical_audit_v1",
+  "scope": "small seeded functional arithmetic audit; no route timing or trained-model quality",
+  "seed": 20261004,
+  "tree_contract": "adjacent balanced full physical-PK tree with zero tails; ascending FP32 K-segment sums"
+}

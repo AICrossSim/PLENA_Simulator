@@ -1,0 +1,9 @@
+{
+  "output": "/tmp/plena-geometry3d-20261004-v6",
+  "fullspace_rows": 16763,
+  "legal": 15107,
+  "frozen_points": 7,
+  "runtime_trials": 168,
+  "source_freeze_matches_current": true,
+  "development_only": true
+}

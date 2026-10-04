@@ -1,0 +1,11 @@
+{
+  "output": "/tmp/plena-geometry3d-compute-20261004-v6",
+  "fullspace_rows": 16763,
+  "legal": 15107,
+  "frozen_points": 7,
+  "runtime_trials": 168,
+  "detailed_layers": 945,
+  "summary_rows": 56,
+  "source_freeze_matches_completion": true,
+  "independent_aggregation": true
+}

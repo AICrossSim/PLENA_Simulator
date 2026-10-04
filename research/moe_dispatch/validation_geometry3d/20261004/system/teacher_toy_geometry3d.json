@@ -1,0 +1,389 @@
+{
+  "limits": {
+    "accumulator_bytes": 65536,
+    "max_records": 8
+  },
+  "not_claimed": [
+    "whole expert Gate/Up/Down latency",
+    "HBM/port/vector/control timing",
+    "silicon speedup"
+  ],
+  "rows": [
+    {
+      "K": 512,
+      "M_experts": [
+        4,
+        2
+      ],
+      "M_waves_per_expert": [
+        1,
+        1
+      ],
+      "N": 128,
+      "core_finish_cycles": [
+        224
+      ],
+      "cycles": 224,
+      "cycles_per_expert": [
+        112,
+        112
+      ],
+      "estimated_latency_ms_at_1ghz": 0.000224,
+      "experts": [
+        {
+          "core": {
+            "pk": 512,
+            "pm": 6,
+            "pn": 4
+          },
+          "expert": "A",
+          "finish_cycle": 112,
+          "m": 4,
+          "oracle_peak_outstanding_results": 8,
+          "owner": 0,
+          "projection": {
+            "accumulator_read_bytes": 0,
+            "accumulator_write_bytes": 3072,
+            "completion_latency": 21,
+            "cycles": 112,
+            "dot_latency": 20,
+            "group_count": 4,
+            "initiation_interval": 1,
+            "issued_macs": 393216,
+            "issues": 32,
+            "k_segments": 1,
+            "last_k_elements": 512,
+            "last_m_rows": 4,
+            "last_n_columns": 4,
+            "m_waves": 1,
+            "n_tiles": 32,
+            "padding_macs": 131072,
+            "peak_accumulator_bytes": 768,
+            "peak_resident_records": 8,
+            "record_bytes": 96,
+            "resident_record_limit": 8,
+            "useful_macs": 262144,
+            "w_slice_bytes": 4096,
+            "x_slice_bytes": 6144
+          },
+          "start_cycle": 0
+        },
+        {
+          "core": {
+            "pk": 512,
+            "pm": 6,
+            "pn": 4
+          },
+          "expert": "B",
+          "finish_cycle": 224,
+          "m": 2,
+          "oracle_peak_outstanding_results": 8,
+          "owner": 0,
+          "projection": {
+            "accumulator_read_bytes": 0,
+            "accumulator_write_bytes": 3072,
+            "completion_latency": 21,
+            "cycles": 112,
+            "dot_latency": 20,
+            "group_count": 4,
+            "initiation_interval": 1,
+            "issued_macs": 393216,
+            "issues": 32,
+            "k_segments": 1,
+            "last_k_elements": 512,
+            "last_m_rows": 2,
+            "last_n_columns": 4,
+            "m_waves": 1,
+            "n_tiles": 32,
+            "padding_macs": 262144,
+            "peak_accumulator_bytes": 768,
+            "peak_resident_records": 8,
+            "record_bytes": 96,
+            "resident_record_limit": 8,
+            "useful_macs": 131072,
+            "w_slice_bytes": 4096,
+            "x_slice_bytes": 6144
+          },
+          "start_cycle": 112
+        }
+      ],
+      "geometry": "6x4x512",
+      "groups_per_expert": [
+        4,
+        4
+      ],
+      "issued_macs": 786432,
+      "issues": 64,
+      "label": "fixed_6",
+      "main_multipliers": 12288,
+      "oracle_verified": true,
+      "padding_macs": 393216,
+      "spatial_utilization": 0.5,
+      "useful_macs": 393216,
+      "wall_mac_utilization": 0.14285714285714285
+    },
+    {
+      "K": 512,
+      "M_experts": [
+        4,
+        2
+      ],
+      "M_waves_per_expert": [
+        2,
+        1
+      ],
+      "N": 128,
+      "core_finish_cycles": [
+        224,
+        112
+      ],
+      "cycles": 224,
+      "cycles_per_expert": [
+        224,
+        112
+      ],
+      "estimated_latency_ms_at_1ghz": 0.000224,
+      "experts": [
+        {
+          "core": {
+            "pk": 512,
+            "pm": 3,
+            "pn": 4
+          },
+          "expert": "A",
+          "finish_cycle": 224,
+          "m": 4,
+          "oracle_peak_outstanding_results": 8,
+          "owner": 0,
+          "projection": {
+            "accumulator_read_bytes": 0,
+            "accumulator_write_bytes": 3072,
+            "completion_latency": 21,
+            "cycles": 224,
+            "dot_latency": 20,
+            "group_count": 8,
+            "initiation_interval": 1,
+            "issued_macs": 393216,
+            "issues": 64,
+            "k_segments": 1,
+            "last_k_elements": 512,
+            "last_m_rows": 1,
+            "last_n_columns": 4,
+            "m_waves": 2,
+            "n_tiles": 32,
+            "padding_macs": 131072,
+            "peak_accumulator_bytes": 384,
+            "peak_resident_records": 8,
+            "record_bytes": 48,
+            "resident_record_limit": 8,
+            "useful_macs": 262144,
+            "w_slice_bytes": 4096,
+            "x_slice_bytes": 3072
+          },
+          "start_cycle": 0
+        },
+        {
+          "core": {
+            "pk": 512,
+            "pm": 3,
+            "pn": 4
+          },
+          "expert": "B",
+          "finish_cycle": 112,
+          "m": 2,
+          "oracle_peak_outstanding_results": 8,
+          "owner": 1,
+          "projection": {
+            "accumulator_read_bytes": 0,
+            "accumulator_write_bytes": 1536,
+            "completion_latency": 21,
+            "cycles": 112,
+            "dot_latency": 20,
+            "group_count": 4,
+            "initiation_interval": 1,
+            "issued_macs": 196608,
+            "issues": 32,
+            "k_segments": 1,
+            "last_k_elements": 512,
+            "last_m_rows": 2,
+            "last_n_columns": 4,
+            "m_waves": 1,
+            "n_tiles": 32,
+            "padding_macs": 65536,
+            "peak_accumulator_bytes": 384,
+            "peak_resident_records": 8,
+            "record_bytes": 48,
+            "resident_record_limit": 8,
+            "useful_macs": 131072,
+            "w_slice_bytes": 4096,
+            "x_slice_bytes": 3072
+          },
+          "start_cycle": 0
+        }
+      ],
+      "geometry": "3x4x512+3x4x512",
+      "groups_per_expert": [
+        8,
+        4
+      ],
+      "issued_macs": 589824,
+      "issues": 96,
+      "label": "fixed_3+3",
+      "main_multipliers": 12288,
+      "oracle_verified": true,
+      "padding_macs": 196608,
+      "spatial_utilization": 0.6666666666666666,
+      "useful_macs": 393216,
+      "wall_mac_utilization": 0.14285714285714285
+    },
+    {
+      "K": 512,
+      "M_experts": [
+        4,
+        2
+      ],
+      "M_waves_per_expert": [
+        1,
+        1
+      ],
+      "N": 128,
+      "core_finish_cycles": [
+        112,
+        112
+      ],
+      "cycles": 112,
+      "cycles_per_expert": [
+        112,
+        112
+      ],
+      "estimated_latency_ms_at_1ghz": 0.000112,
+      "experts": [
+        {
+          "core": {
+            "pk": 512,
+            "pm": 4,
+            "pn": 4
+          },
+          "expert": "A",
+          "finish_cycle": 112,
+          "m": 4,
+          "oracle_peak_outstanding_results": 8,
+          "owner": 1,
+          "projection": {
+            "accumulator_read_bytes": 0,
+            "accumulator_write_bytes": 2048,
+            "completion_latency": 21,
+            "cycles": 112,
+            "dot_latency": 20,
+            "group_count": 4,
+            "initiation_interval": 1,
+            "issued_macs": 262144,
+            "issues": 32,
+            "k_segments": 1,
+            "last_k_elements": 512,
+            "last_m_rows": 4,
+            "last_n_columns": 4,
+            "m_waves": 1,
+            "n_tiles": 32,
+            "padding_macs": 0,
+            "peak_accumulator_bytes": 512,
+            "peak_resident_records": 8,
+            "record_bytes": 64,
+            "resident_record_limit": 8,
+            "useful_macs": 262144,
+            "w_slice_bytes": 4096,
+            "x_slice_bytes": 4096
+          },
+          "start_cycle": 0
+        },
+        {
+          "core": {
+            "pk": 512,
+            "pm": 2,
+            "pn": 4
+          },
+          "expert": "B",
+          "finish_cycle": 112,
+          "m": 2,
+          "oracle_peak_outstanding_results": 8,
+          "owner": 0,
+          "projection": {
+            "accumulator_read_bytes": 0,
+            "accumulator_write_bytes": 1024,
+            "completion_latency": 21,
+            "cycles": 112,
+            "dot_latency": 20,
+            "group_count": 4,
+            "initiation_interval": 1,
+            "issued_macs": 131072,
+            "issues": 32,
+            "k_segments": 1,
+            "last_k_elements": 512,
+            "last_m_rows": 2,
+            "last_n_columns": 4,
+            "m_waves": 1,
+            "n_tiles": 32,
+            "padding_macs": 0,
+            "peak_accumulator_bytes": 256,
+            "peak_resident_records": 8,
+            "record_bytes": 32,
+            "resident_record_limit": 8,
+            "useful_macs": 131072,
+            "w_slice_bytes": 4096,
+            "x_slice_bytes": 2048
+          },
+          "start_cycle": 0
+        }
+      ],
+      "geometry": "2x4x512+4x4x512",
+      "groups_per_expert": [
+        4,
+        4
+      ],
+      "issued_macs": 393216,
+      "issues": 64,
+      "label": "fixed_4+2",
+      "main_multipliers": 12288,
+      "oracle_verified": true,
+      "padding_macs": 0,
+      "spatial_utilization": 1.0,
+      "useful_macs": 393216,
+      "wall_mac_utilization": 0.2857142857142857
+    }
+  ],
+  "schema": "plena_geometry3d_teacher_finite8_v1",
+  "scope": "ideal-operand single projection; fixed whole-expert ownership; prospective analytical 1GHz",
+  "semantics": "finite8 output records; N-major/M-minor group; same-output K waits prior commit; groups retire before replacement",
+  "timing": {
+    "commit_cycles": 1,
+    "hypothesis": "Ldot(PK)=20-2*log2(512/PK); PK512 anchor only; no physical validation",
+    "initiation_interval": 1,
+    "latency_by_pk": [
+      [
+        32,
+        12
+      ],
+      [
+        64,
+        14
+      ],
+      [
+        128,
+        16
+      ],
+      [
+        256,
+        18
+      ],
+      [
+        512,
+        20
+      ],
+      [
+        1024,
+        22
+      ]
+    ],
+    "name": "log2_stage2"
+  }
+}

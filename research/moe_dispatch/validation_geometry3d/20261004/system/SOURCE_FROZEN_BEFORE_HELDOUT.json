@@ -1,0 +1,9 @@
+{
+  "files": {
+    "compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+    "model.py": "16818817148a0d4dc601229983c36751898d05576a402d7273ef557775d2f725",
+    "study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157"
+  },
+  "purpose": "timing/search source frozen before v6 heldout evaluation"
+}

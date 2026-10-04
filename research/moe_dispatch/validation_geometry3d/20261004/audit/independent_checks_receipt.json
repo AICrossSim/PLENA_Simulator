@@ -1,0 +1,14 @@
+{
+  "bf16_fp32_grouping_counterexample": {
+    "pk512": 1.0,
+    "pk64": 0.0
+  },
+  "enumerated_geometries": 16763,
+  "family_counts": {
+    "heterogeneous": 16678,
+    "homogeneous": 41,
+    "single": 44
+  },
+  "independent_shared_hbm_cases": 50,
+  "independent_weight_address_shapes": 840
+}
