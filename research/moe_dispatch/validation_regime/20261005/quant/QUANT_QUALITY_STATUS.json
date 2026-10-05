@@ -1,0 +1,10 @@
+{
+  "W4_architecture_claim_allowed": false,
+  "next_required": "freeze format/scales/calibration; run real calibration activations and heldout model quality, state degradation threshold",
+  "points": 12,
+  "reason": "only6realweightmatrices, syntheticX; no full-model perplexity/accuracy or QERA low-rank reconstruction",
+  "repeats": 2,
+  "tensors": 6,
+  "trained_model_task_quality_qualified": false,
+  "weight_index_sha256": "d2cdb2f325f6682cf3ad1ad2526a9f979d857390b579380c0331d975136e0acf"
+}

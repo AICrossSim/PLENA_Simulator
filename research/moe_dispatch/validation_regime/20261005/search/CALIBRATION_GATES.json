@@ -1,0 +1,56 @@
+[
+  {
+    "action": "skip_native_candidate_calibration_by_preregistered_gate",
+    "area_model_available": false,
+    "claim": "no architecture victory declared",
+    "credits": 256,
+    "native3D_available": false,
+    "passes_both_entry_gates": false,
+    "weight_format": "BF16"
+  },
+  {
+    "action": "skip_native_candidate_calibration_by_preregistered_gate",
+    "area_model_available": false,
+    "claim": "no architecture victory declared",
+    "credits": 256,
+    "native3D_available": false,
+    "passes_both_entry_gates": false,
+    "weight_format": "W4"
+  },
+  {
+    "action": "skip_native_candidate_calibration_by_preregistered_gate",
+    "area_model_available": false,
+    "claim": "no architecture victory declared",
+    "credits": 256,
+    "native3D_available": false,
+    "passes_both_entry_gates": false,
+    "weight_format": "W8"
+  },
+  {
+    "action": "skip_native_candidate_calibration_by_preregistered_gate",
+    "area_model_available": false,
+    "claim": "no architecture victory declared",
+    "credits": 512,
+    "native3D_available": false,
+    "passes_both_entry_gates": false,
+    "weight_format": "BF16"
+  },
+  {
+    "action": "skip_native_candidate_calibration_by_preregistered_gate",
+    "area_model_available": false,
+    "claim": "no architecture victory declared",
+    "credits": 512,
+    "native3D_available": false,
+    "passes_both_entry_gates": false,
+    "weight_format": "W4"
+  },
+  {
+    "action": "skip_native_candidate_calibration_by_preregistered_gate",
+    "area_model_available": false,
+    "claim": "no architecture victory declared",
+    "credits": 512,
+    "native3D_available": false,
+    "passes_both_entry_gates": false,
+    "weight_format": "W8"
+  }
+]

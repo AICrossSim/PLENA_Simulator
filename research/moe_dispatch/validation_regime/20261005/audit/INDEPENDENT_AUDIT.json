@@ -1,0 +1,12 @@
+{
+  "actual_per_cycle_native_occupancy_measured": false,
+  "capture_windows": 135,
+  "checked_selected_heldout_windows": 2430,
+  "complete": true,
+  "full_installed_private_quotas_and_banks_checked": true,
+  "new3Dpretrained_fullFFN_bitexact_tested": false,
+  "phase_live_set_capacity_bounds_checked": true,
+  "scope": "independent arithmetic/traffic/capacity/phase-completion audit,not physical timing calibration",
+  "selected_accumulator_row_word_padding_fits": true,
+  "unique_bytes_rederived_from_dimensions_and_format": true
+}

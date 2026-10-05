@@ -1,0 +1,8 @@
+{
+  "source_evidence": {
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/rust/src/main.rs": "dcd5225076ed67093793f06a35c940728dcbdd9526c3db705b721b2ec1cddef1",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/rust/src/plan.rs": "10fa98a5608b446a077f1147017b5d7fe655b6fcb6a0735a46068e21448740a8"
+  },
+  "convention": "Rust valid_m/n/k access spans; full physical padding capacity; aggregate analytical ports omit address-bank conflicts",
+  "measurement": "source audit,not new3D Rust calibration"
+}

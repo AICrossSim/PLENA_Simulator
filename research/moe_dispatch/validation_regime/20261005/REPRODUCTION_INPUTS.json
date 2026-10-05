@@ -1,0 +1,20 @@
+{
+  "captured_inputs.tar.gz": {
+    "sha256": "5e49aef9eb963425c559a95e453b603d3288219b7a725637277afdf55693e06d",
+    "bytes": 979398
+  },
+  "compatibility_baseline.tar.gz": {
+    "sha256": "2c243b2c22b4f695728b0266a7ceae9d80a51a5c0b0880560bb8db3c0f18aabf",
+    "bytes": 3982928
+  },
+  "input_file_sha256": {
+    "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+    "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f",
+    "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a"
+  },
+  "compatibility_file_sha256": {
+    "FROZEN_SELECTION.json": "438e8a46b33db89da99134ccd1662ac804e3c1dd8169d724ab2984778bf6adcc",
+    "heldout_details.json": "fb03adb77f99479767e4a5b38c6bb54b5ff9fe987f21e5199a65eb8e0b7642ee"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "area_or_energy_gate_active": false,
+  "area_or_energy_gate_percent": 20,
+  "bootstrap95_lower_required_percent": 5,
+  "calibration_entry_both_baselines_percent": 5,
+  "complete": true,
+  "format_scope": "W8/W4 transport/coalescing and decoder hypotheses, BF16 datapath; not trained-model quality",
+  "grid_cells": 84,
+  "grid_windows": 918,
+  "input_sha256": {
+    "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+    "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+    "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+  },
+  "repeats": 2,
+  "screening_error_margin_calibrated": false,
+  "screening_error_margin_percent": 3,
+  "search_space_gate_percent": 10,
+  "v6_windows_exact_match": 945,
+  "victory_after_calibration_percent": 10
+}

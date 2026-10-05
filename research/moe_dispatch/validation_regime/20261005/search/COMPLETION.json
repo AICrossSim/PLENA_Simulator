@@ -1,0 +1,25 @@
+{
+  "area_synthesized": false,
+  "complete_analytical_search": true,
+  "frozen_points": 18,
+  "frozen_selection_sha256": "d3d1a223f43bcf1c9772559da24f6256d7bf045ff7a28cdd96169dce9e039e7a",
+  "heldout_input_sha256": {
+    "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+    "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+  },
+  "heldout_windows_per_point": 135,
+  "native_calibrated": false,
+  "repeats": 2,
+  "source_sha256": {
+    "geometry3d/compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "geometry3d/memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+    "geometry3d/model.py": "16818817148a0d4dc601229983c36751898d05576a402d7273ef557775d2f725",
+    "geometry3d/study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+    "regime/campaign.py": "987656579c61d0c75b8e2e13a10e4d34d352558ce0984b5b51f885f4d298f089",
+    "regime/metrics.py": "a72beb21ecf8ed59c28ff08b095d5c66f7702fee938b2eb367b9998b086567d6",
+    "regime/model.py": "9b54dc767cb13f0a7b7aebacc0682f93e158b61965136fc49cefc4241c0b5ab9",
+    "regime/resources.py": "677699d1ecda761f5ac6607fca5aab882b7349c421fe361783c8f0354ee116e0",
+    "regime/search.py": "8bc9724ed08873ddadcb4cd3fb10e0f61950a0a430dc4f252025c28f2bd2a182"
+  },
+  "trained_model_quant_quality_qualified": false
+}

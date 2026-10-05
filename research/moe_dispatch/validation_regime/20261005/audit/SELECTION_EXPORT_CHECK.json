@@ -1,0 +1,44 @@
+[
+  {
+    "compiler_group_caps_included": true,
+    "complete_configuration_ids": true,
+    "credits": 256,
+    "replay_matches_original": true,
+    "weight_format": "BF16"
+  },
+  {
+    "compiler_group_caps_included": true,
+    "complete_configuration_ids": true,
+    "credits": 256,
+    "replay_matches_original": true,
+    "weight_format": "W4"
+  },
+  {
+    "compiler_group_caps_included": true,
+    "complete_configuration_ids": true,
+    "credits": 256,
+    "replay_matches_original": true,
+    "weight_format": "W8"
+  },
+  {
+    "compiler_group_caps_included": true,
+    "complete_configuration_ids": true,
+    "credits": 512,
+    "replay_matches_original": true,
+    "weight_format": "BF16"
+  },
+  {
+    "compiler_group_caps_included": true,
+    "complete_configuration_ids": true,
+    "credits": 512,
+    "replay_matches_original": true,
+    "weight_format": "W4"
+  },
+  {
+    "compiler_group_caps_included": true,
+    "complete_configuration_ids": true,
+    "credits": 512,
+    "replay_matches_original": true,
+    "weight_format": "W8"
+  }
+]

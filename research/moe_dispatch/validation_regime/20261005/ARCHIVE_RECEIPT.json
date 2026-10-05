@@ -1,0 +1,14 @@
+{
+  "archive": "moe_regime_20261005_v1.tar.gz",
+  "sha256": "60bc812d62114637c16a0183d07f1819335a669234ab11526ed5774190bc4f65",
+  "archive_bytes": 54348604,
+  "manifest_sha256": "abb0341e0e23bb18a929bb72113d01477a3f31c3ebf4ff8859aaebe46d3f5e27",
+  "verified_payload_files": 163,
+  "local_archive_directory": "/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1",
+  "local_payload_directory": "/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload",
+  "branch": "research/moe-supply-first-v3",
+  "simulator_base_commit": "1fcc764ada5505620227ff7cea7a49f2851b5954",
+  "compiler_unchanged_commit": "480d558c72f8fce19572b2408eb02a1ae52c40eb",
+  "raw_candidate_results_in_full_archive": true,
+  "native_candidate_calibration_run": false
+}

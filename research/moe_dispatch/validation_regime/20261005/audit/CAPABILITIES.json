@@ -1,0 +1,16 @@
+{
+  "ASIC_area_model_synthesized": false,
+  "HBM_cap_is_native_measurement": false,
+  "area_gate_active": false,
+  "native": "olderliveHBM2 available; currentresearchRust hardcodesPN4PK512; oldernative supports commonPN/PK; no matching fusedFFN independent-PN/PK3Dadapter",
+  "reason": "Vivado is FPGA tooling; no technology-qualified BF16/FP32 logic and SRAM macro model for these geometries",
+  "required_calibration": "same input addresses/packing/ownership/privatebanks/pairedGU+Z+Down+combine boundary;6frozenpoints only if5percent versus BOTH baseline gates pass",
+  "scope": "126.030769/252.061538 are credits*32/(64+1) continuous upper bounds with modeled landing and backpressure",
+  "tools": {
+    "dc_shell": null,
+    "genus": null,
+    "verilator": "/usr/bin/verilator",
+    "vivado": "/mnt/applications/Xilinx/23.1/Vivado/2023.1/bin/vivado",
+    "yosys": null
+  }
+}

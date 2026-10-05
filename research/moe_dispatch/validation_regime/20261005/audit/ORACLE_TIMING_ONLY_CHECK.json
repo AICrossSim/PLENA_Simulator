@@ -1,0 +1,653 @@
+{
+  "checks": [
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "single",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "homogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 256,
+      "family": "heterogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "BF16",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W4",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "single",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "homogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "ideal_HBM",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "ideal_ports",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "zero_control",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    },
+    {
+      "credits": 512,
+      "family": "heterogeneous",
+      "oracle": "compute_only",
+      "repeats": 2,
+      "weight_format": "W8",
+      "windows": 135,
+      "work_traffic_reservations_owners_unchanged": true
+    }
+  ],
+  "scope": "analytical ledger/owner/capacity verification; not native mutual-exclusion/drain or numerical-output measurement"
+}

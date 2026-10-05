@@ -1,0 +1,96 @@
+{
+  "512credit": "252.061538GB/s continuous credit cap, fixed8KiB ingress with backpressure;512 extra tag bytes inside16KiBcontrol; not native-implemented credit expansion",
+  "SRAM_bytes": 2158592,
+  "W8_W4": "ideal packed transport/coalescing, ideal decoder primary; BF16 operands still occupy installed slots; no accuracy qualification",
+  "clock": "hypothetical1GHz",
+  "compiler_group_search": "GU/Down independently {auto,1,2,4,8}; primary commonGU2Down4; fixed8pairedrecords; no claim of optimal descriptor count or streaming-Z dataflow",
+  "fractions": [
+    0.125,
+    0.25,
+    0.375,
+    0.5,
+    0.625,
+    0.75,
+    0.875
+  ],
+  "gates": {
+    "area_energy_active": false,
+    "area_energy_saving_percent": 20,
+    "bootstrap95_lower_percent": 5,
+    "calibration_entry_vs_both_percent": 5,
+    "victory_calibrated_percent": 10
+  },
+  "geometry_counts": {
+    "dual": 16719,
+    "heterogeneous": 16678,
+    "heterogeneous_same_pk": 4662,
+    "heterogeneous_unequal_pk": 12016,
+    "homogeneous": 41,
+    "single": 44,
+    "total": 16763
+  },
+  "geometry_domain": "PM1..16, PN1..192, independent PK32/64/128/256/512/1024; exact 12288 main multipliers",
+  "headroom_definition": "optimized single / max(unique-weight HBM,peak MAC,compulsory port traffic)-1; actual mapped port service is conditional attribution, not architecture-independent floor",
+  "headroom_grid_sha256": "65b09ff5875aba1dbc84dcf548e54a42a4d81a9dae9938321d9be3cb3469d757",
+  "independent_axes": [
+    "w",
+    "x",
+    "acc",
+    "z",
+    "wb",
+    "xb",
+    "ab"
+  ],
+  "input_development_sha256": {
+    "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55"
+  },
+  "objective": "unweighted geomean of paired per-window latency ratios to common fixed reference; equivalent ranking by geomean latency",
+  "port_protocol": "physical padded reservations/full issued MACs; actual valid_m/n/k SRAM transfers as in Rust; 16B output-word rounding",
+  "refinement": "top8 development geometries per family plus stronger full-single/equal-homogeneous WS/OS baseline seeds; three starts .25/.5/.75, two coordinate sweeps plus32 fixed random cross-axis probes",
+  "regimes_from_development_space_ge10percent": [
+    [
+      256,
+      "BF16"
+    ],
+    [
+      256,
+      "W4"
+    ],
+    [
+      256,
+      "W8"
+    ],
+    [
+      512,
+      "BF16"
+    ],
+    [
+      512,
+      "W4"
+    ],
+    [
+      512,
+      "W8"
+    ]
+  ],
+  "repeats": 2,
+  "runtime": "after hardware quota selection, policies EFT/idle/RR/threshold1,2,4,8,16 and prefetch2/6/32; dev only",
+  "scope": "analytical fluid screening, not native/silicon results",
+  "screen": "all geometries, equal and MAC-proportional initial quotas; both rerun twice",
+  "search_limitation": "hierarchical finite search, NOT exhaustive joint allocation/geometry/runtime optimum",
+  "selection_unit": "one frozen hardware/runtime point per family per credit/format regime, ALL development batches together",
+  "source_sha256": {
+    "geometry3d/compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "geometry3d/memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+    "geometry3d/model.py": "16818817148a0d4dc601229983c36751898d05576a402d7273ef557775d2f725",
+    "geometry3d/study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+    "regime/campaign.py": "987656579c61d0c75b8e2e13a10e4d34d352558ce0984b5b51f885f4d298f089",
+    "regime/metrics.py": "a72beb21ecf8ed59c28ff08b095d5c66f7702fee938b2eb367b9998b086567d6",
+    "regime/model.py": "9b54dc767cb13f0a7b7aebacc0682f93e158b61965136fc49cefc4241c0b5ab9",
+    "regime/resources.py": "677699d1ecda761f5ac6607fca5aab882b7349c421fe361783c8f0354ee116e0",
+    "regime/search.py": "8bc9724ed08873ddadcb4cd3fb10e0f61950a0a430dc4f252025c28f2bd2a182"
+  },
+  "strong_baselines": "all44single and all41homogeneous shapes xWS/OS xprefetch2/6/32 x25GU/Down group pairs; independent quota refinement additionally applied to homogeneous finalists",
+  "test_limit": null
+}

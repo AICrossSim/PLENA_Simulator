@@ -1,0 +1,44 @@
+[
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "selected_single",
+    "windows": 135
+  },
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "selected_homogeneous",
+    "windows": 135
+  },
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "selected_heterogeneous",
+    "windows": 135
+  },
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "fixed_6",
+    "windows": 135
+  },
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "fixed_3+3",
+    "windows": 135
+  },
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "fixed_4+2",
+    "windows": 135
+  },
+  {
+    "complete_repeats": 2,
+    "frozen_v6_metrics_exact_match": true,
+    "label": "selected_unequal_PK",
+    "windows": 135
+  }
+]

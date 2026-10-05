@@ -1,0 +1,4 @@
+credits,weight_format,geometry,family,allocation,partition,flow,policy,prefetch_slots,valid_operand_traffic,gu_group_limit,down_group_limit,configuration_sha256,bootstrap_selected_fraction,scope
+512,W8,6x16x128,single,equal,null,bounded_ws,eft,32,True,1,2,009f2788288e952fe599f3345a274a798294212019393a95fbc9749f2e0675a7,1.0,"development selection,1000 paired batch-stratified draws"
+512,W8,6x16x64+6x16x64,homogeneous,equal,null,bounded_ws,eft,32,True,1,2,dbcce06155a1ab5f813d28d8c2a7a57ebc3c53f950a330fdd55e5b0be1b3d509,1.0,"development selection,1000 paired batch-stratified draws"
+512,W8,1x2x64+10x19x64,heterogeneous,proportional,null,bounded_ws,eft,32,True,2,4,19dbe3235c65f276dab3596768cd4eb262b1b76761c917d9246468856ea16c23,1.0,"development selection,1000 paired batch-stratified draws"

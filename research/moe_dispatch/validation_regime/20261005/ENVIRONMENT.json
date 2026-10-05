@@ -1,0 +1,17 @@
+{
+  "python": "3.11.13",
+  "platform": "Linux-4.18.0-553.115.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "packages": {
+    "numpy": "2.4.6",
+    "pytest": "9.1.1",
+    "matplotlib": "3.11.0",
+    "torch": "2.12.1",
+    "safetensors": "0.8.0"
+  },
+  "base_commits": {
+    "simulator": "1fcc764ada5505620227ff7cea7a49f2851b5954",
+    "compiler": "480d558c72f8fce19572b2408eb02a1ae52c40eb"
+  },
+  "compiler_changed_in_this_campaign": false,
+  "workers": 32
+}

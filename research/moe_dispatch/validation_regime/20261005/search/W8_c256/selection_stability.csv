@@ -1,0 +1,7 @@
+credits,weight_format,family,geometry,partition,flow,policy,prefetch_slots,bootstrap_selected_fraction,scope
+256,W8,single,6x16x128,null,bounded_ws,eft,32,1.0,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+256,W8,homogeneous,6x16x64+6x16x64,"{""ab"": 0.125, ""acc"": 0.125, ""w"": 0.375, ""wb"": 0.25, ""x"": 0.125, ""xb"": 0.125, ""z"": 0.625}",bounded_ws,eft,32,0.006,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+256,W8,homogeneous,6x16x64+6x16x64,"{""ab"": 0.125, ""acc"": 0.125, ""w"": 0.375, ""wb"": 0.25, ""x"": 0.125, ""xb"": 0.125, ""z"": 0.625}",bounded_ws,eft,32,0.99,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+256,W8,homogeneous,6x16x64+6x16x64,"{""ab"": 0.125, ""acc"": 0.125, ""w"": 0.375, ""wb"": 0.25, ""x"": 0.125, ""xb"": 0.125, ""z"": 0.625}",bounded_ws,eft,32,0.004,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+256,W8,heterogeneous,1x2x64+5x19x128,null,bounded_ws,eft,32,0.967,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+256,W8,heterogeneous,5x18x128+6x4x32,null,bounded_ws,eft,32,0.033,"development selection stability among evaluated candidates,1000 paired stratified resamples"

@@ -1,0 +1,33 @@
+{
+  "analytical_evaluation_complete": true,
+  "regimes": 6,
+  "development_windows": 18,
+  "heldout_windows": 135,
+  "geometries_per_regime": 16763,
+  "selected_configurations": 18,
+  "selected_heldout_model_points": 2430,
+  "repeats_per_model_point": 2,
+  "complete_repeat_objects_identical": true,
+  "frozen_v6_compatibility_windows": 945,
+  "independent_arithmetic_and_capacity_checks": 2430,
+  "selection_bootstrap_replay_regimes": 6,
+  "fixed_owner_timing_only_oracle_sets": 72,
+  "tests": {
+    "command": "python -m pytest research/moe_dispatch/regime research/moe_dispatch/geometry3d -q",
+    "passed": 71,
+    "failed": 0,
+    "source": "completed test run during this campaign"
+  },
+  "both_baselines_5percent_entry_regimes": 0,
+  "candidate_native_calibration": {
+    "run": false,
+    "reason": "No regime met preregistered entry gate against both baselines"
+  },
+  "hardware_victory_announced": false,
+  "synthesis_qualified_area_energy_gate_active": false,
+  "trained_model_quant_accuracy_qualified": false,
+  "full_model_generation_measured": false,
+  "compiler_changed": false,
+  "source_hashes_match_frozen_completion": true,
+  "result_scope": "phase-level analytical replay of captured post-router FFN windows; no claim of cycle-exact native timing"
+}

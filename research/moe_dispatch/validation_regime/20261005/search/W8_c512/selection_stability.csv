@@ -1,0 +1,4 @@
+credits,weight_format,family,geometry,partition,flow,policy,prefetch_slots,bootstrap_selected_fraction,scope
+512,W8,single,6x16x128,null,bounded_ws,eft,32,1.0,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+512,W8,homogeneous,6x16x64+6x16x64,null,bounded_ws,eft,32,1.0,"development selection stability among evaluated candidates,1000 paired stratified resamples"
+512,W8,heterogeneous,1x2x64+10x19x64,null,bounded_ws,eft,32,1.0,"development selection stability among evaluated candidates,1000 paired stratified resamples"
