@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "kind": "stacked_dram",
+  "name": "fictional-stacked-dram",
+  "provenance": {
+    "source": "fictional values that only illustrate the profile format",
+    "notes": "Not representative of any device. The DRAM, bank-timing, thermal and energy values reuse the conspicuously fictional configurations published in tile-ai/DeepStack tests (test_custom_arch_profile.py, test_custom_dram_dse_policy.py); the capacity and buffering values are equally fictional. Replace every field with values for your own design."
+  },
+  "dram": {
+    "total_layers": 10,
+    "connected_layers": 3,
+    "channels_per_connected_layer": 7,
+    "bytes_per_channel_transfer": 5.5,
+    "transfers_per_memory_clock": 1.25,
+    "memory_frequency_hz": 345678901.0,
+    "capacity_per_layer_bytes": 1234567890,
+    "transaction_bytes": 96,
+    "bank_timing": {
+      "row_bytes": 4070,
+      "sector_bytes": 74,
+      "sector_cycles": 3,
+      "recharge_cycles": 41,
+      "round_trip_latency_cycles": 137.5,
+      "latency_clock_hz": 654321987.0
+    },
+    "apply_wave_quantization": true
+  },
+  "buffering": {
+    "requesters": 3,
+    "buffer_bytes_per_requester": 54321,
+    "buffering_factor": 1.75
+  },
+  "thermal": {
+    "resistance_base_c_per_w": 0.42,
+    "resistance_per_layer_c_per_w": 0.007,
+    "baseline_layers": 3,
+    "design_power_w": 73.0,
+    "static_power_w": 8.0,
+    "dynamic_power_exponent": 2.5
+  },
+  "energy": {
+    "read_pj_per_bit": 2.47,
+    "write_pj_per_bit": 2.71
+  }
+}
