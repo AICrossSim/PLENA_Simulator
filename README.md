@@ -235,16 +235,39 @@ just test-stacked-dram
 
 See [`analytic_models/stacked_dram/README.md`](analytic_models/stacked_dram/README.md) for the profile format, assumptions and citation.
 
+### Multi-Chip Model
+
+`analytic_models/distributed` estimates TTFT and TPS of a decoder served by
+several PLENA chips under tensor, expert, data, pipeline and context
+parallelism. Each chip is `PerfModel` compute with a `stacked_dram` memory
+system; the network (hierarchical NoC topologies, collective algorithms,
+pipeline transfers and MoE routing statistics) comes from DeepStack
+([arXiv:2604.04750](https://arxiv.org/abs/2604.04750)), vendored as the
+`DeepStack` submodule. With one chip it reproduces `llama_model.py` and
+`gpt_oss_model.py`. The NoC profiles in `examples/` are illustrative.
+
+```bash
+git submodule update --init DeepStack
+just distributed-describe-noc analytic_models/distributed/examples/illustrative_gpu_cluster_32.json
+just distributed-estimate llama-3.1-70b analytic_models/distributed/examples/illustrative_gpu_cluster_32.json \
+    --profile analytic_models/stacked_dram/examples/fictional_stacked_dram.json --tp 8 --pp 4
+just test-distributed
+```
+
+See [`analytic_models/distributed/README.md`](analytic_models/distributed/README.md) for the plan semantics, collectives, routing modes and limitations.
+
 ## Project Structure
 
 ```
 PLENA_Simulator/
 ├── transactional_emulator/    # Transaction-level simulator (Rust)
 ├── analytic_models/          # Analytical models (Python)
+│   ├── distributed/         # Multi-chip model on DeepStack's network model
 │   ├── latency/             # Latency estimation model
 │   ├── stacked_dram/        # 3D-stacked DRAM memory model
 │   └── utilisation/         # Utilization analysis model
 ├── compiler/                # Compiler and model definitions
+├── DeepStack/               # DeepStack network and parallelism model (submodule)
 ├── PLENA_Tools/             # Supporting tools and utilities (submodule)
 ├── doc/                     # Documentation and diagrams
 ├── plena_settings.toml      # Main configuration file

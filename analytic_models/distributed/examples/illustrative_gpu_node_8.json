@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "kind": "noc_hierarchy",
+  "name": "illustrative_gpu_node_8",
+  "provenance": {
+    "source": "Illustrative values from DeepStack's public h200x32 preset (tile-ai/DeepStack, src/deepstack/mosaic/noc/noc_config_set.py): NVSwitch-connected GPUs, InfiniBand between nodes. Not a PLENA hardware specification. One node of the preset.",
+    "energy": "energy_pj_per_bit: DeepStack's example coefficients (examples/custom_noc.py); replace for a real design"
+  },
+  "layers": {
+    "L3": {
+      "kind": "switch",
+      "shape": [1, 1],
+      "hop_latency_ns": 0,
+      "link_bandwidth_gbytes_per_s": 370
+    },
+    "L2": {
+      "kind": "switch",
+      "shape": [1, 1],
+      "hop_latency_ns": 0,
+      "link_bandwidth_gbytes_per_s": 370
+    },
+    "L1": {
+      "kind": "switch",
+      "shape": [1, 8],
+      "hop_latency_ns": 1250,
+      "link_bandwidth_gbytes_per_s": 370,
+      "switch_center_in_gbytes_per_s": 2960,
+      "switch_center_out_gbytes_per_s": 2960
+    }
+  },
+  "port_spread": "even",
+  "energy_pj_per_bit": {
+    "l1": 1.0,
+    "l2": 2.0,
+    "l3": 3.0
+  }
+}

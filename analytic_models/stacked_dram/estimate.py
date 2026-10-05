@@ -267,7 +267,41 @@ class PhaseEstimate:
     dram_energy_pj: float | None
 
 
-class _Phase:
+def price_stage(
+    cycles: float,
+    traffic: Traffic,
+    *,
+    memory: MemorySystem,
+    compute_hz: float,
+    overlap_policy: str,
+) -> PhaseEstimate:
+    """Time of one stage: ``cycles`` of compute at ``compute_hz`` plus its DRAM ``traffic``.
+
+    Every traffic component is quantised by ``memory`` on its own, then all of
+    them are priced at the memory's usable bandwidth and combined with the
+    compute time by ``overlap_policy``.
+    """
+
+    reads, writes = traffic
+    read_bytes = sum(memory.quantize_bytes(value) for value in reads.values() if value > 0)
+    write_bytes = sum(memory.quantize_bytes(value) for value in writes.values() if value > 0)
+    compute_s = cycles / compute_hz
+    memory_s = (read_bytes + write_bytes) / memory.usable_bandwidth_bytes_per_s
+    seconds = max(compute_s, memory_s) if overlap_policy == "stage-roofline" else compute_s + memory_s
+    return PhaseEstimate(
+        seconds=seconds,
+        compute_seconds=compute_s,
+        memory_seconds=memory_s,
+        memory_bound_seconds=seconds if memory_s > compute_s else 0.0,
+        read_bytes=read_bytes,
+        write_bytes=write_bytes,
+        dram_energy_pj=memory.energy_pj(read_bytes, write_bytes),
+    )
+
+
+class PhaseTotals:
+    """Running sum of ``PhaseEstimate`` stages."""
+
     def __init__(self, track_energy: bool) -> None:
         self.seconds = 0.0
         self.compute_seconds = 0.0
@@ -358,26 +392,10 @@ def estimate_decoder_latency(
     nominal_hz = finite_number(frequency_hz, "frequency_hz")
     frequency_scale = memory.compute_frequency_scale
     compute_hz = nominal_hz * frequency_scale
-    bandwidth = memory.usable_bandwidth_bytes_per_s
     track_energy = memory.energy_pj(0.0, 0.0) is not None
-    roofline = overlap_policy == "stage-roofline"
 
     def price(cycles: float, traffic: Traffic) -> PhaseEstimate:
-        reads, writes = traffic
-        read_bytes = sum(memory.quantize_bytes(value) for value in reads.values() if value > 0)
-        write_bytes = sum(memory.quantize_bytes(value) for value in writes.values() if value > 0)
-        compute_s = cycles / compute_hz
-        memory_s = (read_bytes + write_bytes) / bandwidth
-        seconds = max(compute_s, memory_s) if roofline else compute_s + memory_s
-        return PhaseEstimate(
-            seconds=seconds,
-            compute_seconds=compute_s,
-            memory_seconds=memory_s,
-            memory_bound_seconds=seconds if memory_s > compute_s else 0.0,
-            read_bytes=read_bytes,
-            write_bytes=write_bytes,
-            dram_energy_pj=memory.energy_pj(read_bytes, write_bytes),
-        )
+        return price_stage(cycles, traffic, memory=memory, compute_hz=compute_hz, overlap_policy=overlap_policy)
 
     hidden = shape.hidden_size
     heads = shape.num_attention_heads
@@ -390,7 +408,7 @@ def estimate_decoder_latency(
         lm_head = price(perf.lm_head(hidden, shape.vocab_size, batch), (lm_head_reads, {}))
 
     # Prefill: embedding lookup, then the blocks, as in LLaMAModel.compute_prefill_time.
-    prefill = _Phase(track_energy)
+    prefill = PhaseTotals(track_energy)
     embedding_rows = {"embedding_rows": batch * seq * hidden * precision.activation_bytes}
     prefill.add(price(perf.embeddings(hidden, seq, batch, "prefill"), (embedding_rows, {})))
     rms = perf.rms_layer(hidden, seq, batch, "prefill")
@@ -422,16 +440,16 @@ def estimate_decoder_latency(
         + perf.feed_forward(hidden, shape.intermediate_size, 1, batch, "decode")
     )
 
-    def decode_token(kv_len: int) -> _Phase:
+    def decode_token(kv_len: int) -> PhaseTotals:
         cycles = kv_independent_cycles + perf.flash_attention(heads, kv_heads, head_dim, 1, kv_len, batch, "decode")
         traffic = decode_block_traffic(shape, precision, batch_size=batch, kv_len=kv_len)
-        token = _Phase(track_energy)
+        token = PhaseTotals(track_energy)
         token.add(price(cycles * LLAMA_DECODE_ISSUE_FACTOR, traffic), layers)
         if lm_head is not None:
             token.add(lm_head)
         return token
 
-    decode = _Phase(track_energy)
+    decode = PhaseTotals(track_energy)
     first_token = decode_token(seq).freeze()
     decode.add(first_token)
     for step in range(1, out):

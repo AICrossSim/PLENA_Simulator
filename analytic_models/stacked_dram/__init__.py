@@ -14,10 +14,12 @@ from .estimate import (
     DecoderShape,
     HbmStoragePrecision,
     PhaseEstimate,
+    PhaseTotals,
     decode_block_traffic,
     element_bits,
     estimate_decoder_latency,
     prefill_block_traffic,
+    price_stage,
 )
 from .memory import FixedBandwidthMemory, MemorySystem
 from .model import LittlesLawResult, StackedDramModel, dram_connectivity_efficiency
@@ -36,6 +38,7 @@ __all__ = [
     "LittlesLawResult",
     "MemorySystem",
     "PhaseEstimate",
+    "PhaseTotals",
     "StackedDramConfig",
     "StackedDramModel",
     "ThermalPolicy",
@@ -46,4 +49,5 @@ __all__ = [
     "load_memory_profile",
     "memory_from_dict",
     "prefill_block_traffic",
+    "price_stage",
 ]

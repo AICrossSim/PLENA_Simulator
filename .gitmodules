@@ -4,3 +4,6 @@
 [submodule "PLENA_Tools"]
 	path = PLENA_Tools
 	url = https://github.com/AICrossSim/PLENA_Tools.git
+[submodule "DeepStack"]
+	path = DeepStack
+	url = https://github.com/tile-ai/DeepStack.git
