@@ -105,6 +105,29 @@ stacked-dram-estimate model profile batch="4" input_seq="2048" output_seq="1024"
 test-stacked-dram *args:
     python3 -m pytest -q analytic_models/stacked_dram {{args}}
 
+# ==================== Multi-chip (DeepStack network model) ====================
+# These need the DeepStack submodule: git submodule update --init DeepStack
+
+# Levels, bandwidths and device count of a NoC profile:
+#   just distributed-describe-noc analytic_models/distributed/examples/illustrative_gpu_cluster_32.json
+distributed-describe-noc noc *args:
+    python3 -m analytic_models.distributed describe-noc --noc {{noc}} {{args}}
+
+# TTFT/TPS of a decoder on several PLENA chips; pass a memory (--profile or --fixed-bandwidth-gbs) and a plan:
+#   just distributed-estimate <model> <noc.json> --profile <memory.json> --tp 8 --pp 4 [--ep N] [--routing random] [--json] ...
+distributed-estimate model noc *args:
+    python3 -m analytic_models.distributed estimate \
+        --model {{model}} \
+        --noc {{noc}} \
+        --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json" \
+        {{args}}
+
+# Unit tests of the multi-chip model
+test-distributed *args:
+    python3 -m pytest -q analytic_models/distributed {{args}}
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
