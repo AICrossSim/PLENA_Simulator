@@ -50,6 +50,17 @@ The simulator integrates **Ramulator 2** for High-Bandwidth Memory (HBM) modelin
 
 Writes a (BLEN, BLEN) accumulator matrix (`m_accum`) to the Vector SRAM. This operation loads a (BLEN, VLEN) matrix from HBM and uses a mask to write to the Vector SRAM.
 
+### Accumulate latency model
+
+`TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL` in `plena_settings.toml` (command-line override `--matrix-latency-model`) selects the cycles charged for each matrix-matrix accumulate (`M_MM`, `M_TMM`, `M_BMM`, `M_BTMM`):
+
+| Value | Cycles per accumulate | Notes |
+|---|---|---|
+| `"mlen"` (default) | `SYSTOLIC_PROCESSING_OVERHEAD + MLEN` | The historical charge; `SYSTOLIC_PROCESSING_OVERHEAD` comes from `TRANSACTIONAL.LATENCY`. |
+| `"rtl_measured"` | `3 * BLEN + 11` | Issue-to-issue cost of back-to-back accumulates on the PLENA_RTL matrix machine (`mxint_systolic_mcu`, KLEN = BLEN), measured with Verilator 5.034 on SimTop at PLENA_RTL 783ee48: 23 cycles at BLEN=4 (MLEN 8, 16, 32, 64), 35 at BLEN=8 (MLEN 16, 32) and 59 at BLEN=16 (MLEN 32), identical for `M_MM`, `M_TMM`, `M_BMM` and `M_BTMM`. The RTL drains each accumulate before starting the next and splits the MLEN-deep reduction across MLEN / BLEN parallel mini-arrays, so the cost depends on BLEN only. |
+
+The key is optional: a settings file without it charges the `mlen` model, so existing runs are unchanged. Matrix-vector ops and write-outs are not affected by the setting.
+
 
 ## Notes
 
