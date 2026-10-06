@@ -1,0 +1,6 @@
+organization,core,PM,PN,PK,multipliers,W_KiB,W_slots,X_KiB,X_buffers,accumulator_KiB,Z_KiB,W_banks,X_banks,accumulator_banks
+a_single6,0,6,4,512,12288,40.0,10,12.0,2,96.0,384.0,64,24,12
+b_homogeneous3+3,0,3,4,512,6144,20.0,5,6.0,2,48.0,192.0,32,12,6
+b_homogeneous3+3,1,3,4,512,6144,20.0,5,6.0,2,48.0,192.0,32,12,6
+c_heterogeneous4+2,0,2,4,512,4096,20.0,5,4.0,2,32.0,128.0,32,8,4
+c_heterogeneous4+2,1,4,4,512,8192,20.0,5,8.0,2,64.0,256.0,32,16,8

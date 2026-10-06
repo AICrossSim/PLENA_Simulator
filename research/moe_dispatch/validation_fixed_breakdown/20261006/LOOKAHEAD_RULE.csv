@@ -1,0 +1,6 @@
+organization,pm,pn,pk,physical_W_slots,lead_bytes,average_GU_useful_W_bytes,average_Down_useful_W_bytes,required_GU_spare_slots,required_Down_spare_slots,GU_limit,Down_limit
+a_single6,6,4,512,10,8192.0,4096.0,3754.6666666666665,2,3,2,4
+b_homogeneous3+3,3,4,512,5,8192.0,4096.0,3754.6666666666665,2,3,1,2
+b_homogeneous3+3,3,4,512,5,8192.0,4096.0,3754.6666666666665,2,3,1,2
+c_heterogeneous4+2,2,4,512,5,8192.0,4096.0,3754.6666666666665,2,3,1,2
+c_heterogeneous4+2,4,4,512,5,8192.0,4096.0,3754.6666666666665,2,3,1,2

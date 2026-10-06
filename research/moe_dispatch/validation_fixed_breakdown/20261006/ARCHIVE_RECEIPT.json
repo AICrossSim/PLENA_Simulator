@@ -1,0 +1,12 @@
+{
+  "archive": "moe_fixed_shape_report_20261006.zip",
+  "archive_bytes": 12172550,
+  "archive_sha256": "f56844a98393209b997f3a7f021923f911c0e40de5bf07dba37adcfeff1d9ac0",
+  "payload_manifest_sha256": "eab27e6fbde3c3026bc4036b99703b3ffb27493da41337bcebab6fa8c723db92",
+  "manifest_files": 76,
+  "all_zip_members_verified": true,
+  "precision": "BF16 only",
+  "scope": "analytical fixed shapes;not native calibrated",
+  "models_per_complete_repeat": 2916,
+  "complete_repeats": 2
+}

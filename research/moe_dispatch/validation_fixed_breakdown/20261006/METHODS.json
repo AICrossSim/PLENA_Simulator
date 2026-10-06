@@ -1,0 +1,236 @@
+{
+  "complete": true,
+  "repeats": 2,
+  "captured_windows": 108,
+  "windows_per_batch": 27,
+  "analytical_model_points": 2916,
+  "physical_native_calibration": false,
+  "full_model_generation": false,
+  "full_FFN_numerics_verified": false,
+  "precision": "BF16/FP32 only",
+  "assumed_clock_GHz": 1,
+  "native_fetch_span_status": "not measured; null values explicitly retained",
+  "statistics": "arithmetic means and empirical p50/p95 of captured windows; not calibrated model error",
+  "comparison_domain": "fixed6/3+3/4+2 with whole-expert EFT; not optimized-single architecture victory",
+  "new_defaults_installed": false,
+  "controller_or_predictor_added": false,
+  "source_sha256": {
+    "regime/model.py": "9b54dc767cb13f0a7b7aebacc0682f93e158b61965136fc49cefc4241c0b5ab9",
+    "regime/resources.py": "677699d1ecda761f5ac6607fca5aab882b7349c421fe361783c8f0354ee116e0",
+    "regime/metrics.py": "a72beb21ecf8ed59c28ff08b095d5c66f7702fee938b2eb367b9998b086567d6",
+    "regime/search.py": "8bc9724ed08873ddadcb4cd3fb10e0f61950a0a430dc4f252025c28f2bd2a182",
+    "regime/campaign.py": "987656579c61d0c75b8e2e13a10e4d34d352558ce0984b5b51f885f4d298f089",
+    "geometry3d/compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "geometry3d/memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+    "geometry3d/study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+    "fixed_breakdown_report.py": "e64d48d6e2e7b0abb0391a7fe4ccf7ae166baae4d840688ee31219e48d1dfe45"
+  },
+  "python": "3.11.13",
+  "checks": [
+    {
+      "organization": "a_single6",
+      "case": "charged",
+      "windows": 108,
+      "complete_repeats": 2,
+      "exact_original_baseline_reproduction": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "ideal_HBM",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "ideal_ports",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "zero_control",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "compute_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "GU_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "Down_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "both_halved",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "a_single6",
+      "case": "lookahead_guard",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "charged",
+      "windows": 108,
+      "complete_repeats": 2,
+      "exact_original_baseline_reproduction": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "ideal_HBM",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "ideal_ports",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "zero_control",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "compute_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "GU_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "Down_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "both_halved",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "b_homogeneous3+3",
+      "case": "lookahead_guard",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "charged",
+      "windows": 108,
+      "complete_repeats": 2,
+      "exact_original_baseline_reproduction": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "ideal_HBM",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "ideal_ports",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "zero_control",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "compute_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "timing_only_work_owners_traffic_budget_verified": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "GU_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "Down_only",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "both_halved",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    },
+    {
+      "organization": "c_heterogeneous4+2",
+      "case": "lookahead_guard",
+      "windows": 108,
+      "complete_repeats": 2,
+      "HBM_MAC_budget_owners_unchanged": true,
+      "activation_reuse_compute_order_and_control_service_may_change": true
+    }
+  ],
+  "guard_scope": "static compiler uses actual average native useful slice bytes and credit-latency product; not per-request K-tail proof",
+  "group_interventions": "fixed charged owners/HBM/MAC/budget;X traffic/control service/compute order may change",
+  "oracle_scope": "same charged owners/work/traffic/reservations;only declared timing changed",
+  "packaging_scope": "Source manifests are included in the full payload manifest;only root MANIFEST.json excludes itself."
+}
