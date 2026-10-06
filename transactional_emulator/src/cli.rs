@@ -171,7 +171,7 @@ pub(crate) struct Opts {
     /// Override the cycles charged per matrix-matrix accumulate (M_MM, M_TMM,
     /// M_BMM, M_BTMM); default: MATRIX_LATENCY_MODEL in plena_settings.toml,
     /// mlen. `mlen` charges SYSTOLIC_PROCESSING_OVERHEAD + MLEN cycles;
-    /// `rtl_blen` charges the RTL-measured 3 * BLEN + 11 cycles.
+    /// `rtl_measured` charges the RTL-measured 3 * BLEN + 11 cycles.
     pub(crate) matrix_latency_model: Option<MatrixLatencyModel>,
 
     #[arg(long)]

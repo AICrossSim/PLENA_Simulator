@@ -27,17 +27,19 @@ pub enum MatrixLatencyModel {
     /// `SYSTOLIC_PROCESSING_OVERHEAD + MLEN`: the historical charge.
     #[default]
     Mlen,
-    /// `3 * BLEN + 11`: measured on the RTL matrix pipeline with Verilator
-    /// (23 cycles at BLEN=4, 35 at BLEN=8).
-    #[value(name = "rtl_blen")]
-    RtlBlen,
+    /// `3 * BLEN + 11`: the accumulate cost measured on the PLENA_RTL matrix
+    /// machine with Verilator (23, 35 and 59 cycles at BLEN 4, 8 and 16; MLEN
+    /// does not enter). "RTL" names where the numbers come from; BLEN itself
+    /// is the normal `TRANSACTIONAL.CONFIG.BLEN`.
+    #[value(name = "rtl_measured")]
+    RtlMeasured,
 }
 
 impl MatrixLatencyModel {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Mlen => "mlen",
-            Self::RtlBlen => "rtl_blen",
+            Self::RtlMeasured => "rtl_measured",
         }
     }
 }
@@ -48,9 +50,9 @@ impl FromStr for MatrixLatencyModel {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
             "mlen" => Ok(Self::Mlen),
-            "rtl_blen" => Ok(Self::RtlBlen),
+            "rtl_measured" => Ok(Self::RtlMeasured),
             other => Err(format!(
-                "unsupported matrix latency model {other:?} (expected \"mlen\" or \"rtl_blen\")"
+                "unsupported matrix latency model {other:?} (expected \"mlen\" or \"rtl_measured\")"
             )),
         }
     }
@@ -156,7 +158,7 @@ pub struct ConfigSection {
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
     /// Per-accumulate latency model for matrix-matrix ops, "mlen" or
-    /// "rtl_blen". Optional so settings files that predate the key keep
+    /// "rtl_measured". Optional so settings files that predate the key keep
     /// working; absent means mlen.
     #[serde(rename = "MATRIX_LATENCY_MODEL", default)]
     pub matrix_latency_model: Option<ConfigValueString>,
@@ -778,11 +780,11 @@ mod tests {
             MatrixLatencyModel::Mlen
         );
         assert_eq!(
-            "RTL_BLEN".parse::<MatrixLatencyModel>().unwrap(),
-            MatrixLatencyModel::RtlBlen
+            "RTL_MEASURED".parse::<MatrixLatencyModel>().unwrap(),
+            MatrixLatencyModel::RtlMeasured
         );
         assert!("blen".parse::<MatrixLatencyModel>().is_err());
-        assert_eq!(MatrixLatencyModel::RtlBlen.to_string(), "rtl_blen");
+        assert_eq!(MatrixLatencyModel::RtlMeasured.to_string(), "rtl_measured");
     }
 
     #[test]
@@ -835,12 +837,12 @@ mod tests {
         );
 
         let overridden = format!(
-            "{stripped}\n[TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL]\nvalue = \"rtl_blen\"\n"
+            "{stripped}\n[TRANSACTIONAL.CONFIG.MATRIX_LATENCY_MODEL]\nvalue = \"rtl_measured\"\n"
         );
         let settings: PlenaSettings = toml::from_str(&overridden).unwrap();
         assert_eq!(
             settings.transactional.config.matrix_latency_model(),
-            MatrixLatencyModel::RtlBlen
+            MatrixLatencyModel::RtlMeasured
         );
     }
 

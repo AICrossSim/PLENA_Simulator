@@ -26,9 +26,9 @@ use crate::runtime_config::{MATRIX_LATENCY_MODEL, SYSTOLIC_PROCESSING_OVERHEAD};
 const ACCUM_OPTS: (tch::Kind, tch::Device) = (tch::Kind::Float, tch::Device::Cpu);
 
 /// Slope of the RTL-measured matrix-matrix accumulate cost, in cycles per
-/// BLEN row.
+/// unit of BLEN (see [`matrix_accumulate_cycles`] for the measurement).
 const RTL_ACCUMULATE_CYCLES_PER_ROW: u32 = 3;
-/// Fixed part of the RTL-measured matrix-matrix accumulate cost, in cycles.
+/// Intercept of the RTL-measured matrix-matrix accumulate cost, in cycles.
 const RTL_ACCUMULATE_FIXED_CYCLES: u32 = 11;
 
 /// Cycles charged for one matrix-matrix accumulate (`M_MM`, `M_TMM`, `M_BMM`,
@@ -36,13 +36,15 @@ const RTL_ACCUMULATE_FIXED_CYCLES: u32 = 11;
 ///
 /// * [`MatrixLatencyModel::Mlen`]: `SYSTOLIC_PROCESSING_OVERHEAD + MLEN`, the
 ///   historical charge.
-/// * [`MatrixLatencyModel::RtlBlen`]: `3 * BLEN + 11`. Verilator runs of the
-///   RTL matrix pipeline measured 23 cycles per accumulate at BLEN=4 and 35 at
-///   BLEN=8 (matrix ops are serialized: each accumulate drains before the next
-///   starts); those two points fix the slope at 3 cycles per BLEN row and the
-///   fixed overhead at 11 cycles. MLEN does not enter because the MLEN-deep
-///   reduction is spread across parallel sub-arrays, and the
-///   `SYSTOLIC_PROCESSING_OVERHEAD` knob is part of the `mlen` model only.
+/// * [`MatrixLatencyModel::RtlMeasured`]: `3 * BLEN + 11`, the issue-to-issue
+///   cost of back-to-back accumulates on the PLENA_RTL matrix machine
+///   (`matrix_machine.sv` over `mxint_systolic_mcu.sv`, KLEN = BLEN), measured
+///   with Verilator 5.034 on SimTop at PLENA_RTL 783ee48: 23 cycles at BLEN=4
+///   (MLEN 8, 16, 32, 64), 35 at BLEN=8 (MLEN 16, 32) and 59 at BLEN=16
+///   (MLEN 32), identical for all four opcodes. The RTL drains each accumulate
+///   before starting the next, and the MLEN-deep reduction is split across
+///   MLEN / BLEN parallel mini-arrays, so the cost depends on BLEN only. The
+///   `SYSTOLIC_PROCESSING_OVERHEAD` knob belongs to the `mlen` model.
 pub(crate) fn matrix_accumulate_cycles(
     model: MatrixLatencyModel,
     blen: u32,
@@ -51,7 +53,7 @@ pub(crate) fn matrix_accumulate_cycles(
 ) -> u32 {
     match model {
         MatrixLatencyModel::Mlen => systolic_overhead + mlen,
-        MatrixLatencyModel::RtlBlen => {
+        MatrixLatencyModel::RtlMeasured => {
             RTL_ACCUMULATE_CYCLES_PER_ROW * blen + RTL_ACCUMULATE_FIXED_CYCLES
         }
     }
@@ -620,16 +622,18 @@ mod tests {
 
     #[test]
     fn accumulate_cycles_pin_both_models() {
-        use MatrixLatencyModel::{Mlen, RtlBlen};
+        use MatrixLatencyModel::{Mlen, RtlMeasured};
         // Historical charge: overhead + MLEN, independent of BLEN.
         assert_eq!(matrix_accumulate_cycles(Mlen, 4, 64, 0), 64);
         assert_eq!(matrix_accumulate_cycles(Mlen, 8, 64, 0), 64);
         assert_eq!(matrix_accumulate_cycles(Mlen, 4, 64, 5), 69);
-        // RTL measurement: 23 cycles at BLEN=4 and 35 at BLEN=8, independent
-        // of MLEN and of the overhead knob.
-        assert_eq!(matrix_accumulate_cycles(RtlBlen, 4, 64, 0), 23);
-        assert_eq!(matrix_accumulate_cycles(RtlBlen, 8, 64, 0), 35);
-        assert_eq!(matrix_accumulate_cycles(RtlBlen, 8, 1024, 5), 35);
+        // RTL measurement: 23, 35 and 59 cycles at BLEN 4, 8 and 16,
+        // independent of MLEN and of the overhead knob.
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 4, 8, 0), 23);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 4, 64, 0), 23);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 8, 64, 0), 35);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 16, 32, 0), 59);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 8, 1024, 5), 35);
     }
 
     fn bf16_plain() -> MxDataType {
@@ -713,10 +717,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rtl_blen_model_changes_only_the_accumulate_charge() {
+    async fn rtl_measured_model_changes_only_the_accumulate_charge() {
         let executor = Executor::new();
         let (mut machine, vram, out) = make_machine(8).await;
-        machine.set_latency_model(MatrixLatencyModel::RtlBlen);
+        machine.set_latency_model(MatrixLatencyModel::RtlMeasured);
 
         executor.spawn(async move {
             machine.mm(0, 0).await;
