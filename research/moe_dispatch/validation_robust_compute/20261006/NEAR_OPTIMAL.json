@@ -1,0 +1,238 @@
+{
+  "heterogeneous": [
+    {
+      "geometry": "1x49x128+1x94x64",
+      "nominal_ratio": 0.49462329467296756,
+      "worst_regret": 1.0
+    },
+    {
+      "geometry": "1x47x128+1x49x128",
+      "nominal_ratio": 0.49462329467296756,
+      "worst_regret": 1.0006626366691667
+    },
+    {
+      "geometry": "1x64x64+1x64x128",
+      "nominal_ratio": 0.4950930067036916,
+      "worst_regret": 1.0013958588168999
+    },
+    {
+      "geometry": "1x32x128+1x64x128",
+      "nominal_ratio": 0.4950930067036916,
+      "worst_regret": 1.0017323256512036
+    },
+    {
+      "geometry": "1x13x128+1x83x128",
+      "nominal_ratio": 0.495700754846648,
+      "worst_regret": 1.0021783449855366
+    },
+    {
+      "geometry": "1x26x64+1x83x128",
+      "nominal_ratio": 0.49589130765343586,
+      "worst_regret": 1.002563593332794
+    },
+    {
+      "geometry": "1x64x128+1x128x32",
+      "nominal_ratio": 0.49602740817768043,
+      "worst_regret": 1.002838753289291
+    },
+    {
+      "geometry": "1x83x64+1x109x64",
+      "nominal_ratio": 0.49609919789256895,
+      "worst_regret": 1.0029838934710449
+    },
+    {
+      "geometry": "1x25x128+1x71x128",
+      "nominal_ratio": 0.49595490976547385,
+      "worst_regret": 1.0030572519688101
+    },
+    {
+      "geometry": "1x52x32+1x83x128",
+      "nominal_ratio": 0.4963131672390779,
+      "worst_regret": 1.0034164839875317
+    },
+    {
+      "geometry": "1x83x128+1x104x16",
+      "nominal_ratio": 0.4963131672390779,
+      "worst_regret": 1.0034164839875317
+    },
+    {
+      "geometry": "1x37x128+1x59x128",
+      "nominal_ratio": 0.49643073485498074,
+      "worst_regret": 1.0042694875127776
+    },
+    {
+      "geometry": "1x50x64+1x71x128",
+      "nominal_ratio": 0.4967467897819855,
+      "worst_regret": 1.0044038157274293
+    },
+    {
+      "geometry": "1x94x64+1x98x64",
+      "nominal_ratio": 0.4968402513907159,
+      "worst_regret": 1.0044821114201954
+    },
+    {
+      "geometry": "1x2x128+1x94x128",
+      "nominal_ratio": 0.497089807394386,
+      "worst_regret": 1.0049866489265316
+    },
+    {
+      "geometry": "1x4x64+1x94x128",
+      "nominal_ratio": 0.497089807394386,
+      "worst_regret": 1.0049866489265316
+    },
+    {
+      "geometry": "1x8x32+1x94x128",
+      "nominal_ratio": 0.497089807394386,
+      "worst_regret": 1.0049866489265316
+    },
+    {
+      "geometry": "1x16x16+1x94x128",
+      "nominal_ratio": 0.497089807394386,
+      "worst_regret": 1.0049866489265316
+    },
+    {
+      "geometry": "1x47x128+1x98x64",
+      "nominal_ratio": 0.4968402513907159,
+      "worst_regret": 1.0049880389371475
+    },
+    {
+      "geometry": "1x36x128+1x60x128",
+      "nominal_ratio": 0.49684640010936043,
+      "worst_regret": 1.0050378200181738
+    },
+    {
+      "geometry": "1x1x256+1x94x128",
+      "nominal_ratio": 0.49725890801622985,
+      "worst_regret": 1.0053285265203793
+    },
+    {
+      "geometry": "1x60x128+1x72x64",
+      "nominal_ratio": 0.49739475750162954,
+      "worst_regret": 1.0060660558236056
+    },
+    {
+      "geometry": "1x32x128+1x128x64",
+      "nominal_ratio": 0.49833628829666987,
+      "worst_regret": 1.0075067099825075
+    },
+    {
+      "geometry": "1x64x64+1x128x64",
+      "nominal_ratio": 0.49833628829666987,
+      "worst_regret": 1.0075067099825075
+    },
+    {
+      "geometry": "1x94x128+2x1x128",
+      "nominal_ratio": 0.4984038144008124,
+      "worst_regret": 1.0076432302492837
+    },
+    {
+      "geometry": "1x94x128+2x2x64",
+      "nominal_ratio": 0.4984038144008124,
+      "worst_regret": 1.0076432302492837
+    },
+    {
+      "geometry": "1x94x128+2x4x32",
+      "nominal_ratio": 0.4984038144008124,
+      "worst_regret": 1.0076432302492837
+    },
+    {
+      "geometry": "1x94x128+2x8x16",
+      "nominal_ratio": 0.4984038144008124,
+      "worst_regret": 1.0076432302492837
+    },
+    {
+      "geometry": "1x12x128+1x84x128",
+      "nominal_ratio": 0.49850150595728315,
+      "worst_regret": 1.0078407372359601
+    },
+    {
+      "geometry": "1x24x64+1x84x128",
+      "nominal_ratio": 0.49863444393332373,
+      "worst_regret": 1.0081095033403313
+    },
+    {
+      "geometry": "1x16x256+1x64x128",
+      "nominal_ratio": 0.49831192063225127,
+      "worst_regret": 1.0083604227886427
+    },
+    {
+      "geometry": "1x48x32+1x84x128",
+      "nominal_ratio": 0.49881937849749314,
+      "worst_regret": 1.0084833930583474
+    },
+    {
+      "geometry": "1x8x512+1x64x128",
+      "nominal_ratio": 0.49831192063225127,
+      "worst_regret": 1.0085785203762625
+    },
+    {
+      "geometry": "1x42x128+1x54x128",
+      "nominal_ratio": 0.4985164301724727,
+      "worst_regret": 1.0086448847743312
+    },
+    {
+      "geometry": "1x17x128+1x79x128",
+      "nominal_ratio": 0.4987122858151127,
+      "worst_regret": 1.008729789765235
+    },
+    {
+      "geometry": "1x59x128+1x74x64",
+      "nominal_ratio": 0.4986789754333079,
+      "worst_regret": 1.0087342237317107
+    },
+    {
+      "geometry": "1x39x128+1x57x128",
+      "nominal_ratio": 0.4986661247903198,
+      "worst_regret": 1.0089833369300547
+    },
+    {
+      "geometry": "1x24x128+1x72x128",
+      "nominal_ratio": 0.4990110733408185,
+      "worst_regret": 1.0089834875387076
+    },
+    {
+      "geometry": "1x48x128+1x96x64",
+      "nominal_ratio": 0.49917998083086573,
+      "worst_regret": 1.0092124374386995
+    },
+    {
+      "geometry": "1x71x128+1x100x32",
+      "nominal_ratio": 0.4991323897322392,
+      "worst_regret": 1.0092482324317011
+    },
+    {
+      "geometry": "1x84x128+1x96x16",
+      "nominal_ratio": 0.4992075562739987,
+      "worst_regret": 1.009268187831837
+    },
+    {
+      "geometry": "1x30x256+1x36x128",
+      "nominal_ratio": 0.49872868141539883,
+      "worst_regret": 1.0097531097173866
+    },
+    {
+      "geometry": "1x54x128+1x84x64",
+      "nominal_ratio": 0.4991447950247166,
+      "worst_regret": 1.0099011419417214
+    }
+  ],
+  "homogeneous": [
+    {
+      "geometry": "1x48x128+1x48x128",
+      "nominal_ratio": 0.4961808540099344,
+      "worst_regret": 1.0
+    },
+    {
+      "geometry": "1x96x64+1x96x64",
+      "nominal_ratio": 0.5004287457525093,
+      "worst_regret": 1.0085611762490332
+    }
+  ],
+  "single": [
+    {
+      "geometry": "1x96x128",
+      "nominal_ratio": 0.5038121995077786,
+      "worst_regret": 1.0
+    }
+  ]
+}

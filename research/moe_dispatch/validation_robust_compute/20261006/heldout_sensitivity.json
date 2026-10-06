@@ -1,0 +1,74 @@
+[
+  {
+    "heterogeneous_vs_homogeneous": 1.0031888314303745,
+    "heterogeneous_vs_single": 1.0194269961971223,
+    "homogeneous_vs_single": 1.0161865485918489,
+    "scenario": "flat20_ideal"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.0035211817072829,
+    "heterogeneous_vs_single": 1.019001964185446,
+    "homogeneous_vs_single": 1.0154264630984926,
+    "scenario": "log_stage1_ideal"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.0038863774470657,
+    "heterogeneous_vs_single": 1.0186072316319519,
+    "homogeneous_vs_single": 1.014663864871164,
+    "scenario": "log_stage2_ideal"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.0018326476686652,
+    "heterogeneous_vs_single": 1.0157863527075215,
+    "homogeneous_vs_single": 1.0139281795929966,
+    "scenario": "flat20_percore_r8"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 0.9968418961696245,
+    "heterogeneous_vs_single": 1.0298669313651148,
+    "homogeneous_vs_single": 1.0331296621082933,
+    "scenario": "flat20_percore_r16"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.019583934740258,
+    "heterogeneous_vs_single": 1.022896263344674,
+    "homogeneous_vs_single": 1.0032487061550845,
+    "scenario": "flat20_percore_r32"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.0284919620616704,
+    "heterogeneous_vs_single": 1.0427142251451131,
+    "homogeneous_vs_single": 1.0138282685796915,
+    "scenario": "log_stage1_percore_r8"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.0300056654115401,
+    "heterogeneous_vs_single": 1.0639165758794682,
+    "homogeneous_vs_single": 1.0329230329566963,
+    "scenario": "log_stage1_percore_r16"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.020693475189161,
+    "heterogeneous_vs_single": 1.024730273027409,
+    "homogeneous_vs_single": 1.0039549560532852,
+    "scenario": "log_stage1_percore_r32"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.067285306816768,
+    "heterogeneous_vs_single": 1.0819156846853157,
+    "homogeneous_vs_single": 1.0137080289357523,
+    "scenario": "log_stage2_percore_r8"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.038092957808986,
+    "heterogeneous_vs_single": 1.072029707855519,
+    "homogeneous_vs_single": 1.032691436533931,
+    "scenario": "log_stage2_percore_r16"
+  },
+  {
+    "heterogeneous_vs_homogeneous": 1.021320008048296,
+    "heterogeneous_vs_single": 1.026041266489823,
+    "homogeneous_vs_single": 1.0046227023893806,
+    "scenario": "log_stage2_percore_r32"
+  }
+]

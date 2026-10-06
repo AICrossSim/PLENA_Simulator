@@ -1,0 +1,29 @@
+[
+  {
+    "baseline": "robust_single",
+    "candidate": "robust_homogeneous",
+    "ci95": [
+      1.0159299854703367,
+      1.016426758905641
+    ],
+    "speedup": 1.0161865485918489
+  },
+  {
+    "baseline": "robust_single",
+    "candidate": "robust_heterogeneous",
+    "ci95": [
+      1.0191864108341202,
+      1.019660597867704
+    ],
+    "speedup": 1.0194269961971223
+  },
+  {
+    "baseline": "robust_homogeneous",
+    "candidate": "robust_heterogeneous",
+    "ci95": [
+      1.003064130118633,
+      1.0033358386930922
+    ],
+    "speedup": 1.0031888314303745
+  }
+]

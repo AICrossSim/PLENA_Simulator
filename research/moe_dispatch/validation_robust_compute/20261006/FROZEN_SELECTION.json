@@ -1,0 +1,44 @@
+{
+  "counts": {
+    "heterogeneous": 113874,
+    "homogeneous": 72,
+    "single": 88,
+    "total": 114034
+  },
+  "families": {
+    "heterogeneous": {
+      "nominal_best_geometry": "1x47x128+1x49x128",
+      "nominal_ratio_to_anchor": 0.49462329467296756,
+      "robust_geometry": "1x49x128+1x94x64",
+      "scenario_regrets": {
+        "flat20_ideal": 1.0,
+        "log_stage1_ideal": 1.0,
+        "log_stage2_ideal": 1.0
+      },
+      "worst_regret": 1.0
+    },
+    "homogeneous": {
+      "nominal_best_geometry": "1x48x128+1x48x128",
+      "nominal_ratio_to_anchor": 0.4961808540099344,
+      "robust_geometry": "1x48x128+1x48x128",
+      "scenario_regrets": {
+        "flat20_ideal": 1.0,
+        "log_stage1_ideal": 1.0,
+        "log_stage2_ideal": 1.0
+      },
+      "worst_regret": 1.0
+    },
+    "single": {
+      "nominal_best_geometry": "1x96x128",
+      "nominal_ratio_to_anchor": 0.5038121995077786,
+      "robust_geometry": "1x96x128",
+      "scenario_regrets": {
+        "flat20_ideal": 1.0,
+        "log_stage1_ideal": 1.0,
+        "log_stage2_ideal": 1.0
+      },
+      "worst_regret": 1.0
+    }
+  },
+  "frozen_before_heldout_loaded": true
+}

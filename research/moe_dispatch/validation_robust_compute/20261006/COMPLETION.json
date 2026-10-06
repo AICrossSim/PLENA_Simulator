@@ -1,0 +1,15 @@
+{
+  "development_windows": 18,
+  "elapsed_seconds": 22.53684139624238,
+  "frozen_sensitivity_repeats": 2,
+  "frozen_sensitivity_scenarios": 12,
+  "full_search_repeats": 2,
+  "heldout_hashes": {
+    "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+    "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+  },
+  "heldout_repeats": 2,
+  "heldout_windows": 135,
+  "scenarios": 3,
+  "search_window_simulations": 12315672
+}

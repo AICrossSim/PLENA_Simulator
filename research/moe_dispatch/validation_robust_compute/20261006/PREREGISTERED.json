@@ -1,0 +1,94 @@
+{
+  "II": 1,
+  "M_N_bounds": "all positive integers satisfying exact total multiplier budget",
+  "PK": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048
+  ],
+  "clock": "assumed 1GHz, unvalidated",
+  "commit_cycles": 1,
+  "counts": {
+    "heterogeneous": 113874,
+    "homogeneous": 72,
+    "single": 88,
+    "total": 114034
+  },
+  "development_counts": {
+    "2": 3,
+    "4": 3,
+    "8": 3,
+    "16": 3,
+    "64": 2,
+    "96": 2,
+    "128": 2
+  },
+  "development_hashes": {
+    "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55"
+  },
+  "distinct_core_shapes": 9417,
+  "excluded": [
+    "HBM",
+    "DMA",
+    "SRAM timing/capacity/banks",
+    "control costs",
+    "Router",
+    "SiLU",
+    "combine",
+    "learned predictor"
+  ],
+  "heldout_warning": "frozen split, historically exposed captures; not pristine blind generalization",
+  "main_multiplier_budget": 12288,
+  "nominal": "flat20_ideal",
+  "numerical_warning": "PK changes reduction grouping; no pretrained accuracy verification",
+  "numpy_version": "2.4.6",
+  "output_residency": "no bound in primary; finite 8/16/32 records per core in separate diagnostics",
+  "scheduler": "whole-expert logical-work LPT followed by EFT; common zero-cost rule, no N splitting or cross-expert packing",
+  "scope": "analytical pure GEMM compute; not native HBM, RTL, or full model inference",
+  "selection": "development batch-balanced paired geometric latency ratios; minimax within-family regret across three compute timing profiles, no finite-buffer filter",
+  "source_hashes": {
+    "compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "robust_compute.py": "80238909a8404e705b17275d369ef4b33ca2f7356ef9dc8f67c1af328f94bee1",
+    "study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+    "test_compute.py": "fffad6ccfa068ebd1cb62fea0a8feec36b130920e303a9c171330fe22ed11097",
+    "test_robust_compute.py": "bc1dc0d6c4ebf2cb370d6af19579fea5a6cb0452e5947ebd1f0faf2419fd2040"
+  },
+  "timings": {
+    "flat20": {
+      "16": 20,
+      "32": 20,
+      "64": 20,
+      "128": 20,
+      "256": 20,
+      "512": 20,
+      "1024": 20,
+      "2048": 20
+    },
+    "log_stage1": {
+      "16": 15,
+      "32": 16,
+      "64": 17,
+      "128": 18,
+      "256": 19,
+      "512": 20,
+      "1024": 21,
+      "2048": 22
+    },
+    "log_stage2": {
+      "16": 10,
+      "32": 12,
+      "64": 14,
+      "128": 16,
+      "256": 18,
+      "512": 20,
+      "1024": 22,
+      "2048": 24
+    }
+  }
+}
