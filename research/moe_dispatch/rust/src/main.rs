@@ -1,5 +1,5 @@
 #![recursion_limit = "256"]
-//! Independent candidate analytical model. NOT native Ramulator or RTL timing.
+//! Event-level core model; optional native Ramulator memory backend. Not RTL timing.
 //! All times are 1 ns cycles. Numeric SRAM validation is a separate executable.
 // Simulator-host optimization only: avoid constructing discarded JSON events.
 // The condition is evaluated before the event expression; modeled timing and
@@ -15,6 +15,9 @@ macro_rules! trace {
 mod compute;
 mod joint;
 mod legacy_chunks;
+mod live_profile;
+#[cfg(feature = "native-hbm")]
+mod native_hbm;
 #[allow(dead_code)]
 mod plan;
 mod profile_v3;
@@ -34,6 +37,7 @@ fn ceil(a: usize, b: usize) -> usize {
 fn align(a: usize, b: usize) -> usize {
     ceil(a, b) * b
 }
+fn is_false(v: &bool) -> bool { !*v }
 
 #[derive(Clone, Deserialize, Serialize)]
 struct Expert {
@@ -64,6 +68,12 @@ struct Workload {
 #[serde(default)]
 struct Config {
     arch: String,
+    #[serde(skip_serializing_if = "is_false")]
+    native_hbm: bool,
+    #[serde(skip_serializing_if = "Value::is_null")]
+    native_hbm_config: Value,
+    #[serde(skip_serializing_if = "is_false")]
+    live_profile: bool,
     diagnostic_profile: bool,
     profile_issue_limit: usize,
     weight_bytes_scale: f64,
@@ -108,6 +118,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             arch: "joint_v1".into(),
+            native_hbm: false,
+            native_hbm_config: Value::Null,
+            live_profile: false,
             diagnostic_profile: false,
             profile_issue_limit: 4096,
             weight_bytes_scale: 1.0,
@@ -414,6 +427,9 @@ struct Sim {
     tail_partition_count: u64,
     joint: joint::JointState,
     profile_v3: profile_v3::Profile,
+    live_profile: live_profile::Profile,
+    #[cfg(feature = "native-hbm")]
+    native: Option<native_hbm::Backend>,
 }
 
 impl Sim {
@@ -1481,6 +1497,9 @@ impl Sim {
         self.cores[c].feed_until = end;
         self.cores[c].weight_cache = Some(tid);
         self.cores[c].arithmetic_until = end + self.cfg.dot_tail_ns;
+        if self.cfg.live_profile {
+            self.live_profile.issue(c, self.now, end, end + self.cfg.dot_tail_ns);
+        }
         self.cores[c].contexts += 1;
         self.cores[c].stats.contexts_peak = self.cores[c]
             .stats
@@ -1507,6 +1526,13 @@ impl Sim {
         "issue"
     }
     fn new(w: Workload, cfg: Config) -> Self {
+        if cfg.native_hbm {
+            assert!(cfg!(feature = "native-hbm"), "build with --features native-hbm");
+            assert!(cfg.runtime_fsm && !cfg.ideal_hbm && cfg.weight_bytes_scale == 1.0);
+            assert!(!cfg.native_hbm_config.is_null() && cfg.live_profile);
+        }
+        #[cfg(feature = "native-hbm")]
+        let native = cfg.native_hbm.then(|| native_hbm::Backend::new(&cfg.native_hbm_config));
         assert!(
             matches!(
                 cfg.lanes.as_slice(),
@@ -1735,6 +1761,9 @@ impl Sim {
             tail_partition_count: 0,
             joint: joint::JointState::default(),
             profile_v3: profile_v3::Profile::new(nc),
+            live_profile: live_profile::Profile::new(nc),
+            #[cfg(feature = "native-hbm")]
+            native,
         };
         let mut load = vec![0u64; nc];
         for e in 0..ne {
@@ -1762,6 +1791,14 @@ impl Sim {
     }
     fn run(mut self) -> Value {
         loop {
+            #[cfg(feature = "native-hbm")]
+            if let Some(native) = &mut self.native {
+                let callbacks = native.advance(self.now);
+                for serial in callbacks {
+                    let req = self.outstanding_dma.get(&serial).expect("native callback without credit").clone();
+                    self.event(self.now, Event::RuntimeReturn(req));
+                }
+            }
             // Same-cycle completions are drained before a new dispatch/issue decision.
             while self
                 .events
@@ -1793,6 +1830,10 @@ impl Sim {
             }
             self.diagnostics.accepted_this_cycle.fill(false);
             self.hbm_issue();
+            #[cfg(feature = "native-hbm")]
+            if self.native.as_ref().is_some_and(|n| n.pending > 0) {
+                self.live_profile.outstanding_cycles += 1;
+            }
             self.profile_hbm_cycle();
             for c in 0..self.cores.len() {
                 let state = self.step_core(c);
@@ -1913,6 +1954,17 @@ impl Sim {
     "weight_bank_words":c.wb.words,"x_bank_words":c.xb.words,"workspace_bank_words":c.ab.words})).collect::<Vec<_>>(),"trace":self.trace});
         if self.cfg.diagnostic_profile {
             report["m0_profile"] = self.profile_v3.report(self.now);
+        }
+        if self.cfg.live_profile {
+            let macs: Vec<_> = self.cores.iter().map(|c| c.stats.useful_macs).collect();
+            report["live_timing_profile"] = self.live_profile.report(self.now, &macs, weight);
+        }
+        #[cfg(feature = "native-hbm")]
+        if let Some(native) = &self.native {
+            report["native_hbm"] = native.report();
+            report["schema"] = json!("plena_dispatch_native_hbm_profile_v1");
+            report["scope"] = json!("captured routed MoE; resident X/routes through ordered combine; live native Ramulator weight reads plus event-level core/SRAM model; numerical tensors separately verified");
+            report["model_limitations"] = json!(["arithmetic/SRAM/vector timing is an event-level model, not RTL", "router and full-model attention execution excluded; routes and input X resident at start", "native HBM reads carry timing tags, not numerical weight payloads", "internal storage placement is this Rust runtime; not identical to Python fluid-model placement"]);
         }
         report
     }

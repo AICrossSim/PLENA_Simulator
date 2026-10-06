@@ -1,0 +1,71 @@
+{
+  "all_same_address_multiset": true,
+  "exact_repeats": 2,
+  "rows": [
+    {
+      "accepted_and_completed": 32768,
+      "address_multiset_sha256": "3c17fa445689d232882bc75a00fefe3100c5b65744770b522d04f1f5874ea27a",
+      "bandwidth_GBps": 161.24496386283255,
+      "burst_sectors_per_stream": 1,
+      "bytes": 1048576,
+      "cycles": 6503,
+      "rejected_attempts": 389,
+      "row_conflicts": 16061,
+      "row_hits": 15712,
+      "row_misses": 995,
+      "scope": "two weight streams; native memory only; no MAC/SRAM execution"
+    },
+    {
+      "accepted_and_completed": 32768,
+      "address_multiset_sha256": "3c17fa445689d232882bc75a00fefe3100c5b65744770b522d04f1f5874ea27a",
+      "bandwidth_GBps": 161.96725362990423,
+      "burst_sectors_per_stream": 8,
+      "bytes": 1048576,
+      "cycles": 6474,
+      "rejected_attempts": 0,
+      "row_conflicts": 16160,
+      "row_hits": 15728,
+      "row_misses": 880,
+      "scope": "two weight streams; native memory only; no MAC/SRAM execution"
+    },
+    {
+      "accepted_and_completed": 32768,
+      "address_multiset_sha256": "3c17fa445689d232882bc75a00fefe3100c5b65744770b522d04f1f5874ea27a",
+      "bandwidth_GBps": 163.9168360168829,
+      "burst_sectors_per_stream": 32,
+      "bytes": 1048576,
+      "cycles": 6397,
+      "rejected_attempts": 0,
+      "row_conflicts": 16488,
+      "row_hits": 15768,
+      "row_misses": 512,
+      "scope": "two weight streams; native memory only; no MAC/SRAM execution"
+    },
+    {
+      "accepted_and_completed": 32768,
+      "address_multiset_sha256": "3c17fa445689d232882bc75a00fefe3100c5b65744770b522d04f1f5874ea27a",
+      "bandwidth_GBps": 147.375404075896,
+      "burst_sectors_per_stream": 128,
+      "bytes": 1048576,
+      "cycles": 7115,
+      "rejected_attempts": 0,
+      "row_conflicts": 17992,
+      "row_hits": 14304,
+      "row_misses": 472,
+      "scope": "two weight streams; native memory only; no MAC/SRAM execution"
+    },
+    {
+      "accepted_and_completed": 32768,
+      "address_multiset_sha256": "3c17fa445689d232882bc75a00fefe3100c5b65744770b522d04f1f5874ea27a",
+      "bandwidth_GBps": 185.5558308264024,
+      "burst_sectors_per_stream": 512,
+      "bytes": 1048576,
+      "cycles": 5651,
+      "rejected_attempts": 0,
+      "row_conflicts": 7808,
+      "row_hits": 23800,
+      "row_misses": 1160,
+      "scope": "two weight streams; native memory only; no MAC/SRAM execution"
+    }
+  ]
+}

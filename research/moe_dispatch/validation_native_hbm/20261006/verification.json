@@ -1,0 +1,13 @@
+{
+  "all_324_points_verified": true,
+  "all_8_controller_cycles_match_core_clock": true,
+  "equal_gross_resource_budget": true,
+  "equal_weight_and_X_bytes_every_window": true,
+  "exact_full_report_repeats": true,
+  "native_build_receipt_sha256": "d6358504d9ea102cbb0d6f6912a1b6d6c362b04aa64d75132ed5bf00086576c9",
+  "native_library_sha256": "dfa151ae64218133503da95fe96f26c8aa01db58362cb779434480a70aa8ed1d",
+  "native_read_counts_callbacks_landings_conserved": true,
+  "per_core_front_state_partition_exact": true,
+  "pipeline_intervals_match_original_active_counter": true,
+  "runs": 648
+}

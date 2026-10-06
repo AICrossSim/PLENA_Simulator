@@ -894,6 +894,17 @@ impl Sim {
                 self.cores[r.core].stats.dma_backpressure_cycles += 1;
                 break; // No AGU advance, charge, new selection or changed tag.
             }
+            #[cfg(feature = "native-hbm")]
+            if let Some(native) = &mut self.native {
+                if !native.request(r.serial, r.address.try_into().unwrap()) {
+                    self.cores[r.core].stats.dma_backpressure_cycles += 1;
+                    self.live_profile.native_backpressure_cycles += 1;
+                    break; // Same descriptor/address/credit state retried next cycle.
+                }
+            }
+            if self.cfg.live_profile {
+                self.live_profile.accept(r.serial, r.core, self.now);
+            }
             self.record_dma_accept(&r);
             let t = self.dma_tile_mut(&r);
             assert_eq!(t.sent, r.offset);
@@ -925,7 +936,7 @@ impl Sim {
                 json!({"event":"dma_fire","cycle":self.now,"request":r})
             );
             self.last_progress = self.now;
-            self.event(
+            if !self.cfg.native_hbm { self.event(
                 self.now
                     + if self.cfg.ideal_hbm {
                         0
@@ -933,10 +944,11 @@ impl Sim {
                         self.cfg.hbm_latency_ns
                     },
                 Event::RuntimeReturn(r),
-            );
+            ); }
         }
     }
     pub(super) fn return_runtime(&mut self, r: DmaRequest) {
+        if self.cfg.live_profile { self.live_profile.returned(r.serial, self.now); }
         self.profile_return();
         assert_eq!(self.outstanding_dma.get(&r.serial), Some(&r));
         let t = self.dma_tile(&r);
