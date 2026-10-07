@@ -1,0 +1,29 @@
+{
+  "audit_source_sha256": "29281e5c9320626aa6ef8ead237091b460d62a4a303dd7cb3126bcff2f5128de",
+  "checks": 120771,
+  "failed": [],
+  "input_sha256": {
+    "E1/bounds_per_window.csv": "a25e0434132ea8467c06dc6fccb04d2e525eb1acf15593e8341190475c3cfa5b",
+    "E2/micro.csv": "47b47a5cf170d4118c5d3bc4f738dd634967b6f95eaef0deb9fdacee00ee151a",
+    "E3/bnb_fixed_issue_A.json": "90fa06ad53eff64bb9d39ec588016a23751962db1a539a0e4daa62f7e4a65245",
+    "E3/bnb_pipelined_A.json": "0ffa19cfd737c61a4f881478e4059b38cd940f062e2cfdddcde3cc9c95b47962",
+    "E3/bnb_port_tight_A.json": "25827c33b4fb18b6f1c46b94564f3d67cf3e44d6da16555bebcb585d6e7c42dd",
+    "E4/heldout_main_table.csv": "eff0da1f1bb91ca6cdeda686a158085dde54f294adc81057552865f853f66471",
+    "E4/per_window.csv": "27f2d69e8488af496f1f646932906c8c20fb358c1400be594101cebba4827ef7"
+  },
+  "missing_inputs": [
+    "E5/predictor_table.csv",
+    "E6/model_token_e2e.csv"
+  ],
+  "passed": 120771,
+  "scope": "Independent read-only numerical/table integrity; not RTL calibration or verification of analytical approximation",
+  "warnings": [
+    "pipelined/5+1 is best-evaluated with open proof; not certified global optimum",
+    "port_tight/5+1 is best-evaluated with open proof; not certified global optimum",
+    "fixed_issue/4+2 is best-evaluated with open proof; not certified global optimum",
+    "fixed_issue/5+1 is best-evaluated with open proof; not certified global optimum",
+    "fixed_issue/heterogeneous is best-evaluated with open proof; not certified global optimum",
+    "fixed_issue/homogeneous is best-evaluated with open proof; not certified global optimum",
+    "fixed_issue/single is best-evaluated with open proof; not certified global optimum"
+  ]
+}

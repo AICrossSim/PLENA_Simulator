@@ -1,0 +1,14 @@
+{
+  "completed_cases": 1377,
+  "development_windows": 18,
+  "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+  "heldout_windows": 135,
+  "planned_cases": 1377,
+  "repeat_identical": true,
+  "repeats": 2,
+  "scope": "fixed CP-SAT owner witness plus LPT finite replay; unresolved allocations remain flagged",
+  "solver_status_counts": {
+    "OPTIMAL": 1377
+  },
+  "workers": 16
+}

@@ -1,0 +1,7 @@
+design,onchip_mode,predictor,predictor_state_bits,task_fifo_bits,core_current_next_bits,credit_slot_scoreboard_bits,synthesized_area,synthesized_fmax,scope
+best_hetero,pipelined,oracle_profile_guided,,4096,2048,576,,,state estimate; excludes queues common to all policies
+fixed_4+2,pipelined,oracle_profile_guided,,4096,2048,576,,,state estimate; excludes queues common to all policies
+best_hetero,port_tight,oracle_profile_guided,,4096,2048,576,,,state estimate; excludes queues common to all policies
+fixed_4+2,port_tight,oracle_profile_guided,,4096,2048,576,,,state estimate; excludes queues common to all policies
+best_hetero,fixed_issue,oracle_profile_guided,,4096,2048,576,,,state estimate; excludes queues common to all policies
+fixed_4+2,fixed_issue,oracle_profile_guided,,4096,2048,576,,,state estimate; excludes queues common to all policies

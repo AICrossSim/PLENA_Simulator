@@ -1,0 +1,19 @@
+{
+  "scope": "Read-only E4 complete tables/breakdown/sensitivity/provenance; no performance rerun",
+  "checks": 11804,
+  "passed": 11804,
+  "failed": [],
+  "rows": {
+    "main": 66,
+    "per_window": 8910,
+    "breakdown": 528,
+    "sensitivity": 72
+  },
+  "input_receipt_sha256": "69251bdf5c72593320e076ecebbb2bbf4d5860429a186e153e6071f846910949",
+  "warnings": [
+    "Occupation means overlap and do not add to wall latency",
+    "512credit results re-evaluate frozen hardware, not a new search",
+    "fixed_issue remains non-iso resource",
+    "No RTL/native timing calibration"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "failed_engine_sha256": "fa03b5c0826be532244dbab8e1412b9f791e71c04781b85ed6b06a3fd6f175e4",
+  "replacement_engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+  "failure": "native CP query work diagnostic last-ULP difference only; full owners, integer bounds, statuses, and physical replay objects identical",
+  "treatment": "all partial main rows archived; strict fresh full main run required; regional LB/runtime sources unchanged",
+  "raw_pair": [
+    7.99561000000003e-05,
+    7.995610000000028e-05
+  ],
+  "fix_commit": "045161dd"
+}

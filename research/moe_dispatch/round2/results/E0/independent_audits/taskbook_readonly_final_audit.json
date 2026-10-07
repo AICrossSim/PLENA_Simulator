@@ -1,0 +1,53 @@
+{
+  "scope": "read-only taskbook versus report/status/source protocol, before final campaigns complete; no performance-winner claim",
+  "taskbook_sha256": "b58925b7cde5c96807942be8d870a4366eedde02887427754ecbfc3fa68ac0a1",
+  "reviewed_sources": {
+    "report.py": "95d563b64df7ea91273401bf7a407bbcf2b6d448a8075cf9dfb1715fc369a85c",
+    "final_receipts.py": "8f6a8e919c5b10a5f949e9b536295246a006c46cdf781fe1e535ac6041ec33e7",
+    "audit_tables.py": "4fc7f6aafaac25a0b8cb2f4749b4d0e590c44a343e53597975e67ab72579f9e1",
+    "CONTRACT.md": "8fd3090d58a09bfd5c4d969494380fddc1fcf933bc3d466c880bb1cd8fced35a",
+    "README.md": "9db362703f902d9208042439d18925a6532e984118600eb0376b1d798980e83b",
+    "heldout_runner.py": "216d5797ce33ed31f194a96f383b87dbe8dd6d562d0231f9f6a9ea2e98a7a936",
+    "oracle_replay.py": "3cdb013bb5e704a3f4c999eb10573f300834ac1b8fa9dc92b5db8b7c75c4389b",
+    "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622"
+  },
+  "findings": [
+    {
+      "severity": "documentation",
+      "item": "CONTRACT mathematical item 8 still explains old changing-owner profile-guided oracle",
+      "resolution": "replace clause with conditional same-plan physical replay; keep profile-guided supplemental caveat",
+      "engine_change_required": false
+    },
+    {
+      "severity": "documentation",
+      "item": "top-level post-merge documents need explicit nested Compiler artifact links/pin",
+      "resolution": "link PLENA_Compiler/research/moe_dispatch/round2/BRANCHES_AFTER.md and MERGE_LOG.md and current Compiler SHA",
+      "engine_change_required": false
+    },
+    {
+      "severity": "audit_strengthening",
+      "item": "active audit_tables only checks 810 oracle receipt count/replay boolean/repeats",
+      "resolution": "add unique action-plan keys, helper/plan SHA, same-sequence proof and conservation residual checks (outside audit helper already has them)",
+      "engine_change_required": false
+    }
+  ],
+  "honest_incomplete_conditions": {
+    "5.1": "open family frontiers means partial; ledger coverage is not proof closure",
+    "5.2": "non-OPTIMAL allocation witnesses retain certified lower bound, no exact-optimal claim",
+    "5.3": "open per-grid or delta0 extreme proofs must remain partial even all samples evaluated",
+    "5.4": "near-best evaluated candidates do not certify full global 1pct set",
+    "5.5": "Sobol estimates from open-search candidates remain partial",
+    "6": "best-family unclosed means frozen candidate, not proven-best architecture",
+    "8": "no matching DeepSeek attention/router/norm+layer mapping; do not invent token timing"
+  },
+  "confirmed_protocol": [
+    "BF16-only main experiment; explicit256/512 credits and 126.03/252.06 GB/s service caps",
+    "paired-window geometric mean, B1+B2 calibration gates",
+    "frozen development hardware and same heldout cohort",
+    "finite runtime candidate/current/next queues and paid serialized binding",
+    "same-plan oracle physically reconstructed, old profile guided separated",
+    "fixed_issue labeled non-iso-resource",
+    "ten PDF/PNG scientifically static figures with input hashes",
+    "branch/archive integrity independently passed"
+  ]
+}

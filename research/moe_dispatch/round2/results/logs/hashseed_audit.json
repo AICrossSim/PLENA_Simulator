@@ -1,0 +1,70 @@
+{
+  "all_fresh_process_bit_identical": true,
+  "cases": [
+    {
+      "case": 0,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case0_seed1.json",
+      "hashseed": "1",
+      "seconds": 0.900608079507947,
+      "sha256": "c2800bbd3565b2a3584e81963bf7c255ba781428003becaf255517788aeeddca"
+    },
+    {
+      "case": 0,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case0_seed2.json",
+      "hashseed": "2",
+      "seconds": 0.8776143807917833,
+      "sha256": "c2800bbd3565b2a3584e81963bf7c255ba781428003becaf255517788aeeddca"
+    },
+    {
+      "case": 0,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case0_seed20261007.json",
+      "hashseed": "20261007",
+      "seconds": 0.879743542522192,
+      "sha256": "c2800bbd3565b2a3584e81963bf7c255ba781428003becaf255517788aeeddca"
+    },
+    {
+      "case": 1,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case1_seed1.json",
+      "hashseed": "1",
+      "seconds": 0.8581675048917532,
+      "sha256": "1b19269e341fa4b8ea0dbf21e637536938c3c81497dd00cd1df892aac86d9d2c"
+    },
+    {
+      "case": 1,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case1_seed2.json",
+      "hashseed": "2",
+      "seconds": 0.8672621268779039,
+      "sha256": "1b19269e341fa4b8ea0dbf21e637536938c3c81497dd00cd1df892aac86d9d2c"
+    },
+    {
+      "case": 1,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case1_seed20261007.json",
+      "hashseed": "20261007",
+      "seconds": 0.874907948076725,
+      "sha256": "1b19269e341fa4b8ea0dbf21e637536938c3c81497dd00cd1df892aac86d9d2c"
+    },
+    {
+      "case": 2,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case2_seed1.json",
+      "hashseed": "1",
+      "seconds": 0.9778970219194889,
+      "sha256": "7b7aa3dad4a450d30f37f7230082d90a3483f081f99bc02bb5185277cab93f3d"
+    },
+    {
+      "case": 2,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case2_seed2.json",
+      "hashseed": "2",
+      "seconds": 0.9874308779835701,
+      "sha256": "7b7aa3dad4a450d30f37f7230082d90a3483f081f99bc02bb5185277cab93f3d"
+    },
+    {
+      "case": 2,
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/hashseed_audit/case2_seed20261007.json",
+      "hashseed": "20261007",
+      "seconds": 0.9908210467547178,
+      "sha256": "7b7aa3dad4a450d30f37f7230082d90a3483f081f99bc02bb5185277cab93f3d"
+    }
+  ],
+  "reproduction_scope": "full canonical evaluate_design including both finite replays and integer assignment in fresh process; hashseed1,2,20261007",
+  "source_engine_sha256": "9480921bcb9b0bf9c7883a588c7364d888cddf4f5565f619643555a442583683"
+}

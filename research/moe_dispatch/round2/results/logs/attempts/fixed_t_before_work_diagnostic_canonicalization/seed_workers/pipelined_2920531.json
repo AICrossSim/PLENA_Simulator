@@ -1,0 +1,12 @@
+{
+  "engine_sha256": "fa03b5c0826be532244dbab8e1412b9f791e71c04781b85ed6b06a3fd6f175e4",
+  "flows": [
+    "WS",
+    "IS"
+  ],
+  "geometry": "1x6x1024+1x6x1024",
+  "repeat_index": 2,
+  "started_monotonic": 15871439.102554364,
+  "state": "evaluating",
+  "window_id": "v3_captured_mixed_development_swe_t96_l13"
+}

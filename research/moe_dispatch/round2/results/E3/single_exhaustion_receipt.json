@@ -1,0 +1,301 @@
+{
+  "all_modes_complete": true,
+  "dataflows": [
+    "OS",
+    "WS",
+    "IS"
+  ],
+  "development_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e",
+  "development_windows": 18,
+  "dimension_order": "PM\u00d7PN\u00d7PK",
+  "domain": {
+    "PK": [
+      32,
+      64,
+      128,
+      256,
+      512,
+      1024
+    ],
+    "PM": [
+      1,
+      16
+    ],
+    "PN": [
+      1,
+      192
+    ],
+    "multiplier_product": 12288
+  },
+  "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+  "expected_points_per_mode": 132,
+  "geometry_inventory_sha256": "aa00801687626cb97ad6ed7ea4e7c5ebf0fb360aeae82d0d8281ac867436d2fd",
+  "modes": {
+    "fixed_issue": {
+      "all_allocations_OPTIMAL": true,
+      "all_repeats_identical": true,
+      "best": {
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 48
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "flows": [
+          "WS"
+        ],
+        "geomean_ms": 5.356828222055863,
+        "geometry": "2x48x128"
+      },
+      "exact_allocation_windows": 2322,
+      "executable_repeats_per_legal_point": 2,
+      "invalid_templates": 3,
+      "invalids": [
+        {
+          "flows": [
+            "OS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        },
+        {
+          "flows": [
+            "WS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        },
+        {
+          "flows": [
+            "IS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        }
+      ],
+      "legal_points": 129,
+      "points": 132,
+      "seed_file_sha256": "53f929528f789ecbf57d11dc255c87d7ceb838e83db35339c89cae70a841077d",
+      "single_family_proof_complete": true,
+      "solver_algorithm_window_counts": {
+        "exact_grouped_count_enumeration": 2322
+      }
+    },
+    "pipelined": {
+      "all_allocations_OPTIMAL": true,
+      "all_repeats_identical": true,
+      "best": {
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "flows": [
+          "WS"
+        ],
+        "geomean_ms": 4.033368266089851,
+        "geometry": "3x32x128"
+      },
+      "exact_allocation_windows": 2322,
+      "executable_repeats_per_legal_point": 2,
+      "invalid_templates": 3,
+      "invalids": [
+        {
+          "flows": [
+            "OS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        },
+        {
+          "flows": [
+            "WS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        },
+        {
+          "flows": [
+            "IS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        }
+      ],
+      "legal_points": 129,
+      "points": 132,
+      "seed_file_sha256": "01ed41419cd6039e4328e25c215eda223d927b69cf8bd5aec28c2d58900e84f9",
+      "single_family_proof_complete": true,
+      "solver_algorithm_window_counts": {
+        "exact_grouped_count_enumeration": 2322
+      }
+    },
+    "port_tight": {
+      "all_allocations_OPTIMAL": true,
+      "all_repeats_identical": true,
+      "best": {
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "flows": [
+          "WS"
+        ],
+        "geomean_ms": 11.243781734366843,
+        "geometry": "3x32x128"
+      },
+      "exact_allocation_windows": 2322,
+      "executable_repeats_per_legal_point": 2,
+      "invalid_templates": 3,
+      "invalids": [
+        {
+          "flows": [
+            "OS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        },
+        {
+          "flows": [
+            "WS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        },
+        {
+          "flows": [
+            "IS"
+          ],
+          "geometry": "12x1x1024",
+          "reason": "an expert has no physical core"
+        }
+      ],
+      "legal_points": 129,
+      "points": 132,
+      "seed_file_sha256": "cdfb89bc81925e2adb62782511d7607490daecfe98a2e5d22e064dbabc92d549",
+      "single_family_proof_complete": true,
+      "solver_algorithm_window_counts": {
+        "exact_grouped_count_enumeration": 2322
+      }
+    }
+  },
+  "objective_scope": "exhaustive declared single geometry\u00d7OS/WS/IS family with fixed pool/port ledger, exact integer resource relaxation and executable deterministic finite LPT replay; not globally optimal temporal schedule or arbitrary dataflow/hardware",
+  "physical_budget": {
+    "W_X_acc_banks": [
+      64,
+      24,
+      12
+    ],
+    "bank_B_per_cycle": 16,
+    "other_fixed_storage_B": 1613824,
+    "private_W_B": 40960,
+    "private_X_B": 12288,
+    "private_Z_B": 393216,
+    "private_acc_B": 98304,
+    "vector_lanes": 64
+  },
+  "single_geometry_count": 44,
+  "single_inventory_sha256": "c25db204f7d0a2b0ccd85c6475f79c01c1eecd1654b4bbfc3c3afb947f901a21"
+}

@@ -1,0 +1,51 @@
+{
+  "all_full_object_repeats_identical": true,
+  "changed_owner_cases": 218,
+  "completed": true,
+  "completed_cases": 940,
+  "deterministic_work_limit": 1.0,
+  "diagnostic_source_sha256": "c4d1fa20d6cfed8c10c1b56344050fbbfc4728db12919714444b8b8153ba6e25",
+  "effort_units": 100.0,
+  "elapsed_seconds": 532.769666230306,
+  "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+  "frozen_evidence_sha256": {
+    "FROZEN_SELECTION.json": "f461deaba2fce1d86aeaaefe205d8e4ab502ba69ff6a3b890b8dbad7360d0373",
+    "bnb_certificate.csv": "f4ca2914c970e0bfa93e833e80a883ae7193c832ced11bf5db01b0e157dbf747",
+    "bnb_fixed_issue_A.json": "90fa06ad53eff64bb9d39ec588016a23751962db1a539a0e4daa62f7e4a65245",
+    "bnb_fixed_issue_B.json": "35a4a5194f14421abf73c07878226dfff624a1992decde0935532e9714df9300",
+    "bnb_leaves.csv": "02be72212df9a8e0cb537d187e1d25abe314ada5d50bfcc7616b3b015194097d",
+    "bnb_pipelined_A.json": "0ffa19cfd737c61a4f881478e4059b38cd940f062e2cfdddcde3cc9c95b47962",
+    "bnb_pipelined_B.json": "03a267f8e74ecc3db0f524b7e75abd41d2d246a9f236bc520e04656101f45306",
+    "bnb_port_tight_A.json": "25827c33b4fb18b6f1c46b94564f3d67cf3e44d6da16555bebcb585d6e7c42dd",
+    "bnb_port_tight_B.json": "984f304cce6f53c895ecfb2fab1480078f045a63a8d942e52209c0e83481ad3e",
+    "bnb_summary.json": "9dc6faa0dd1c1f44be62c2a06909b12d65469759eb16cb7f6ad5e1159fd11e84",
+    "schedule_gaps.csv": "40ad3e1873a96fbf62c499ebc5ba21485f7996291583cd8151e41967c40659c3",
+    "schedule_gaps_protocol.json": "b95fb967de74f600f1710604447f9a32d1354e969d5ed0dce55549c739bd3057",
+    "seed_leaves.csv": "8fd265d5f5e17d5e2f63519b42da1d715c7a046fef7ead3f7ca36d4fb3195bec",
+    "seed_points_fixed_issue.json": "53f929528f789ecbf57d11dc255c87d7ceb838e83db35339c89cae70a841077d",
+    "seed_points_pipelined.json": "01ed41419cd6039e4328e25c215eda223d927b69cf8bd5aec28c2d58900e84f9",
+    "seed_points_port_tight.json": "cdfb89bc81925e2adb62782511d7607490daecfe98a2e5d22e064dbabc92d549",
+    "single_exhaustion_receipt.json": "1a6687b3868134502d2d48ed222949866dcfceacd9bd1c31d419a01389f5913a"
+  },
+  "frozen_evidence_unchanged": true,
+  "full_unresolved_seed_cases": 940,
+  "new_status_counts": {
+    "FEASIBLE": 718,
+    "OPTIMAL": 222
+  },
+  "old_effort_units": 10.0,
+  "output_csv_sha256": "9d3a6e69b650d40be4b26dd08ad4a6f6a0043e791b06ca062beeba8fb503827c",
+  "planned_cases": 940,
+  "preflight_subset": false,
+  "quantum_cycles": 1e-06,
+  "query_limit": 64,
+  "repeats": 2,
+  "scope": "higher finite effort diagnostic; no retroactive headline/proof update",
+  "unresolved_cases": 718,
+  "unresolved_seed_counts_by_mode": {
+    "fixed_issue": 489,
+    "pipelined": 255,
+    "port_tight": 196
+  },
+  "workers": 4
+}

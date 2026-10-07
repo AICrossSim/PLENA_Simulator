@@ -1,0 +1,34 @@
+{
+  "audit_script_sha256": "d621cbeef4774c52ae55cf23cefc1b179766dc65351145f70fabecbccd8ddd4b",
+  "development_windows": 18,
+  "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+  "heldout_windows": 135,
+  "input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+  "stages": {
+    "robust": {
+      "bootstrap_draws_per_group": 200,
+      "bootstrap_groups": 36,
+      "candidate_measurements": 66,
+      "execution": {
+        "command": [
+          "/tmp/plena-round2-venv/bin/python",
+          "-u",
+          "-m",
+          "research.moe_dispatch.round2.robust",
+          "--jobs",
+          "28"
+        ],
+        "elapsed_seconds": 110.98301395960152,
+        "execution_commit": "cdd193e966b9ca35c23a88ca55631e87a8474581",
+        "receipt": "results/executions/E3_robust_20261007T145915Z.json",
+        "sha256": "9d20e190c4aa5e80d4f6d192642c7111042e231caa7f8dfa54fa1ff8b1e5fca8"
+      },
+      "measurement_sha256": "cb800e949f96bca9116ff57fbf5d6d761b29a6ff8138ebd4eaf0a077b3499a02",
+      "objective_rows": 396,
+      "objectives_sha256": "f6c096caf5ff39122e3f2f7dfba4f7afcdd4f95da1bd6287f2fd17b3149f674a",
+      "protocol_sha256": "30cd0333f5ac7396da6f3b14868b2d2625405c0cd2cbcf49e5cefb8bec9a8c9f",
+      "stability_rows": 396,
+      "stability_sha256": "0bf96a157701de55e8929cd55511f2b998ac5579315035957d2872abd8551dea"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "scope": "Read-only causal scalar verification of one actual held-out window; not a new run or proof that all windows have the same bottleneck. CP assignment optimality is not temporal/global hardware optimality.",
+  "source_path": "research/moe_dispatch/round2/results/logs/heterogeneous_runtime_gap_diagnostic.json",
+  "source_sha256": "59a93414f66415222d773dba0b3471a4fe5907d8ec3e42a325cdbd1f6f6ca8b5",
+  "checks": {
+    "same_frozen_private_resources": true,
+    "selected_assignment_optimal_only_resource_relaxation": true,
+    "shared_has128tokens": true,
+    "offline_shared_large_z": true,
+    "online_shared_small_z": true,
+    "online_shared_two_physically_legal_one_policy_available": true,
+    "online_hbm_almost_doubled": true,
+    "shared_nominal_cost_already_accounts_for_reload": true,
+    "runtime_report_gap_matches_absolute_times": true
+  },
+  "all_passed": true,
+  "window_id": "v3_captured_mixed_heldout_gpqa_t128_l13",
+  "observed": {
+    "milp_sched": {
+      "latency_ms": 8.8445972865505,
+      "hbm_bytes": 1107296256,
+      "shared_core": 1,
+      "shared_start_ms": 0.005827333333333333,
+      "shared_nominal_ms": 1.097984,
+      "z_bytes": 360448,
+      "physical_legal_cores": 2,
+      "policy_legal_cores": 2
+    },
+    "runtime": {
+      "latency_ms": 17.445080076768164,
+      "hbm_bytes": 2197291008,
+      "shared_core": 0,
+      "shared_start_ms": 10.173277717161765,
+      "shared_nominal_ms": 7.141888,
+      "z_bytes": 32768,
+      "physical_legal_cores": 2,
+      "policy_legal_cores": 1
+    }
+  },
+  "hbm_ratio": 1.984375,
+  "schedule_lower_bound_ms": 8.78592
+}

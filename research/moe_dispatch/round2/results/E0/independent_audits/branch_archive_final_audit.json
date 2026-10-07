@@ -1,0 +1,23 @@
+{
+  "scope": "read-only archive integrity and asserted merged-ref ancestry, not full performance completion",
+  "archive_selected_records": 808,
+  "archive_corrupt": 0,
+  "archive_status_counts": {
+    "copied": 254,
+    "deduplicated": 554,
+    "skipped": 80
+  },
+  "refs": {
+    "simulator": {
+      "asserted_merged_refs_checked": 58,
+      "non_ancestors": [],
+      "HEAD": "06af1aa76db72be530b43cf22d0ff2182ddd697f"
+    },
+    "compiler": {
+      "asserted_merged_refs_checked": 33,
+      "non_ancestors": [],
+      "HEAD": "80ac775c91e1b9384ec40382090e525dd24e732a"
+    }
+  },
+  "failed_archive_records": []
+}

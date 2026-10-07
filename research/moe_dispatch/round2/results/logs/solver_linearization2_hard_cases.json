@@ -1,0 +1,53 @@
+{
+  "diagnostic_only": true,
+  "max_deterministic_work": 0.1,
+  "no_wall_timeout": true,
+  "linearization_level": 2,
+  "cases": [
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "OS",
+        "IS"
+      ],
+      "window": "joint_test_swe_b16_l13_s7",
+      "seconds": [
+        0.41229829750955105,
+        0.3985942769795656
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 4532742500000\nbest_bound: 4532742500000\nintegers: 7\nbooleans: 10057\nconflicts: 10051\nbranches: 10098\npropagations: 40266\ninteger_propagations: 50393\nrestarts: 2\nlp_iterations: 23\nwalltime: 0.406086\nusertime: 0.406086\ndeterministic_time: 0.0121491\ngap_integral: 0\nsolution_fingerprint: 0x8a6c23ff90233b91\n"
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "OS"
+      ],
+      "window": "joint_test_gpqa_b16_l13_s7",
+      "seconds": [
+        0.3944197315722704,
+        0.39314065873622894
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 6866502500000\nbest_bound: 6866502500000\nintegers: 7\nbooleans: 10061\nconflicts: 10052\nbranches: 10104\npropagations: 30220\ninteger_propagations: 50402\nrestarts: 2\nlp_iterations: 7\nwalltime: 0.388951\nusertime: 0.388951\ndeterministic_time: 0.00957044\ngap_integral: 0\nsolution_fingerprint: 0xfef182de54b7216c\n"
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "WS",
+        "IS"
+      ],
+      "window": "joint_test_gpqa_b4_l13_s7",
+      "seconds": [
+        1.2625797167420387,
+        1.2687496319413185
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 2612073750000\nbest_bound: 2612073750000\nintegers: 4\nbooleans: 10057\nconflicts: 10050\nbranches: 20125\npropagations: 30157\ninteger_propagations: 70400\nrestarts: 1\nlp_iterations: 12\nwalltime: 1.25965\nusertime: 1.25966\ndeterministic_time: 0.0126904\ngap_integral: 0\nsolution_fingerprint: 0x7c5b63d8e3c3c01f\n"
+    }
+  ]
+}

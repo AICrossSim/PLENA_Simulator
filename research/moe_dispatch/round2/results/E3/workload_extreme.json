@@ -1,0 +1,4165 @@
+{
+  "CMA_evaluations": 500,
+  "CMA_stop": {},
+  "best_evaluated_workload_parameters": {
+    "E": 64,
+    "F": 640,
+    "alpha": 0.568933024486926,
+    "batch": 101,
+    "bw": 247.91990460850678,
+    "shared_units": 0.9062680120578406,
+    "topk": 6
+  },
+  "continuous_parameter_projection": "B rounded2..256; E rounded64..256; F nearest32; Shared continuous equivalent width rounded integer; no fractional tokens",
+  "delta_vs_homo": -0.28495232322503905,
+  "delta_vs_single": -0.10993984726240458,
+  "distance_from_real": {
+    "all_development_distances": [
+      {
+        "Me_hist_KL_synthetic_to_real": 15.675887076142184,
+        "batch": 2,
+        "batch_log2_distance": 5.658211482751795,
+        "distinct_real": 6,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_bfcl_b2_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 12.055790753555485,
+        "batch": 4,
+        "batch_log2_distance": 4.658211482751795,
+        "distinct_real": 16,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_bfcl_b4_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 11.117130924558563,
+        "batch": 8,
+        "batch_log2_distance": 3.6582114827517946,
+        "distinct_real": 28,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_bfcl_b8_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 9.392847610820887,
+        "batch": 16,
+        "batch_log2_distance": 2.6582114827517946,
+        "distinct_real": 48,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_bfcl_b16_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 13.492501310260925,
+        "batch": 2,
+        "batch_log2_distance": 5.658211482751795,
+        "distinct_real": 11,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_gpqa_b2_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 13.591027233865594,
+        "batch": 4,
+        "batch_log2_distance": 4.658211482751795,
+        "distinct_real": 17,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_gpqa_b4_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 11.026080468345143,
+        "batch": 8,
+        "batch_log2_distance": 3.6582114827517946,
+        "distinct_real": 25,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_gpqa_b8_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 10.168261309090443,
+        "batch": 16,
+        "batch_log2_distance": 2.6582114827517946,
+        "distinct_real": 39,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_gpqa_b16_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 12.978614742088528,
+        "batch": 2,
+        "batch_log2_distance": 5.658211482751795,
+        "distinct_real": 7,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_swe_b2_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 11.979842812918358,
+        "batch": 4,
+        "batch_log2_distance": 4.658211482751795,
+        "distinct_real": 16,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_swe_b4_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 8.380225246389802,
+        "batch": 8,
+        "batch_log2_distance": 3.6582114827517946,
+        "distinct_real": 19,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_swe_b8_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 10.772443543486487,
+        "batch": 16,
+        "batch_log2_distance": 2.6582114827517946,
+        "distinct_real": 21,
+        "distinct_synthetic": 52,
+        "window_id": "joint_test_swe_b16_l13_s7"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 4.831696583176363,
+        "batch": 64,
+        "batch_log2_distance": 0.6582114827517946,
+        "distinct_real": 55,
+        "distinct_synthetic": 52,
+        "window_id": "v3_captured_mixed_development_t64_l13"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 5.119152354652717,
+        "batch": 96,
+        "batch_log2_distance": 0.07324898203063857,
+        "distinct_real": 59,
+        "distinct_synthetic": 52,
+        "window_id": "v3_captured_mixed_development_t96_l13"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 4.185617018655389,
+        "batch": 128,
+        "batch_log2_distance": 0.34178851724820536,
+        "distinct_real": 62,
+        "distinct_synthetic": 52,
+        "window_id": "v3_captured_mixed_development_t128_l13"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 5.191355440951397,
+        "batch": 64,
+        "batch_log2_distance": 0.6582114827517946,
+        "distinct_real": 53,
+        "distinct_synthetic": 52,
+        "window_id": "v3_captured_mixed_development_swe_t64_l13"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 4.155813672487501,
+        "batch": 96,
+        "batch_log2_distance": 0.07324898203063857,
+        "distinct_real": 57,
+        "distinct_synthetic": 52,
+        "window_id": "v3_captured_mixed_development_swe_t96_l13"
+      },
+      {
+        "Me_hist_KL_synthetic_to_real": 4.347297742789071,
+        "batch": 128,
+        "batch_log2_distance": 0.34178851724820536,
+        "distinct_real": 60,
+        "distinct_synthetic": 52,
+        "window_id": "v3_captured_mixed_development_swe_t128_l13"
+      }
+    ],
+    "distance_scope": "token-count histogram and batch only; no claim synthetic prompts resemble captured language tasks",
+    "nearest_real_window": {
+      "Me_hist_KL_synthetic_to_real": 4.155813672487501,
+      "batch": 96,
+      "batch_log2_distance": 0.07324898203063857,
+      "distinct_real": 57,
+      "distinct_synthetic": 52,
+      "window_id": "v3_captured_mixed_development_swe_t96_l13"
+    }
+  },
+  "family_optimum_delta_intervals": {
+    "candidate_delta_scope": "Incumbent ratio is a candidate estimate; family-optimum ratio lies in [LB_hetero / U_baseline, U_hetero / LB_baseline] when the displayed bounds exist",
+    "delta_lower_vs_homo_pct": -31.217578250803168,
+    "delta_lower_vs_single_pct": -14.382642170279947,
+    "delta_upper_vs_homo_pct": 3.9579093888636674,
+    "delta_upper_vs_single_pct": 3.9579093888636674,
+    "hetero_certified_lb_ms": 1.67844866130092,
+    "hetero_incumbent_ms": 1.7448801384538055,
+    "homo_certified_lb_ms": 1.67844866130092,
+    "homo_incumbent_ms": 2.440229085595578,
+    "single_certified_lb_ms": 1.67844866130092,
+    "single_incumbent_ms": 1.9604069827044883
+  },
+  "full_archive": {
+    "file": "certificate_archives/extreme_final/part_000.tar.gz",
+    "manifest": "certificate_archives/extreme_final/manifest.json",
+    "member": "workload_extreme.json",
+    "sha256": "5e1b5319282611174ff92041d872af8c0e6b4fef3fcdda8af5ddb1cb95083e52"
+  },
+  "hypothetical_HBM_bandwidth_override": true,
+  "max_allowed_evaluations": 500,
+  "omitted_large_payload_keys": {
+    "certificate": 132,
+    "leaves": 280,
+    "resume": 13
+  },
+  "original_output_bytes": 143858188,
+  "original_output_sha256": "63b254106c2ddb7fed5e0ea874bd78084b19c1044a516f8cefebbb0d2ac7fd25",
+  "requested_verification_delta": 0,
+  "scope": "synthetic workload exploration; best evaluated candidate until all full-domain open regions close",
+  "standalone_final_delta0_resume_checkpoint": "cma_verification/final_delta0.json",
+  "summary_kind": "Derived compact summary; complete original actual-driver JSON preserved byte-for-byte in archive",
+  "verification_full_domain_certificate": {
+    "concrete_points_evaluated": 280,
+    "delta": 0,
+    "domain_warning": "Full positive-cut lattice includes physically infeasible points; no shortlist is called exhaustive",
+    "elapsed_seconds": 123.78338210657239,
+    "families": {
+      "heterogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "certified_global_lb_ms": 1.67844866130092,
+        "coverage_pct": 0.0,
+        "covered_lattice_points": 0,
+        "declared_lattice_points": 2352706598170238310,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "gap_pct": 3.9579093888636674,
+        "geomean_ms": 1.7448801384538055,
+        "geometry": "1x32x128+2x32x128",
+        "geometry_count": 16678,
+        "latencies_ms": [
+          1.7448801384538055
+        ],
+        "lb_ms": [
+          1.678448661274
+        ],
+        "open_lb_ms": 1.67844866130092,
+        "open_region_count": 17413,
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 504,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 247.91990460850678,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "proof_complete": false,
+        "proof_status": "time_or_node_limited_open_regions",
+        "repeat_identical": true,
+        "root_lb_ms": 1.67844866130092,
+        "runtime_latencies_ms": [
+          2.323897863891665
+        ],
+        "schedule_objective": "exact integer-assignment witness replayed by finite LPT streaming",
+        "score_ms": 1.7448801384538055,
+        "search_family": "heterogeneous",
+        "solver_algorithms": [
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "658ddd72ee881ae7f70a9aee3e1c417ebd9b48ad1ab9f5c6ca166c6486f63e12"
+      },
+      "homogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "certified_global_lb_ms": 1.67844866130092,
+        "coverage_pct": 0.0,
+        "covered_lattice_points": 0,
+        "declared_lattice_points": 5783725298295945,
+        "design": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            49152,
+            49152
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 24
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 24
+            }
+          ],
+          "flows": [
+            "OS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            20480,
+            20480
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            6144,
+            6144
+          ],
+          "z_bytes": [
+            196608,
+            196608
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {}
+        ],
+        "family": "homogeneous",
+        "flows": [
+          "OS",
+          "WS"
+        ],
+        "gap_pct": 45.38598301268404,
+        "geomean_ms": 2.440229085595578,
+        "geometry": "2x24x128+2x24x128",
+        "geometry_count": 41,
+        "latencies_ms": [
+          2.440229085595578
+        ],
+        "lb_ms": [
+          2.191589458323
+        ],
+        "open_lb_ms": 1.67844866130092,
+        "open_region_count": 17412,
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 504,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 247.91990460850678,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "proof_complete": false,
+        "proof_status": "time_or_node_limited_open_regions",
+        "repeat_identical": true,
+        "root_lb_ms": 1.67844866130092,
+        "runtime_latencies_ms": [
+          3.705920855627289
+        ],
+        "schedule_objective": "exact integer-assignment witness replayed by finite LPT streaming",
+        "score_ms": 2.440229085595578,
+        "search_family": "homogeneous",
+        "solver_algorithms": [
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "658ddd72ee881ae7f70a9aee3e1c417ebd9b48ad1ab9f5c6ca166c6486f63e12"
+      },
+      "single": {
+        "allocation_statuses": [
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "certified_global_lb_ms": 1.67844866130092,
+        "coverage_pct": 100.0,
+        "covered_lattice_points": 132,
+        "declared_lattice_points": 132,
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 28
+          }
+        ],
+        "family": "single",
+        "flows": [
+          "WS"
+        ],
+        "gap_pct": 16.79874564557906,
+        "geomean_ms": 1.9604069827044883,
+        "geometry": "3x32x128",
+        "geometry_count": 44,
+        "latencies_ms": [
+          1.9604069827044883
+        ],
+        "lb_ms": [
+          1.678448661274
+        ],
+        "open_lb_ms": null,
+        "open_region_count": 0,
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 504,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 247.91990460850678,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "proof_complete": true,
+        "proof_status": "exact_fixed_replay_objective_full_declared_domain",
+        "repeat_identical": true,
+        "root_lb_ms": 1.67844866130092,
+        "runtime_latencies_ms": [
+          1.960684308339406
+        ],
+        "schedule_objective": "exact integer-assignment witness replayed by finite LPT streaming",
+        "score_ms": 1.9604069827044883,
+        "search_family": "single",
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration"
+        ],
+        "workload_sha256": "658ddd72ee881ae7f70a9aee3e1c417ebd9b48ad1ab9f5c6ca166c6486f63e12"
+      }
+    },
+    "full_frontiers_archive": {
+      "file": "certificate_archives/extreme_final/part_000.tar.gz",
+      "member": "workload_extreme.json",
+      "path_within_member": "verification_full_domain_certificate",
+      "sha256": "5e1b5319282611174ff92041d872af8c0e6b4fef3fcdda8af5ddb1cb95083e52"
+    },
+    "gap_pct": 3.9579093888636674,
+    "geometry_counts": {
+      "dual": 16719,
+      "heterogeneous": 16678,
+      "heterogeneous_same_pk": 4662,
+      "heterogeneous_unequal_pk": 12016,
+      "homogeneous": 41,
+      "single": 44,
+      "total": 16763
+    },
+    "geometry_inventory_sha256": "aa00801687626cb97ad6ed7ea4e7c5ebf0fb360aeae82d0d8281ac867436d2fd",
+    "global_delta_proof": false,
+    "global_incumbent_ms": 1.7448801384538055,
+    "global_proof_warning": "A global incumbent/resource proof does not certify each family optimum",
+    "mirror_warning": "4+2 and2+4 MAC-ratio families are physical mirror aliases when roles and private resources can swap",
+    "nodes_processed": 35086,
+    "open_lb_ms": 1.67844866130092,
+    "proof_complete": false,
+    "resource_cut_domain": {
+      "acc_banks": {
+        "positive_core0_units": [
+          1,
+          11
+        ],
+        "step_bytes_or_units": 1,
+        "total": 12
+      },
+      "acc_bytes": {
+        "positive_core0_units": [
+          1,
+          95
+        ],
+        "step_bytes_or_units": 1024,
+        "total": 98304
+      },
+      "vector_lanes": {
+        "positive_core0_units": [
+          1,
+          63
+        ],
+        "step_bytes_or_units": 1,
+        "total": 64
+      },
+      "w_banks": {
+        "positive_core0_units": [
+          1,
+          63
+        ],
+        "step_bytes_or_units": 1,
+        "total": 64
+      },
+      "w_bytes": {
+        "positive_core0_units": [
+          1,
+          39
+        ],
+        "step_bytes_or_units": 1024,
+        "total": 40960
+      },
+      "x_banks": {
+        "positive_core0_units": [
+          1,
+          23
+        ],
+        "step_bytes_or_units": 1,
+        "total": 24
+      },
+      "x_bytes": {
+        "positive_core0_units": [
+          1,
+          11
+        ],
+        "step_bytes_or_units": 1024,
+        "total": 12288
+      },
+      "z_bytes": {
+        "positive_core0_units": [
+          1,
+          383
+        ],
+        "step_bytes_or_units": 1024,
+        "total": 393216
+      }
+    },
+    "root_lb_ms": 1.67844866130092,
+    "scope": "entire declared geometry x dataflow x independent private-resource lattice; finite assignment/LPT replay objective",
+    "seed": 20261007,
+    "setup_overrun_seconds": 0.0,
+    "setup_seconds": 2.5325205828994513,
+    "time_cap_scope": "mandatory repeated incumbent setup followed by separately capped full-domain traversal",
+    "time_limit_s": 120.0,
+    "traversal_seconds": 121.25086520053446,
+    "vector_assumption": "existing64 BF16 vector lanes, positive integer split; additional frozen finite-resource assumption"
+  },
+  "workload": {
+    "batch": 101,
+    "experts": [
+      {
+        "F": 580,
+        "H": 2048,
+        "Me": 101,
+        "id": -1,
+        "is_shared": true,
+        "token_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 0,
+        "is_shared": false,
+        "token_indices": [
+          4,
+          50
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 13,
+        "id": 1,
+        "is_shared": false,
+        "token_indices": [
+          0,
+          9,
+          12,
+          17,
+          29,
+          30,
+          37,
+          49,
+          50,
+          55,
+          84,
+          93,
+          99
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 2,
+        "is_shared": false,
+        "token_indices": [
+          13,
+          49
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 3,
+        "id": 3,
+        "is_shared": false,
+        "token_indices": [
+          2,
+          54,
+          65
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 3,
+        "id": 4,
+        "is_shared": false,
+        "token_indices": [
+          41,
+          51,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 5,
+        "is_shared": false,
+        "token_indices": [
+          88
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 13,
+        "id": 6,
+        "is_shared": false,
+        "token_indices": [
+          7,
+          8,
+          10,
+          18,
+          29,
+          31,
+          36,
+          40,
+          55,
+          58,
+          68,
+          71,
+          76
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 22,
+        "id": 7,
+        "is_shared": false,
+        "token_indices": [
+          7,
+          16,
+          19,
+          27,
+          28,
+          32,
+          36,
+          38,
+          40,
+          44,
+          53,
+          64,
+          66,
+          70,
+          72,
+          75,
+          77,
+          82,
+          85,
+          88,
+          92,
+          97
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 10,
+        "id": 8,
+        "is_shared": false,
+        "token_indices": [
+          3,
+          8,
+          13,
+          37,
+          52,
+          64,
+          69,
+          82,
+          84,
+          98
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 44,
+        "id": 9,
+        "is_shared": false,
+        "token_indices": [
+          1,
+          3,
+          7,
+          10,
+          11,
+          15,
+          20,
+          22,
+          29,
+          30,
+          33,
+          34,
+          35,
+          39,
+          41,
+          42,
+          43,
+          44,
+          47,
+          49,
+          51,
+          56,
+          58,
+          59,
+          61,
+          66,
+          68,
+          69,
+          71,
+          72,
+          73,
+          74,
+          75,
+          77,
+          79,
+          80,
+          82,
+          83,
+          84,
+          91,
+          92,
+          94,
+          96,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 10,
+        "is_shared": false,
+        "token_indices": [
+          59
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 11,
+        "is_shared": false,
+        "token_indices": [
+          68,
+          78
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 12,
+        "is_shared": false,
+        "token_indices": [
+          33
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 39,
+        "id": 13,
+        "is_shared": false,
+        "token_indices": [
+          0,
+          3,
+          4,
+          5,
+          14,
+          15,
+          17,
+          24,
+          25,
+          26,
+          28,
+          29,
+          33,
+          35,
+          41,
+          43,
+          48,
+          50,
+          51,
+          53,
+          59,
+          67,
+          71,
+          73,
+          74,
+          75,
+          76,
+          77,
+          81,
+          85,
+          86,
+          89,
+          90,
+          91,
+          94,
+          95,
+          97,
+          98,
+          99
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 26,
+        "id": 14,
+        "is_shared": false,
+        "token_indices": [
+          8,
+          9,
+          18,
+          19,
+          21,
+          27,
+          29,
+          31,
+          34,
+          35,
+          40,
+          44,
+          46,
+          47,
+          48,
+          51,
+          59,
+          60,
+          61,
+          62,
+          66,
+          73,
+          78,
+          87,
+          96,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 4,
+        "id": 15,
+        "is_shared": false,
+        "token_indices": [
+          4,
+          42,
+          58,
+          62
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 12,
+        "id": 16,
+        "is_shared": false,
+        "token_indices": [
+          1,
+          3,
+          33,
+          44,
+          54,
+          55,
+          68,
+          79,
+          80,
+          86,
+          96,
+          97
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 14,
+        "id": 19,
+        "is_shared": false,
+        "token_indices": [
+          12,
+          16,
+          21,
+          39,
+          50,
+          52,
+          57,
+          64,
+          66,
+          70,
+          79,
+          82,
+          91,
+          96
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 4,
+        "id": 20,
+        "is_shared": false,
+        "token_indices": [
+          9,
+          25,
+          49,
+          66
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 5,
+        "id": 21,
+        "is_shared": false,
+        "token_indices": [
+          20,
+          26,
+          39,
+          46,
+          96
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 7,
+        "id": 22,
+        "is_shared": false,
+        "token_indices": [
+          5,
+          7,
+          25,
+          51,
+          65,
+          80,
+          81
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 20,
+        "id": 23,
+        "is_shared": false,
+        "token_indices": [
+          6,
+          18,
+          24,
+          25,
+          34,
+          37,
+          43,
+          44,
+          45,
+          48,
+          50,
+          71,
+          74,
+          76,
+          83,
+          84,
+          92,
+          94,
+          97,
+          99
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 24,
+        "is_shared": false,
+        "token_indices": [
+          55,
+          82
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 11,
+        "id": 25,
+        "is_shared": false,
+        "token_indices": [
+          18,
+          21,
+          26,
+          27,
+          43,
+          53,
+          65,
+          70,
+          87,
+          89,
+          90
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 27,
+        "id": 27,
+        "is_shared": false,
+        "token_indices": [
+          0,
+          2,
+          5,
+          14,
+          20,
+          22,
+          23,
+          24,
+          26,
+          32,
+          38,
+          45,
+          48,
+          62,
+          67,
+          69,
+          74,
+          77,
+          83,
+          84,
+          88,
+          90,
+          92,
+          93,
+          94,
+          95,
+          98
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 29,
+        "is_shared": false,
+        "token_indices": [
+          66
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 48,
+        "id": 30,
+        "is_shared": false,
+        "token_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          11,
+          12,
+          13,
+          14,
+          15,
+          17,
+          20,
+          22,
+          24,
+          31,
+          32,
+          33,
+          37,
+          39,
+          40,
+          41,
+          42,
+          47,
+          49,
+          51,
+          52,
+          53,
+          56,
+          57,
+          61,
+          63,
+          64,
+          65,
+          67,
+          69,
+          71,
+          72,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          87,
+          88,
+          96
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 31,
+        "is_shared": false,
+        "token_indices": [
+          32,
+          57
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 9,
+        "id": 32,
+        "is_shared": false,
+        "token_indices": [
+          1,
+          15,
+          17,
+          18,
+          19,
+          28,
+          74,
+          86,
+          92
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 7,
+        "id": 33,
+        "is_shared": false,
+        "token_indices": [
+          10,
+          14,
+          27,
+          30,
+          52,
+          67,
+          79
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 36,
+        "id": 34,
+        "is_shared": false,
+        "token_indices": [
+          5,
+          6,
+          8,
+          9,
+          16,
+          21,
+          23,
+          27,
+          31,
+          35,
+          37,
+          38,
+          40,
+          41,
+          46,
+          47,
+          52,
+          53,
+          56,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          65,
+          76,
+          79,
+          84,
+          85,
+          89,
+          93,
+          94,
+          95,
+          99,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 35,
+        "is_shared": false,
+        "token_indices": [
+          28,
+          87
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 36,
+        "is_shared": false,
+        "token_indices": [
+          37,
+          99
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 37,
+        "is_shared": false,
+        "token_indices": [
+          70
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 6,
+        "id": 39,
+        "is_shared": false,
+        "token_indices": [
+          23,
+          46,
+          54,
+          78,
+          86,
+          95
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 40,
+        "is_shared": false,
+        "token_indices": [
+          30,
+          63
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 4,
+        "id": 41,
+        "is_shared": false,
+        "token_indices": [
+          26,
+          60,
+          75,
+          92
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 42,
+        "is_shared": false,
+        "token_indices": [
+          26
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 2,
+        "id": 43,
+        "is_shared": false,
+        "token_indices": [
+          34,
+          85
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 25,
+        "id": 45,
+        "is_shared": false,
+        "token_indices": [
+          0,
+          5,
+          13,
+          14,
+          19,
+          22,
+          23,
+          25,
+          28,
+          30,
+          32,
+          34,
+          36,
+          39,
+          43,
+          54,
+          57,
+          58,
+          64,
+          73,
+          80,
+          83,
+          85,
+          97,
+          98
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 19,
+        "id": 47,
+        "is_shared": false,
+        "token_indices": [
+          4,
+          9,
+          10,
+          11,
+          16,
+          17,
+          25,
+          38,
+          42,
+          45,
+          47,
+          48,
+          56,
+          75,
+          78,
+          81,
+          89,
+          90,
+          93
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 22,
+        "id": 48,
+        "is_shared": false,
+        "token_indices": [
+          1,
+          2,
+          3,
+          4,
+          12,
+          13,
+          21,
+          23,
+          32,
+          35,
+          36,
+          38,
+          41,
+          45,
+          54,
+          58,
+          60,
+          61,
+          62,
+          63,
+          87,
+          98
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 5,
+        "id": 50,
+        "is_shared": false,
+        "token_indices": [
+          24,
+          46,
+          70,
+          72,
+          83
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 1,
+        "id": 51,
+        "is_shared": false,
+        "token_indices": [
+          81
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 12,
+        "id": 52,
+        "is_shared": false,
+        "token_indices": [
+          0,
+          10,
+          12,
+          16,
+          17,
+          22,
+          35,
+          60,
+          62,
+          68,
+          90,
+          95
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 28,
+        "id": 54,
+        "is_shared": false,
+        "token_indices": [
+          2,
+          6,
+          8,
+          9,
+          11,
+          12,
+          16,
+          28,
+          38,
+          47,
+          55,
+          57,
+          59,
+          61,
+          64,
+          65,
+          67,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          76,
+          85,
+          91,
+          93,
+          94
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 3,
+        "id": 58,
+        "is_shared": false,
+        "token_indices": [
+          11,
+          56,
+          86
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 49,
+        "id": 59,
+        "is_shared": false,
+        "token_indices": [
+          1,
+          2,
+          6,
+          7,
+          10,
+          11,
+          15,
+          18,
+          20,
+          21,
+          22,
+          23,
+          27,
+          29,
+          30,
+          31,
+          33,
+          34,
+          36,
+          40,
+          42,
+          43,
+          44,
+          45,
+          46,
+          48,
+          49,
+          53,
+          54,
+          55,
+          57,
+          60,
+          63,
+          68,
+          69,
+          72,
+          73,
+          75,
+          78,
+          80,
+          81,
+          86,
+          88,
+          89,
+          90,
+          91,
+          95,
+          97,
+          98
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 17,
+        "id": 60,
+        "is_shared": false,
+        "token_indices": [
+          6,
+          8,
+          14,
+          15,
+          19,
+          20,
+          24,
+          42,
+          50,
+          52,
+          63,
+          76,
+          77,
+          87,
+          89,
+          99,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 5,
+        "id": 61,
+        "is_shared": false,
+        "token_indices": [
+          31,
+          39,
+          67,
+          88,
+          91
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 3,
+        "id": 62,
+        "is_shared": false,
+        "token_indices": [
+          77,
+          93,
+          100
+        ]
+      },
+      {
+        "F": 640,
+        "H": 2048,
+        "Me": 6,
+        "id": 63,
+        "is_shared": false,
+        "token_indices": [
+          7,
+          13,
+          19,
+          36,
+          45,
+          56
+        ]
+      }
+    ],
+    "hidden": 2048,
+    "id": "cma_synthetic_B101_a0.56893302_S0_E64_K6_F640_seed20261007_S0.90626801",
+    "provenance": {
+      "origin": "synthetic_calibrated_region_only",
+      "seed": 20261007
+    },
+    "tokens": [
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 0
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 32
+          }
+        ],
+        "token_index": 1
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 3
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 2
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 48
+          }
+        ],
+        "token_index": 3
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 15
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 0
+          }
+        ],
+        "token_index": 4
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 22
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 5
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 54
+          }
+        ],
+        "token_index": 6
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 63
+          },
+          {
+            "expert_id": 22
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 7
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 8
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 20
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 9
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 47
+          }
+        ],
+        "token_index": 10
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 58
+          },
+          {
+            "expert_id": 47
+          }
+        ],
+        "token_index": 11
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 1
+          }
+        ],
+        "token_index": 12
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 63
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 2
+          },
+          {
+            "expert_id": 48
+          }
+        ],
+        "token_index": 13
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 14
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 32
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 15
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 16
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 32
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 17
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 32
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 18
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 32
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 63
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 60
+          }
+        ],
+        "token_index": 19
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 21
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 20
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 21
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 9
+          }
+        ],
+        "token_index": 22
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 39
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 48
+          }
+        ],
+        "token_index": 23
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 50
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 24
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 22
+          },
+          {
+            "expert_id": 20
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 47
+          }
+        ],
+        "token_index": 25
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 41
+          },
+          {
+            "expert_id": 21
+          },
+          {
+            "expert_id": 42
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 27
+          }
+        ],
+        "token_index": 26
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 25
+          }
+        ],
+        "token_index": 27
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 35
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 32
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 7
+          }
+        ],
+        "token_index": 28
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 14
+          }
+        ],
+        "token_index": 29
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 40
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 45
+          }
+        ],
+        "token_index": 30
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 61
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 6
+          }
+        ],
+        "token_index": 31
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 31
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 48
+          }
+        ],
+        "token_index": 32
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 12
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 33
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 43
+          },
+          {
+            "expert_id": 23
+          }
+        ],
+        "token_index": 34
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 35
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 63
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 6
+          }
+        ],
+        "token_index": 36
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 36
+          },
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 1
+          }
+        ],
+        "token_index": 37
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 27
+          }
+        ],
+        "token_index": 38
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 21
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 61
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 39
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 40
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 4
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 41
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 15
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 42
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 9
+          }
+        ],
+        "token_index": 43
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 23
+          }
+        ],
+        "token_index": 44
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 63
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 47
+          }
+        ],
+        "token_index": 45
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 39
+          },
+          {
+            "expert_id": 50
+          },
+          {
+            "expert_id": 21
+          }
+        ],
+        "token_index": 46
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 47
+          }
+        ],
+        "token_index": 47
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 27
+          }
+        ],
+        "token_index": 48
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 2
+          },
+          {
+            "expert_id": 20
+          }
+        ],
+        "token_index": 49
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 0
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 1
+          }
+        ],
+        "token_index": 50
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 4
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 22
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 9
+          }
+        ],
+        "token_index": 51
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 8
+          }
+        ],
+        "token_index": 52
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 53
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 3
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 39
+          }
+        ],
+        "token_index": 54
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 24
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 55
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 58
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 63
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 56
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 31
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 45
+          }
+        ],
+        "token_index": 57
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 15
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 45
+          }
+        ],
+        "token_index": 58
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 10
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 54
+          }
+        ],
+        "token_index": 59
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 41
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 48
+          }
+        ],
+        "token_index": 60
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 14
+          }
+        ],
+        "token_index": 61
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 15
+          },
+          {
+            "expert_id": 14
+          }
+        ],
+        "token_index": 62
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 40
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 63
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 64
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 3
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 22
+          }
+        ],
+        "token_index": 65
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 20
+          },
+          {
+            "expert_id": 29
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 14
+          }
+        ],
+        "token_index": 66
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 61
+          }
+        ],
+        "token_index": 67
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 11
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 52
+          }
+        ],
+        "token_index": 68
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 69
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 37
+          },
+          {
+            "expert_id": 50
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 25
+          }
+        ],
+        "token_index": 70
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 6
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 71
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 50
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 72
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 73
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 32
+          }
+        ],
+        "token_index": 74
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 41
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 75
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 6
+          }
+        ],
+        "token_index": 76
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 62
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 27
+          }
+        ],
+        "token_index": 77
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 39
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 11
+          }
+        ],
+        "token_index": 78
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 33
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 30
+          }
+        ],
+        "token_index": 79
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 22
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 16
+          }
+        ],
+        "token_index": 80
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 22
+          },
+          {
+            "expert_id": 51
+          },
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 81
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 24
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 7
+          }
+        ],
+        "token_index": 82
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 50
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 45
+          }
+        ],
+        "token_index": 83
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 8
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 84
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 43
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 85
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 39
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 58
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 32
+          }
+        ],
+        "token_index": 86
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 35
+          },
+          {
+            "expert_id": 14
+          }
+        ],
+        "token_index": 87
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 5
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 61
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 27
+          }
+        ],
+        "token_index": 88
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 89
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 25
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 90
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 61
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 19
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 13
+          }
+        ],
+        "token_index": 91
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 41
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 32
+          },
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 23
+          }
+        ],
+        "token_index": 92
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 47
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 1
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 62
+          },
+          {
+            "expert_id": 34
+          }
+        ],
+        "token_index": 93
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 54
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 27
+          }
+        ],
+        "token_index": 94
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 52
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 39
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 59
+          }
+        ],
+        "token_index": 95
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 30
+          },
+          {
+            "expert_id": 21
+          },
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 19
+          }
+        ],
+        "token_index": 96
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 7
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 16
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 23
+          }
+        ],
+        "token_index": 97
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 45
+          },
+          {
+            "expert_id": 27
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 48
+          },
+          {
+            "expert_id": 59
+          },
+          {
+            "expert_id": 8
+          }
+        ],
+        "token_index": 98
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 23
+          },
+          {
+            "expert_id": 36
+          },
+          {
+            "expert_id": 13
+          },
+          {
+            "expert_id": 1
+          }
+        ],
+        "token_index": 99
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 14
+          },
+          {
+            "expert_id": 34
+          },
+          {
+            "expert_id": 62
+          },
+          {
+            "expert_id": 60
+          },
+          {
+            "expert_id": 9
+          },
+          {
+            "expert_id": 4
+          }
+        ],
+        "token_index": 100
+      }
+    ],
+    "top_k": 6
+  }
+}

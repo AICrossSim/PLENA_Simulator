@@ -1,0 +1,19 @@
+{
+  "engine_sha256": "fa03b5c0826be532244dbab8e1412b9f791e71c04781b85ed6b06a3fd6f175e4",
+  "source_commit": "06af1aa7",
+  "model_binding_guard_commit": "12c5e43c",
+  "precision_quantum_unchanged": 1e-06,
+  "source_gate_receipt": "executions/round2_final_engine_unit_suite_20261007T134124Z.json",
+  "source_gate_returncode": 0,
+  "focused_tests_passed": 94,
+  "focused_seconds": 4.46,
+  "fresh_process_actual_cases": 15,
+  "all_actual_repeat_identical": true,
+  "all_actual_assignment_OPTIMAL": true,
+  "actual_benchmark": "logs/solver_final_fixed_t_validation.json",
+  "formal_execution": "research/moe_dispatch/round2/results/executions/E3_main_search_20261007T134519Z.json",
+  "PYTHONHASHSEED": "20261007",
+  "old_attempt_cache_reused": false,
+  "old_attempt_archive": "logs/attempts/enumeration_before_admission_fix",
+  "created_utc": "2026-10-07T13:46:04.243073+00:00"
+}

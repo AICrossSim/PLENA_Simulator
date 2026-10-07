@@ -1,0 +1,26 @@
+{
+  "state": "cancelled_before_engine_edit",
+  "parent_pid": 2871305,
+  "child_pids": [
+    2875139,
+    2875140,
+    2875141,
+    2875142,
+    2875143,
+    2875144,
+    2875145,
+    2875146,
+    2875147,
+    2875148,
+    2875149,
+    2875150,
+    2875151,
+    2875152,
+    2875153,
+    2875154
+  ],
+  "cancelled_utc": "2026-10-07T12:57:07.692453+00:00",
+  "engine_sha256": "751e4ff0f6c29ebaad3e44b40deed2807941249898cc4cc36b9291e49e789100",
+  "reason": "native CP lazy encoding took >400s on small grouped assignments; exact same integer feasible set will be solved by bounded grouped-count enumeration; no model or precision change",
+  "cache_reuse": false
+}

@@ -1,0 +1,10 @@
+{
+  "all_ok": true,
+  "checks": 36000,
+  "concrete_feasible_designs": 2000,
+  "development_windows": 18,
+  "repeats": 2,
+  "sampling_attempts": 2953,
+  "seed": 20261007,
+  "warning": "Random checks support implementation confidence, not a mathematical proof"
+}

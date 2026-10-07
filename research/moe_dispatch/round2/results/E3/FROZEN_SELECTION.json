@@ -1,0 +1,4796 @@
+{
+  "BF16_only": true,
+  "all_hardware_fixed_before_heldout": true,
+  "modes": {
+    "fixed_issue": {
+      "2+4": {
+        "alias_scope": "same physical MAC-ratio domain with swappable roles and all private resource cuts",
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            81920,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 4,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 16
+            }
+          ],
+          "flows": [
+            "WS",
+            "OS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            56,
+            8
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            16384,
+            24576
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            10240,
+            2048
+          ],
+          "z_bytes": [
+            360448,
+            32768
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 6,
+            "pruned_nodes": 36,
+            "visited_nodes": 53
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 60,
+            "visited_nodes": 87
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 30,
+            "pruned_nodes": 196,
+            "visited_nodes": 277
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 34,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 48,
+            "visited_nodes": 85
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 22,
+            "pruned_nodes": 185,
+            "visited_nodes": 279
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 29,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 131,
+            "visited_nodes": 221
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 18,
+            "pruned_nodes": 851,
+            "visited_nodes": 1154
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "OS"
+        ],
+        "geomean_ms": 5.261347663135061,
+        "geometry": "4x16x128+2x16x128",
+        "latencies_ms": [
+          1.0990713333333333,
+          2.4722421666666663,
+          4.120401885964912,
+          6.866964545217803,
+          1.7859493333333332,
+          2.6100706666666667,
+          3.7081520438596485,
+          5.631253699062999,
+          1.2364213333333332,
+          2.4724016666666664,
+          2.8838462382002588,
+          3.9825399460351876,
+          12.996820065044902,
+          18.95146975288076,
+          24.699048585379835,
+          12.95214838748303,
+          18.790642677035038,
+          24.534616621585155
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.98112,
+          12.969369599991,
+          18.876211199986997,
+          24.654643199988,
+          12.840959999985998,
+          18.747801599989998,
+          24.526233599989002
+        ],
+        "mirror_alias_of": "4+2",
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "fixed_issue",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0984523333333334,
+          2.746023166666667,
+          4.256383425438596,
+          7.82604387289424,
+          1.7849733333333333,
+          2.6088241666666665,
+          4.1190076293859645,
+          7.414198179238934,
+          1.2357963333333333,
+          2.746033666666667,
+          3.981656786271432,
+          5.080500352995415,
+          18.368264460885175,
+          23.52923094797919,
+          30.244154408539288,
+          16.264826874997546,
+          33.77901849354387,
+          28.542837247420977
+        ],
+        "search_family": "2+4",
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "4+2": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            81920,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 4,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 16
+            }
+          ],
+          "flows": [
+            "WS",
+            "OS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            56,
+            8
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            16384,
+            24576
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            10240,
+            2048
+          ],
+          "z_bytes": [
+            360448,
+            32768
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 6,
+            "pruned_nodes": 36,
+            "visited_nodes": 53
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 60,
+            "visited_nodes": 87
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 30,
+            "pruned_nodes": 196,
+            "visited_nodes": 277
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 34,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 48,
+            "visited_nodes": 85
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 22,
+            "pruned_nodes": 185,
+            "visited_nodes": 279
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 29,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 131,
+            "visited_nodes": 221
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 18,
+            "pruned_nodes": 851,
+            "visited_nodes": 1154
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "OS"
+        ],
+        "geomean_ms": 5.261347663135061,
+        "geometry": "4x16x128+2x16x128",
+        "latencies_ms": [
+          1.0990713333333333,
+          2.4722421666666663,
+          4.120401885964912,
+          6.866964545217803,
+          1.7859493333333332,
+          2.6100706666666667,
+          3.7081520438596485,
+          5.631253699062999,
+          1.2364213333333332,
+          2.4724016666666664,
+          2.8838462382002588,
+          3.9825399460351876,
+          12.996820065044902,
+          18.95146975288076,
+          24.699048585379835,
+          12.95214838748303,
+          18.790642677035038,
+          24.534616621585155
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.98112,
+          12.969369599991,
+          18.876211199986997,
+          24.654643199988,
+          12.840959999985998,
+          18.747801599989998,
+          24.526233599989002
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "fixed_issue",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0984523333333334,
+          2.746023166666667,
+          4.256383425438596,
+          7.82604387289424,
+          1.7849733333333333,
+          2.6088241666666665,
+          4.1190076293859645,
+          7.414198179238934,
+          1.2357963333333333,
+          2.746033666666667,
+          3.981656786271432,
+          5.080500352995415,
+          18.368264460885175,
+          23.52923094797919,
+          30.244154408539288,
+          16.264826874997546,
+          33.77901849354387,
+          28.542837247420977
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "5+1": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            81920,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 5,
+              "pn": 8
+            },
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 8
+            }
+          ],
+          "flows": [
+            "WS",
+            "OS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            56,
+            8
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            16384,
+            24576
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            10240,
+            2048
+          ],
+          "z_bytes": [
+            360448,
+            32768
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 9,
+            "pruned_nodes": 5,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 15,
+            "pruned_nodes": 29,
+            "visited_nodes": 56
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 26,
+            "pruned_nodes": 120,
+            "visited_nodes": 183
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 54,
+            "pruned_nodes": 466,
+            "visited_nodes": 663
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 4,
+            "pruned_nodes": 20,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 22,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 27,
+            "pruned_nodes": 145,
+            "visited_nodes": 221
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 44,
+            "pruned_nodes": 303,
+            "visited_nodes": 512
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 8,
+            "pruned_nodes": 20,
+            "visited_nodes": 39
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 38,
+            "visited_nodes": 65
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 28,
+            "pruned_nodes": 142,
+            "visited_nodes": 250
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 40,
+            "pruned_nodes": 736,
+            "visited_nodes": 1017
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "OS"
+        ],
+        "geomean_ms": 5.289680242835185,
+        "geometry": "5x8x256+1x8x256",
+        "latencies_ms": [
+          1.104685156479266,
+          2.4756937671100925,
+          4.121549500501693,
+          6.874656365119121,
+          1.7920720436825701,
+          2.609950201665928,
+          3.714681698139677,
+          5.636164750084728,
+          1.2407843451880556,
+          2.473679659393134,
+          2.8845688530242386,
+          4.038014062492446,
+          13.250628300157066,
+          18.790518544741225,
+          24.809106588692742,
+          13.276207795419241,
+          19.146008915243925,
+          24.680984160749933
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.937894399987,
+          13.128908799970999,
+          18.67008,
+          24.670207999964997,
+          13.17888,
+          19.027967999972002,
+          24.537907199968
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "fixed_issue",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.5122294957134097,
+          3.1586961368421047,
+          5.494555502631579,
+          8.513324089692984,
+          1.9220835765746533,
+          3.0204755211875844,
+          4.6680050884805535,
+          8.376021491008771,
+          1.6475852837032834,
+          3.020418838257269,
+          4.124837572383373,
+          5.774759596590451,
+          18.383717760055237,
+          23.97273443754319,
+          28.602410433552038,
+          18.555514767685278,
+          44.76730237118516,
+          28.664260994076635
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "all_family_optima_certified": false,
+      "heterogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            81920,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 4,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 16
+            }
+          ],
+          "flows": [
+            "WS",
+            "OS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            56,
+            8
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            16384,
+            24576
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            10240,
+            2048
+          ],
+          "z_bytes": [
+            360448,
+            32768
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 6,
+            "pruned_nodes": 36,
+            "visited_nodes": 53
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 60,
+            "visited_nodes": 87
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 30,
+            "pruned_nodes": 196,
+            "visited_nodes": 277
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 34,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 48,
+            "visited_nodes": 85
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 22,
+            "pruned_nodes": 185,
+            "visited_nodes": 279
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 29,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 131,
+            "visited_nodes": 221
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 18,
+            "pruned_nodes": 851,
+            "visited_nodes": 1154
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "OS"
+        ],
+        "geomean_ms": 5.261347663135061,
+        "geometry": "4x16x128+2x16x128",
+        "latencies_ms": [
+          1.0990713333333333,
+          2.4722421666666663,
+          4.120401885964912,
+          6.866964545217803,
+          1.7859493333333332,
+          2.6100706666666667,
+          3.7081520438596485,
+          5.631253699062999,
+          1.2364213333333332,
+          2.4724016666666664,
+          2.8838462382002588,
+          3.9825399460351876,
+          12.996820065044902,
+          18.95146975288076,
+          24.699048585379835,
+          12.95214838748303,
+          18.790642677035038,
+          24.534616621585155
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.98112,
+          12.969369599991,
+          18.876211199986997,
+          24.654643199988,
+          12.840959999985998,
+          18.747801599989998,
+          24.526233599989002
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "fixed_issue",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0984523333333334,
+          2.746023166666667,
+          4.256383425438596,
+          7.82604387289424,
+          1.7849733333333333,
+          2.6088241666666665,
+          4.1190076293859645,
+          7.414198179238934,
+          1.2357963333333333,
+          2.746033666666667,
+          3.981656786271432,
+          5.080500352995415,
+          18.368264460885175,
+          23.52923094797919,
+          30.244154408539288,
+          16.264826874997546,
+          33.77901849354387,
+          28.542837247420977
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "homogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            49152,
+            49152
+          ],
+          "cores": [
+            {
+              "pk": 32,
+              "pm": 3,
+              "pn": 64
+            },
+            {
+              "pk": 32,
+              "pm": 3,
+              "pn": 64
+            }
+          ],
+          "flows": [
+            "WS",
+            "IS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            20480,
+            20480
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            6144,
+            6144
+          ],
+          "z_bytes": [
+            196608,
+            196608
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 12,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 32,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 6,
+            "pruned_nodes": 68,
+            "visited_nodes": 87
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 170,
+            "visited_nodes": 221
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 22,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 34,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 4,
+            "pruned_nodes": 48,
+            "visited_nodes": 61
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 18,
+            "pruned_nodes": 100,
+            "visited_nodes": 161
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 14,
+            "visited_nodes": 21
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 32,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 122,
+            "visited_nodes": 193
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 20,
+            "pruned_nodes": 1720,
+            "visited_nodes": 2314
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "homogeneous",
+        "flows": [
+          "WS",
+          "IS"
+        ],
+        "geomean_ms": 5.3266498138096345,
+        "geometry": "3x64x32+3x64x32",
+        "latencies_ms": [
+          1.0988153333333333,
+          2.472583692982456,
+          4.121146515525319,
+          6.868090646443879,
+          1.7856933333333331,
+          2.609933692982456,
+          3.7091307139030105,
+          5.631614924441786,
+          1.2361653333333331,
+          2.472583692982456,
+          2.884016322555323,
+          3.9823215367767237,
+          13.596348235207156,
+          19.52411074374294,
+          25.560989303722092,
+          13.459033914187103,
+          19.52398839119196,
+          25.432448844234425
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.980697599999,
+          13.59072,
+          19.518259199996,
+          25.553510399992,
+          13.45344,
+          19.518259199994,
+          25.425100799992
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "fixed_issue",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0984523333333334,
+          2.471608521929824,
+          4.393561486842105,
+          7.277083335875199,
+          1.7849733333333333,
+          2.608952521929824,
+          3.7071912884644136,
+          6.231864457510963,
+          1.2357963333333333,
+          2.471608521929824,
+          3.7071089024995016,
+          4.668609939107356,
+          21.213465111256927,
+          25.09190062653388,
+          33.2022748404061,
+          18.191002929335816,
+          28.937057919916985,
+          36.24900830089666
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "search_scope": "full declared domain; open regional frontiers remain if time cap reached",
+      "single": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 48
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 3
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 5
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 6
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 8
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 6
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 9
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 5
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 9
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 8
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 23
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 20
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 26
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 28
+          }
+        ],
+        "family": "single",
+        "flows": [
+          "WS"
+        ],
+        "geomean_ms": 5.356828222055863,
+        "geometry": "2x48x128",
+        "latencies_ms": [
+          1.0990573333333333,
+          2.4729426666666665,
+          4.191428789024887,
+          7.28329390730315,
+          1.7859253333333334,
+          2.6102906666666663,
+          3.7792966482660137,
+          6.362801881605546,
+          1.2364053333333334,
+          2.4729426666666665,
+          2.9918202567527423,
+          4.0645531533897605,
+          13.905980846488703,
+          18.50698063816982,
+          23.7925127184416,
+          13.699005710047196,
+          18.922841497230802,
+          24.034049777320973
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          11.774497599963,
+          17.421175999975,
+          23.112390399979,
+          11.730934399965,
+          17.464739199968996,
+          22.981700799968
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "fixed_issue",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "proof_complete": true,
+        "proof_status": "complete_single_geometry_dataflow_scope",
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0990333333333333,
+          2.4728906666666663,
+          4.191576155609955,
+          7.283926825907793,
+          1.7858813333333332,
+          2.6102226666666666,
+          3.7795439444716443,
+          6.363226316786611,
+          1.2363773333333332,
+          2.4729506666666663,
+          2.992273124092207,
+          4.064514552760088,
+          13.905934608037512,
+          18.507092147100806,
+          23.79210248878195,
+          13.699390140824427,
+          18.92271597677466,
+          24.033788769783676
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      }
+    },
+    "pipelined": {
+      "2+4": {
+        "alias_scope": "same physical MAC-ratio domain with swappable roles and all private resource cuts",
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 29,
+            "visited_nodes": 35
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 49,
+            "visited_nodes": 57
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 18,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 26,
+            "visited_nodes": 32
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 40,
+            "visited_nodes": 49
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 20,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 22,
+            "visited_nodes": 30
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 4.0136142207695915,
+        "geometry": "1x32x128+2x32x128",
+        "latencies_ms": [
+          1.0993645487179486,
+          2.473759205827506,
+          4.123100303263405,
+          6.872060644988345,
+          1.7865357641025639,
+          2.6112064030303035,
+          3.710824745221446,
+          5.6351996911421915,
+          1.236812287179487,
+          2.473758844988345,
+          2.8862402515151513,
+          3.1614449470862476,
+          7.830362475863894,
+          8.654176985193898,
+          9.145097801224544,
+          7.556845707393097,
+          8.379732900085516,
+          8.870591864145194
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          7.82496,
+          8.64864,
+          9.06048,
+          7.5504,
+          8.37408,
+          8.78592
+        ],
+        "mirror_alias_of": "4+2",
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0983953333333334,
+          2.4714160855175202,
+          4.119086103630754,
+          6.865204245253943,
+          1.7848593333333334,
+          2.608632068027211,
+          3.7071821307146995,
+          5.640996838213869,
+          1.2357393333333333,
+          2.471416068027211,
+          2.8834342147311003,
+          3.1584182745959724,
+          8.960594257604736,
+          15.2461510809625,
+          17.444981397814285,
+          11.674149451221057,
+          14.147509331285928,
+          11.26540218425463
+        ],
+        "search_family": "2+4",
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "4+2": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 29,
+            "visited_nodes": 35
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 49,
+            "visited_nodes": 57
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 18,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 26,
+            "visited_nodes": 32
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 40,
+            "visited_nodes": 49
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 20,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 22,
+            "visited_nodes": 30
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 4.0136142207695915,
+        "geometry": "1x32x128+2x32x128",
+        "latencies_ms": [
+          1.0993645487179486,
+          2.473759205827506,
+          4.123100303263405,
+          6.872060644988345,
+          1.7865357641025639,
+          2.6112064030303035,
+          3.710824745221446,
+          5.6351996911421915,
+          1.236812287179487,
+          2.473758844988345,
+          2.8862402515151513,
+          3.1614449470862476,
+          7.830362475863894,
+          8.654176985193898,
+          9.145097801224544,
+          7.556845707393097,
+          8.379732900085516,
+          8.870591864145194
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          7.82496,
+          8.64864,
+          9.06048,
+          7.5504,
+          8.37408,
+          8.78592
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0983953333333334,
+          2.4714160855175202,
+          4.119086103630754,
+          6.865204245253943,
+          1.7848593333333334,
+          2.608632068027211,
+          3.7071821307146995,
+          5.640996838213869,
+          1.2357393333333333,
+          2.471416068027211,
+          2.8834342147311003,
+          3.1584182745959724,
+          8.960594257604736,
+          15.2461510809625,
+          17.444981397814285,
+          11.674149451221057,
+          14.147509331285928,
+          11.26540218425463
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "5+1": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "FEASIBLE",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": false,
+        "design": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            80896,
+            17408
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 5,
+              "pn": 8
+            },
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 8
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            20480,
+            20480
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            9216,
+            3072
+          ],
+          "z_bytes": [
+            326656,
+            66560
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 29,
+            "visited_nodes": 35
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 96,
+            "visited_nodes": 111
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 18,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 26,
+            "visited_nodes": 32
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 78,
+            "visited_nodes": 95
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 20,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 2,
+            "pruned_nodes": 42,
+            "visited_nodes": 57
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 4.48836609894005,
+        "geometry": "5x8x256+1x8x256",
+        "latencies_ms": [
+          1.0990713333333333,
+          2.4729766666666664,
+          4.207737837890625,
+          6.869434037583116,
+          1.7859493333333332,
+          2.6103266666666665,
+          3.795575326171875,
+          5.678563438312962,
+          1.2364213333333332,
+          2.4729766666666664,
+          2.996712255859375,
+          3.3351715576634686,
+          9.771075364344577,
+          11.200676730137443,
+          14.003476427099772,
+          9.201689767388679,
+          11.506997346961505,
+          13.960194831686284
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          8.09952,
+          8.813113333332998,
+          11.777475958335,
+          7.82496,
+          8.824290666664998,
+          11.752759999999
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0983953333333332,
+          2.4712806666666665,
+          4.11908684796748,
+          7.139673366032916,
+          1.784887833333333,
+          2.6086246666666666,
+          3.70706683699187,
+          5.904719543297072,
+          1.2357423333333333,
+          2.4712806666666665,
+          2.929805311978597,
+          3.4331063997989526,
+          10.62727027899372,
+          13.280815384882413,
+          16.196962993516603,
+          10.468231793807321,
+          13.55726223892956,
+          16.017620760964213
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "all_family_optima_certified": false,
+      "heterogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 29,
+            "visited_nodes": 35
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 49,
+            "visited_nodes": 57
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 18,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 26,
+            "visited_nodes": 32
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 40,
+            "visited_nodes": 49
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 20,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 22,
+            "visited_nodes": 30
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 4.0136142207695915,
+        "geometry": "1x32x128+2x32x128",
+        "latencies_ms": [
+          1.0993645487179486,
+          2.473759205827506,
+          4.123100303263405,
+          6.872060644988345,
+          1.7865357641025639,
+          2.6112064030303035,
+          3.710824745221446,
+          5.6351996911421915,
+          1.236812287179487,
+          2.473758844988345,
+          2.8862402515151513,
+          3.1614449470862476,
+          7.830362475863894,
+          8.654176985193898,
+          9.145097801224544,
+          7.556845707393097,
+          8.379732900085516,
+          8.870591864145194
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          7.82496,
+          8.64864,
+          9.06048,
+          7.5504,
+          8.37408,
+          8.78592
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0983953333333334,
+          2.4714160855175202,
+          4.119086103630754,
+          6.865204245253943,
+          1.7848593333333334,
+          2.608632068027211,
+          3.7071821307146995,
+          5.640996838213869,
+          1.2357393333333333,
+          2.471416068027211,
+          2.8834342147311003,
+          3.1584182745959724,
+          8.960594257604736,
+          15.2461510809625,
+          17.444981397814285,
+          11.674149451221057,
+          14.147509331285928,
+          11.26540218425463
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "homogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            49152,
+            49152
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 24
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 24
+            }
+          ],
+          "flows": [
+            "OS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            20480,
+            20480
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            6144,
+            6144
+          ],
+          "z_bytes": [
+            196608,
+            196608
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 7,
+            "visited_nodes": 10
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 29,
+            "visited_nodes": 35
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 49,
+            "visited_nodes": 57
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 12,
+            "visited_nodes": 16
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 18,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 26,
+            "visited_nodes": 32
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 40,
+            "visited_nodes": 49
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 8,
+            "visited_nodes": 12
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 17,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 20,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 22,
+            "visited_nodes": 30
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "homogeneous",
+        "flows": [
+          "OS",
+          "WS"
+        ],
+        "geomean_ms": 4.16228176038323,
+        "geometry": "2x24x128+2x24x128",
+        "latencies_ms": [
+          1.0991373333333332,
+          2.4731526666666666,
+          4.122039333333333,
+          6.870240666666666,
+          1.7860813333333332,
+          2.6105246666666666,
+          3.709839333333333,
+          5.633682666666666,
+          1.2365093333333332,
+          2.4731526666666666,
+          2.885481333333333,
+          3.1606086666666666,
+          8.116286370823373,
+          9.701209154494334,
+          11.362220401931955,
+          7.831309531170868,
+          9.007115361180944,
+          10.648764157271462
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          8.09952,
+          8.9232,
+          9.6096,
+          7.82496,
+          8.64864,
+          9.33504
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.098534942885794,
+          2.8833808072836833,
+          4.394026115633724,
+          7.963840500555332,
+          1.7851239171127036,
+          2.609075639568565,
+          4.256540523246456,
+          7.002810423506911,
+          1.2358796775380887,
+          2.7461320842871717,
+          3.7073521194738364,
+          5.449181317258364,
+          13.428118251566298,
+          15.804754057013184,
+          17.368648164848235,
+          20.320995593724824,
+          14.69362893891666,
+          31.93340617152817
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "search_scope": "full declared domain; open regional frontiers remain if time cap reached",
+      "single": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 3
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 5
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 6
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 8
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 6
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 9
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 5
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 9
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 8
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 23
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 20
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 26
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 28
+          }
+        ],
+        "family": "single",
+        "flows": [
+          "WS"
+        ],
+        "geomean_ms": 4.033368266089851,
+        "geometry": "3x32x128",
+        "latencies_ms": [
+          1.0990573333333333,
+          2.4729426666666665,
+          4.121673333333333,
+          6.869614666666666,
+          1.7859253333333334,
+          2.6102906666666663,
+          3.709501333333333,
+          5.633162666666666,
+          1.2364053333333334,
+          2.4729426666666665,
+          2.885221333333333,
+          3.1603226666666666,
+          7.9350524158415885,
+          8.780316123955421,
+          9.305396424483055,
+          7.660311400990103,
+          8.505372,
+          9.03943746657361
+        ],
+        "lb_ms": [
+          1.09824,
+          2.47104,
+          4.1184,
+          6.864,
+          1.78464,
+          2.60832,
+          3.70656,
+          5.62848,
+          1.23552,
+          2.47104,
+          2.88288,
+          3.15744,
+          7.82496,
+          8.64864,
+          9.06048,
+          7.5504,
+          8.37408,
+          8.78592
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "pipelined",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "proof_complete": true,
+        "proof_status": "complete_single_geometry_dataflow_scope",
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          1.0990333333333333,
+          2.4728906666666663,
+          4.121641333333333,
+          6.869510666666666,
+          1.7858813333333332,
+          2.6102226666666666,
+          3.709549333333333,
+          5.633082666666666,
+          1.2363773333333332,
+          2.4729506666666663,
+          2.885213333333333,
+          3.1602386666666664,
+          7.935596,
+          8.780237104321419,
+          9.306825794959051,
+          7.660832999999999,
+          8.505290645833332,
+          9.039594740113712
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      }
+    },
+    "port_tight": {
+      "2+4": {
+        "alias_scope": "same physical MAC-ratio domain with swappable roles and all private resource cuts",
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 9,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 85,
+            "visited_nodes": 127
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 678,
+            "visited_nodes": 883
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 26,
+            "pruned_nodes": 9903,
+            "visited_nodes": 12443
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 7,
+            "pruned_nodes": 23,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 131,
+            "visited_nodes": 161
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 857,
+            "visited_nodes": 1066
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 4263,
+            "visited_nodes": 6652
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 21,
+            "visited_nodes": 36
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 104,
+            "visited_nodes": 149
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 11,
+            "pruned_nodes": 544,
+            "visited_nodes": 880
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 1564,
+            "visited_nodes": 2065
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 11.52605269895404,
+        "geometry": "1x32x128+2x32x128",
+        "latencies_ms": [
+          3.082320066666666,
+          6.935131387654324,
+          11.558518724737098,
+          19.264198412267767,
+          5.393878755555555,
+          7.705594987654323,
+          10.78791232043895,
+          16.181993885068326,
+          3.852783666666666,
+          6.935131387654324,
+          8.476299254320987,
+          9.247181747325103,
+          22.348438812267762,
+          24.661264945601094,
+          25.433233878934438,
+          21.577905212267765,
+          23.890731345601097,
+          24.66270027893444
+        ],
+        "lb_ms": [
+          3.0818304,
+          6.934118399999999,
+          11.556864,
+          19.26144,
+          5.3932032,
+          7.704576,
+          10.7864064,
+          16.1796096,
+          3.852288,
+          6.934118399999999,
+          8.4750336,
+          9.2454912,
+          22.343270399999998,
+          24.6546432,
+          25.425100799999996,
+          21.5728128,
+          23.8841856,
+          24.6546432
+        ],
+        "mirror_alias_of": "4+2",
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "port_tight",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          3.0822880666666674,
+          6.935039387654317,
+          11.558354724737093,
+          19.26391441226777,
+          5.393812755555557,
+          7.705492987654317,
+          10.787762320438965,
+          16.181759885068328,
+          3.852741666666667,
+          6.935039387654317,
+          8.476185254320992,
+          9.247055747325096,
+          43.9236713481481,
+          57.02394316954725,
+          70.12493826666656,
+          24.65954961226775,
+          54.71223048065836,
+          31.596974678934476
+        ],
+        "search_family": "2+4",
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "4+2": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 9,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 85,
+            "visited_nodes": 127
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 678,
+            "visited_nodes": 883
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 26,
+            "pruned_nodes": 9903,
+            "visited_nodes": 12443
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 7,
+            "pruned_nodes": 23,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 131,
+            "visited_nodes": 161
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 857,
+            "visited_nodes": 1066
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 4263,
+            "visited_nodes": 6652
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 21,
+            "visited_nodes": 36
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 104,
+            "visited_nodes": 149
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 11,
+            "pruned_nodes": 544,
+            "visited_nodes": 880
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 1564,
+            "visited_nodes": 2065
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 11.52605269895404,
+        "geometry": "1x32x128+2x32x128",
+        "latencies_ms": [
+          3.082320066666666,
+          6.935131387654324,
+          11.558518724737098,
+          19.264198412267767,
+          5.393878755555555,
+          7.705594987654323,
+          10.78791232043895,
+          16.181993885068326,
+          3.852783666666666,
+          6.935131387654324,
+          8.476299254320987,
+          9.247181747325103,
+          22.348438812267762,
+          24.661264945601094,
+          25.433233878934438,
+          21.577905212267765,
+          23.890731345601097,
+          24.66270027893444
+        ],
+        "lb_ms": [
+          3.0818304,
+          6.934118399999999,
+          11.556864,
+          19.26144,
+          5.3932032,
+          7.704576,
+          10.7864064,
+          16.1796096,
+          3.852288,
+          6.934118399999999,
+          8.4750336,
+          9.2454912,
+          22.343270399999998,
+          24.6546432,
+          25.425100799999996,
+          21.5728128,
+          23.8841856,
+          24.6546432
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "port_tight",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          3.0822880666666674,
+          6.935039387654317,
+          11.558354724737093,
+          19.26391441226777,
+          5.393812755555557,
+          7.705492987654317,
+          10.787762320438965,
+          16.181759885068328,
+          3.852741666666667,
+          6.935039387654317,
+          8.476185254320992,
+          9.247055747325096,
+          43.9236713481481,
+          57.02394316954725,
+          70.12493826666656,
+          24.65954961226775,
+          54.71223048065836,
+          31.596974678934476
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "5+1": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            81920,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 5,
+              "pn": 8
+            },
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 8
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            56,
+            8
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            16384,
+            24576
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            10240,
+            2048
+          ],
+          "z_bytes": [
+            360448,
+            32768
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 9,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 102,
+            "visited_nodes": 152
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 18,
+            "pruned_nodes": 1104,
+            "visited_nodes": 1430
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 32,
+            "pruned_nodes": 21539,
+            "visited_nodes": 27832
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 7,
+            "pruned_nodes": 23,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 131,
+            "visited_nodes": 161
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 17,
+            "pruned_nodes": 1013,
+            "visited_nodes": 1297
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 28,
+            "pruned_nodes": 7648,
+            "visited_nodes": 12242
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 21,
+            "visited_nodes": 36
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 126,
+            "visited_nodes": 181
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 761,
+            "visited_nodes": 1260
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 20,
+            "pruned_nodes": 2405,
+            "visited_nodes": 3187
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 11.77964481480477,
+        "geometry": "5x8x256+1x8x256",
+        "latencies_ms": [
+          3.1445888619047624,
+          7.07528668085742,
+          11.792148701048854,
+          19.653633457439373,
+          5.471730819047619,
+          7.830188293838678,
+          10.97482106880375,
+          16.477948406471263,
+          3.899488900000001,
+          7.07528668085742,
+          8.616457360505349,
+          9.402931976127173,
+          22.972778214718808,
+          25.30133924565714,
+          26.372213205948228,
+          22.186679814718808,
+          24.515209293848475,
+          25.613150114134836
+        ],
+        "lb_ms": [
+          3.1440895999999996,
+          7.074201599999999,
+          11.790336,
+          19.65056,
+          5.4710272,
+          7.8290944,
+          10.973184,
+          16.475340799999998,
+          3.8989824,
+          7.074201599999999,
+          8.6151168,
+          9.4011392,
+          22.76352,
+          25.090457599999997,
+          25.9387392,
+          21.9774976,
+          24.3044352,
+          25.152716799999997
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "port_tight",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          3.144556861904762,
+          7.07519468085742,
+          11.791984701048852,
+          19.65334945743939,
+          5.471730802721089,
+          7.830281352380955,
+          10.974871190476188,
+          16.478033521768708,
+          3.8995297333333334,
+          7.075194680857423,
+          8.616343360505342,
+          9.40285842176871,
+          26.11748643191451,
+          58.33955861214987,
+          70.73201184761898,
+          42.833824335959434,
+          57.553439512244836,
+          34.15377037120682
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "all_family_optima_certified": false,
+      "heterogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 9,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 85,
+            "visited_nodes": 127
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 678,
+            "visited_nodes": 883
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 26,
+            "pruned_nodes": 9903,
+            "visited_nodes": 12443
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 7,
+            "pruned_nodes": 23,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 131,
+            "visited_nodes": 161
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 857,
+            "visited_nodes": 1066
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 4263,
+            "visited_nodes": 6652
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 21,
+            "visited_nodes": 36
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 104,
+            "visited_nodes": 149
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 11,
+            "pruned_nodes": 544,
+            "visited_nodes": 880
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 1564,
+            "visited_nodes": 2065
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "heterogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 11.52605269895404,
+        "geometry": "1x32x128+2x32x128",
+        "latencies_ms": [
+          3.082320066666666,
+          6.935131387654324,
+          11.558518724737098,
+          19.264198412267767,
+          5.393878755555555,
+          7.705594987654323,
+          10.78791232043895,
+          16.181993885068326,
+          3.852783666666666,
+          6.935131387654324,
+          8.476299254320987,
+          9.247181747325103,
+          22.348438812267762,
+          24.661264945601094,
+          25.433233878934438,
+          21.577905212267765,
+          23.890731345601097,
+          24.66270027893444
+        ],
+        "lb_ms": [
+          3.0818304,
+          6.934118399999999,
+          11.556864,
+          19.26144,
+          5.3932032,
+          7.704576,
+          10.7864064,
+          16.1796096,
+          3.852288,
+          6.934118399999999,
+          8.4750336,
+          9.2454912,
+          22.343270399999998,
+          24.6546432,
+          25.425100799999996,
+          21.5728128,
+          23.8841856,
+          24.6546432
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "port_tight",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          3.0822880666666674,
+          6.935039387654317,
+          11.558354724737093,
+          19.26391441226777,
+          5.393812755555557,
+          7.705492987654317,
+          10.787762320438965,
+          16.181759885068328,
+          3.852741666666667,
+          6.935039387654317,
+          8.476185254320992,
+          9.247055747325096,
+          43.9236713481481,
+          57.02394316954725,
+          70.12493826666656,
+          24.65954961226775,
+          54.71223048065836,
+          31.596974678934476
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "homogeneous": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            49152,
+            49152
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            }
+          ],
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            20480,
+            20480
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            6144,
+            6144
+          ],
+          "z_bytes": [
+            196608,
+            196608
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 14,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 9,
+            "visited_nodes": 17
+          },
+          {
+            "domain_combinations": 288,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 85,
+            "visited_nodes": 127
+          },
+          {
+            "domain_combinations": 3570,
+            "evaluated_leaves": 16,
+            "pruned_nodes": 886,
+            "visited_nodes": 1149
+          },
+          {
+            "domain_combinations": 126000,
+            "evaluated_leaves": 26,
+            "pruned_nodes": 16617,
+            "visited_nodes": 20939
+          },
+          {
+            "domain_combinations": 44,
+            "evaluated_leaves": 7,
+            "pruned_nodes": 23,
+            "visited_nodes": 41
+          },
+          {
+            "domain_combinations": 176,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 131,
+            "visited_nodes": 161
+          },
+          {
+            "domain_combinations": 2772,
+            "evaluated_leaves": 14,
+            "pruned_nodes": 1023,
+            "visited_nodes": 1306
+          },
+          {
+            "domain_combinations": 63360,
+            "evaluated_leaves": 21,
+            "pruned_nodes": 7617,
+            "visited_nodes": 12196
+          },
+          {
+            "domain_combinations": 36,
+            "evaluated_leaves": 5,
+            "pruned_nodes": 21,
+            "visited_nodes": 36
+          },
+          {
+            "domain_combinations": 330,
+            "evaluated_leaves": 10,
+            "pruned_nodes": 104,
+            "visited_nodes": 149
+          },
+          {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 11,
+            "pruned_nodes": 752,
+            "visited_nodes": 1240
+          },
+          {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 3149,
+            "visited_nodes": 4165
+          },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "family": "homogeneous",
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "geomean_ms": 11.687989828917384,
+        "geometry": "3x16x128+3x16x128",
+        "latencies_ms": [
+          3.0823309,
+          6.935209227160494,
+          11.558685029035232,
+          19.264523165689205,
+          5.393907644444442,
+          7.705672827160491,
+          10.788048026886148,
+          16.182223075867512,
+          3.8527945,
+          6.935209227160494,
+          8.476377093827159,
+          9.247287806995882,
+          23.119188832681655,
+          25.432142966015004,
+          26.974759767361018,
+          22.348623565689145,
+          24.661609366015004,
+          26.20419463437484
+        ],
+        "lb_ms": [
+          3.0818304,
+          6.934118399999999,
+          11.556864,
+          19.26144,
+          5.3932032,
+          7.704576,
+          10.7864064,
+          16.1796096,
+          3.852288,
+          6.934118399999999,
+          8.4750336,
+          9.2454912,
+          23.113728,
+          25.425100799999996,
+          26.966016,
+          22.343270399999998,
+          24.6546432,
+          26.1955584
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "port_tight",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          3.0824497333333336,
+          6.935117227160495,
+          11.558682685185177,
+          19.264520271604948,
+          5.393841644444447,
+          7.705695777777774,
+          10.788127177777776,
+          16.182218822222215,
+          3.852820500000001,
+          6.935196233333333,
+          8.47626309382716,
+          9.247214088888883,
+          23.889594184590774,
+          26.97300187120866,
+          30.056351084895546,
+          23.119094640146322,
+          26.202505175034307,
+          29.28591716662773
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket",
+          "CP-SAT fixed-T feasibility bracket"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      },
+      "search_scope": "full declared domain; open regional frontiers remain if time cap reached",
+      "single": {
+        "allocation_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "allocations_optimal": true,
+        "design": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            98304
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            40960
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            12288
+          ],
+          "z_bytes": [
+            393216
+          ]
+        },
+        "engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+        "enumeration_state_counts": [
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 3
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 5
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 6
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 8
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 6
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 9
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 4
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 5
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 9
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 8
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 22
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 23
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 29
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 20
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 26
+          },
+          {
+            "domain_combinations": 1,
+            "evaluated_leaves": 1,
+            "pruned_nodes": 0,
+            "visited_nodes": 28
+          }
+        ],
+        "family": "single",
+        "flows": [
+          "WS"
+        ],
+        "geomean_ms": 11.243781734366843,
+        "geometry": "3x32x128",
+        "latencies_ms": [
+          3.082544214814816,
+          6.935625994269166,
+          11.55935907893444,
+          19.26563641226778,
+          5.00904761399177,
+          7.320922794269165,
+          10.403468678934441,
+          15.797965212267767,
+          3.4678410148148164,
+          6.935625994269166,
+          8.091687751734998,
+          8.862622812267775,
+          21.9647620122678,
+          24.27790014560114,
+          25.435155878934484,
+          21.194168412267796,
+          23.50730654560114,
+          24.664562278934476
+        ],
+        "lb_ms": [
+          3.0818304,
+          6.934118399999999,
+          11.556864,
+          19.26144,
+          5.007974399999999,
+          7.319347199999999,
+          10.4011776,
+          15.794380799999999,
+          3.4670591999999996,
+          6.934118399999999,
+          8.0898048,
+          8.8602624,
+          21.958041599999998,
+          24.2694144,
+          25.425100799999996,
+          21.187584,
+          23.498956800000002,
+          24.6546432
+        ],
+        "parameters": {
+          "bank_Bpc": 16.0,
+          "binding_lead_cycles": 512.0,
+          "charge_control": true,
+          "credits": 256,
+          "dotstagecycles": 2.0,
+          "hbm_Bpc": 256.0,
+          "hbm_latency": 64.0,
+          "onchip_mode": "port_tight",
+          "prefetch": true,
+          "request_bytes": 32,
+          "seed": 20261007,
+          "sram_weight_read_once_oracle": false,
+          "tile_issue_cycles": 1.0,
+          "vector_scale": 1.0
+        },
+        "proof_complete": true,
+        "proof_status": "complete_single_geometry_dataflow_scope",
+        "repeat_identical": true,
+        "runtime_latencies_ms": [
+          3.0825202148148163,
+          6.935822214814813,
+          11.559710251028806,
+          19.266177235025165,
+          5.00900361399177,
+          7.320854794269165,
+          10.403914155555555,
+          15.798254259990854,
+          3.4678130148148165,
+          6.935809992592591,
+          8.091747746959303,
+          8.862538812267776,
+          21.965712332510304,
+          24.278443757398115,
+          25.435370068980024,
+          21.19475832601739,
+          23.507638981815123,
+          24.66469682214434
+        ],
+        "solver_algorithms": [
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration",
+          "exact_grouped_count_enumeration"
+        ],
+        "workload_sha256": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e"
+      }
+    }
+  },
+  "objective": "paired window geometric mean",
+  "selection_split": "development only"
+}

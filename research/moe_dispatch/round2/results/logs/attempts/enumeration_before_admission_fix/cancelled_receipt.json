@@ -1,0 +1,26 @@
+{
+  "parent_pid": 2882334,
+  "wrapper_pid": 2882256,
+  "workers": [
+    2885689,
+    2885690,
+    2885691,
+    2885692,
+    2885693,
+    2885694,
+    2885695,
+    2885696,
+    2885697,
+    2885698,
+    2885699,
+    2885700,
+    2885701,
+    2885702,
+    2885703,
+    2885704
+  ],
+  "cancelled_utc": "2026-10-07T13:29:49.255377+00:00",
+  "engine_sha256": "9480921bcb9b0bf9c7883a588c7364d888cddf4f5565f619643555a442583683",
+  "reason": "runtime Task Next started before bindinglockcompletion; coordinate strict model causality fix with fixed-T solver; engine edits occur only afterallworkerstop",
+  "old_cache_reused": false
+}

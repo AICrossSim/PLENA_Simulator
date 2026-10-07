@@ -1,0 +1,53 @@
+[
+  {
+    "diagnostic_only": true,
+    "native_wall_fail_safe5s": true,
+    "linearization_level": 2,
+    "geometry": "6x4x256+6x4x256",
+    "flows": [
+      "WS",
+      "IS"
+    ],
+    "window": "joint_test_gpqa_b4_l13_s7",
+    "seconds": 1.3566513732075691,
+    "status": "OPTIMAL",
+    "types": 3,
+    "lb_cycles": 2612073.75,
+    "upper_cycles": 2612073.75,
+    "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 2612073750000\nbest_bound: 2612073750000\nintegers: 4\nbooleans: 10057\nconflicts: 10050\nbranches: 20125\npropagations: 30157\ninteger_propagations: 70400\nrestarts: 1\nlp_iterations: 12\nwalltime: 1.35204\nusertime: 1.35204\ndeterministic_time: 0.0126904\ngap_integral: 0\nsolution_fingerprint: 0x7c5b63d8e3c3c01f\n"
+  },
+  {
+    "diagnostic_only": true,
+    "native_wall_fail_safe5s": true,
+    "linearization_level": 0,
+    "geometry": "6x4x256+6x4x256",
+    "flows": [
+      "WS",
+      "IS"
+    ],
+    "window": "joint_test_gpqa_b4_l13_s7",
+    "seconds": 5.004642819985747,
+    "status": "FEASIBLE",
+    "types": 3,
+    "lb_cycles": 2608320.0209419997,
+    "upper_cycles": 2618330.0,
+    "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 2618330000000\nbest_bound: 2608320020942\nintegers: 4\nbooleans: 20945\nconflicts: 20942\nbranches: 20946\npropagations: 20944\ninteger_propagations: 83780\nrestarts: 1\nlp_iterations: 0\nwalltime: 5.00148\nusertime: 5.00148\ndeterministic_time: 0.0090527\ngap_integral: 0\nsolution_fingerprint: 0x6422af64b75ec967\n"
+  },
+  {
+    "diagnostic_only": true,
+    "native_wall_fail_safe5s": true,
+    "linearization_level": 1,
+    "geometry": "6x4x256+6x4x256",
+    "flows": [
+      "WS",
+      "IS"
+    ],
+    "window": "joint_test_gpqa_b4_l13_s7",
+    "seconds": 5.005919275805354,
+    "status": "FEASIBLE",
+    "types": 3,
+    "lb_cycles": 2609571.2780879997,
+    "upper_cycles": 2615827.5,
+    "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 2615827500000\nbest_bound: 2609571278088\nintegers: 4\nbooleans: 38143\nconflicts: 38138\nbranches: 48204\npropagations: 58243\ninteger_propagations: 162639\nrestarts: 1\nlp_iterations: 10\nwalltime: 5.00243\nusertime: 5.00243\ndeterministic_time: 0.0225014\ngap_integral: 0\nsolution_fingerprint: 0xf8a23af3a7cd5313\n"
+  }
+]

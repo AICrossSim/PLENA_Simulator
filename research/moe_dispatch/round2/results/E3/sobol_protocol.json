@@ -1,0 +1,64 @@
+{
+  "baseN": 256,
+  "baseline_parameters": {
+    "bank_Bpc": 16.0,
+    "binding_lead_cycles": 512.0,
+    "charge_control": true,
+    "credits": 256,
+    "dotstagecycles": 2.0,
+    "hbm_Bpc": 256.0,
+    "hbm_latency": 64.0,
+    "onchip_mode": "pipelined",
+    "prefetch": true,
+    "request_bytes": 32,
+    "seed": 20261007,
+    "sram_weight_read_once_oracle": false,
+    "tile_issue_cycles": 1.0,
+    "timing_model_sha256": "3e5391729e908545456c9e38e7244af00b9109216e604681375ea4da57c20d89",
+    "vector_scale": 1.0,
+    "weight_tile_service_cycles": 1.0
+  },
+  "certified_samples": 5,
+  "delta_interval_semantics": "True family-optimum H/S delta lies in [LB_H/U_S - 1, U_H/LB_S - 1]; delta_lower/delta_upper are fractions, *_pct fields are percentages",
+  "effective_credits_rounded_to_integer": true,
+  "hardware_reoptimized_per_sample": true,
+  "parameter_class": "SensitivityParameters",
+  "problem": {
+    "bounds": [
+      [
+        1,
+        30.4
+      ],
+      [
+        8,
+        32
+      ],
+      [
+        1,
+        4
+      ],
+      [
+        256,
+        512
+      ],
+      [
+        0.5,
+        2
+      ]
+    ],
+    "names": [
+      "weight_tile_service_cycles",
+      "bank_Bpc",
+      "dotstagecycles",
+      "credits",
+      "vector_scale"
+    ],
+    "num_vars": 5,
+    "sample_scaled": true
+  },
+  "samples": 1792,
+  "second_order": false,
+  "timing_model_sha256": "3e5391729e908545456c9e38e7244af00b9109216e604681375ea4da57c20d89",
+  "universal_W_bound_scope": "Ignores the extra frontend cap; remains conservative but may be looser",
+  "weight_tile_service_semantics": "Shared W frontend total bandwidth min(64 * bank_Bpc, 4096 / tau); per-core share w_banks / 64; datapath issue interval stays 1"
+}

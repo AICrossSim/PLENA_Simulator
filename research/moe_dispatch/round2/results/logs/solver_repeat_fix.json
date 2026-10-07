@@ -1,0 +1,35 @@
+{
+  "old_engine_sha256": "63c381bd84b30e87d8d49a8c8e98950c27e6b3b8cf81ee224bd7e745e4152931",
+  "new_engine_sha256": "fa44e542129910f09987913ad07c70aa6041d04ea5bc6f0c06d8a78f710f717a",
+  "aborted_outputs_reused": false,
+  "failure_window": "v3_captured_mixed_development_swe_t128_l13",
+  "failure_design": "1x6x1024+1x6x1024",
+  "failure_flows": [
+    "OS",
+    "WS"
+  ],
+  "old_statuses": [
+    "FEASIBLE",
+    "FEASIBLE"
+  ],
+  "old_identical_owners": true,
+  "old_lb_cycles": 27420578.946094,
+  "old_objective_values": [
+    27465554.361020997,
+    27465554.360978
+  ],
+  "fix": "deterministic CP-SAT work cap0.1; actual owner allocation load replaces slack objective variable",
+  "solver_default_requested_effort": 10,
+  "deterministic_work_per_effort": 0.01,
+  "regression_tests_passed": 80,
+  "source_scope_changed": [
+    "optimizer budget termination",
+    "assignment witness objective reporting"
+  ],
+  "unchanged": [
+    "phase-fluid model",
+    "regional/universal LB functions",
+    "traffic accounting",
+    "workloads"
+  ]
+}

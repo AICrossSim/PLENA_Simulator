@@ -1,0 +1,16 @@
+{
+  "final_engine_sha256": "9480921bcb9b0bf9c7883a588c7364d888cddf4f5565f619643555a442583683",
+  "no_model_timing_change": true,
+  "previous_attempt_archived_directory": "logs/attempts/linearization2_before_exact_enumeration",
+  "old_parent_exitcode": 143,
+  "old_cache_reused": false,
+  "unit_tests": {
+    "count": 88,
+    "exitcode": 0,
+    "seconds": 3.57
+  },
+  "benchmark": "logs/solver_enumeration_benchmark.json",
+  "backend": "exact integer grouped-count enumeration\u22641000000 combinations, otherwise CP-SAT same fixedwork0.1",
+  "formal_execution": "research/moe_dispatch/round2/results/executions/E3_main_search_20261007T130214Z.json",
+  "recorded_utc": "2026-10-07T13:02:31.908637+00:00"
+}

@@ -1,0 +1,20 @@
+{
+  "scope": "read-only exact failing-repeat diagnosis; no comparison check removed",
+  "inputs": {
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/repeat_debug_fixed_t/v3_captured_mixed_development_t96_l13_a.json": "c90b08c88235850b78cac041e3648fefb9d90fceaffaa08c2ddde3f9b51aeae3",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/logs/repeat_debug_fixed_t/v3_captured_mixed_development_t96_l13_b.json": "da5b68b3ea6f01fdd14939fdfd9c96999f42749356ce4db0fd1a4b8c2a97e983"
+  },
+  "differences": [
+    {
+      "path": ".assignment.integer_objective_bracket.queries[29].deterministic_work",
+      "a": 7.99561000000003e-05,
+      "b": 7.995610000000028e-05
+    }
+  ],
+  "all_physical_result_objects_identical": true,
+  "owners_identical": true,
+  "bounds_and_gaps_identical": true,
+  "immutable_costs": true,
+  "default_prediction_state": "None per evaluate_design call; no predictor reused across _point windows",
+  "recommendation": "Use documented conservative canonical native solver work accounting; retain exact complete solver/performance output comparison. Original raw diagnostics remain archived."
+}

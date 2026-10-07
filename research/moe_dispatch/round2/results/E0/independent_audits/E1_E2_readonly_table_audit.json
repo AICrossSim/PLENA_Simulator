@@ -1,0 +1,25 @@
+{
+  "scope": "Read-only E1/E2 table consistency, no native timing verification",
+  "checks": 4759,
+  "passed": 4759,
+  "failed": [],
+  "source_sha256": {
+    "E1/bounds_per_window.csv": "a25e0434132ea8467c06dc6fccb04d2e525eb1acf15593e8341190475c3cfa5b",
+    "E1/headroom_by_batch.csv": "405366444a73ec5859794d077739b6c0ff2fe7a534dab642f27b8f9952d36afe",
+    "E2/micro.csv": "47b47a5cf170d4118c5d3bc4f738dd634967b6f95eaef0deb9fdacee00ee151a",
+    "E2/layer_grid.csv": "9b9ccb2b90b134366a0eab739fdaead6a6c800895b3e6d6718297772f5265b65",
+    "E2/micro_WS_vs_OS.csv": "90107a374bca6ea8dd0c46d2019685a26ee126c8d935895e5c072321ac68f5a3"
+  },
+  "rows": {
+    "E1/bounds_per_window.csv": 2430,
+    "E1/headroom_by_batch.csv": 21,
+    "E2/micro.csv": 1188,
+    "E2/layer_grid.csv": 720,
+    "E2/micro_WS_vs_OS.csv": 396
+  },
+  "warnings": [
+    "E2 micro includes finite HBM and private ports; not pure compute",
+    "fixed_issue duplicates issue pipelines and is not an iso-resource mode",
+    "phase-fluid estimates are not native HBM or calibrated RTL measurements"
+  ]
+}

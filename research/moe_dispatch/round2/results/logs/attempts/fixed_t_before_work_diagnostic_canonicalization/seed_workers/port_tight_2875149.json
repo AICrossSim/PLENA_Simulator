@@ -1,0 +1,12 @@
+{
+  "engine_sha256": "751e4ff0f6c29ebaad3e44b40deed2807941249898cc4cc36b9291e49e789100",
+  "flows": [
+    "WS",
+    "OS"
+  ],
+  "geometry": "3x32x64+3x32x64",
+  "repeat_index": 2,
+  "started_monotonic": 15868508.549931496,
+  "state": "evaluating",
+  "window_id": "joint_test_swe_b2_l13_s7"
+}

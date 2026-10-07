@@ -1,0 +1,39 @@
+seed pipelined 32 / 636
+seed pipelined 64 / 636
+seed pipelined 96 / 636
+seed pipelined 128 / 636
+concurrent.futures.process._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/usr/lib64/python3.11/concurrent/futures/process.py", line 261, in _process_worker
+    r = call_item.fn(*call_item.args, **call_item.kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/main_search.py", line 36, in _point
+    assert not bad,canonical({'error':'allocation/replay repeat mismatch','geometry':d.geometry,'flows':d.flows,'windows':bad})
+           ^^^^^^^
+AssertionError: {"error":"allocation/replay repeat mismatch","flows":["OS","WS"],"geometry":"1x6x1024+1x6x1024","windows":["v3_captured_mixed_development_t96_l13","v3_captured_mixed_development_swe_t96_l13"]}
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/main_search.py", line 262, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/main_search.py", line 261, in main
+    args=ap.parse_args();{'search':main_search,'validity':validity,'gaps':schedule_gaps}[args.stage](args)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/main_search.py", line 162, in main_search
+    points=seed_candidates(dev,p,args.jobs,checkpoint=out/f'seed_points_{mode}_partial.jsonl')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/main_search.py", line 137, in seed_candidates
+    row=future.result();completed[futures[future]]=row
+        ^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+AssertionError: {"error":"allocation/replay repeat mismatch","flows":["OS","WS"],"geometry":"1x6x1024+1x6x1024","windows":["v3_captured_mixed_development_t96_l13","v3_captured_mixed_development_swe_t96_l13"]}

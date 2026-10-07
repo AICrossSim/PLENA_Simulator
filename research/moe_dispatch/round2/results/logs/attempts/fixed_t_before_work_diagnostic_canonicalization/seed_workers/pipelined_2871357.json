@@ -1,0 +1,13 @@
+{
+  "elapsed_seconds": 0.1132135633379221,
+  "engine_sha256": "751e4ff0f6c29ebaad3e44b40deed2807941249898cc4cc36b9291e49e789100",
+  "flows": [
+    "WS",
+    "OS"
+  ],
+  "geometry": "1x32x128+2x32x128",
+  "repeat_index": 2,
+  "solver_status": "OPTIMAL",
+  "state": "complete",
+  "window_id": "v3_captured_mixed_development_swe_t128_l13"
+}

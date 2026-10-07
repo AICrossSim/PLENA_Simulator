@@ -1,0 +1,118 @@
+{
+  "complete": true,
+  "finished_utc": "2026-10-07T14:50:09.009602+00:00",
+  "jobs": 16,
+  "selection_sha256": "f461deaba2fce1d86aeaaefe205d8e4ab502ba69ff6a3b890b8dbad7360d0373",
+  "source_sha256": {
+    "common.py": "3342422c57757019415473f3af15a2bb67b6398d165c767254e860858eb31d61",
+    "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+    "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+    "oracle_replay.py": "3cdb013bb5e704a3f4c999eb10573f300834ac1b8fa9dc92b5db8b7c75c4389b",
+    "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+    "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622",
+    "search.py": "f8f40f99a0d246212869e6baa19019241a70f6d8c05094c739e138f806458710"
+  },
+  "stages": [
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.execute",
+        "--label",
+        "E1",
+        "--",
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.run",
+        "--stage",
+        "E1",
+        "--jobs",
+        "16"
+      ],
+      "elapsed_seconds": 42.112132923677564,
+      "returncode": 0,
+      "stage": "E1"
+    },
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.execute",
+        "--label",
+        "E2layer",
+        "--",
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.run",
+        "--stage",
+        "E2layer",
+        "--jobs",
+        "16"
+      ],
+      "elapsed_seconds": 221.13962773419917,
+      "returncode": 0,
+      "stage": "E2layer"
+    },
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.execute",
+        "--label",
+        "E4",
+        "--",
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.run",
+        "--stage",
+        "E4",
+        "--jobs",
+        "16"
+      ],
+      "elapsed_seconds": 249.0741385743022,
+      "returncode": 0,
+      "stage": "E4"
+    },
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.execute",
+        "--label",
+        "E5",
+        "--",
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.run",
+        "--stage",
+        "E5",
+        "--jobs",
+        "16"
+      ],
+      "elapsed_seconds": 926.5862486101687,
+      "returncode": 0,
+      "stage": "E5"
+    },
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.execute",
+        "--label",
+        "E6",
+        "--",
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "research.moe_dispatch.round2.run",
+        "--stage",
+        "E6",
+        "--jobs",
+        "16"
+      ],
+      "elapsed_seconds": 0.8172639571130276,
+      "returncode": 0,
+      "stage": "E6"
+    }
+  ],
+  "started_utc": "2026-10-07T14:26:09.265509+00:00"
+}

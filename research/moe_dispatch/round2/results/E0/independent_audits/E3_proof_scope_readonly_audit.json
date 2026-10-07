@@ -1,0 +1,110 @@
+{
+  "scope": "Independent finite single-domain and assignment-proof scope checks",
+  "checks": [
+    {
+      "check": "fixed_issue receipt pins exact seed file",
+      "ok": true
+    },
+    {
+      "check": "fixed_issue single geometry and3flow full inventory",
+      "ok": true
+    },
+    {
+      "check": "fixed_issue all legal single allocations OPTIMAL/repeated",
+      "ok": true
+    },
+    {
+      "check": "fixed_issue exact finite single minimum",
+      "ok": true
+    },
+    {
+      "check": "fixed_issue invalid input slice truly above pool",
+      "ok": true
+    },
+    {
+      "check": "fixed_issue receipt preserves finite temporal policy scope",
+      "ok": true
+    },
+    {
+      "check": "pipelined receipt pins exact seed file",
+      "ok": true
+    },
+    {
+      "check": "pipelined single geometry and3flow full inventory",
+      "ok": true
+    },
+    {
+      "check": "pipelined all legal single allocations OPTIMAL/repeated",
+      "ok": true
+    },
+    {
+      "check": "pipelined exact finite single minimum",
+      "ok": true
+    },
+    {
+      "check": "pipelined invalid input slice truly above pool",
+      "ok": true
+    },
+    {
+      "check": "pipelined receipt preserves finite temporal policy scope",
+      "ok": true
+    },
+    {
+      "check": "port_tight receipt pins exact seed file",
+      "ok": true
+    },
+    {
+      "check": "port_tight single geometry and3flow full inventory",
+      "ok": true
+    },
+    {
+      "check": "port_tight all legal single allocations OPTIMAL/repeated",
+      "ok": true
+    },
+    {
+      "check": "port_tight exact finite single minimum",
+      "ok": true
+    },
+    {
+      "check": "port_tight invalid input slice truly above pool",
+      "ok": true
+    },
+    {
+      "check": "port_tight receipt preserves finite temporal policy scope",
+      "ok": true
+    }
+  ],
+  "assignment_statuses": {
+    "fixed_issue": {
+      "OPTIMAL": 10581,
+      "FEASIBLE": 489
+    },
+    "pipelined": {
+      "OPTIMAL": 10815,
+      "FEASIBLE": 255
+    },
+    "port_tight": {
+      "OPTIMAL": 10874,
+      "FEASIBLE": 196
+    }
+  },
+  "leaf_statuses": {
+    "evaluated/True": 329,
+    "evaluated/False": 6,
+    "invalid_or_unresolved/False": 12
+  },
+  "frozen_schedule_gap_scope": {
+    "rows": 1377,
+    "solver_statuses": {
+      "OPTIMAL": 1377
+    }
+  },
+  "all_visited_assignments_exact": false,
+  "warnings": [
+    "All1377 frozen design/window gap rows are OPTIMAL; this does not resolve all visited seeds/leaves",
+    "Direct single exhaustion establishes fixed-family optimum even while generic B certificate remains open",
+    "Infeasible12x1x1024 Xslice is24KiB against12KiB; not a universal architecture impossibility"
+  ],
+  "passed": 18,
+  "failed": []
+}

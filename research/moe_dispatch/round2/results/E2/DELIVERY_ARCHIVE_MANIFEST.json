@@ -1,0 +1,9 @@
+{
+  "archive_indexes": [],
+  "archive_member_hash_boundary": "Container bytes are checked by this metadata refresh. Exact member hashes and roundtrip checks are preserved from original packaging manifests/full-scope audits, not recomputed numerical outputs.",
+  "excluded": [],
+  "external_restoration_paths_not_traversed": [],
+  "metadata_generation_commit": "8247e7c9ccc0db622eb2dbf378612581ef215f4b",
+  "preserved_archives": "All regular files in non-excluded archive directories are independently hashed in PROVENANCE.csv; retained producer archive manifests remain authoritative for external references.",
+  "scope": "Explicit omitted payload/reference manifest; omitted directory contents are not hashed or claimed self-contained"
+}

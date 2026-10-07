@@ -1,0 +1,1042 @@
+{
+  "scope": "Independent read-only final actual rendered report/status review; no source/result modification or numerical runs",
+  "report_path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/REPORT_ZH.md",
+  "report_sha256": "09267dec8421d74a3faa8def028a538bce44c3fe503f0d86e5102dcea1a3f469",
+  "status_sha256": "5c95d147b6474003f71d657f645066ac3a87d14cea0d9c7561ece1813358569b",
+  "metadata_generation_commit": "8247e7c9ccc0db622eb2dbf378612581ef215f4b",
+  "report_generation_commit": "8247e7c9ccc0db622eb2dbf378612581ef215f4b",
+  "all_checks_passed": true,
+  "check_count": 256,
+  "checks": [
+    {
+      "check": "exact13headings",
+      "ok": true
+    },
+    {
+      "check": "conclusion_bullets_max10",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_milp_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_milp_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_pipelined_runtime_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_pipelined_runtime_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_milp_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_milp_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_port_tight_runtime_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_port_tight_runtime_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_B0",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_B1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_B2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_fixed_3+3",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_fixed_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_best_hetero",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_best_5+1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_best_4+2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_best_2+4",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_U1",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_milp_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_milp_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_main_fixed_issue_runtime_U2",
+      "ok": true
+    },
+    {
+      "check": "E4_CI_fixed_issue_runtime_U2",
+      "ok": true
+    },
+    {
+      "check": "sobol_weight_tile_service_cycles",
+      "ok": true
+    },
+    {
+      "check": "sobol_bank_Bpc",
+      "ok": true
+    },
+    {
+      "check": "sobol_dotstagecycles",
+      "ok": true
+    },
+    {
+      "check": "sobol_credits",
+      "ok": true
+    },
+    {
+      "check": "sobol_vector_scale",
+      "ok": true
+    },
+    {
+      "check": "flip_weight_tile_service_cycles_0",
+      "ok": true
+    },
+    {
+      "check": "flip_weight_tile_service_cycles_-0.05",
+      "ok": true
+    },
+    {
+      "check": "flip_bank_Bpc_0",
+      "ok": true
+    },
+    {
+      "check": "flip_bank_Bpc_0",
+      "ok": true
+    },
+    {
+      "check": "flip_bank_Bpc_-0.05",
+      "ok": true
+    },
+    {
+      "check": "flip_dotstagecycles_0",
+      "ok": true
+    },
+    {
+      "check": "flip_dotstagecycles_-0.05",
+      "ok": true
+    },
+    {
+      "check": "flip_credits_0",
+      "ok": true
+    },
+    {
+      "check": "flip_credits_-0.05",
+      "ok": true
+    },
+    {
+      "check": "flip_vector_scale_0",
+      "ok": true
+    },
+    {
+      "check": "flip_vector_scale_-0.05",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_pipelined_random",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_pipelined_static",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_pipelined_btb",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_pipelined_ema",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_pipelined_ours",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_pipelined_oracle",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_pipelined_random",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_pipelined_static",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_pipelined_btb",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_pipelined_ema",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_pipelined_ours",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_pipelined_oracle",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_port_tight_random",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_port_tight_static",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_port_tight_btb",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_port_tight_ema",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_port_tight_ours",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_port_tight_oracle",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_port_tight_random",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_port_tight_static",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_port_tight_btb",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_port_tight_ema",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_port_tight_ours",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_port_tight_oracle",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_fixed_issue_random",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_fixed_issue_static",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_fixed_issue_btb",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_fixed_issue_ema",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_fixed_issue_ours",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_best_hetero_fixed_issue_oracle",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_fixed_issue_random",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_fixed_issue_static",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_fixed_issue_btb",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_fixed_issue_ema",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_fixed_issue_ours",
+      "ok": true
+    },
+    {
+      "check": "E5_predictor_fixed_4+2_fixed_issue_oracle",
+      "ok": true
+    },
+    {
+      "check": "supported_section_complete_1",
+      "ok": true
+    },
+    {
+      "check": "supported_section_complete_2",
+      "ok": true
+    },
+    {
+      "check": "supported_section_complete_3",
+      "ok": true
+    },
+    {
+      "check": "supported_section_complete_4",
+      "ok": true
+    },
+    {
+      "check": "supported_section_complete_7",
+      "ok": true
+    },
+    {
+      "check": "supported_section_complete_9–10",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_5.1",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_5.2",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_5.3",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_5.4",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_5.5",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_6",
+      "ok": true
+    },
+    {
+      "check": "partial_scope_preserved_8",
+      "ok": true
+    },
+    {
+      "check": "overall_not_false_complete",
+      "ok": true
+    },
+    {
+      "check": "no_evidence_read_errors",
+      "ok": true
+    },
+    {
+      "check": "fullmodel_missing0of168",
+      "ok": true
+    },
+    {
+      "check": "replay_nonzero_residual_retained",
+      "ok": true
+    },
+    {
+      "check": "conditional_oracle_not_performance_upperbound",
+      "ok": true
+    },
+    {
+      "check": "corrected_latency_CI_header",
+      "ok": true
+    },
+    {
+      "check": "actual_effective_threshold_header",
+      "ok": true
+    },
+    {
+      "check": "no_fresh_CMA_overwrite_in_resume",
+      "ok": true
+    },
+    {
+      "check": "portable_restore_before_resume_grid",
+      "ok": true
+    },
+    {
+      "check": "portable_restore_before_resume_sobol",
+      "ok": true
+    },
+    {
+      "check": "portable_restore_before_resume_flip",
+      "ok": true
+    },
+    {
+      "check": "CMA_resume_from_archived_exact_checkpoint",
+      "ok": true
+    },
+    {
+      "check": "wholemodel_all168missing",
+      "ok": true
+    },
+    {
+      "check": "wholemodel_status_missing",
+      "ok": true
+    },
+    {
+      "check": "no_RTL_or_winner_claim",
+      "ok": true
+    },
+    {
+      "check": "source_and_model_boundaries",
+      "ok": true
+    },
+    {
+      "check": "resource_pool_domain_disclosed",
+      "ok": true
+    },
+    {
+      "check": "selected_exact_vs_visited_FEASIBLE_disclosed",
+      "ok": true
+    },
+    {
+      "check": "finite_single_vs_temporal_optimum_disclosed",
+      "ok": true
+    },
+    {
+      "check": "metadata_not_numerical_rerun",
+      "ok": true
+    },
+    {
+      "check": "all7_stage_metadata_manifests",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_pipelined_threshold_2",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_pipelined_threshold_fallback_6",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_pipelined_adaptive",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_pipelined_eft",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_pipelined_random",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_pipelined_milp",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_pipelined_threshold_2",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_pipelined_threshold_fallback_1",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_pipelined_adaptive",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_pipelined_eft",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_pipelined_random",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_pipelined_milp",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_port_tight_threshold_2",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_port_tight_threshold_fallback_8",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_port_tight_adaptive",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_port_tight_eft",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_port_tight_random",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_port_tight_milp",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_port_tight_threshold_2",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_port_tight_threshold_fallback_1",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_port_tight_adaptive",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_port_tight_eft",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_port_tight_random",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_port_tight_milp",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_fixed_issue_threshold_2",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_fixed_issue_threshold_fallback_1",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_fixed_issue_adaptive",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_fixed_issue_eft",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_fixed_issue_random",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_best_hetero_fixed_issue_milp",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_fixed_issue_threshold_2",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_fixed_issue_threshold_fallback_1",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_fixed_issue_adaptive",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_fixed_issue_eft",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_fixed_issue_random",
+      "ok": true
+    },
+    {
+      "check": "E5_actual_threshold_fixed_4+2_fixed_issue_milp",
+      "ok": true
+    }
+  ],
+  "scientific_boundary": "All numerical stages ran, but hardware proof closure/global near-optimum set and matching full-model timing remain truthfully partial. Conditional oracle is same-schedule accuracy reference; fixed_issue is non-iso-resource.",
+  "reader_scope_note": "The report prints36 all-window E5 dispatch rows; per-batch252CSV rows are intentionally not repeated in this report table. Initial audit mistakenly required these252unrendered rows; its failed reader-scope attempt is preserved separately and no source/results were changed.",
+  "superseded_reader_scope_attempt": {
+    "file": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/final_actual_report_audit_failed_reader_scope_attempt.json",
+    "sha256": "e0cd28dfb0af082902c4112a9598fe19114020d042366e1175508408c26b60d2"
+  }
+}

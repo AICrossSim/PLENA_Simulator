@@ -1,0 +1,273 @@
+{
+  "engine_sha256": "2cdf53885ecbb83ff068a84f620618f6d114b2301d9f88a9951fa75b6e0f3fc2",
+  "diagnostic_only": true,
+  "default_deterministic_work": 0.1,
+  "planned_cases": 12,
+  "completed_cases": 12,
+  "cases": [
+    {
+      "geometry": "6x16x64+6x16x64",
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.022865237668156624,
+        0.012476194649934769
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "lb_cycles": 9609600.0,
+      "objective_upper_cycles": 9609600.0,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 9609600000000\nbest_bound: 9609600000000\nintegers: 29\nbooleans: 30\nconflicts: 0\nbranches: 60\npropagations: 0\ninteger_propagations: 61\nrestarts: 0\nlp_iterations: 8\nwalltime: 0.00867952\nusertime: 0.00867958\ndeterministic_time: 9.56792e-05\ngap_integral: 0\nsolution_fingerprint: 0x3fbc732c925e238e\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 9609600000000\nbest_bound: 9609600000000\nintegers: 29\nbooleans: 30\nconflicts: 0\nbranches: 60\npropagations: 0\ninteger_propagations: 61\nrestarts: 0\nlp_iterations: 8\nwalltime: 0.00579204\nusertime: 0.0057921\ndeterministic_time: 9.56792e-05\ngap_integral: 0\nsolution_fingerprint: 0x3fbc732c925e238e\n"
+      }
+    },
+    {
+      "geometry": "6x2x512+6x2x512",
+      "flows": [
+        "IS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.24684720858931541,
+        0.2338474839925766
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "lb_cycles": 22798132.5,
+      "objective_upper_cycles": 22798132.5,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 22798132500000\nbest_bound: 22798132500000\nintegers: 29\nbooleans: 4471\nconflicts: 4444\nbranches: 13939\npropagations: 260755\ninteger_propagations: 32244\nrestarts: 4\nlp_iterations: 717\nwalltime: 0.23252\nusertime: 0.23252\ndeterministic_time: 0.0546634\ngap_integral: 0\nsolution_fingerprint: 0x883a26dd40309be1\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 22798132500000\nbest_bound: 22798132500000\nintegers: 29\nbooleans: 4471\nconflicts: 4444\nbranches: 13939\npropagations: 260755\ninteger_propagations: 32244\nrestarts: 4\nlp_iterations: 717\nwalltime: 0.226896\nusertime: 0.226896\ndeterministic_time: 0.0546634\ngap_integral: 0\nsolution_fingerprint: 0x883a26dd40309be1\n"
+      }
+    },
+    {
+      "geometry": "6x2x512+6x2x512",
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.4044846836477518,
+        0.3908275533467531
+      ],
+      "repeat_identical": true,
+      "status": "FEASIBLE",
+      "lb_cycles": 50891467.333322994,
+      "objective_upper_cycles": 53213785.33333333,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 53213785333328\nbest_bound: 50891467333323\nintegers: 29\nbooleans: 61\nconflicts: 7835\nbranches: 11821\npropagations: 30497\ninteger_propagations: 58558\nrestarts: 94\nlp_iterations: 5660\nwalltime: 0.389666\nusertime: 0.389666\ndeterministic_time: 0.108103\ngap_integral: 0\nsolution_fingerprint: 0xe975adc2ccd676da\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 53213785333328\nbest_bound: 50891467333323\nintegers: 29\nbooleans: 61\nconflicts: 7835\nbranches: 11821\npropagations: 30497\ninteger_propagations: 58558\nrestarts: 94\nlp_iterations: 5660\nwalltime: 0.383764\nusertime: 0.383764\ndeterministic_time: 0.108103\ngap_integral: 0\nsolution_fingerprint: 0xe975adc2ccd676da\n"
+      }
+    },
+    {
+      "geometry": "8x24x32+8x24x32",
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.46853792667388916,
+        0.44469038769602776
+      ],
+      "repeat_identical": true,
+      "status": "FEASIBLE",
+      "lb_cycles": 14650690.667318,
+      "objective_upper_cycles": 14713541.333333332,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 14713541333321\nbest_bound: 14650690667318\nintegers: 29\nbooleans: 550\nconflicts: 7911\nbranches: 13474\npropagations: 89818\ninteger_propagations: 52199\nrestarts: 42\nlp_iterations: 7041\nwalltime: 0.454196\nusertime: 0.454196\ndeterministic_time: 0.100018\ngap_integral: 0\nsolution_fingerprint: 0x1981e6dc18505757\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 14713541333321\nbest_bound: 14650690667318\nintegers: 29\nbooleans: 550\nconflicts: 7911\nbranches: 13474\npropagations: 89818\ninteger_propagations: 52199\nrestarts: 42\nlp_iterations: 7041\nwalltime: 0.437638\nusertime: 0.437638\ndeterministic_time: 0.100018\ngap_integral: 0\nsolution_fingerprint: 0x1981e6dc18505757\n"
+      }
+    },
+    {
+      "geometry": "1x6x1024+1x6x1024",
+      "flows": [
+        "OS",
+        "OS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.018780285492539406,
+        0.01030251756310463
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "lb_cycles": 140574720.0,
+      "objective_upper_cycles": 140574720.0,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 140574720000000\nbest_bound: 140574720000000\nintegers: 1\nbooleans: 0\nconflicts: 0\nbranches: 0\npropagations: 0\ninteger_propagations: 1\nrestarts: 0\nlp_iterations: 0\nwalltime: 0.00389374\nusertime: 0.0038938\ndeterministic_time: 3.3816e-05\ngap_integral: 0\nsolution_fingerprint: 0x3679989d8b2b406\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 140574720000000\nbest_bound: 140574720000000\nintegers: 1\nbooleans: 0\nconflicts: 0\nbranches: 0\npropagations: 0\ninteger_propagations: 1\nrestarts: 0\nlp_iterations: 0\nwalltime: 0.00380408\nusertime: 0.00380413\ndeterministic_time: 3.3816e-05\ngap_integral: 0\nsolution_fingerprint: 0x3679989d8b2b406\n"
+      }
+    },
+    {
+      "geometry": "6x16x64+6x16x64",
+      "flows": [
+        "OS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.5359312407672405,
+        0.5128163266927004
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "lb_cycles": 10906634.666658,
+      "objective_upper_cycles": 10906634.666666666,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 10906634666658\nbest_bound: 10906634666658\nintegers: 22\nbooleans: 10043\nconflicts: 10059\nbranches: 30401\npropagations: 110548\ninteger_propagations: 81106\nrestarts: 2\nlp_iterations: 95\nwalltime: 0.520731\nusertime: 0.520731\ndeterministic_time: 0.0540067\ngap_integral: 0\nsolution_fingerprint: 0x32e2d475cadc0024\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 10906634666658\nbest_bound: 10906634666658\nintegers: 22\nbooleans: 10043\nconflicts: 10059\nbranches: 30401\npropagations: 110548\ninteger_propagations: 81106\nrestarts: 2\nlp_iterations: 95\nwalltime: 0.503501\nusertime: 0.503501\ndeterministic_time: 0.0540067\ngap_integral: 0\nsolution_fingerprint: 0x32e2d475cadc0024\n"
+      }
+    },
+    {
+      "geometry": "6x16x64+6x16x64",
+      "flows": [
+        "WS",
+        "OS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.5448516272008419,
+        0.5284018702805042
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "lb_cycles": 10906634.666658,
+      "objective_upper_cycles": 10906634.666666666,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 10906634666658\nbest_bound: 10906634666658\nintegers: 22\nbooleans: 10044\nconflicts: 10060\nbranches: 30439\npropagations: 110409\ninteger_propagations: 80934\nrestarts: 2\nlp_iterations: 112\nwalltime: 0.529673\nusertime: 0.529673\ndeterministic_time: 0.0542928\ngap_integral: 0\nsolution_fingerprint: 0x5c7a27630879981\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 10906634666658\nbest_bound: 10906634666658\nintegers: 22\nbooleans: 10044\nconflicts: 10060\nbranches: 30439\npropagations: 110409\ninteger_propagations: 80934\nrestarts: 2\nlp_iterations: 112\nwalltime: 0.52131\nusertime: 0.52131\ndeterministic_time: 0.0542928\ngap_integral: 0\nsolution_fingerprint: 0x5c7a27630879981\n"
+      }
+    },
+    {
+      "geometry": "6x2x512+6x2x512",
+      "flows": [
+        "WS",
+        "IS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.6093334034085274,
+        0.5820164605975151
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "lb_cycles": 22798132.5,
+      "objective_upper_cycles": 22798132.5,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 22798132500000\nbest_bound: 22798132500000\nintegers: 29\nbooleans: 10040\nconflicts: 10017\nbranches: 50335\npropagations: 90179\ninteger_propagations: 210819\nrestarts: 2\nlp_iterations: 233\nwalltime: 0.594888\nusertime: 0.594888\ndeterministic_time: 0.0607043\ngap_integral: 0\nsolution_fingerprint: 0x7d7e43e9fe51268a\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 22798132500000\nbest_bound: 22798132500000\nintegers: 29\nbooleans: 10040\nconflicts: 10017\nbranches: 50335\npropagations: 90179\ninteger_propagations: 210819\nrestarts: 2\nlp_iterations: 233\nwalltime: 0.574925\nusertime: 0.574925\ndeterministic_time: 0.0607043\ngap_integral: 0\nsolution_fingerprint: 0x7d7e43e9fe51268a\n"
+      }
+    },
+    {
+      "geometry": "8x24x32+8x24x32",
+      "flows": [
+        "WS",
+        "IS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.611776864156127,
+        0.5828707031905651
+      ],
+      "repeat_identical": true,
+      "status": "FEASIBLE",
+      "lb_cycles": 18154978.384143,
+      "objective_upper_cycles": 18217530.666666664,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 18262805302838\nbest_bound: 18154978384143\nintegers: 29\nbooleans: 10142\nconflicts: 10151\nbranches: 41063\npropagations: 145750\ninteger_propagations: 172096\nrestarts: 4\nlp_iterations: 229\nwalltime: 0.597661\nusertime: 0.597661\ndeterministic_time: 0.10174\ngap_integral: 0\nsolution_fingerprint: 0x6ce8ffb003d6eb6e\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 18262805302838\nbest_bound: 18154978384143\nintegers: 29\nbooleans: 10142\nconflicts: 10151\nbranches: 41063\npropagations: 145750\ninteger_propagations: 172096\nrestarts: 4\nlp_iterations: 229\nwalltime: 0.576032\nusertime: 0.576032\ndeterministic_time: 0.10174\ngap_integral: 0\nsolution_fingerprint: 0x6ce8ffb003d6eb6e\n"
+      }
+    },
+    {
+      "geometry": "1x6x1024+1x6x1024",
+      "flows": [
+        "OS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.3745498899370432,
+        0.357852591201663
+      ],
+      "repeat_identical": true,
+      "status": "FEASIBLE",
+      "lb_cycles": 27494982.438035,
+      "objective_upper_cycles": 27800796.0,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 27800796000000\nbest_bound: 27494982438035\nintegers: 27\nbooleans: 4008\nconflicts: 3991\nbranches: 18061\npropagations: 874809\ninteger_propagations: 31344\nrestarts: 10\nlp_iterations: 19697\nwalltime: 0.361605\nusertime: 0.361605\ndeterministic_time: 0.10001\ngap_integral: 0\nsolution_fingerprint: 0x56538079aa24ecfa\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 27800796000000\nbest_bound: 27494982438035\nintegers: 27\nbooleans: 4008\nconflicts: 3991\nbranches: 18061\npropagations: 874809\ninteger_propagations: 31344\nrestarts: 10\nlp_iterations: 19697\nwalltime: 0.351116\nusertime: 0.351117\ndeterministic_time: 0.10001\ngap_integral: 0\nsolution_fingerprint: 0x56538079aa24ecfa\n"
+      }
+    },
+    {
+      "geometry": "8x24x32+8x24x32",
+      "flows": [
+        "IS",
+        "WS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.6213927678763866,
+        0.5924445763230324
+      ],
+      "repeat_identical": true,
+      "status": "FEASIBLE",
+      "lb_cycles": 18154978.319472,
+      "objective_upper_cycles": 18764602.666666664,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 23730823969611\nbest_bound: 18154978319472\nintegers: 29\nbooleans: 10273\nconflicts: 10251\nbranches: 41833\npropagations: 522708\ninteger_propagations: 93947\nrestarts: 7\nlp_iterations: 258\nwalltime: 0.611171\nusertime: 0.611171\ndeterministic_time: 0.126128\ngap_integral: 0\nsolution_fingerprint: 0xb011a7ab642e7fc6\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: FEASIBLE\nobjective: 23730823969611\nbest_bound: 18154978319472\nintegers: 29\nbooleans: 10273\nconflicts: 10251\nbranches: 41833\npropagations: 522708\ninteger_propagations: 93947\nrestarts: 7\nlp_iterations: 258\nwalltime: 0.585824\nusertime: 0.585824\ndeterministic_time: 0.126128\ngap_integral: 0\nsolution_fingerprint: 0xb011a7ab642e7fc6\n"
+      }
+    },
+    {
+      "geometry": "1x6x1024+1x6x1024",
+      "flows": [
+        "WS",
+        "OS"
+      ],
+      "window": "v3_captured_mixed_development_t128_l13",
+      "seconds": [
+        0.5341874603182077,
+        0.44028610177338123
+      ],
+      "repeat_identical": true,
+      "status": "UNKNOWN",
+      "lb_cycles": 27494984.018999,
+      "objective_upper_cycles": 32647793.333333332,
+      "first_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: UNKNOWN\nobjective: 32647793333398\nbest_bound: 27494984018999\nintegers: 27\nbooleans: 6155\nconflicts: 6137\nbranches: 55496\npropagations: 79125\ninteger_propagations: 85643\nrestarts: 46\nlp_iterations: 18546\nwalltime: 0.521603\nusertime: 0.521603\ndeterministic_time: 0.1\ngap_integral: 0\n"
+      },
+      "second_stats": {
+        "response_stats": "CpSolverResponse summary:\nstatus: UNKNOWN\nobjective: 32647793333398\nbest_bound: 27494984018999\nintegers: 27\nbooleans: 6155\nconflicts: 6137\nbranches: 55496\npropagations: 79125\ninteger_propagations: 85643\nrestarts: 46\nlp_iterations: 18546\nwalltime: 0.435081\nusertime: 0.435081\ndeterministic_time: 0.1\ngap_integral: 0\n"
+      }
+    }
+  ]
+}

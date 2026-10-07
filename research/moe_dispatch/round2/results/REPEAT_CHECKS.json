@@ -1,0 +1,157 @@
+{
+  "all_configurations_identical": true,
+  "caveat": "This is an execution/repetition receipt, not RTL calibration, full search closure, or complete-model timing.",
+  "checks": [
+    {
+      "name": "historical_reproduction",
+      "ok": true,
+      "rows": 1350
+    },
+    {
+      "name": "regional_bound_audit",
+      "ok": true,
+      "protocol": {
+        "all_ok": true,
+        "checks": 36000,
+        "concrete_feasible_designs": 2000,
+        "development_windows": 18,
+        "repeats": 2,
+        "sampling_attempts": 2953,
+        "seed": 20261007,
+        "warning": "Random checks support implementation confidence, not a mathematical proof"
+      }
+    },
+    {
+      "declared_points": 636,
+      "evaluated_valid_points": 615,
+      "name": "seed_pipelined",
+      "ok": true
+    },
+    {
+      "declared_points": 636,
+      "evaluated_valid_points": 615,
+      "name": "seed_port_tight",
+      "ok": true
+    },
+    {
+      "declared_points": 636,
+      "evaluated_valid_points": 615,
+      "name": "seed_fixed_issue",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E2micro_cold_recompute_20261007T135717Z.json",
+      "name": "E2micro_cold_recompute",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_main_search_20261007T135855Z.json",
+      "name": "E3_main_search",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_schedule_gaps_20261007T142405Z.json",
+      "name": "E3_schedule_gaps",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E1_20261007T142609Z.json",
+      "name": "E1",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E2layer_20261007T142651Z.json",
+      "name": "E2layer",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E4_20261007T143032Z.json",
+      "name": "E4",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E5_20261007T143441Z.json",
+      "name": "E5",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E6_20261007T145008Z.json",
+      "name": "E6",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_grid_20261007T142449Z.json",
+      "name": "E3_grid",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_extreme_20261007T145104Z.json",
+      "name": "E3_extreme",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_robust_20261007T145915Z.json",
+      "name": "E3_robust",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_sobol_20261007T150110Z.json",
+      "name": "E3_sobol",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_flip_20261007T152135Z.json",
+      "name": "E3_flip",
+      "ok": true
+    },
+    {
+      "evidence": "results/executions/E3_inner_assignment_verification_20261007T144406Z.json",
+      "name": "E3_inner_assignment_verification",
+      "ok": true
+    },
+    {
+      "actual": 4320,
+      "expected": 4320,
+      "name": "workload_map_coverage",
+      "ok": true
+    },
+    {
+      "actual": 1792,
+      "expected": 1792,
+      "name": "sobol_samples_coverage",
+      "ok": true
+    },
+    {
+      "name": "flip_coverage",
+      "ok": true,
+      "rows": 105
+    },
+    {
+      "cases": 940,
+      "name": "higher_effort_inner_repetition",
+      "ok": true,
+      "unresolved_cases": 718
+    }
+  ],
+  "current_engine_sha256": "943211ec3825b344fa3358dd503f34ca4e452262c4a205b637d52c4b6c05c123",
+  "execution_receipt_sha256": {
+    "results/executions/E1_20261007T142609Z.json": "22891704e79038e0b210d44d7458a6ebdb785c295b340f4f1a845f3900259234",
+    "results/executions/E2layer_20261007T142651Z.json": "af3ddce4aa861633a3dde64efa2ab628dcab7bc91c7f21f6168480910bace7f2",
+    "results/executions/E2micro_cold_recompute_20261007T135717Z.json": "c31d995b84cda2d606e8e050eb7b94b951aba95ea0589cbd9b0d90719eb9613a",
+    "results/executions/E3_extreme_20261007T145104Z.json": "2a0b13ff38f6ab756b7a28f8e8feb08a960e2f3b6ef69dd65e54777755a78dde",
+    "results/executions/E3_flip_20261007T152135Z.json": "c001913f67aab499b7ca56ecc728d463b56e1a6e1aa9f43628aba692ef9870fd",
+    "results/executions/E3_grid_20261007T142449Z.json": "5db0175955944c87cfd8a27d0928cb28e4d3f927ea70c4ffc42c1c28d46b6280",
+    "results/executions/E3_inner_assignment_verification_20261007T144406Z.json": "43ec9846eed020de1c8cb787f7f155101d883303ceb415ffdc3ad861df1c9c29",
+    "results/executions/E3_main_search_20261007T135855Z.json": "6475506a57a3a32fd2a0d7badc1ee9c83ef43b91e291b2967f678e5ae9a4b27c",
+    "results/executions/E3_robust_20261007T145915Z.json": "9d20e190c4aa5e80d4f6d192642c7111042e231caa7f8dfa54fa1ff8b1e5fca8",
+    "results/executions/E3_schedule_gaps_20261007T142405Z.json": "a1f59122fdefc375c780eec7b1c14d3605a961d26d33c5637206ed174d7a0544",
+    "results/executions/E3_sobol_20261007T150110Z.json": "658f9c45ccb50e7f77a9e4162400a4c69f0eb46f2ee6265b922ec62e69a5dede",
+    "results/executions/E4_20261007T143032Z.json": "69251bdf5c72593320e076ecebbb2bbf4d5860429a186e153e6071f846910949",
+    "results/executions/E5_20261007T143441Z.json": "06a9f638337898e955dfcff5541007ba2a4b30731c5720a490b1e61a2ad1c735",
+    "results/executions/E6_20261007T145008Z.json": "35e0727240a3cdb99ba79736e14478ebe805a46a96e6216d6bb765c2a216928c"
+  },
+  "generated_utc": "2026-10-07T15:23:48.042664+00:00",
+  "protocol": "Performance drivers assert equality of two full result objects; E5 repeats warmup and heldout in two fresh identical states. Search wall-clock trajectories need not be identical; witness repetitions are.",
+  "scope": "All actually evaluated physical configurations and complete learned predictor sequences; unopened search regions are not certified or claimed evaluated",
+  "source_sha256": "c9a91d0c831a764f63a7baf5a9b829cf7ce9c8920eb361718368e1755bfedf7e"
+}

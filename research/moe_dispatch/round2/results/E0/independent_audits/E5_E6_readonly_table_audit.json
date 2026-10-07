@@ -1,0 +1,83 @@
+{
+  "scope": "Read-only E5 task metrics/oracle/state/protocol + E6 exact copy/missing wholemodel audit; no performance rerun",
+  "checks": 295303,
+  "passed": 295303,
+  "failed": [],
+  "expected_tasks_per_hardware_predictor": 4214,
+  "rows": {
+    "predictor": 36,
+    "task_errors": 151704,
+    "physical_replays": 810,
+    "dispatch": 288,
+    "state": 36,
+    "profile_reference": 6,
+    "profile_task_errors": 25284,
+    "moe_layer": 168,
+    "whole_model": 168
+  },
+  "predictor_improvements": [
+    {
+      "mode": "pipelined",
+      "design": "best_hetero",
+      "best": "ours",
+      "best_vs_worst_latency_reduction_pct": 1.7317298235589806,
+      "ours_vs_static_latency_reduction_pct": 0.25661653577300214,
+      "ours_vs_random_latency_reduction_pct": 1.7317298235589806,
+      "best_vs_E4_B1_latency_ratio": 1.0577890587418273
+    },
+    {
+      "mode": "pipelined",
+      "design": "fixed_4+2",
+      "best": "ema",
+      "best_vs_worst_latency_reduction_pct": 1.7345539955461842,
+      "ours_vs_static_latency_reduction_pct": -0.17839889488504568,
+      "ours_vs_random_latency_reduction_pct": 1.268139539048252,
+      "best_vs_E4_B1_latency_ratio": 1.5530146264923383
+    },
+    {
+      "mode": "port_tight",
+      "design": "best_hetero",
+      "best": "ours",
+      "best_vs_worst_latency_reduction_pct": 1.5457058044007543,
+      "ours_vs_static_latency_reduction_pct": 0.07879367106370383,
+      "ours_vs_random_latency_reduction_pct": 1.5457058044007543,
+      "best_vs_E4_B1_latency_ratio": 1.1115387436893087
+    },
+    {
+      "mode": "port_tight",
+      "design": "fixed_4+2",
+      "best": "static",
+      "best_vs_worst_latency_reduction_pct": 2.7189730560298275,
+      "ours_vs_static_latency_reduction_pct": -0.4380895698735676,
+      "ours_vs_random_latency_reduction_pct": 1.8127219391473992,
+      "best_vs_E4_B1_latency_ratio": 1.6324923422156488
+    },
+    {
+      "mode": "fixed_issue",
+      "design": "best_hetero",
+      "best": "static",
+      "best_vs_worst_latency_reduction_pct": 3.167910181743494,
+      "ours_vs_static_latency_reduction_pct": -0.9816783044447552,
+      "ours_vs_random_latency_reduction_pct": 2.217330564257214,
+      "best_vs_E4_B1_latency_ratio": 1.130857870772536
+    },
+    {
+      "mode": "fixed_issue",
+      "design": "fixed_4+2",
+      "best": "ema",
+      "best_vs_worst_latency_reduction_pct": 1.7324255548870182,
+      "ours_vs_static_latency_reduction_pct": -0.17606064219923834,
+      "ours_vs_random_latency_reduction_pct": 1.268836975853238,
+      "best_vs_E4_B1_latency_ratio": 1.305797645657693
+    }
+  ],
+  "max_replay_time_error_cycles": 7.450580596923828e-08,
+  "max_hbm_replay_error_B": 0.06666016578674316,
+  "warnings": [
+    "E5 perwindow wallcycles not exported; E2E GM ratios checked algebraically plus actual two-pass repeat source assertions/receipts, not rebuilt from task durations",
+    "Conditional oracle follows frozen ours plan; not an optimal scheduling performance upper bound",
+    "State bits are estimates, not synthesized circuit area/frequency",
+    "Micro/MoE times do not include router/attention/norm; full model remains unavailable",
+    "fixed_issue is non-iso resources"
+  ]
+}

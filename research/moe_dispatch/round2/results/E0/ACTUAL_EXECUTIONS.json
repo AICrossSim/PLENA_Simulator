@@ -1,0 +1,1429 @@
+{
+  "archived_original_driver_outputs": [],
+  "direct_phase1_evidence": [
+    {
+      "command": null,
+      "command_note": "When absent here, original exact commands remain in RUN_README.md, SOURCES.md and referenced test receipts; no command is invented.",
+      "compiler_sha": null,
+      "execution_commit": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "reproduction_receipt.json",
+      "input_sha256": {
+        "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+        "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+        "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+        "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+      },
+      "receipt_sha256": {},
+      "scope": "BF16 exact compatibility only; not round2 new-design evidence",
+      "sha256": "99a335a12a9d3395fcc5a208d289f374b3171505ce214a2be7c04609f0755624",
+      "source_sha256": {
+        "geometry3d/compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+        "geometry3d/memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+        "geometry3d/model.py": "16818817148a0d4dc601229983c36751898d05576a402d7273ef557775d2f725",
+        "geometry3d/study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+        "regime/campaign.py": "987656579c61d0c75b8e2e13a10e4d34d352558ce0984b5b51f885f4d298f089",
+        "regime/metrics.py": "a72beb21ecf8ed59c28ff08b095d5c66f7702fee938b2eb367b9998b086567d6",
+        "regime/model.py": "9b54dc767cb13f0a7b7aebacc0682f93e158b61965136fc49cefc4241c0b5ab9",
+        "regime/resources.py": "677699d1ecda761f5ac6607fca5aab882b7349c421fe361783c8f0354ee116e0",
+        "regime/search.py": "8bc9724ed08873ddadcb4cd3fb10e0f61950a0a430dc4f252025c28f2bd2a182"
+      }
+    },
+    {
+      "command": null,
+      "command_note": "When absent here, original exact commands remain in RUN_README.md, SOURCES.md and referenced test receipts; no command is invented.",
+      "compiler_sha": "80ac775c91e1b9384ec40382090e525dd24e732a",
+      "execution_commit": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "PHASE1_GATE.json",
+      "input_sha256": {},
+      "receipt_sha256": {
+        "compiler_integration/COPY_MANIFEST.json": "0be485ff3a87c1ad02adb5ba1fea513fd2bf68446da08a2e8a1dc013493021aa",
+        "compiler_integration/TEST_RESULTS.md": "898fefea054e3773b0140bf26b2531ff51935c8008783e0eae05576be49a5a2a",
+        "compiler_integration/tests/evidence_manifest.json": "e7729274ba0ba502729fab02ef8e973f9968457c5d0e09aad8b5dd553b3a0976",
+        "post_integration_replay_20261007/reproduction_receipt.json": "ed2211368b755fb32972a6d53e80fb19aa6b31699affb1c491803212a6e16764",
+        "tests/20261007T105511300902Z/UNIT_CHECKS.json": "2ac23f5ef21f80d5d8f63fe243bd559d56cd7abae28b4aa46a3594e0640a232d",
+        "tests/20261007T110253385260Z/UNIT_CHECKS.json": "35c4a4e187c4b52607d2187ae4ce1455a0a75c87c896168337da259ed593d896",
+        "tests/20261007T114345980637Z/UNIT_CHECKS.json": "55dd5a91a5009d3300b981de4c0552b44df674df60529ab6333b19a95cca9a95",
+        "tests/analytical_collection_current.log": "007cda097f84c4fe791b63583d4b7829726364985b163828ed02ddf3f617fbd5",
+        "tests/analytical_full_historical_pin.xml": "34d6a29599407f82ff2af7b0440f54922a2a4d5bd057157b0fa475d676251de9",
+        "tests/analytical_gate_coverage.csv": "0a1800eb64f435ce0443943ec7ff21833cc2f755ad342fb2b959cbf79a3f8ce1",
+        "tests/analytical_remaining.xml": "6f88782bbf9fadc009febb20c969b1b4cbe66c2c4b569dfd1ac90b7ffb3bbaef",
+        "tests/live_golden_fix.xml": "6c7b3062ffd320e9d55397ab7e96d6fb919c827cfddfe5c29e6833927cf0850b",
+        "tests/live_golden_full_files.xml": "87cda5fcae3073a40317fe28be3027a3749dad5d25caa5527790d1c72e38ebe4"
+      },
+      "scope": "Phase-1 integrated source validation plus exact historical BF16 replay; not new-design latency evidence",
+      "sha256": "03a8e03f6cab257b2b9bd9614ae86e76331bde1fcffee23f8c3dc44287064172",
+      "source_sha256": {
+        "analytic_models/performance/hybrid_lcompute_campaign.py": "9e9a8039168b86612695c10cf4e7ab16ed66cd328a8391ad81042641c1296c01",
+        "analytic_models/performance/profiles/historical_hybrid_compiler_evidence.json": "ab2f2615a108ce69e28a6c293c6bf14973dc8a049bf8c3efd22cbc3941ed9083",
+        "analytic_models/performance/test_matrix_lcompute_campaign.py": "0f6190d2ea38618a22c00be4b8c7f46887d6c97793ad082b37920257a4cc195e",
+        "analytic_models/performance/test_nemotron3_formal_dse.py": "69b38e783380aeaf27616a0b9a6688a079303e0c732340f37c60839da0881e43",
+        "research/moe_dispatch/round2/run_unit_checks.py": "30b9af2dbd34bd94cb459b18673a896d129519bf5b87f101284a0c1703e7d076"
+      }
+    }
+  ],
+  "frozen_input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+  "metadata_generation_commit": "8247e7c9ccc0db622eb2dbf378612581ef215f4b",
+  "missing_stage_receipts": [],
+  "other_successful_stage_executions": [
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "pytest",
+        "research/moe_dispatch/round2",
+        "-q"
+      ],
+      "current_numeric_source_compatible": true,
+      "elapsed_seconds": 31.658820571377873,
+      "exact_shell_command": "env /tmp/plena-round2-venv/bin/python -m pytest research/moe_dispatch/round2 -q",
+      "execution_commit": "64873f206d212ce3a9ee98205b378b5b29f5d9cb",
+      "finished_utc": "2026-10-07T13:03:12.138440+00:00",
+      "frozen_input_hash_valid": true,
+      "frozen_input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+      "label": "round2_final_engine_unit_suite",
+      "log": "results/executions/round2_final_engine_unit_suite_20261007T130240Z.log",
+      "log_hash_valid": true,
+      "log_sha256": "fab2ec83d4de5b293fd981f537d29009361c9672a7ce49f962723c7c2e9d5eab",
+      "receipt": "results/executions/round2_final_engine_unit_suite_20261007T130240Z.json",
+      "receipt_sha256": "f982bad1051602f043cd14cbd93c989ff3866983606974101d455f5b46f22111",
+      "returncode": 0,
+      "source_sha256": {
+        "__init__.py": "f6583f8e03d088078e11a1e9c62314fb009e01d3e6c169b71bb9cebdb707718b",
+        "audit_tables.py": "1280af9a104c502d101d0e8f401d6ef9ea98c7b22a859cb912390dea339b21ca",
+        "common.py": "d6675102c3aa21accea0f6c9d89c664f5e93daf58c2d725d1b4ac6651635508b",
+        "conftest.py": "2432741d02c4b91029171d13ef564c6dfd6a023a275c741ac979ebedf1ee99d6",
+        "execute.py": "86fc0bfc204a7d55bc60f5b1b58fe01bd73ebdbb2a2171f6dd1e4240ba4609fc",
+        "extreme.py": "de60c7e463e93b247b187e73031382ae18172b58df993a4cc27409a7149bf93e",
+        "figures.py": "1416ff723551371e25145d404796762cc0030eabbdca679649c941bfe57849dc",
+        "heldout_runner.py": "05794138049791e58d004ff2f7b1310275e222a3d06c82af2a94f6f9ee258e14",
+        "main_search.py": "31d3b95ba6cdac60c15d3ed61a41196f126c448083a62cfc7a91c308f3410b3d",
+        "model.py": "1c573104f6fdcdeefda9997a04dc2e91ee8c1e18b0cfe6598586e3a312f35ba7",
+        "optimizer.py": "f839b3c66c104b565b9558b3a6bb08c31b79c15729ada8b988648cd1df9134f6",
+        "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+        "profile_inputs.py": "593e63fe27ef302d1e022486d1522f49427364c12a3145b576a6d42fca7a4278",
+        "regions.py": "754084730111fc58164a0cbd18debf39f85721fab440a0ed5a243f8857e3589e",
+        "report.py": "662ff1f0b0fef9ee17f823ae7f57efa13022bc12fc9a76d0e88636c905c77b82",
+        "reproduce_e0.py": "10924fe0e87872992dbdd9ac26349a5bd31d85ada9dc1fa9eedfbae0ac94fd3f",
+        "reproduce_historical_compiler_fixture.py": "c3983204e62b2d9720a3a5db0459ea17f13160440388dc3ca67b08ce16a62ddd",
+        "resume.py": "08753bee95f60f2546b2cc6364f1d615ae0cd4f6140688705f2ec179aa1e5a15",
+        "robust.py": "a3c4164b561def1958e1f2a827036126aec381e8236b319bf00d531ff2e3f482",
+        "run.py": "971fb1d9692047a064cf1d9f3371e7de2b84de42eb92f971ec9b05c1c4686070",
+        "run_unit_checks.py": "30b9af2dbd34bd94cb459b18673a896d129519bf5b87f101284a0c1703e7d076",
+        "search.py": "f8f40f99a0d246212869e6baa19019241a70f6d8c05094c739e138f806458710",
+        "sensitivity.py": "3e5391729e908545456c9e38e7244af00b9109216e604681375ea4da57c20d89",
+        "test_campaign_contract.py": "f68bfeae4c15fd92552b2a90c5a79bfee2c3efeb6d861eff187117c069bc140e",
+        "test_figures.py": "6ef21780b94dd59d1342dace52b09104362586b49c75ff5191f58701832c1f5b",
+        "test_model.py": "c97784538bc9ec23c788908caf54199147df2674d38f85b62ddfcaace09dccae",
+        "test_optimizer.py": "0cb8d55ac7a9399cffb779e38a7e2ce24f448bb981630a1675e06bb1e0781320",
+        "test_regions.py": "3a105395ec0a6c22d45c4f2b2ff0b7e6bf4a98309a5effb29e8d7777362ad9ef",
+        "test_robust.py": "594b4ab3a84ce9c719869cd7d651ad97a0e16a8dad9fe5bfbaa6276c4bcc235a",
+        "test_search.py": "63cd6f73a78adcfe7798768eaf87d5150bc2721771e661c7b0e42b2c8c4f16c5",
+        "test_sensitivity.py": "7744447403a6a2a8473c7241503a19f0ffca5d613c676106d4f91aceec587a78"
+      },
+      "started_utc": "2026-10-07T13:02:40.471408+00:00"
+    },
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "pytest",
+        "research/moe_dispatch/round2",
+        "-q",
+        "--junitxml=research/moe_dispatch/round2/results/E0/tests/round2_final_engine.xml"
+      ],
+      "current_numeric_source_compatible": true,
+      "elapsed_seconds": 33.495375864207745,
+      "exact_shell_command": "env /tmp/plena-round2-venv/bin/python -m pytest research/moe_dispatch/round2 -q --junitxml=research/moe_dispatch/round2/results/E0/tests/round2_final_engine.xml",
+      "execution_commit": "c792959d03626d47cc6cb659ceff1c2620a91814",
+      "finished_utc": "2026-10-07T13:41:58.256771+00:00",
+      "frozen_input_hash_valid": true,
+      "frozen_input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+      "label": "round2_final_engine_unit_suite",
+      "log": "results/executions/round2_final_engine_unit_suite_20261007T134124Z.log",
+      "log_hash_valid": true,
+      "log_sha256": "7a841d23a4b2cac488db89d7442b84b8f9c839eceb9766cc1e5e7b1135d58c8f",
+      "receipt": "results/executions/round2_final_engine_unit_suite_20261007T134124Z.json",
+      "receipt_sha256": "fd4d4e6890cd82417a2d791ad0c8748ab413ee1f9cdab91dd835b0b2f84f838c",
+      "returncode": 0,
+      "source_sha256": {
+        "__init__.py": "f6583f8e03d088078e11a1e9c62314fb009e01d3e6c169b71bb9cebdb707718b",
+        "audit_tables.py": "4fc7f6aafaac25a0b8cb2f4749b4d0e590c44a343e53597975e67ab72579f9e1",
+        "common.py": "d6675102c3aa21accea0f6c9d89c664f5e93daf58c2d725d1b4ac6651635508b",
+        "conftest.py": "2432741d02c4b91029171d13ef564c6dfd6a023a275c741ac979ebedf1ee99d6",
+        "execute.py": "86fc0bfc204a7d55bc60f5b1b58fe01bd73ebdbb2a2171f6dd1e4240ba4609fc",
+        "extreme.py": "d8f34f96660e3373c510b20204541c8d262b1fea98e3178c4e5d7bdd97ee8804",
+        "figures.py": "44f601132a4b6edef39501f3dfa981fb1396c7761c34fba9189cf25badc0c21f",
+        "final_receipts.py": "8f6a8e919c5b10a5f949e9b536295246a006c46cdf781fe1e535ac6041ec33e7",
+        "heldout_runner.py": "216d5797ce33ed31f194a96f383b87dbe8dd6d562d0231f9f6a9ea2e98a7a936",
+        "main_search.py": "31d3b95ba6cdac60c15d3ed61a41196f126c448083a62cfc7a91c308f3410b3d",
+        "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+        "optimizer.py": "407d0f4693f062992b61434822e2ac1b15d59a276f225b591ad1e1f7d09aa7bd",
+        "oracle_replay.py": "3cdb013bb5e704a3f4c999eb10573f300834ac1b8fa9dc92b5db8b7c75c4389b",
+        "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+        "profile_inputs.py": "593e63fe27ef302d1e022486d1522f49427364c12a3145b576a6d42fca7a4278",
+        "regions.py": "313a2032b630cb0a5343f9c19759eca2d6ad98daab3bb364dcec7f62ab70f346",
+        "report.py": "95d563b64df7ea91273401bf7a407bbcf2b6d448a8075cf9dfb1715fc369a85c",
+        "reproduce_e0.py": "10924fe0e87872992dbdd9ac26349a5bd31d85ada9dc1fa9eedfbae0ac94fd3f",
+        "reproduce_historical_compiler_fixture.py": "c3983204e62b2d9720a3a5db0459ea17f13160440388dc3ca67b08ce16a62ddd",
+        "resume.py": "08753bee95f60f2546b2cc6364f1d615ae0cd4f6140688705f2ec179aa1e5a15",
+        "robust.py": "a3c4164b561def1958e1f2a827036126aec381e8236b319bf00d531ff2e3f482",
+        "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622",
+        "run_unit_checks.py": "30b9af2dbd34bd94cb459b18673a896d129519bf5b87f101284a0c1703e7d076",
+        "search.py": "f8f40f99a0d246212869e6baa19019241a70f6d8c05094c739e138f806458710",
+        "sensitivity.py": "3e5391729e908545456c9e38e7244af00b9109216e604681375ea4da57c20d89",
+        "test_campaign_contract.py": "f68bfeae4c15fd92552b2a90c5a79bfee2c3efeb6d861eff187117c069bc140e",
+        "test_figures.py": "6ef21780b94dd59d1342dace52b09104362586b49c75ff5191f58701832c1f5b",
+        "test_model.py": "c97784538bc9ec23c788908caf54199147df2674d38f85b62ddfcaace09dccae",
+        "test_optimizer.py": "8542585f04e0887c24e4b71b36bde68b6c01c8e41bbecba6837691d633361116",
+        "test_oracle_replay.py": "d497cc4215bc00488ec6a41fdf2b2621af104edd16f9f3fdd7fba4381156aa74",
+        "test_regions.py": "e9032213e39546c50f7b4f4dc5b19148ff26529ad5ec617bb86f4c2b6fe60325",
+        "test_robust.py": "594b4ab3a84ce9c719869cd7d651ad97a0e16a8dad9fe5bfbaa6276c4bcc235a",
+        "test_search.py": "63cd6f73a78adcfe7798768eaf87d5150bc2721771e661c7b0e42b2c8c4f16c5",
+        "test_sensitivity.py": "7744447403a6a2a8473c7241503a19f0ffca5d613c676106d4f91aceec587a78"
+      },
+      "started_utc": "2026-10-07T13:41:24.752279+00:00"
+    }
+  ],
+  "scope": "Actual successful producer receipts; metadata refresh is not a numerical rerun",
+  "selected_current_source_executions": [
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "pytest",
+        "research/moe_dispatch/round2",
+        "-q",
+        "--junitxml=research/moe_dispatch/round2/results/E0/tests/round2_final_engine.xml"
+      ],
+      "current_numeric_source_compatible": true,
+      "elapsed_seconds": 37.609156830236316,
+      "environment": {
+        "MKL_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONHASHSEED": "20261007"
+      },
+      "exact_shell_command": "env MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONHASHSEED=20261007 /tmp/plena-round2-venv/bin/python -m pytest research/moe_dispatch/round2 -q --junitxml=research/moe_dispatch/round2/results/E0/tests/round2_final_engine.xml",
+      "execution_commit": "045161dd7e9c8fa44f4ef421cd324cfa3a0cb007",
+      "finished_utc": "2026-10-07T13:57:53.728648+00:00",
+      "frozen_input_hash_valid": true,
+      "frozen_input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+      "label": "round2_final_engine_unit_suite",
+      "log": "results/executions/round2_final_engine_unit_suite_20261007T135716Z.log",
+      "log_hash_valid": true,
+      "log_sha256": "3c2f27e3e30de00b2c39b84d303d54d98a84074a45a5b4ddb61c896a1f5b8fa4",
+      "receipt": "results/executions/round2_final_engine_unit_suite_20261007T135716Z.json",
+      "receipt_sha256": "6fc3937f045dd5569f38fc59d66f24d3fa938bc4d987199a029def3c8f273858",
+      "returncode": 0,
+      "source_sha256": {
+        "__init__.py": "f6583f8e03d088078e11a1e9c62314fb009e01d3e6c169b71bb9cebdb707718b",
+        "audit_tables.py": "29281e5c9320626aa6ef8ead237091b460d62a4a303dd7cb3126bcff2f5128de",
+        "common.py": "3342422c57757019415473f3af15a2bb67b6398d165c767254e860858eb31d61",
+        "conftest.py": "2432741d02c4b91029171d13ef564c6dfd6a023a275c741ac979ebedf1ee99d6",
+        "execute.py": "c98661b9ec8a3d4389896b15774cafcbb9c0ea65bdeb0f01966d2578341aecfd",
+        "extreme.py": "d8f34f96660e3373c510b20204541c8d262b1fea98e3178c4e5d7bdd97ee8804",
+        "figures.py": "44f601132a4b6edef39501f3dfa981fb1396c7761c34fba9189cf25badc0c21f",
+        "final_receipts.py": "8f6a8e919c5b10a5f949e9b536295246a006c46cdf781fe1e535ac6041ec33e7",
+        "heldout_runner.py": "216d5797ce33ed31f194a96f383b87dbe8dd6d562d0231f9f6a9ea2e98a7a936",
+        "main_search.py": "31d3b95ba6cdac60c15d3ed61a41196f126c448083a62cfc7a91c308f3410b3d",
+        "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+        "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+        "oracle_replay.py": "3cdb013bb5e704a3f4c999eb10573f300834ac1b8fa9dc92b5db8b7c75c4389b",
+        "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+        "profile_inputs.py": "593e63fe27ef302d1e022486d1522f49427364c12a3145b576a6d42fca7a4278",
+        "regions.py": "313a2032b630cb0a5343f9c19759eca2d6ad98daab3bb364dcec7f62ab70f346",
+        "report.py": "95d563b64df7ea91273401bf7a407bbcf2b6d448a8075cf9dfb1715fc369a85c",
+        "reproduce_e0.py": "10924fe0e87872992dbdd9ac26349a5bd31d85ada9dc1fa9eedfbae0ac94fd3f",
+        "reproduce_historical_compiler_fixture.py": "c3983204e62b2d9720a3a5db0459ea17f13160440388dc3ca67b08ce16a62ddd",
+        "resume.py": "08753bee95f60f2546b2cc6364f1d615ae0cd4f6140688705f2ec179aa1e5a15",
+        "robust.py": "a3c4164b561def1958e1f2a827036126aec381e8236b319bf00d531ff2e3f482",
+        "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622",
+        "run_unit_checks.py": "30b9af2dbd34bd94cb459b18673a896d129519bf5b87f101284a0c1703e7d076",
+        "search.py": "f8f40f99a0d246212869e6baa19019241a70f6d8c05094c739e138f806458710",
+        "sensitivity.py": "3e5391729e908545456c9e38e7244af00b9109216e604681375ea4da57c20d89",
+        "test_campaign_contract.py": "f68bfeae4c15fd92552b2a90c5a79bfee2c3efeb6d861eff187117c069bc140e",
+        "test_figures.py": "6ef21780b94dd59d1342dace52b09104362586b49c75ff5191f58701832c1f5b",
+        "test_model.py": "c97784538bc9ec23c788908caf54199147df2674d38f85b62ddfcaace09dccae",
+        "test_optimizer.py": "92a3eef602e5ab20b3f98b1ed50e2392759e2eb13d6ced260157835a5bb3e943",
+        "test_oracle_replay.py": "d497cc4215bc00488ec6a41fdf2b2621af104edd16f9f3fdd7fba4381156aa74",
+        "test_regions.py": "e9032213e39546c50f7b4f4dc5b19148ff26529ad5ec617bb86f4c2b6fe60325",
+        "test_robust.py": "594b4ab3a84ce9c719869cd7d651ad97a0e16a8dad9fe5bfbaa6276c4bcc235a",
+        "test_search.py": "63cd6f73a78adcfe7798768eaf87d5150bc2721771e661c7b0e42b2c8c4f16c5",
+        "test_sensitivity.py": "7744447403a6a2a8473c7241503a19f0ffca5d613c676106d4f91aceec587a78"
+      },
+      "started_utc": "2026-10-07T13:57:16.109889+00:00"
+    },
+    {
+      "command": [
+        "/tmp/plena-round2-venv/bin/python",
+        "-m",
+        "pytest",
+        "research/moe_dispatch/round2/test_figures.py",
+        "-q"
+      ],
+      "current_numeric_source_compatible": true,
+      "elapsed_seconds": 35.81196248717606,
+      "environment": {
+        "MKL_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONHASHSEED": "20261007"
+      },
+      "exact_shell_command": "env MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONHASHSEED=20261007 /tmp/plena-round2-venv/bin/python -m pytest research/moe_dispatch/round2/test_figures.py -q",
+      "execution_commit": "cdd193e966b9ca35c23a88ca55631e87a8474581",
+      "finished_utc": "2026-10-07T15:00:26.898520+00:00",
+      "frozen_input_hash_valid": true,
+      "frozen_input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+      "label": "round2_final_reader_unit_suite",
+      "log": "results/executions/round2_final_reader_unit_suite_20261007T145951Z.log",
+      "log_hash_valid": true,
+      "log_sha256": "c2abf601d172ec667cf6ae2b000948f9b0dca55f15380ff2374009a868f61c77",
+      "receipt": "results/executions/round2_final_reader_unit_suite_20261007T145951Z.json",
+      "receipt_sha256": "6717c84bde0efa5d203cc2c83695fba1386d72b60ea3a15f6681c49826fecfbe",
+      "returncode": 0,
+      "source_sha256": {
+        "__init__.py": "f6583f8e03d088078e11a1e9c62314fb009e01d3e6c169b71bb9cebdb707718b",
+        "audit_tables.py": "849fe6ec1832f1c1d78e2cd56109b949b0021fcce23b1f1cdf399e9a8b35e1b7",
+        "common.py": "3342422c57757019415473f3af15a2bb67b6398d165c767254e860858eb31d61",
+        "conftest.py": "2432741d02c4b91029171d13ef564c6dfd6a023a275c741ac979ebedf1ee99d6",
+        "execute.py": "c98661b9ec8a3d4389896b15774cafcbb9c0ea65bdeb0f01966d2578341aecfd",
+        "extreme.py": "d8f34f96660e3373c510b20204541c8d262b1fea98e3178c4e5d7bdd97ee8804",
+        "figures.py": "bebfd112b51752b84c47538db8e89b4bab76e5a9c07ee0ca94d047866ed16d61",
+        "final_receipts.py": "8f6a8e919c5b10a5f949e9b536295246a006c46cdf781fe1e535ac6041ec33e7",
+        "heldout_runner.py": "216d5797ce33ed31f194a96f383b87dbe8dd6d562d0231f9f6a9ea2e98a7a936",
+        "main_search.py": "31d3b95ba6cdac60c15d3ed61a41196f126c448083a62cfc7a91c308f3410b3d",
+        "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+        "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+        "oracle_replay.py": "3cdb013bb5e704a3f4c999eb10573f300834ac1b8fa9dc92b5db8b7c75c4389b",
+        "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+        "profile_inputs.py": "593e63fe27ef302d1e022486d1522f49427364c12a3145b576a6d42fca7a4278",
+        "regions.py": "313a2032b630cb0a5343f9c19759eca2d6ad98daab3bb364dcec7f62ab70f346",
+        "repair_inner.py": "c4d1fa20d6cfed8c10c1b56344050fbbfc4728db12919714444b8b8153ba6e25",
+        "report.py": "d247320fe8800d6128d7abdf58bc051da2037f1c0ba5d1da3e9fb3a56760029b",
+        "reproduce_e0.py": "10924fe0e87872992dbdd9ac26349a5bd31d85ada9dc1fa9eedfbae0ac94fd3f",
+        "reproduce_historical_compiler_fixture.py": "c3983204e62b2d9720a3a5db0459ea17f13160440388dc3ca67b08ce16a62ddd",
+        "restore_inputs.py": "92d07cbc624814ef3545c7a58bb1def4c1c8c938d6cc2e7d8d488e28ceac625a",
+        "resume.py": "08753bee95f60f2546b2cc6364f1d615ae0cd4f6140688705f2ec179aa1e5a15",
+        "robust.py": "a3c4164b561def1958e1f2a827036126aec381e8236b319bf00d531ff2e3f482",
+        "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622",
+        "run_unit_checks.py": "30b9af2dbd34bd94cb459b18673a896d129519bf5b87f101284a0c1703e7d076",
+        "search.py": "f8f40f99a0d246212869e6baa19019241a70f6d8c05094c739e138f806458710",
+        "sensitivity.py": "3e5391729e908545456c9e38e7244af00b9109216e604681375ea4da57c20d89",
+        "test_campaign_contract.py": "f68bfeae4c15fd92552b2a90c5a79bfee2c3efeb6d861eff187117c069bc140e",
+        "test_figures.py": "6ef21780b94dd59d1342dace52b09104362586b49c75ff5191f58701832c1f5b",
+        "test_model.py": "c97784538bc9ec23c788908caf54199147df2674d38f85b62ddfcaace09dccae",
+        "test_optimizer.py": "92a3eef602e5ab20b3f98b1ed50e2392759e2eb13d6ced260157835a5bb3e943",
+        "test_oracle_replay.py": "d497cc4215bc00488ec6a41fdf2b2621af104edd16f9f3fdd7fba4381156aa74",
+        "test_regions.py": "e9032213e39546c50f7b4f4dc5b19148ff26529ad5ec617bb86f4c2b6fe60325",
+        "test_robust.py": "594b4ab3a84ce9c719869cd7d651ad97a0e16a8dad9fe5bfbaa6276c4bcc235a",
+        "test_search.py": "63cd6f73a78adcfe7798768eaf87d5150bc2721771e661c7b0e42b2c8c4f16c5",
+        "test_sensitivity.py": "7744447403a6a2a8473c7241503a19f0ffca5d613c676106d4f91aceec587a78"
+      },
+      "started_utc": "2026-10-07T14:59:51.073046+00:00"
+    }
+  ],
+  "test_attempt_receipts": [
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T102524503838Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "4cb94fe918edef0ae29e72911a800d4ca3a428134d1874db595b1af2ba20b687",
+      "suites": [
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "research/moe_dispatch",
+            "-q",
+            "--ignore=research/moe_dispatch/archive",
+            "--ignore=research/moe_dispatch/results",
+            "--ignore=research/moe_dispatch/round2/results",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/research.xml"
+          ],
+          "errors": 0,
+          "failed_tests": [],
+          "failures": 0,
+          "finished_utc": "2026-10-07T10:30:05.084235+00:00",
+          "initial_classification": "passed",
+          "junit_sha256": "6996ddbf17be3593b869859b7b29cd0e5e8e9af317922b6d9bc913bba13003cc",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/research.log",
+          "log_sha256": "459794d43be8f0b52d53f6ba39be13b4eecea72f4f63aeb466a765a5556f7db8",
+          "returncode": 0,
+          "skipped": 0,
+          "started_utc": "2026-10-07T10:25:24.525943+00:00",
+          "suite": "research",
+          "tests": 281
+        },
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "analytic_models",
+            "-q",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/analytical.xml"
+          ],
+          "errors": 14,
+          "failed_tests": [
+            {
+              "class": "analytic_models.performance.test_gpu_evidence",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_profiled_nemotron_config_matches_the_full_checkpoint_campaign"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_lane_dse_recompiles_each_width_instead_of_scaling_counts"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_compiler_and_gpu_evidence_are_the_pinned_real_shapes"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_ablation_separates_arlo_stride_from_consumer_major_and_affine"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_explicit_state_tile_transfers_only_at_decode_boundaries"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_zero_fifo_is_legal_and_serializes_the_overlap_boundary"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_full_schedules_and_compressed_mla_are_validated_in_both_phases"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_full_model_uses_one_shared_hbm_timeline"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_checked_in_long_campaign_is_self_consistent"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_checked_in_paper_2048_campaign_is_self_consistent"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+              "name": "test_checked_in_paper_2048_batch_campaign_is_self_consistent"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "AttributeError: MXFP8",
+              "name": "test_formal_state_capacities_match_real_dtypes"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_report_contains_full_prefill_decode_dse_and_ablation"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_layout_and_state_cache_ablations_are_physical"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_mixed_precision_keeps_model_specific_weight_formats"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_decode_executes_complete_hybrid_backbones"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_multi_token_decode_grows_context_and_reports_tpot"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_prefill_uses_mamba_and_kda_chunk_algorithms"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_nemotron_prefill_routing_matches_the_requested_sequence_length"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_kimi_mla_keeps_only_compressed_cache"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_all_stage_types_share_one_hbm_and_sram_server"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_full_state_cache_removes_per_token_state_hbm[nemotron3-64]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_consumer_aware_layout_reaches_ideal_bank_service[nemotron3]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "AttributeError: MXFP8",
+              "name": "test_mx_storage_contracts_keep_formats_distinct"
+            },
+            {
+              "class": "analytic_models.performance.test_ltile_execution",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_decode_kv_write_is_inside_the_attention_extent"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_compiler_evidence_uses_frozen_matrix_view_v3"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_real_lowering_service_replays_fixed_and_affine_paths"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0]"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1]"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_basic_model_records_publish_strict_and_ideal_timeline_endpoints"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_uniform_bf16_weight_sensitivity_is_numerically_pinned"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_one_mib_point_cannot_claim_unemitted_static_overlap"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+              "name": "test_ordinary_attention_and_moe_matrix_lines_do_not_regress"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_service",
+              "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.matrix_recurrence_lowering'",
+              "name": "test_nvfp4_fixture_decoder_covers_signed_codes_and_block_global_scales"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_formal_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_formal_report_keeps_gpu_evidence_separate_from_plena_cycles"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_formal_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_decode_logical_traffic_crosschecks_complete_b200_ncu"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_formal_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_formal_dse_preserves_exact_state_and_routing_capacity_knees"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_formal_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_formal_dse_couples_cache_misses_to_expert_m_k_timeline"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_formal_dse",
+              "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+              "name": "test_l_compute_and_amdahl_numbers_are_labeled_as_local_bounds"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_moe_event_dse",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_routing_patterns_match_the_independent_lru_replay"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_routing_dse",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_trace_preserves_all_exact_decode_topk_events"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_routing_dse",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_profile_driven_lru_reproduces_capacity_knees"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_routing_dse",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_lru_counts_every_miss_as_one_expert_weight_read"
+            },
+            {
+              "class": "analytic_models.performance.test_nemotron3_routing_dse",
+              "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+              "name": "test_trace_rejects_duplicate_topk_ids"
+            },
+            {
+              "class": "analytic_models.performance.test_precision_contract",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+              "name": "test_changing_weight_format_preserves_other_traffic_and_work[nemotron3]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[1]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[4]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+              "name": "test_tuning_reprices_composition_and_keeps_uniform_fallback[35-mixed]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+              "name": "test_tuning_reprices_composition_and_keeps_uniform_fallback[150-uniform]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-1]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-2]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-4]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-8]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-16]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-1]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-2]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-4]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-8]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_pipeline",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-16]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_request_grouping_exposes_weight_reloads_and_preserves_compute_count"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_cross_group_aliases_and_invalid_budget_fail_before_emission"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_larger_workspace_is_existing_capacity_not_extra_storage"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+              "name": "test_codec_workspace_cannot_be_reclaimed_for_compressed_weights"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_standalone_projection_uses_the_same_software_request_tile"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_transposed_packets_have_bounded_storage_and_no_weight_expansion"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_transposed_layer_composition_replaces_every_projection[1]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+              "name": "test_transposed_layer_composition_replaces_every_projection[16]"
+            },
+            {
+              "class": "analytic_models.performance.test_projection_software",
+              "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+              "name": "test_transposed_profile_rejects_unvalidated_codec_and_extra_datapaths"
+            }
+          ],
+          "failures": 67,
+          "finished_utc": "2026-10-07T10:31:05.699408+00:00",
+          "initial_classification": "missing_dependency",
+          "junit_sha256": "7a47f0fabe01a904363a497c5faaa9f23d05e15d0ef3b114e374ceb8aca39573",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/analytical.log",
+          "log_sha256": "263d3f73bc0b932f0121e2d9bffce862b68c57015c0568ffcdf7b7bf14ce4867",
+          "returncode": 1,
+          "skipped": 10,
+          "started_utc": "2026-10-07T10:30:05.086031+00:00",
+          "suite": "analytical",
+          "tests": 478
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "research/moe_dispatch/rust/Cargo.toml",
+            "--target-dir",
+            "/tmp/plena-round2-cargo-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:31:05.719422+00:00",
+          "initial_classification": "unit_or_build_failure_review_required",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/rust.log",
+          "log_sha256": "a96bf18474bc74aaa584873de13befcaf953650a47b6fbcb5da743d4772e15d2",
+          "returncode": 1,
+          "started_utc": "2026-10-07T10:31:05.706051+00:00",
+          "suite": "rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T103408631812Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "119be6f605d983f70acc2362509f60373e32cce7c60e16301fc5f718f5bb04d7",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/fk7y98mnnn9ckx1nh3pwnyqda4g2rg06-cargo-1.93.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "research/moe_dispatch/rust/Cargo.toml",
+            "--target-dir",
+            "/tmp/plena-round2-cargo-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:34:10.919924+00:00",
+          "initial_classification": "unit_or_build_failure_review_required",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T103408631812Z/rust.log",
+          "log_sha256": "af46f46ca946dafc2e11c308a91e0649e354abe9a22b67aa25658aab3830022f",
+          "returncode": 101,
+          "started_utc": "2026-10-07T10:34:08.647366+00:00",
+          "suite": "rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T103455417745Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "1f237d08c77756fbd94a2b3e9670e398a4bcecc04a68365a155c818452938fa8",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/kq05ljqgafgadlfa38pjl8a40sd204a3-rust-default-1.93.1/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "research/moe_dispatch/rust/Cargo.toml",
+            "--target-dir",
+            "/tmp/plena-round2-cargo-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:35:30.668841+00:00",
+          "initial_classification": "passed",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T103455417745Z/rust.log",
+          "log_sha256": "a1f139845041760e21d9926579b957185e503003dd12d8c62493038df1cbdcbc",
+          "returncode": 0,
+          "started_utc": "2026-10-07T10:34:55.433286+00:00",
+          "suite": "rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T103818508944Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "572af779971723422bf73e20114a45244da11af68b3bf1bd2505a03d368610ed",
+      "suites": [
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "analytic_models",
+            "-q",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T103818508944Z/analytical.xml"
+          ],
+          "errors": 4,
+          "failed_tests": [
+            {
+              "class": "analytic_models.performance.test_gpu_evidence",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_gpu_evidence_pins_real_shapes_bottlenecks_and_precision"
+            },
+            {
+              "class": "analytic_models.performance.test_gpu_evidence",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_profiled_nemotron_config_matches_the_full_checkpoint_campaign"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True]"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_lane_dse_recompiles_each_width_instead_of_scaling_counts"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_compiler_and_gpu_evidence_are_the_pinned_real_shapes"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_ablation_separates_arlo_stride_from_consumer_major_and_affine"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_explicit_state_tile_transfers_only_at_decode_boundaries"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_zero_fifo_is_legal_and_serializes_the_overlap_boundary"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_full_schedules_and_compressed_mla_are_validated_in_both_phases"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_full_model_uses_one_shared_hbm_timeline"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_checked_in_long_campaign_is_self_consistent"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_checked_in_paper_2048_campaign_is_self_consistent"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_checked_in_paper_2048_batch_campaign_is_self_consistent"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "AttributeError: MXFP8",
+              "name": "test_formal_state_capacities_match_real_dtypes"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"AttributeError: MXFP8\"",
+              "name": "test_report_contains_full_prefill_decode_dse_and_ablation"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"AttributeError: MXFP8\"",
+              "name": "test_layout_and_state_cache_ablations_are_physical"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"AttributeError: MXFP8\"",
+              "name": "test_mixed_precision_keeps_model_specific_weight_formats"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_dse",
+              "message": "failed on setup with \"AttributeError: MXFP8\"",
+              "name": "test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "assert 0 == 69",
+              "name": "test_prefill_uses_mamba_and_kda_chunk_algorithms"
+            },
+            {
+              "class": "analytic_models.performance.test_hybrid_system_timeline",
+              "message": "AttributeError: MXFP8",
+              "name": "test_mx_storage_contracts_keep_formats_distinct"
+            },
+            {
+              "class": "analytic_models.performance.test_ltile_execution",
+              "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+              "name": "test_decode_kv_write_is_inside_the_attention_extent"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_compiler_evidence_uses_frozen_matrix_view_v3"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_real_lowering_service_replays_fixed_and_affine_paths"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0]"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1]"
+            },
+            {
+              "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+              "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+              "name": "test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical"
+            }
+          ],
+          "failures": 31,
+          "finished_utc": "2026-10-07T10:51:00.560665+00:00",
+          "initial_classification": "unit_or_build_failure_review_required",
+          "junit_sha256": "72727745c3c4eefc909e61f651efae419adcdf4b0e22f058cdbad9b120acaeb2",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T103818508944Z/analytical.log",
+          "log_sha256": "0e801ab8ee41d66b31433722ab6f6f97a99353d30bdada9349a23f970b8f7b4e",
+          "returncode": 2,
+          "skipped": 9,
+          "started_utc": "2026-10-07T10:38:18.526101+00:00",
+          "suite": "analytical",
+          "tests": 209
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T104355334828Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "178e10449881a1fdd5145180a2e2ed6098b11ab41b61ccab9e190e6a259ae55d",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "transactional_emulator/Cargo.toml",
+            "--workspace",
+            "--target-dir",
+            "/tmp/mcl123-plena-layout-async-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:45:44.997902+00:00",
+          "initial_classification": "unit_or_build_failure_review_required",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T104355334828Z/main_rust.log",
+          "log_sha256": "0d5a1f0e0da27b99f19f3d97de31f369688f403a99f2f5f153ae7cd960d167ac",
+          "returncode": 101,
+          "started_utc": "2026-10-07T10:43:55.350355+00:00",
+          "suite": "main_rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T104708097208Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "81591ace348522cbfb9c681fb8cd6765e2bbda6195fbb1614aeb6bf97d88997e",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "transactional_emulator/Cargo.toml",
+            "--workspace",
+            "--target-dir",
+            "/tmp/mcl123-plena-layout-async-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:47:23.501349+00:00",
+          "initial_classification": "unit_or_build_failure_review_required",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T104708097208Z/main_rust.log",
+          "log_sha256": "7b7a879bc5d231e055685d48ce9603fde1bfa24ab77b59e3e4568d1856841419",
+          "returncode": 101,
+          "started_utc": "2026-10-07T10:47:08.112776+00:00",
+          "suite": "main_rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T105153856742Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "da1a4ebab1a05e8f3edf601d5552fb5d0ba9d1b33021f3a8d0da46b70929090c",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "transactional_emulator/Cargo.toml",
+            "--workspace",
+            "--target-dir",
+            "/tmp/mcl123-plena-layout-async-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:51:59.749848+00:00",
+          "initial_classification": "unit_or_build_failure_review_required",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T105153856742Z/main_rust.log",
+          "log_sha256": "d75880a002c57bd0e57a3895af52fef017ffd1eb08d3c30da2105f5a695bd750",
+          "returncode": 101,
+          "started_utc": "2026-10-07T10:51:53.872067+00:00",
+          "suite": "main_rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T105511300902Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "2ac23f5ef21f80d5d8f63fe243bd559d56cd7abae28b4aa46a3594e0640a232d",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "transactional_emulator/Cargo.toml",
+            "--workspace",
+            "--target-dir",
+            "/tmp/mcl123-plena-layout-async-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T10:55:35.509722+00:00",
+          "initial_classification": "passed",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T105511300902Z/main_rust.log",
+          "log_sha256": "8aa4a3a26a8fde392d3270794e11fe0f2e3f4ea0cb45d07656164f53b59fb87c",
+          "returncode": 0,
+          "started_utc": "2026-10-07T10:55:11.316392+00:00",
+          "suite": "main_rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T110253385260Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "35c4a4e187c4b52607d2187ae4ce1455a0a75c87c896168337da259ed593d896",
+      "suites": [
+        {
+          "command": [
+            "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "research/moe_dispatch/rust/Cargo.toml",
+            "--target-dir",
+            "/tmp/plena-round2-cargo-target",
+            "--",
+            "--test-threads=2"
+          ],
+          "finished_utc": "2026-10-07T11:03:19.400537+00:00",
+          "initial_classification": "passed",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T110253385260Z/rust.log",
+          "log_sha256": "ec00fab049eb198b9800ce04b9c991380e60a8126101b03ef143e1e51e4536ce",
+          "returncode": 0,
+          "started_utc": "2026-10-07T11:02:53.400831+00:00",
+          "suite": "rust"
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T110711597904Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "b75cad39b6c564abe30ad4232fde0f28d9bd1d21000de7b7d59db21ff0677e3b",
+      "suites": [
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "research/moe_dispatch",
+            "-q",
+            "--ignore=research/moe_dispatch/archive",
+            "--ignore=research/moe_dispatch/results",
+            "--ignore=research/moe_dispatch/round2/results",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T110711597904Z/research.xml"
+          ],
+          "errors": 0,
+          "failed_tests": [],
+          "failures": 0,
+          "finished_utc": "2026-10-07T11:11:43.949723+00:00",
+          "initial_classification": "passed",
+          "junit_sha256": "6d9b12af428246c845111b6a7b516b5e26351cd3122e01099e3ca60d92a122ca",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T110711597904Z/research.log",
+          "log_sha256": "5fb1bb926feef874d2403e5e4d09cb91874b526574db0606b2aebed955385694",
+          "returncode": 0,
+          "skipped": 0,
+          "started_utc": "2026-10-07T11:07:11.620041+00:00",
+          "suite": "research",
+          "tests": 281
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T114311035244Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "136fefb84d5de6c09595e29af83d07093f7a1db567e5610e931cf80ee2b170fc",
+      "suites": [
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "research/moe_dispatch",
+            "-q",
+            "--ignore=research/moe_dispatch/archive",
+            "--ignore=research/moe_dispatch/results",
+            "--ignore=research/moe_dispatch/round2/results",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T114311035244Z/research.xml"
+          ],
+          "errors": 6,
+          "failed_tests": [
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_live_golden_20261007.test_matrix_lcompute_campaign"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_precision_contract.test_hybrid_lcompute_campaign.before"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_fold_fuse_20261007.tilelang_tvm_compiler.tests.test_mid_ir_fold"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_fold_fuse_20261007.tilelang_tvm_compiler.tests.test_mid_ir_fuse"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_view_lower_20261007.test_mid_ir_to_plena"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_view_lower_20261007.test_mid_ir_view"
+            }
+          ],
+          "failures": 0,
+          "finished_utc": "2026-10-07T11:43:14.167267+00:00",
+          "initial_classification": "missing_dependency",
+          "junit_sha256": "1c07ce06f65f99e11fbfb7d4dba3ef127cb6ae01dcb5b31dd5ef7b3eab75c9e9",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T114311035244Z/research.log",
+          "log_sha256": "1fdfb6d934c48354ee64740fe9e541f5f193137d1fa9d6c5948b08553713b8ad",
+          "returncode": 2,
+          "skipped": 0,
+          "started_utc": "2026-10-07T11:43:11.051573+00:00",
+          "suite": "research",
+          "tests": 6
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T114330925719Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "24bcb02a93f7d87e4feadd5fd58630d3a9130a9acb537c21b70ec5ddae7ec353",
+      "suites": [
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "research/moe_dispatch",
+            "-q",
+            "--ignore=research/moe_dispatch/archive",
+            "--ignore=research/moe_dispatch/results",
+            "--ignore=research/moe_dispatch/round2/results",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T114330925719Z/research.xml"
+          ],
+          "errors": 6,
+          "failed_tests": [
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_live_golden_20261007.test_matrix_lcompute_campaign"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_precision_contract.test_hybrid_lcompute_campaign.before"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_fold_fuse_20261007.tilelang_tvm_compiler.tests.test_mid_ir_fold"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_fold_fuse_20261007.tilelang_tvm_compiler.tests.test_mid_ir_fuse"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_view_lower_20261007.test_mid_ir_to_plena"
+            },
+            {
+              "class": "",
+              "message": "collection failure",
+              "name": "research.moe_dispatch.round2.archive.phase1_tvm_view_lower_20261007.test_mid_ir_view"
+            }
+          ],
+          "failures": 0,
+          "finished_utc": "2026-10-07T11:43:33.843755+00:00",
+          "initial_classification": "missing_dependency",
+          "junit_sha256": "c3970555bb2b83a824269f2347dfb0c47cf0cf52df799cc848c5b213bd996682",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T114330925719Z/research.log",
+          "log_sha256": "cabebfb4bb16bfe97962477772eb7c8392ae54eb44f2dfb6f0743715e8ac5e58",
+          "returncode": 2,
+          "skipped": 0,
+          "started_utc": "2026-10-07T11:43:30.947307+00:00",
+          "suite": "research",
+          "tests": 6
+        }
+      ]
+    },
+    {
+      "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+      "file": "tests/20261007T114345980637Z/UNIT_CHECKS.json",
+      "scope": "Original test attempt; successful and superseded failed attempts are distinguished by the referenced receipt and supported PHASE1_GATE, not relabeled by metadata",
+      "sha256": "55dd5a91a5009d3300b981de4c0552b44df674df60529ab6333b19a95cca9a95",
+      "suites": [
+        {
+          "command": [
+            "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+            "-m",
+            "pytest",
+            "research/moe_dispatch",
+            "-q",
+            "--ignore=research/moe_dispatch/archive",
+            "--ignore=research/moe_dispatch/results",
+            "--ignore=research/moe_dispatch/round2/results",
+            "--ignore=research/moe_dispatch/round2/archive",
+            "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T114345980637Z/research.xml"
+          ],
+          "errors": 0,
+          "failed_tests": [],
+          "failures": 0,
+          "finished_utc": "2026-10-07T11:48:20.271424+00:00",
+          "initial_classification": "passed",
+          "junit_sha256": "6ca33ba365add076973eff1c1c4d26ab6d01ab07a7738f3591330de246e98dde",
+          "log": "research/moe_dispatch/round2/results/E0/tests/20261007T114345980637Z/research.log",
+          "log_sha256": "b32a6359e650772712c2ff70d9505f33fe21df8dcafbcc784b19f8586be5ef7f",
+          "returncode": 0,
+          "skipped": 0,
+          "started_utc": "2026-10-07T11:43:46.004320+00:00",
+          "suite": "research",
+          "tests": 281
+        }
+      ]
+    }
+  ]
+}

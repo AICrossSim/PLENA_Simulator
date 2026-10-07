@@ -1,0 +1,12 @@
+param,target_delta,value,bracket_low,bracket_high,status,proof_complete
+weight_tile_service_cycles,0,5.463978486792167,5.41,6.88,interpolated_between_sampled_candidates,False
+weight_tile_service_cycles,-0.05,,,,no_crossing_in_evaluated_range,False
+bank_Bpc,0,12.54297641541007,11.6,12.8,interpolated_between_sampled_candidates,False
+bank_Bpc,0,23.111951795770967,22.4,23.6,interpolated_between_sampled_candidates,False
+bank_Bpc,-0.05,,,,no_crossing_in_evaluated_range,False
+dotstagecycles,0,,,,no_crossing_in_evaluated_range,False
+dotstagecycles,-0.05,,,,no_crossing_in_evaluated_range,False
+credits,0,257.90743829462673,256.0,268.8,interpolated_between_sampled_candidates,False
+credits,-0.05,,,,no_crossing_in_evaluated_range,False
+vector_scale,0,,,,no_crossing_in_evaluated_range,False
+vector_scale,-0.05,,,,no_crossing_in_evaluated_range,False

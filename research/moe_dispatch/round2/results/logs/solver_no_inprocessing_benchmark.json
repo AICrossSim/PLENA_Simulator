@@ -1,0 +1,1107 @@
+{
+  "cases": [
+    {
+      "case": {
+        "cores": [
+          [
+            2,
+            12,
+            256
+          ],
+          [
+            2,
+            12,
+            256
+          ]
+        ],
+        "flows": [
+          "OS",
+          "WS"
+        ],
+        "window": "v3_captured_mixed_development_t96_l13"
+      },
+      "elapsed_seconds": 8.016785487532616,
+      "hard_timeout": true
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            2,
+            24,
+            128
+          ],
+          [
+            2,
+            24,
+            128
+          ]
+        ],
+        "flows": [
+          "OS",
+          "WS"
+        ],
+        "window": "v3_captured_mixed_development_t96_l13"
+      },
+      "elapsed_seconds": 8.019918704405427,
+      "hard_timeout": true
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            2,
+            24,
+            128
+          ],
+          [
+            2,
+            24,
+            128
+          ]
+        ],
+        "flows": [
+          "IS",
+          "WS"
+        ],
+        "window": "v3_captured_mixed_development_t96_l13"
+      },
+      "elapsed_seconds": 8.019324677065015,
+      "hard_timeout": true
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "OS",
+          "OS"
+        ],
+        "window": "joint_test_bfcl_b4_l13_s7"
+      },
+      "elapsed_seconds": 1.149483298882842,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 4,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 3.725290298461914e-09,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 288,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 131,
+            "visited_nodes": 195
+          },
+          "lb_cycles": 13588070.399999999,
+          "objective_upper_cycles": 13588070.400000002,
+          "optimal": true,
+          "owners": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 1.8e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 13.589367066666666,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 13.589699066666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "OS",
+          "IS"
+        ],
+        "window": "joint_test_bfcl_b4_l13_s7"
+      },
+      "elapsed_seconds": 1.1244224570691586,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 4,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 3.725290298461914e-09,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 288,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 131,
+            "visited_nodes": 195
+          },
+          "lb_cycles": 13588070.399999999,
+          "objective_upper_cycles": 13588070.400000002,
+          "optimal": true,
+          "owners": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 1.8e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 13.589367066666666,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 13.589699066666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "IS",
+          "OS"
+        ],
+        "window": "joint_test_bfcl_b4_l13_s7"
+      },
+      "elapsed_seconds": 1.0874647423624992,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 4,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 3.725290298461914e-09,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 288,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 131,
+            "visited_nodes": 195
+          },
+          "lb_cycles": 13588070.399999999,
+          "objective_upper_cycles": 13588070.400000002,
+          "optimal": true,
+          "owners": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 1.8e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 13.589367066666666,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 13.589699066666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "IS",
+          "IS"
+        ],
+        "window": "joint_test_bfcl_b4_l13_s7"
+      },
+      "elapsed_seconds": 1.0968260634690523,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 4,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 3.725290298461914e-09,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 288,
+            "evaluated_leaves": 12,
+            "pruned_nodes": 131,
+            "visited_nodes": 195
+          },
+          "lb_cycles": 13588070.399999999,
+          "objective_upper_cycles": 13588070.400000002,
+          "optimal": true,
+          "owners": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 1.8e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 13.589367066666666,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 13.589699066666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "OS",
+          "OS"
+        ],
+        "window": "joint_test_swe_b8_l13_s7"
+      },
+      "elapsed_seconds": 1.1227439567446709,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 8,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 17,
+            "pruned_nodes": 1196,
+            "visited_nodes": 1964
+          },
+          "lb_cycles": 27027302.4,
+          "objective_upper_cycles": 27027302.399999995,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.1e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 27.028787733333356,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 27.87795613333335
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "OS",
+          "IS"
+        ],
+        "window": "joint_test_swe_b8_l13_s7"
+      },
+      "elapsed_seconds": 1.1332999039441347,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 8,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 17,
+            "pruned_nodes": 1196,
+            "visited_nodes": 1964
+          },
+          "lb_cycles": 27027302.4,
+          "objective_upper_cycles": 27027302.399999995,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.1e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 27.028787733333356,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 27.87795613333335
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "IS",
+          "OS"
+        ],
+        "window": "joint_test_swe_b8_l13_s7"
+      },
+      "elapsed_seconds": 1.13860840536654,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 8,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 17,
+            "pruned_nodes": 1196,
+            "visited_nodes": 1964
+          },
+          "lb_cycles": 27027302.4,
+          "objective_upper_cycles": 27027302.399999995,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.1e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 27.028787733333356,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 27.87795613333335
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "IS",
+          "IS"
+        ],
+        "window": "joint_test_swe_b8_l13_s7"
+      },
+      "elapsed_seconds": 1.1435153298079967,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 8,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 3456,
+            "evaluated_leaves": 17,
+            "pruned_nodes": 1196,
+            "visited_nodes": 1964
+          },
+          "lb_cycles": 27027302.4,
+          "objective_upper_cycles": 27027302.399999995,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.1e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 27.028787733333356,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 27.87795613333335
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "OS",
+          "OS"
+        ],
+        "window": "joint_test_swe_b16_l13_s7"
+      },
+      "elapsed_seconds": 1.1928581818938255,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 7,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 24,
+            "pruned_nodes": 4133,
+            "visited_nodes": 5508
+          },
+          "lb_cycles": 53503027.199999996,
+          "objective_upper_cycles": 53503027.199999996,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.3e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 53.50563386666669,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 54.90546786666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "OS",
+          "IS"
+        ],
+        "window": "joint_test_swe_b16_l13_s7"
+      },
+      "elapsed_seconds": 1.6977380719035864,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 7,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 24,
+            "pruned_nodes": 4133,
+            "visited_nodes": 5508
+          },
+          "lb_cycles": 53503027.199999996,
+          "objective_upper_cycles": 53503027.199999996,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.3e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 53.50563386666669,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 54.90546786666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "IS",
+          "OS"
+        ],
+        "window": "joint_test_swe_b16_l13_s7"
+      },
+      "elapsed_seconds": 1.1867180652916431,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 7,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 24,
+            "pruned_nodes": 4133,
+            "visited_nodes": 5508
+          },
+          "lb_cycles": 53503027.199999996,
+          "objective_upper_cycles": 53503027.199999996,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.3e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 53.50563386666669,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 54.90546786666668
+      }
+    },
+    {
+      "case": {
+        "cores": [
+          [
+            1,
+            6,
+            1024
+          ],
+          [
+            1,
+            6,
+            1024
+          ]
+        ],
+        "flows": [
+          "IS",
+          "IS"
+        ],
+        "window": "joint_test_swe_b16_l13_s7"
+      },
+      "elapsed_seconds": 1.7175123654305935,
+      "hard_timeout": false,
+      "result": {
+        "assignment": {
+          "aggregated_task_types": 7,
+          "assignment_backend": "exact_grouped_count_enumeration",
+          "assignment_gap_cycles": 0.0,
+          "common_activation_spill_bytes": 0,
+          "enumeration": {
+            "domain_combinations": 6480,
+            "evaluated_leaves": 24,
+            "pruned_nodes": 4133,
+            "visited_nodes": 5508
+          },
+          "lb_cycles": 53503027.199999996,
+          "objective_upper_cycles": 53503027.199999996,
+          "optimal": true,
+          "owners": [
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "quantization_direction": "all resource/critical coefficients rounded down",
+          "quantization_loss_bound_cycles": 2.3e-05,
+          "quantum": 1e-06,
+          "scope": "exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule",
+          "solver_algorithm": "exact_grouped_count_enumeration",
+          "solver_budget": {
+            "cp_sat_work_consumed": false,
+            "effort_units": 10.0,
+            "enumeration_cap_combinations": 1000000,
+            "kind": "exact_finite_enumeration",
+            "linearization_level": 2,
+            "max_deterministic_time": 0.1,
+            "num_search_workers": 1,
+            "random_seed": 20261007,
+            "selected_backend": "exact_grouped_count_enumeration",
+            "wall_clock_timeout_seconds": null,
+            "work_per_effort_unit": 0.01
+          },
+          "status": "OPTIMAL",
+          "storage_chunks": 1
+        },
+        "latency_ms": 53.50563386666669,
+        "lb_le_schedule": true,
+        "repeat_equal": true,
+        "runtime_ms": 54.90546786666668
+      }
+    }
+  ],
+  "diagnostic_hard_subprocess_timeout_seconds": 8,
+  "same_CP_deterministic_work": 0.1,
+  "same_model_precision_quantum": true,
+  "source_engine_sha256": "9480921bcb9b0bf9c7883a588c7364d888cddf4f5565f619643555a442583683",
+  "standalone_only": true,
+  "temporary_parameter_use_sat_inprocessing": false
+}

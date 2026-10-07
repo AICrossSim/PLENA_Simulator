@@ -1,0 +1,6 @@
+param,S1,S1_ci,ST,ST_ci,all_searches_certified,scope
+weight_tile_service_cycles,0.6504097600497896,0.26030259867077715,1.0228908818515945,0.24240976957406937,False,indices of time-limited best-evaluated designs if certificates remain open
+bank_Bpc,0.0204154687320122,0.04028615445831474,0.26327751387444365,0.19514269249190325,False,indices of time-limited best-evaluated designs if certificates remain open
+dotstagecycles,0.00217451379252666,0.003966854299353018,0.00017045297852461556,0.00010783736700357571,False,indices of time-limited best-evaluated designs if certificates remain open
+credits,0.05587482784117451,0.05112612247681348,0.19450256274860298,0.10497282487672696,False,indices of time-limited best-evaluated designs if certificates remain open
+vector_scale,0.0,0.0,0.0,0.0,False,indices of time-limited best-evaluated designs if certificates remain open

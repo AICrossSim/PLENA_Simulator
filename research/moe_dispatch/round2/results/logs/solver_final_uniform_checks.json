@@ -1,0 +1,296 @@
+{
+  "diagnostic_only": true,
+  "engine_sha256": "751e4ff0f6c29ebaad3e44b40deed2807941249898cc4cc36b9291e49e789100",
+  "planned": 12,
+  "completed": 12,
+  "cases": [
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "OS"
+      ],
+      "window": "uniform_B4_T6",
+      "seconds": [
+        0.009919015690684319,
+        0.0030006039887666702
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "OS",
+        "IS"
+      ],
+      "window": "uniform_B4_T6",
+      "seconds": [
+        0.010221965610980988,
+        0.0030155200511217117
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "WS"
+      ],
+      "window": "uniform_B4_T6",
+      "seconds": [
+        0.010043086484074593,
+        0.0031096208840608597
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "WS",
+        "IS"
+      ],
+      "window": "uniform_B4_T6",
+      "seconds": [
+        0.009983144700527191,
+        0.0033424701541662216
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "OS",
+        "IS"
+      ],
+      "window": "uniform_B16_T6",
+      "seconds": [
+        1.2718233950436115,
+        1.1014513466507196
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "WS"
+      ],
+      "window": "uniform_B128_T6",
+      "seconds": [
+        1.224266430363059,
+        1.1553714964538813
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "OS"
+      ],
+      "window": "uniform_B128_T6",
+      "seconds": [
+        1.2260689437389374,
+        1.1609038226306438
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "OS"
+      ],
+      "window": "uniform_B16_T6",
+      "seconds": [
+        1.2594798374921083,
+        1.160846684128046
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "OS",
+        "IS"
+      ],
+      "window": "uniform_B128_T6",
+      "seconds": [
+        1.2431666422635317,
+        1.1821832340210676
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "WS",
+        "IS"
+      ],
+      "window": "uniform_B128_T6",
+      "seconds": [
+        3.575408425182104,
+        3.393410289660096
+      ],
+      "repeat_identical": true,
+      "status": "UNKNOWN",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "IS",
+        "WS"
+      ],
+      "window": "uniform_B16_T6",
+      "seconds": [
+        3.795712571591139,
+        3.352466896176338
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    },
+    {
+      "geometry": "6x4x256+6x4x256",
+      "flows": [
+        "WS",
+        "IS"
+      ],
+      "window": "uniform_B16_T6",
+      "seconds": [
+        3.6784779876470566,
+        3.5911073461174965
+      ],
+      "repeat_identical": true,
+      "status": "OPTIMAL",
+      "solver_budget": {
+        "kind": "deterministic_work",
+        "effort_units": 10.0,
+        "work_per_effort_unit": 0.01,
+        "max_deterministic_time": 0.1,
+        "wall_clock_timeout_seconds": null,
+        "num_search_workers": 1,
+        "random_seed": 20261007,
+        "linearization_level": 2
+      }
+    }
+  ]
+}

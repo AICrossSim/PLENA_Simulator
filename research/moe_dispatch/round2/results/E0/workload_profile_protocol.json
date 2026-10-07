@@ -1,0 +1,6 @@
+{
+  "command": "/tmp/plena-round2-venv/bin/python -m research.moe_dispatch.round2.profile_inputs",
+  "formula": "Active means Me>0; Me<=2 is a low-token expert, not an inactive expert. Shared is separate. Unique BF16 weights /126.030769GB/s gives the HBM floor.",
+  "input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+  "windows": 153
+}

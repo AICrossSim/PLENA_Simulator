@@ -1,0 +1,92 @@
+{
+  "concentrated_fit_loss": 3.022501012587732,
+  "diffuse_fit_loss": 2.365878238457955,
+  "diffuse_fit_source_ids": [
+    "v3_captured_mixed_development_t64_l13",
+    "v3_captured_mixed_development_t96_l13",
+    "v3_captured_mixed_development_t128_l13"
+  ],
+  "endpoint_fits": {
+    "concentrated_swe": {
+      "alpha": 0.5689264825384504,
+      "loss": 3.022501012587732,
+      "source_ids": [
+        "joint_test_swe_b2_l13_s7",
+        "joint_test_swe_b4_l13_s7",
+        "joint_test_swe_b8_l13_s7",
+        "joint_test_swe_b16_l13_s7",
+        "v3_captured_mixed_development_swe_t64_l13",
+        "v3_captured_mixed_development_swe_t96_l13",
+        "v3_captured_mixed_development_swe_t128_l13"
+      ]
+    },
+    "diffuse_development": {
+      "alpha": 1.8631274730627931,
+      "loss": 2.365878238457955,
+      "source_ids": [
+        "v3_captured_mixed_development_t64_l13",
+        "v3_captured_mixed_development_t96_l13",
+        "v3_captured_mixed_development_t128_l13"
+      ]
+    }
+  },
+  "fit_samples_per_window": 8,
+  "fit_source_ids": [
+    "joint_test_swe_b2_l13_s7",
+    "joint_test_swe_b4_l13_s7",
+    "joint_test_swe_b8_l13_s7",
+    "joint_test_swe_b16_l13_s7",
+    "v3_captured_mixed_development_swe_t64_l13",
+    "v3_captured_mixed_development_swe_t96_l13",
+    "v3_captured_mixed_development_swe_t128_l13"
+  ],
+  "fitted_endpoint_order_matches_expected": true,
+  "levels": [
+    1.8631274730627931,
+    1.3849878543062373,
+    1.029554544339622,
+    0.7653370796535459,
+    0.5689264825384504
+  ],
+  "seed": 20261007,
+  "selection_protocol": {
+    "alpha_fit_bounds": [
+      0.003,
+      100
+    ],
+    "cohort_entropy_scores": {
+      "bfcl": 0.8166636229185166,
+      "gpqa": 0.854979853851443,
+      "non_swe_mixed": 0.894526763932697
+    },
+    "cohort_source_ids": {
+      "bfcl": [
+        "joint_test_bfcl_b2_l13_s7",
+        "joint_test_bfcl_b4_l13_s7",
+        "joint_test_bfcl_b8_l13_s7",
+        "joint_test_bfcl_b16_l13_s7"
+      ],
+      "gpqa": [
+        "joint_test_gpqa_b2_l13_s7",
+        "joint_test_gpqa_b4_l13_s7",
+        "joint_test_gpqa_b8_l13_s7",
+        "joint_test_gpqa_b16_l13_s7"
+      ],
+      "non_swe_mixed": [
+        "v3_captured_mixed_development_t64_l13",
+        "v3_captured_mixed_development_t96_l13",
+        "v3_captured_mixed_development_t128_l13"
+      ]
+    },
+    "diffuse_rule": "Highest cohort mean normalized routed-token entropy among non-SWE development cohorts; lexical tie break",
+    "endpoint_label_scope": "Empirical diffuse and SWE fits; finite alpha does not assert exactly uniform routing",
+    "entropy_normalization": "Shannon entropy of expert Me / total routed tokens, divided by log(min(64, batch * topk))",
+    "fit_seed_rule": "20261007 + 31 * endpoint_window_index + draw_index",
+    "grid_level_order": "Five geometric levels from larger fitted alpha to smaller fitted alpha",
+    "log_alpha_xatol": 0.015,
+    "loss": "Mean across endpoint windows of KL(real Me histogram || synthetic histogram) plus squared relative distinct-count error",
+    "scope": "development only; no heldout input",
+    "selected_diffuse_cohort": "non_swe_mixed"
+  },
+  "synthetic_draws_for_validation": 16
+}

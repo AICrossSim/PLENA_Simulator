@@ -1,0 +1,86 @@
+
+==================================== ERRORS ====================================
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_matrix_lcompute_campaign.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_matrix_lcompute_campaign.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_matrix_lcompute_campaign.py:11: in <module>
+    from .matrix_lcompute_campaign import (
+E   ImportError: attempted relative import with no known parent package
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_nemotron3_formal_dse.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_nemotron3_formal_dse.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_nemotron3_formal_dse.py:3: in <module>
+    from analytic_models.performance.nemotron3_formal_dse import build_report, render_markdown
+analytic_models/__init__.py:8: in <module>
+    from . import performance
+analytic_models/performance/__init__.py:1: in <module>
+    from .perf_model import (
+analytic_models/performance/perf_model.py:30: in <module>
+    import toml
+E   ModuleNotFoundError: No module named 'toml'
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_precision_contract/test_hybrid_lcompute_campaign.before.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_precision_contract/test_hybrid_lcompute_campaign.before.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'test_hybrid_lcompute_campaign'
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fold.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fold.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fold.py:21: in <module>
+    import tvm
+E   ModuleNotFoundError: No module named 'tvm'
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fuse.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fuse.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fuse.py:21: in <module>
+    from tvm import tir as _tir
+E   ModuleNotFoundError: No module named 'tvm'
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_to_plena.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_to_plena.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_to_plena.py:30: in <module>
+    from tilelang_tvm_compiler import hlir as _hlir
+E   ModuleNotFoundError: No module named 'tilelang_tvm_compiler'
+_ ERROR collecting research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_view.py _
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_view.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_view.py:21: in <module>
+    from tilelang_tvm_compiler.frontend.mid_ir import ir
+E   ModuleNotFoundError: No module named 'tilelang_tvm_compiler'
+=========================== short test summary info ============================
+ERROR research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_matrix_lcompute_campaign.py
+ERROR research/moe_dispatch/round2/archive/phase1_live_golden_20261007/test_nemotron3_formal_dse.py
+ERROR research/moe_dispatch/round2/archive/phase1_precision_contract/test_hybrid_lcompute_campaign.before.py
+ERROR research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fold.py
+ERROR research/moe_dispatch/round2/archive/phase1_tvm_fold_fuse_20261007/tilelang_tvm_compiler/tests/test_mid_ir_fuse.py
+ERROR research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_to_plena.py
+ERROR research/moe_dispatch/round2/archive/phase1_tvm_view_lower_20261007/test_mid_ir_view.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+7 errors in 1.25s

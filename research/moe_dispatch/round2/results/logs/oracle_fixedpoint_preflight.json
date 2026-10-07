@@ -1,0 +1,1784 @@
+[
+  {
+    "mode": "pipelined",
+    "trace": [
+      {
+        "cycles": 1922189.8927738925,
+        "iteration": 1,
+        "mae_max": 0.4997013011612828,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1924502.4435585756,
+        "iteration": 2,
+        "mae_max": 0.49982618697912967,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922180.8431871156,
+        "iteration": 3,
+        "mae_max": 0.051914678880329766,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922178.5807904215,
+        "iteration": 4,
+        "mae_max": 0.000588498945073798,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922180.8431871154,
+        "iteration": 5,
+        "mae_max": 0.000588152817761851,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922178.0151912482,
+        "iteration": 6,
+        "mae_max": 0.0005884989450746465,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922180.277587942,
+        "iteration": 7,
+        "mae_max": 0.00048827936044366346,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922178.1565910417,
+        "iteration": 8,
+        "mae_max": 0.0004698495024694416,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922179.7119887685,
+        "iteration": 9,
+        "mae_max": 0.0004700703647964668,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.4849420227,
+        "iteration": 10,
+        "mae_max": 0.0004291193810126452,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922179.9064134848,
+        "iteration": 11,
+        "mae_max": 0.00042930360350924954,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922176.990042746,
+        "iteration": 12,
+        "mae_max": 0.0003315825636412866,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922179.367326772,
+        "iteration": 13,
+        "mae_max": 0.00027801467757913395,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922176.6078214296,
+        "iteration": 14,
+        "mae_max": 0.00019841037040637999,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922178.9055680719,
+        "iteration": 15,
+        "mae_max": 0.00016010672436615856,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922176.9977755472,
+        "iteration": 16,
+        "mae_max": 0.00011499301371693276,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922178.4156398813,
+        "iteration": 17,
+        "mae_max": 8.334652840637617e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.4287411284,
+        "iteration": 18,
+        "mae_max": 5.7064397678555127e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922178.0860292304,
+        "iteration": 19,
+        "mae_max": 3.756374722569486e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.6621060213,
+        "iteration": 20,
+        "mae_max": 2.4012035274879205e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.9288531418,
+        "iteration": 21,
+        "mae_max": 1.500368191047816e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.7642808359,
+        "iteration": 22,
+        "mae_max": 9.203763511148748e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8641858657,
+        "iteration": 23,
+        "mae_max": 5.5606380396334224e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8043559052,
+        "iteration": 24,
+        "mae_max": 3.316587414304611e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.839772739,
+        "iteration": 25,
+        "mae_max": 1.9564177469466273e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8190172664,
+        "iteration": 26,
+        "mae_max": 1.1430209345940151e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8310738772,
+        "iteration": 27,
+        "mae_max": 6.62175091656451e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8241248205,
+        "iteration": 28,
+        "mae_max": 3.807388856207215e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8281022017,
+        "iteration": 29,
+        "mae_max": 2.1745018225034716e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8258399358,
+        "iteration": 30,
+        "mae_max": 1.2344054499403063e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8271193863,
+        "iteration": 31,
+        "mae_max": 6.968939213772117e-08,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922177.8263995098,
+        "iteration": 32,
+        "mae_max": 3.9146853753669974e-08,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "heldout_bfcl_b2_l2_s3"
+  },
+  {
+    "mode": "pipelined",
+    "trace": [
+      {
+        "cycles": 4530945.640789272,
+        "iteration": 1,
+        "mae_max": 0.4995857437583871,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530843.199111913,
+        "iteration": 2,
+        "mae_max": 0.49958574375838755,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530816.361148035,
+        "iteration": 3,
+        "mae_max": 0.4993505417010524,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530814.722651649,
+        "iteration": 4,
+        "mae_max": 0.0008470547930241536,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530824.792458727,
+        "iteration": 5,
+        "mae_max": 0.00030310241604850926,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530826.524995001,
+        "iteration": 6,
+        "mae_max": 0.027961201472570956,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530814.440904947,
+        "iteration": 7,
+        "mae_max": 0.0006099597237183051,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530814.867637418,
+        "iteration": 8,
+        "mae_max": 0.0004260305580471875,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530818.87631134,
+        "iteration": 9,
+        "mae_max": 0.0006219936059607401,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 10,
+        "mae_max": 0.000756536187148273,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530820.217812032,
+        "iteration": 11,
+        "mae_max": 0.0007303791453136855,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 12,
+        "mae_max": 0.0008669947357403763,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530819.486033645,
+        "iteration": 13,
+        "mae_max": 0.0006228073800157907,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438081,
+        "iteration": 14,
+        "mae_max": 0.0005888489427330103,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530816.02326613,
+        "iteration": 15,
+        "mae_max": 0.0004093655349804997,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438083,
+        "iteration": 16,
+        "mae_max": 0.0003421446284449556,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530813.659117649,
+        "iteration": 17,
+        "mae_max": 0.0002755235108875814,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 18,
+        "mae_max": 0.00020556413718653558,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438081,
+        "iteration": 19,
+        "mae_max": 0.00016363567781105197,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438084,
+        "iteration": 20,
+        "mae_max": 0.0001226446301364189,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 21,
+        "mae_max": 8.592375355752217e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438083,
+        "iteration": 22,
+        "mae_max": 5.738262572859912e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438081,
+        "iteration": 23,
+        "mae_max": 3.69270142619278e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438081,
+        "iteration": 24,
+        "mae_max": 2.3061105754373278e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438083,
+        "iteration": 25,
+        "mae_max": 1.4039054298992723e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 26,
+        "mae_max": 8.357922860924063e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 27,
+        "mae_max": 4.876033045423047e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438083,
+        "iteration": 28,
+        "mae_max": 2.7915687055355336e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 29,
+        "mae_max": 1.569526647905429e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438082,
+        "iteration": 30,
+        "mae_max": 8.667966058122464e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438083,
+        "iteration": 31,
+        "mae_max": 4.700306332553141e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4530812.403438083,
+        "iteration": 32,
+        "mae_max": 2.4999736222939823e-07,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "heldout_bfcl_b8_l2_s3"
+  },
+  {
+    "mode": "pipelined",
+    "trace": [
+      {
+        "cycles": 47093648.301144354,
+        "iteration": 1,
+        "mae_max": 0.4999415958207062,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58463420.91905409,
+        "iteration": 2,
+        "mae_max": 0.4999652211407393,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 47368405.37831514,
+        "iteration": 3,
+        "mae_max": 0.49994889623842087,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58460467.87825641,
+        "iteration": 4,
+        "mae_max": 0.4999182346850294,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 47505193.51781392,
+        "iteration": 5,
+        "mae_max": 0.49979559374780913,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58464483.71090184,
+        "iteration": 6,
+        "mae_max": 0.4681665686515068,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603264.06070446,
+        "iteration": 7,
+        "mae_max": 0.057873739077803,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603200.43113465,
+        "iteration": 8,
+        "mae_max": 0.03037049652581197,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603225.34740142,
+        "iteration": 9,
+        "mae_max": 0.0007520096743209075,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603186.47487087,
+        "iteration": 10,
+        "mae_max": 0.0007525756184700478,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603275.22674507,
+        "iteration": 11,
+        "mae_max": 0.0008334010402548013,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603179.39369386,
+        "iteration": 12,
+        "mae_max": 0.000834096176872887,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603294.11425648,
+        "iteration": 13,
+        "mae_max": 0.000859930280518336,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603198.37329225,
+        "iteration": 14,
+        "mae_max": 0.0007750184871877557,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603245.3484235,
+        "iteration": 15,
+        "mae_max": 0.0007666504419575873,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603266.05504007,
+        "iteration": 16,
+        "mae_max": 0.0007253148451896535,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603195.908294536,
+        "iteration": 17,
+        "mae_max": 0.0007636900355628814,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603197.36544257,
+        "iteration": 18,
+        "mae_max": 0.030252740519816038,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603185.24098465,
+        "iteration": 19,
+        "mae_max": 0.0006413590852633657,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603193.58272385,
+        "iteration": 20,
+        "mae_max": 0.0005882160118590176,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603168.324794166,
+        "iteration": 21,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603192.55660613,
+        "iteration": 22,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603168.85483943,
+        "iteration": 23,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603196.810036585,
+        "iteration": 24,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603193.96400758,
+        "iteration": 25,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603222.61027242,
+        "iteration": 26,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603214.22794895,
+        "iteration": 27,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603213.614915736,
+        "iteration": 28,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603213.13893883,
+        "iteration": 29,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603192.02968507,
+        "iteration": 30,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603227.631785884,
+        "iteration": 31,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603182.99556701,
+        "iteration": 32,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "v3_captured_mixed_heldout_bfcl_t128_l2"
+  },
+  {
+    "mode": "port_tight",
+    "trace": [
+      {
+        "cycles": 5717277.878787881,
+        "iteration": 1,
+        "mae_max": 0.0001409685504651109,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787883,
+        "iteration": 2,
+        "mae_max": 0.00023421130129041304,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 3,
+        "mae_max": 0.0003728047775721544,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787883,
+        "iteration": 4,
+        "mae_max": 0.0004161198099475991,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 5,
+        "mae_max": 0.0004162930377273407,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 6,
+        "mae_max": 0.0004161198099475991,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787881,
+        "iteration": 7,
+        "mae_max": 0.0004162377608154022,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 8,
+        "mae_max": 0.00041606457902745045,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787881,
+        "iteration": 9,
+        "mae_max": 0.0003772874252025859,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 10,
+        "mae_max": 0.00037714513308872695,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 11,
+        "mae_max": 0.0003534492192312495,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 12,
+        "mae_max": 0.0003533243370201943,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787883,
+        "iteration": 13,
+        "mae_max": 0.00033688414665088455,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.8787878845,
+        "iteration": 14,
+        "mae_max": 0.000287286794890987,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 15,
+        "mae_max": 0.0002739363486222917,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787881,
+        "iteration": 16,
+        "mae_max": 0.000212325844466869,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 17,
+        "mae_max": 0.00020973950456362725,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787881,
+        "iteration": 18,
+        "mae_max": 0.000193850027855443,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 19,
+        "mae_max": 0.00019381245730519566,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 20,
+        "mae_max": 0.00017804915145326066,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 21,
+        "mae_max": 0.000141446359776275,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 22,
+        "mae_max": 0.0001302620463326331,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 23,
+        "mae_max": 0.00010243513670112417,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 24,
+        "mae_max": 9.615304917730102e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 25,
+        "mae_max": 7.917087535264024e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.87878788,
+        "iteration": 26,
+        "mae_max": 7.178053924545705e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 27,
+        "mae_max": 6.272958411817931e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 28,
+        "mae_max": 5.3945532259260964e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 29,
+        "mae_max": 4.894867270292869e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 30,
+        "mae_max": 4.203660079562529e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 31,
+        "mae_max": 3.478884251605882e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 5717277.878787882,
+        "iteration": 32,
+        "mae_max": 2.8022396572982315e-05,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "heldout_bfcl_b2_l2_s3"
+  },
+  {
+    "mode": "port_tight",
+    "trace": [
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 1,
+        "mae_max": 0.00014096855046822135,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 2,
+        "mae_max": 0.00023421130128497295,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 3,
+        "mae_max": 0.00028113178016835386,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 4,
+        "mae_max": 0.0002434161658590346,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333329,
+        "iteration": 5,
+        "mae_max": 0.00023031907382221192,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 6,
+        "mae_max": 0.0001928341555204073,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 7,
+        "mae_max": 0.0001917211994180152,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333329,
+        "iteration": 8,
+        "mae_max": 0.00017381413309662633,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333336,
+        "iteration": 9,
+        "mae_max": 0.0001297999655381733,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 10,
+        "mae_max": 0.0001191989163785653,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333338,
+        "iteration": 11,
+        "mae_max": 9.189818267863372e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333327,
+        "iteration": 12,
+        "mae_max": 8.45189262903212e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333342,
+        "iteration": 13,
+        "mae_max": 6.980379916006599e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 14,
+        "mae_max": 5.913020965121946e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333336,
+        "iteration": 15,
+        "mae_max": 5.4871414793613814e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 16,
+        "mae_max": 4.7638040933845025e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 17,
+        "mae_max": 3.9784252840861994e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333325,
+        "iteration": 18,
+        "mae_max": 3.2084163079890256e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333334,
+        "iteration": 19,
+        "mae_max": 2.521275280881115e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333336,
+        "iteration": 20,
+        "mae_max": 1.9415230901022165e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 21,
+        "mae_max": 1.4709345318557199e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 22,
+        "mae_max": 1.0994309904989463e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 23,
+        "mae_max": 8.124491608657939e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 24,
+        "mae_max": 5.945150941132606e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 25,
+        "mae_max": 4.3134954827729106e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 26,
+        "mae_max": 3.106209333131007e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 27,
+        "mae_max": 2.2219530393945167e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 28,
+        "mae_max": 1.5799334811393368e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 29,
+        "mae_max": 1.1173739503304683e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 30,
+        "mae_max": 7.863711409854134e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.733333332,
+        "iteration": 31,
+        "mae_max": 5.509503358603136e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 12577689.73333333,
+        "iteration": 32,
+        "mae_max": 3.844259807596764e-07,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "heldout_bfcl_b8_l2_s3"
+  },
+  {
+    "mode": "port_tight",
+    "trace": [
+      {
+        "cycles": 137751052.62937826,
+        "iteration": 1,
+        "mae_max": 0.00014096855046822135,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751587.03448376,
+        "iteration": 2,
+        "mae_max": 0.00021151194647393254,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751603.66643357,
+        "iteration": 3,
+        "mae_max": 0.00036606771519006703,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751603.705468,
+        "iteration": 4,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751595.52380964,
+        "iteration": 5,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751564.29343826,
+        "iteration": 6,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751594.2347755,
+        "iteration": 7,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751540.18570805,
+        "iteration": 8,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751541.53501153,
+        "iteration": 9,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751531.52380967,
+        "iteration": 10,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751508.84410053,
+        "iteration": 11,
+        "mae_max": 0.00041629303777322225,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751531.5238097,
+        "iteration": 12,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751486.13766426,
+        "iteration": 13,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751499.5713498,
+        "iteration": 14,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751468.25129145,
+        "iteration": 15,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751460.4988659,
+        "iteration": 16,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751467.52380964,
+        "iteration": 17,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751438.0144718,
+        "iteration": 18,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751467.52380964,
+        "iteration": 19,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751416.66538346,
+        "iteration": 20,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751423.7052784,
+        "iteration": 21,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751403.52380964,
+        "iteration": 22,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751390.38664854,
+        "iteration": 23,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751403.52380967,
+        "iteration": 24,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751369.35767198,
+        "iteration": 25,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751396.5375642,
+        "iteration": 26,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751349.6640077,
+        "iteration": 27,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751353.21641973,
+        "iteration": 28,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751339.52380964,
+        "iteration": 29,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751323.34922463,
+        "iteration": 30,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751339.5238096,
+        "iteration": 31,
+        "mae_max": 0.00041629303777322225,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 137751302.7474281,
+        "iteration": 32,
+        "mae_max": 0.0004162930377483391,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "v3_captured_mixed_heldout_bfcl_t128_l2"
+  },
+  {
+    "mode": "fixed_issue",
+    "trace": [
+      {
+        "cycles": 1922196.5071547271,
+        "iteration": 1,
+        "mae_max": 0.4962999413149628,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1924507.955542604,
+        "iteration": 2,
+        "mae_max": 0.49642491186496823,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922187.4575679505,
+        "iteration": 3,
+        "mae_max": 0.0519174464698568,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922185.195171256,
+        "iteration": 4,
+        "mae_max": 0.0005884934522871527,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922187.4575679502,
+        "iteration": 5,
+        "mae_max": 0.0005881473314336237,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.6295720823,
+        "iteration": 6,
+        "mae_max": 0.0005884934522871527,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922186.8919687765,
+        "iteration": 7,
+        "mae_max": 0.0004882748052856202,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.7709718759,
+        "iteration": 8,
+        "mae_max": 0.00046984511916353384,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922186.326369603,
+        "iteration": 9,
+        "mae_max": 0.00047006597736783654,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.099322857,
+        "iteration": 10,
+        "mae_max": 0.0004291153775209876,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922186.5207943192,
+        "iteration": 11,
+        "mae_max": 0.0004292995965802922,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922183.6044235807,
+        "iteration": 12,
+        "mae_max": 0.0003315794698241011,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922185.9817076067,
+        "iteration": 13,
+        "mae_max": 0.00027801208285637834,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922183.222202264,
+        "iteration": 14,
+        "mae_max": 0.00019840851900576365,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922185.5199489065,
+        "iteration": 15,
+        "mae_max": 0.0001601052301437409,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922183.6121563818,
+        "iteration": 16,
+        "mae_max": 0.00011499194064711132,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922185.0300207161,
+        "iteration": 17,
+        "mae_max": 8.334575058312382e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.0431219626,
+        "iteration": 18,
+        "mae_max": 5.7063865155994424e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.7004100643,
+        "iteration": 19,
+        "mae_max": 3.7563396659842504e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.2764868564,
+        "iteration": 20,
+        "mae_max": 2.4011811180259856e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.5432339758,
+        "iteration": 21,
+        "mae_max": 1.500354188899961e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.3786616703,
+        "iteration": 22,
+        "mae_max": 9.20367762880782e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4785667001,
+        "iteration": 23,
+        "mae_max": 5.560586163313672e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4187367398,
+        "iteration": 24,
+        "mae_max": 3.3165564840364265e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4541535734,
+        "iteration": 25,
+        "mae_max": 1.9563995123866315e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4333981,
+        "iteration": 26,
+        "mae_max": 1.1430102898889541e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4454547118,
+        "iteration": 27,
+        "mae_max": 6.621689266036402e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4385056545,
+        "iteration": 28,
+        "mae_max": 3.8073533592791567e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.442483036,
+        "iteration": 29,
+        "mae_max": 2.174481495941643e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.44022077,
+        "iteration": 30,
+        "mae_max": 1.2343938794712082e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4415002204,
+        "iteration": 31,
+        "mae_max": 6.968873585261582e-08,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 1922184.4407803444,
+        "iteration": 32,
+        "mae_max": 3.914648249405359e-08,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "heldout_bfcl_b2_l2_s3"
+  },
+  {
+    "mode": "fixed_issue",
+    "trace": [
+      {
+        "cycles": 4531886.444298045,
+        "iteration": 1,
+        "mae_max": 0.49618753322524534,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531787.611741142,
+        "iteration": 2,
+        "mae_max": 0.4961875332252449,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531759.726060316,
+        "iteration": 3,
+        "mae_max": 0.49595073616891694,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531758.087563928,
+        "iteration": 4,
+        "mae_max": 0.0008409339287133493,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531768.157371007,
+        "iteration": 5,
+        "mae_max": 0.0003030995872978349,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531769.889907281,
+        "iteration": 6,
+        "mae_max": 0.027967396904862225,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531757.805817227,
+        "iteration": 7,
+        "mae_max": 0.0006099597237183051,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531758.232614316,
+        "iteration": 8,
+        "mae_max": 0.0004260305580471875,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531762.241150925,
+        "iteration": 9,
+        "mae_max": 0.0006178373207310545,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350364,
+        "iteration": 10,
+        "mae_max": 0.0007514799025177139,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531763.582724313,
+        "iteration": 11,
+        "mae_max": 0.0007255016238447004,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 12,
+        "mae_max": 0.0008611997215772691,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531762.8509457875,
+        "iteration": 13,
+        "mae_max": 0.0006186470834550701,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 14,
+        "mae_max": 0.0005849131783895332,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531759.38817829,
+        "iteration": 15,
+        "mae_max": 0.0004066305200413631,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 16,
+        "mae_max": 0.00033985794410753124,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531757.024029858,
+        "iteration": 17,
+        "mae_max": 0.0002736825875555322,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 18,
+        "mae_max": 0.00020419037146831494,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350364,
+        "iteration": 19,
+        "mae_max": 0.00016254229352398355,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 20,
+        "mae_max": 0.00012182504065165329,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 21,
+        "mae_max": 8.534960533347125e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350364,
+        "iteration": 22,
+        "mae_max": 5.699916946841215e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 23,
+        "mae_max": 3.6680260758945857e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 24,
+        "mae_max": 2.290700367872988e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350361,
+        "iteration": 25,
+        "mae_max": 1.3945242214227407e-05,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 26,
+        "mae_max": 8.302073194536262e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 27,
+        "mae_max": 4.843450617890853e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350363,
+        "iteration": 28,
+        "mae_max": 2.7729151502958265e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350364,
+        "iteration": 29,
+        "mae_max": 1.5590390885282974e-06,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 30,
+        "mae_max": 8.61004813166546e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 31,
+        "mae_max": 4.668900717426426e-07,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 4531755.768350362,
+        "iteration": 32,
+        "mae_max": 2.4832704412905243e-07,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "heldout_bfcl_b8_l2_s3"
+  },
+  {
+    "mode": "fixed_issue",
+    "trace": [
+      {
+        "cycles": 47155323.823951386,
+        "iteration": 1,
+        "mae_max": 0.49653838819553975,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58463436.85272871,
+        "iteration": 2,
+        "mae_max": 0.4965623555812421,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 47430082.26186777,
+        "iteration": 3,
+        "mae_max": 0.4965456816410923,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58460482.42894133,
+        "iteration": 4,
+        "mae_max": 0.49651504937058916,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 47566879.755214974,
+        "iteration": 5,
+        "mae_max": 0.4963925255598865,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58464504.72597861,
+        "iteration": 6,
+        "mae_max": 0.46816656865150613,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603283.0262495,
+        "iteration": 7,
+        "mae_max": 0.05787279848628615,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603214.043753475,
+        "iteration": 8,
+        "mae_max": 0.030382330474572384,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603234.16962149,
+        "iteration": 9,
+        "mae_max": 0.0007498819962089287,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603201.27325354,
+        "iteration": 10,
+        "mae_max": 0.0007504447412061161,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603289.88361675,
+        "iteration": 11,
+        "mae_max": 0.0008315067007708612,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603189.712699756,
+        "iteration": 12,
+        "mae_max": 0.0008321986795526747,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603309.92332463,
+        "iteration": 13,
+        "mae_max": 0.0008599302805217258,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603203.276213594,
+        "iteration": 14,
+        "mae_max": 0.0007882873680776832,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603262.90629604,
+        "iteration": 15,
+        "mae_max": 0.0007796139571787199,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603274.11109227,
+        "iteration": 16,
+        "mae_max": 0.0007206415431361036,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603209.799079925,
+        "iteration": 17,
+        "mae_max": 0.0007491989669267994,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603215.042016275,
+        "iteration": 18,
+        "mae_max": 0.03025181835618244,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603198.4552905,
+        "iteration": 19,
+        "mae_max": 0.0006413590852633657,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603204.32976567,
+        "iteration": 20,
+        "mae_max": 0.0005882160118590176,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603178.265018165,
+        "iteration": 21,
+        "mae_max": 0.0005883476675503003,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603203.857743934,
+        "iteration": 22,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603180.867305204,
+        "iteration": 23,
+        "mae_max": 0.000588353157623504,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603206.742519744,
+        "iteration": 24,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603204.995702684,
+        "iteration": 25,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603233.900822744,
+        "iteration": 26,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603227.7763202,
+        "iteration": 27,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603224.27855968,
+        "iteration": 28,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603226.0365165,
+        "iteration": 29,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603202.97003879,
+        "iteration": 30,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603241.78451512,
+        "iteration": 31,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      },
+      {
+        "cycles": 58603204.4784954,
+        "iteration": 32,
+        "mae_max": 0.0005883531576167143,
+        "same_actual_schedule": false
+      }
+    ],
+    "window": "v3_captured_mixed_heldout_bfcl_t128_l2"
+  }
+]

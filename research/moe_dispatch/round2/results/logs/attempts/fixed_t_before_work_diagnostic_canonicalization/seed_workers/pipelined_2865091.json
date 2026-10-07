@@ -1,0 +1,12 @@
+{
+  "engine_sha256": "2cdf53885ecbb83ff068a84f620618f6d114b2301d9f88a9951fa75b6e0f3fc2",
+  "flows": [
+    "IS",
+    "WS"
+  ],
+  "geometry": "6x4x256+6x4x256",
+  "repeat_index": 1,
+  "started_monotonic": 15866175.461029805,
+  "state": "evaluating",
+  "window_id": "joint_test_gpqa_b4_l13_s7"
+}

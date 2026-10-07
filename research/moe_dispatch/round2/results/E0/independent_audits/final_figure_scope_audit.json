@@ -1,0 +1,235 @@
+{
+  "scope": "Independent final figure hashes and visual/read-only source review; no simulations or result changes",
+  "manifest_sha256": "78a74603e319fece3950cba7e72bf669bab32a9948f3c10c08ae5a3490475284",
+  "all_checks_passed": true,
+  "checks": [
+    {
+      "kind": "source",
+      "file": "figures.py",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E1/bounds_per_window.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E2/layer_grid.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E2/micro.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/bnb_fixed_issue_A.json",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/bnb_fixed_issue_B.json",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/bnb_pipelined_A.json",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/bnb_pipelined_B.json",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/bnb_port_tight_A.json",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/bnb_port_tight_B.json",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/flip_boundary.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/flip_samples.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/seed_points_fixed_issue_partial.jsonl",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/seed_points_pipelined_partial.jsonl",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/seed_points_port_tight_partial.jsonl",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/sobol.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/synthetic_calibration.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E3/workload_map.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E4/heldout_main_table.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E4/per_window.csv",
+      "ok": true
+    },
+    {
+      "kind": "input",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E5/predictor_table.csv",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_bnb_coverage.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_bnb_coverage.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_breakdown.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_breakdown.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_dataflow_grid.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_dataflow_grid.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_flip_boundary.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_flip_boundary.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_headroom.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_headroom.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_main_bars.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_main_bars.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_me_crossover.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_me_crossover.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_predictor.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_predictor.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_sobol.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_sobol.png",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_workload_map.pdf",
+      "ok": true
+    },
+    {
+      "kind": "output",
+      "file": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/figures/fig_workload_map.png",
+      "ok": true
+    },
+    {
+      "kind": "scope",
+      "file": "all10 PDF+PNG",
+      "ok": true
+    }
+  ],
+  "visual_review": {
+    "inspected": [
+      "fig_main_bars",
+      "fig_predictor",
+      "fig_workload_map",
+      "fig_sobol",
+      "fig_flip_boundary",
+      "fig_dataflow_grid"
+    ],
+    "no_clipped_labels": true,
+    "units_match_tables": true,
+    "conditional_oracle_not_performance_upper_bound": true,
+    "fixed_issue_non_iso_resource_labeled": true,
+    "open_proofs_and_candidate_estimates_labeled": true,
+    "workload_region_hypothetical_bandwidths_labeled": true,
+    "sobol_estimator_confidence_distinct_from_search_uncertainty": true,
+    "nonblocking_observation": "Workload-map capture circles overlap cell annotations at some observed points; caption and values remain legible. Sobol ST>1 is a finite estimator value with confidence interval, not clamped."
+  }
+}

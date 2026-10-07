@@ -1,0 +1,11 @@
+{
+  "scope": "Exact original metadata-reader output, retained before replacing redundant full proof embedding with a compact certificate index. Numerical results and all proof payloads are unchanged.",
+  "original_path": "DELIVERY_STATUS.json",
+  "original_bytes": 85685575,
+  "original_sha256": "5c95d147b6474003f71d657f645066ac3a87d14cea0d9c7561ece1813358569b",
+  "archive": "initial_full_delivery_status.tar.gz",
+  "archive_member": "DELIVERY_STATUS_full_initial.json",
+  "archive_sha256": "dd5afaed09fdbd91692d176e711b06ea7f41b7d00dda990844b98ada9651da81",
+  "actual_reader_execution_receipt": "results/executions/round2_final_report_20261007T153827Z.json",
+  "roundtrip_verified": true
+}
