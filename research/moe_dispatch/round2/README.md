@@ -2,6 +2,8 @@
 
 所有脚本从 Simulator 仓库根目录运行。Python 环境 `/tmp/plena-round2-venv/bin/python`，依赖见 requirements.txt。每个指标由原始逐窗口CSV重建。旧实验不覆盖。所有真实负载点完整运行两次并比较完整结果对象；合成每个搜索点的已评估叶也重复两次。
 
+四份捕获输入的逐字快照在 `results/E0/input_snapshot/`，与冻结SHA256完全相同。如果另一份checkout缺少原始绝对路径，先运行 `python -m research.moe_dispatch.round2.restore_inputs` 恢复缺失文件；已有不匹配文件会报错，绝不覆盖。`--check`只核对。此操作不改变窗口、参数或原冻结清单。
+
 ```bash
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export PYTHONHASHSEED=20261007
@@ -44,3 +46,5 @@ run.py支持`--onchip-mode all/pipelined/port_tight/fixed_issue`。默认all生�
 每个微实验两次都清空纯函数cost缓存，真实重算后比较；整层每次运行重建完整运行时状态。连续敏感性τ表示共享W前端每4096B的服务时间，合计带宽min(64×bank_Bpc,4096/τ)，计算发射间隔仍为1；SensitivityParameters额外记录源码哈希，续跑必须一致。保守全域下界忽略该新增带宽上限时只会更松，不会失去合法性。
 
 E5的oracle冻结ours第一遍的实际归属、绑定、预取和相位释放，在第二遍重新计算共享HBM、私有端口和有限权重槽的服务时间，核对完成时间与字节守恒。它是同一计划的时长准确率参考，其E2E等于冻结ours计划，不是完美预测派工的性能上界，也不提供未选择核的反事实时长。旧profile-guided两遍参考单独保留，允许控制动作改变和残差。所有开放搜索保留具体LB/gap/继续命令。
+
+独立最终核查：`python -m research.moe_dispatch.round2.audit_tables`；重复执行汇总：`python -m research.moe_dispatch.round2.final_receipts`。完整单核声明域的直接枚举收据为 `E3/single_exhaustion_receipt.json`。主搜索部分内层分配仍为FEASIBLE；`repair_inner --jobs 4 --effort-units 100 --resume`只写额外验证，不覆盖冻结硬件、旧种子、证书或主结果。

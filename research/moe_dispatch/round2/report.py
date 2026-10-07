@@ -402,6 +402,11 @@ def delivery_status(e, args):
     if any(r.get("status") == "evaluated" and not truth(r.get("allocations_optimal")) for r in leaves):
         partial("5.2", "完整评估 BnB 叶子仍有内层分配未证最优，已保留在开放前沿")
     checks["5.2"]["remaining"] = {"scope": "冻结三组织族的 1,377 个调度差距行与主搜索所有访问叶子的内层求解是两个范围；后者未证分配保留可行见证和资源下界。"}
+    inner = e.data("results/E3/inner_assignment_verification_protocol.json")
+    if inner:
+        checks["5.2"]["completed_scope"]["higher_effort_diagnostic"] = inner
+        checks["5.2"]["remaining"]["diagnostic_unresolved_cases"] = inner.get("unresolved_cases")
+    checks["5.2"]["resume_commands"] = [shlex.quote(args.python) + " -m research.moe_dispatch.round2.repair_inner --jobs 4 --effort-units 1000 --output-directory research/moe_dispatch/round2/results/E3/inner_effort1000"]
     grid_ids = {r.get("point_index") for r in grid}
     verification = extreme.get("verification_full_domain_certificate", {})
     certified_grid = sum(truth(r.get("proof_complete")) for r in grid)
@@ -615,9 +620,12 @@ def render_report(e, status, args):
                 add(4, f"{name} 相对 B1 的诊断延迟余量为 {100 * (1 - float(r['ratio_vs_B1'])):.3f}%；不同消融收益不得相加。")
     bd = e.rows("results/E4/breakdown.csv")
     selected_bd = [r for r in bd if r.get("entry") in (*BASELINES, "best_hetero") and r.get("batch") == "all" and r.get("sched_type") == "runtime"]
-    add(4, table(("模式", "条目", "核0 busy", "核1 busy", "W busy", "X busy", "累加 busy", "HBM busy", "核完成差", "idle", "绑定项"),
-                 [(r["onchip_mode"], hardware_label(r["entry"]), *(fmt(r.get(k), 3) for k in ("core0_compute_busy", "core1_compute_busy", "w_port_busy", "x_port_busy", "acc_port_busy", "hbm_busy_frac", "core_finish_gap", "idle_frac")), r.get("binding_term", "缺失")) for r in selected_bd]) if selected_bd else "时间分解尚缺。")
-    add(4, "busy 分数和完成差的单位遵循原 CSV；重叠占用不相加成墙钟。B2/B1 的同构拆分代价可逐 batch/模式从上表配对几何平均得到；不拼接各 batch 胜格。512 信用只重评估冻结三组织族，见 [hbm512_sensitivity.csv](results/E4/hbm512_sensitivity.csv)。")
+    add(4, table(("模式", "条目", "核0占用 ms", "核1占用 ms", "W占用 ms", "X占用 ms", "累加占用 ms", "HBM忙碌 %", "核完成差 ms", "idle %", "绑定项"),
+                 [(r["onchip_mode"], hardware_label(r["entry"]),
+                   *(fmt(float(r[k]) / 1e6, 3) for k in ("core0_compute_busy", "core1_compute_busy", "w_port_busy", "x_port_busy", "acc_port_busy")),
+                   fmt(100 * float(r["hbm_busy_frac"]), 2), fmt(float(r["core_finish_gap"]) / 1e6, 3),
+                   fmt(100 * float(r["idle_frac"]), 2), r.get("binding_term", "缺失")) for r in selected_bd]) if selected_bd else "时间分解尚缺。")
+    add(4, "占用表为135个相同留出窗口的算术平均，cycles/1e6换算ms，fraction×100换算百分比；主延迟表用几何平均，二者统计口径不同。各资源占用互相重叠，不能相加成墙钟或当成原生stall类别；idle不是单独HBM等待时间。B2/B1 的同构拆分代价可逐 batch/模式从主表配对几何平均得到；不拼接各 batch 胜格。512 信用只重评估冻结三组织族，见 [hbm512_sensitivity.csv](results/E4/hbm512_sensitivity.csv)。")
     add(4, "![各 batch 主结果](figures/fig_main_bars.png)\n\n![时间分解](figures/fig_breakdown.png)")
 
     summary = e.data("results/E3/bnb_summary.json")
@@ -652,6 +660,13 @@ def render_report(e, status, args):
     add(5, "T_lb 是 CP-SAT 专家分配的已证资源约束松弛下界；只有 solver_status=OPTIMAL 才取得该分配问题的最优解 T*，否则所有 CP-SAT/LPT 数字只是已知可执行分配见证，不能称最优分配。LPT 完整流式回放是可执行调度。该模型目标的最优性不等于任意时序调度、RTL 或实芯片最优性。B0/B1/B2 三列为 E4 冻结基线上下文，没有假造 B0 的独立求解差距。")
     add(5, "冻结三族×三模式×153 窗口的调度差距共 1,377 行，最优性状态见 CSV；主搜索访问种子的内层状态另列：`" + json.dumps(status["sections"]["5.2"]["completed_scope"].get("visited_seed_assignment_statuses", {}), ensure_ascii=False, sort_keys=True) + "`。即使最终冻结点全部精确求解，也不能由此把有 FEASIBLE 状态的全部搜索叶子写成精确解；任务书 5.2 的全叶子精确性据此仍标部分完成。")
     add(5, "BnB 实际叶子状态与内层最优性标记：`" + json.dumps(status["sections"]["5.2"]["completed_scope"].get("visited_leaf_statuses", {}), ensure_ascii=False, sort_keys=True) + "`。invalid_or_unresolved 含不可行模板，不能一概计作可行未证解。未证叶子不会凭可行见证被标为完整最优性证明。")
+    inner = status["sections"]["5.2"]["completed_scope"].get("higher_effort_diagnostic", {})
+    if inner.get("completed"):
+        iv = e.rows("results/E3/inner_assignment_verification.csv")
+        add(5, f"补充较高预算复验 {inner.get('completed_cases')} 个原 FEASIBLE 窗口分配，完整新旧结果各重复两次，冻结主表和证明哈希未改变={inner.get('frozen_evidence_unchanged')}。新状态 `{json.dumps(inner.get('new_status_counts', {}), ensure_ascii=False)}`；改变核归属 {inner.get('changed_owner_cases')} 例。资源分配更优不保证 LPT 时序回放更快，本次诊断不会替换冻结 headline。")
+        unresolved = [r for r in iv if r.get("new_status") != "OPTIMAL"]
+        if unresolved:
+            add(5, f"尚未证最优的 {len(unresolved)} 例中，连续资源见证上界减已证下界的最大差为 {max(float(r['unclosed_assignment_gap_ms']) for r in unresolved):.6f} ms；逐例 LB/UB/实际回放/归属见 [inner_assignment_verification.csv](results/E3/inner_assignment_verification.csv)。该差不是完整系统的最优性误差。更高预算继续命令见 DELIVERY_STATUS.md；原始主搜索的未证标记保留。")
     add(5, "![剪枝覆盖与 incumbent](figures/fig_bnb_coverage.png)")
     if status["sections"]["5.1"]["resume_commands"]:
         add(5, "继续运行保留原证书并写入 *_continued.json 新恢复结果；下一次继续使用最新生成的证书。恢复会核对原始工作负载及引擎哈希。\n\n```sh\n" + "\n".join(status["sections"]["5.1"]["resume_commands"]) + "\n```")
@@ -773,6 +788,7 @@ def render_report(e, status, args):
             if number(a.get("geomean_ms")) and number(b.get("geomean_ms")):
                 add(10, f"{mode}/{hardware_label(name)}：纯 T=2 阈值比阈值+回退慢 {100 * (float(a['geomean_ms']) / float(b['geomean_ms']) - 1):.3f}%。")
     add(10, "MAE=平均 |预测时长−实际时长|/实际时长；success=Next 第一权重块落在 Current 结束前 W 内的比例。W近似计两个块的纯计算服务：WS每块含ceil(Me/PM)个M发射，OS/IS装入后只含一个M发射；排除HBM/端口，不是精确tile时序。late=块晚于 Current 结束；stall=暴露权重等待。oracle 冻结 ours 第一遍的实际归属、绑定、预取与相位释放，再重新计算共享 HBM、私有端口与有限槽的服务时间；它是同一计划的时长准确率参考，不是最优派工或反事实核选择的性能上界。其 E2E 与冻结 ours 计划相同，数值残差保留，未强制写 MAE=0。旧 profile-guided 两遍参考另存 profile_guided_reference.csv，其控制动作可改变。状态 bit 只是状态量估计，没有综合面积或频率。")
+    add(10, "独立核查可从任务级原始 CSV 重建 MAE/success/late/stall；E5 未额外导出每个预测器的逐窗口墙钟明细，其端到端几何平均依赖完整双序列执行断言与实际执行收据，可由 E5 命令重新生成。不能把预测误差下降等同于系统延迟同比下降。")
     replays = e.rows("results/E5/oracle_replay_validation.csv")
     if replays:
         add(10, f"条件 oracle 完成 {len(replays)} 个窗口重放收据；最大时间差 {max(float(r['max_timing_difference_cycles']) for r in replays):.6g} 周期，最大 HBM 字节差 {max(float(r['max_hbm_difference_bytes']) for r in replays):.6g} B，详见 [oracle_replay_validation.csv](results/E5/oracle_replay_validation.csv)。")

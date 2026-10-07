@@ -59,7 +59,10 @@ for mode in M:
  for k,f in obj['families'].items():
   fail(f['covered_lattice_points']+sum(v['lattice_points'] for v in f['open_regions'])==f['declared_lattice_points'],mode+'/'+k+' BnB lattice conservation')
   fail(bool(f['proof_complete'])==(not f['open_regions']),mode+'/'+k+' proofstate matches openfrontier')
-  if not f['proof_complete']:warnings.append(mode+'/'+k+' is best-evaluated with open proof; not certified global optimum')
+  if not f['proof_complete']:
+   if k=='single' and (R/'E3/single_exhaustion_receipt.json').is_file():
+    warnings.append(mode+'/'+k+' generic regional frontier open; separate finite single-template exhaustion receipt must be considered independently')
+   else:warnings.append(mode+'/'+k+' is best-evaluated with open proof; not certified global optimum')
 ps=read('E5/predictor_table.csv')
 if ps:
  fail(len(ps)==36,'E5 two designs*three modes*six predictors')
@@ -76,6 +79,7 @@ whole=read('E6/model_token_e2e.csv')
 if whole:
  fail(all(not r['token_ms'] and not r['non_moe_ms_per_layer'] and r['status']=='missing_matching_DeepSeek_non_MoE_layer_timing' for r in whole),'E6 matching nonMoE unavailable; whole-model fields must remain missing')
  warnings.append('E6 complete-model inference remains unavailable; table is honest MoE-layer evidence only')
+fail(not missing,'All required final audit inputs are present')
 obj={'scope':'Independent read-only numerical/table integrity; not RTL calibration or verification of analytical approximation','checks':len(checks),'passed':sum(c['ok'] for c in checks),'failed':[c for c in checks if not c['ok']],'missing_inputs':missing,'warnings':warnings,'input_sha256':files,'audit_source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(obj,indent=2,sort_keys=True)+'\n')
 print(json.dumps({k:obj[k] for k in ('checks','passed','failed','missing_inputs','warnings')}));raise SystemExit(bool(obj['failed']))

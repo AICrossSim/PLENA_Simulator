@@ -92,7 +92,8 @@ class Figures:
                 ax.bar(x+(j-(len(names)-1)/2)*width,vals,width,color=COLORS[j%len(COLORS)],
                     hatch=('//' if name.startswith('U') else '..' if j>=6 else None),label=NAMES[name])
             ax.axhline(1,color='black',lw=.8);ax.set_xticks(x,[f'B{b}' for b in BATCHES]);ax.set_ylabel('Speedup relative to B1');ax.set_title(self.title(mode));ax.grid(axis='y',alpha=.2)
-        axes[0].legend(fontsize=7)
+        handles,labels=axes[0].get_legend_handles_labels()
+        fig.legend(handles,labels,loc='lower center',bbox_to_anchor=(.5,.99),ncol=6,fontsize=7)
         self.save(fig,'fig_main_bars','Runtime analytical estimates on held-out windows; one development-selected design is frozen across batches. Selected designs are best-evaluated candidates when search proofs remain open; no RTL calibration.')
 
     def breakdown(self):
@@ -200,7 +201,7 @@ class Figures:
             for (y,x),v in np.ndenumerate(a):
                 if np.isfinite(v):ax.text(x,y,f'{v:.3f}x',ha='center',va='center',fontsize=9)
             ax.set_yticks(range(3),FLOWS);ax.set_xticks(range(a.shape[1]),['single'] if single else FLOWS);ax.set_ylabel('Single-core flow' if single else 'Large-core flow');ax.set_xlabel('Small-core flow' if not single else '');ax.set_title(NAMES[name]+'\n'+self.title(mode),fontsize=9)
-        self.save(fig,'fig_dataflow_grid','Held-out, all-window paired geometric latency ratio relative to the same design OS/OS (single: OS). Capacity, ports, geometry and policy stay frozen; dataflow benefits are not additive. Large/small labels follow multiplier counts (core 0 first on a tie); B1 has no second core.')
+        self.save(fig,'fig_dataflow_grid','Held-out, all-window paired geometric latency ratio relative to the same design OS/OS (single: OS). Colors normalize within each panel; compare the annotated ratios across panels. Capacity, ports, geometry and policy stay frozen; dataflow benefits are not additive. Large/small labels follow multiplier counts (core 0 first on a tie); B1 has no second core.')
 
     def me_crossover(self):
         rows=self.csv('E2/micro.csv');fig,axes=plt.subplots(3,3,figsize=(14,11))
