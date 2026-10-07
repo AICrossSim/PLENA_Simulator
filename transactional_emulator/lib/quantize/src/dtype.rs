@@ -391,10 +391,49 @@ impl IntType {
     }
 }
 
+/// PLENA MXINT element: one sign bit followed by an unsigned fixed-point
+/// magnitude.  The magnitude has `width - 1` fractional bits, so an MXINT8
+/// byte `0x7f` represents `127 / 128` before the shared block scale is applied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MxIntType {
+    pub width: u32,
+}
+
+impl MxIntType {
+    pub const fn size_in_bits(self) -> u8 {
+        self.width as u8
+    }
+
+    pub fn bits_from_f32(self, value: f32) -> u32 {
+        assert!((2..=32).contains(&self.width));
+        let magnitude_bits = self.width - 1;
+        let magnitude_mask = ((1u64 << magnitude_bits) - 1) as u32;
+        let scale = (1u64 << magnitude_bits) as f32;
+        let magnitude = (value.abs() * scale) as u32;
+        let magnitude = magnitude.min(magnitude_mask);
+        let sign = u32::from(value.is_sign_negative() && magnitude != 0);
+        (sign << magnitude_bits) | magnitude
+    }
+
+    pub fn convert_bits_to_f32(self, bits: u32) -> f32 {
+        assert!((2..=32).contains(&self.width));
+        let magnitude_bits = self.width - 1;
+        let magnitude_mask = ((1u64 << magnitude_bits) - 1) as u32;
+        let magnitude = (bits & magnitude_mask) as f32;
+        let value = magnitude / (1u64 << magnitude_bits) as f32;
+        if ((bits >> magnitude_bits) & 1) != 0 {
+            -value
+        } else {
+            value
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
     Fp(FpType),
     Int(IntType),
+    MxInt(MxIntType),
 }
 
 impl From<FpType> for DataType {
@@ -408,20 +447,23 @@ impl DataType {
         match self {
             DataType::Fp(fp_type) => fp_type.size_in_bits(),
             DataType::Int(int_type) => int_type.size_in_bits(),
+            DataType::MxInt(mxint_type) => mxint_type.size_in_bits(),
         }
     }
 
-    pub const fn bits_from_f32(self, float: f32) -> u32 {
+    pub fn bits_from_f32(self, float: f32) -> u32 {
         match self {
             DataType::Fp(fp_type) => fp_type.bits_from_f32(float),
             DataType::Int(int_type) => int_type.bits_from_f32(float),
+            DataType::MxInt(mxint_type) => mxint_type.bits_from_f32(float),
         }
     }
 
-    pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
+    pub fn convert_bits_to_f32(self, bits: u32) -> f32 {
         match self {
             DataType::Fp(fp_type) => fp_type.convert_bits_to_f32(bits),
             DataType::Int(int_type) => int_type.convert_bits_to_f32(bits),
+            DataType::MxInt(mxint_type) => mxint_type.convert_bits_to_f32(bits),
         }
     }
 
@@ -577,9 +619,20 @@ mod tests {
     }
 
     #[test]
+    fn test_mxint8_uses_sign_magnitude_with_seven_fractional_bits() {
+        let ty = MxIntType { width: 8 };
+        assert_eq!(ty.convert_bits_to_f32(0x7f), 127.0 / 128.0);
+        assert_eq!(ty.convert_bits_to_f32(0xc0), -0.5);
+        assert_eq!(ty.convert_bits_to_f32(0x80), 0.0);
+        assert_eq!(ty.bits_from_f32(1.0), 0x7f);
+        assert_eq!(ty.bits_from_f32(-0.5), 0xc0);
+    }
+
+    #[test]
     fn test_datatype_dispatch_size() {
         assert_eq!(DataType::Fp(FpType::F16).size_in_bits(), 16);
         assert_eq!(DataType::Int(IntType { width: 4 }).size_in_bits(), 4);
+        assert_eq!(DataType::MxInt(MxIntType { width: 8 }).size_in_bits(), 8);
     }
 
     #[test]
