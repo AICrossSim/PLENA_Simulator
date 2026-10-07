@@ -10,6 +10,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import shlex
 import subprocess
 import sys
@@ -161,7 +162,20 @@ def test_receipts(e):
                                          "receipt": str(path.relative_to(e.root)), "commit": "standalone XML; see E0 provenance"}
             except (ET.ParseError, OSError, ValueError) as error:
                 e.errors.append(f"{path}: {error}")
-    required = ("research", "analytical", "rust", "main_rust")
+    current_sources = ("model.py", "optimizer.py", "search.py", "run.py", "predictors.py", "regions.py", "sensitivity.py")
+    for path in sorted(e.path("results/executions").glob("round2_*unit_suite_*.json")):
+        item = e.data(str(path.relative_to(e.root)))
+        if item.get("returncode") != 0 or not all(item.get("source_sha256", {}).get(name) ==
+                hashlib.sha256(e.path(name).read_bytes()).hexdigest() for name in current_sources):
+            continue
+        log = e.path(item.get("log", "missing"))
+        if not log.is_file() or hashlib.sha256(log.read_bytes()).hexdigest() != item.get("log_sha256"):
+            continue
+        passed = re.findall(r"(\d+) passed", log.read_text())
+        latest["round2"] = {"returncode": 0, "tests": int(passed[-1]) if passed else "see log",
+                            "failures": 0, "errors": 0, "receipt": str(path.relative_to(e.root)),
+                            "commit": item.get("execution_commit"), "source_hash_checked": list(current_sources)}
+    required = ("research", "analytical", "rust", "main_rust", "round2")
     gate = e.data("results/E0/PHASE1_GATE.json")
     receipt_hash_checks = {}
     for relative, expected in gate.get("receipt_sha256", {}).items():
