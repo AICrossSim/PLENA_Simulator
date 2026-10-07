@@ -1,0 +1,8 @@
+# Exact raw payloads are stored in portable SHA-checked certificate archives.
+# Do not commit workspace-specific links into /tmp.
+/results/E3/search_certificates/grid
+/results/E3/search_certificates/sobol
+/results/E3/search_certificates/flip
+/results/E3/cma_certificates
+/results/E3/cma_verification
+/results/logs/main_search.log

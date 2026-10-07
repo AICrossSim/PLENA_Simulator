@@ -67,12 +67,15 @@ def main():
         "E3_robust": ("model.py", "optimizer.py", "robust.py"),
         "E3_sobol": ("model.py", "optimizer.py", "search.py", "regions.py", "sensitivity.py"),
         "E3_flip": ("model.py", "optimizer.py", "search.py", "regions.py", "sensitivity.py"),
+        "E3_inner_assignment_verification": ("model.py", "optimizer.py", "repair_inner.py"),
     }
     executions = [(path, data(path)) for path in sorted((folder / "executions").glob("*.json"))]
     for label, sources in required.items():
         compatible = [(p, r) for p, r in executions if r.get("label") == label and
                       r.get("returncode") == 0 and r.get("finished_utc") and
                       all(r.get("source_sha256", {}).get(name) == sha(ROOT / name) for name in sources)]
+        compatible = [(p, r) for p, r in compatible if (ROOT / r.get("log", "missing")).is_file() and
+                      sha(ROOT / r["log"]) == r.get("log_sha256")]
         receipt = max(compatible, key=lambda item: item[1]["finished_utc"]) if compatible else None
         check(label, receipt is not None, evidence=str(receipt[0].relative_to(ROOT)) if receipt else None)
         if receipt:
@@ -86,6 +89,10 @@ def main():
     flip = rows(folder / "E3/flip_samples.csv")
     check("flip_coverage", len(flip) == 105 and
           len({(v["param"], v["value"]) for v in flip}) == 105, rows=len(flip))
+    inner = data(folder / "E3/inner_assignment_verification_protocol.json")
+    check("higher_effort_inner_repetition", inner.get("completed") and inner.get("completed_cases") == 940 and
+          inner.get("all_full_object_repeats_identical") and inner.get("frozen_evidence_unchanged"),
+          cases=inner.get("completed_cases"), unresolved_cases=inner.get("unresolved_cases"))
     checks_ok = all(item["ok"] for item in checks)
     record = {
         "generated_utc": datetime.now(timezone.utc).isoformat(),

@@ -48,3 +48,7 @@ run.py支持`--onchip-mode all/pipelined/port_tight/fixed_issue`。默认all生�
 E5的oracle冻结ours第一遍的实际归属、绑定、预取和相位释放，在第二遍重新计算共享HBM、私有端口和有限权重槽的服务时间，核对完成时间与字节守恒。它是同一计划的时长准确率参考，其E2E等于冻结ours计划，不是完美预测派工的性能上界，也不提供未选择核的反事实时长。旧profile-guided两遍参考单独保留，允许控制动作改变和残差。所有开放搜索保留具体LB/gap/继续命令。
 
 独立最终核查：`python -m research.moe_dispatch.round2.audit_tables`；重复执行汇总：`python -m research.moe_dispatch.round2.final_receipts`。完整单核声明域的直接枚举收据为 `E3/single_exhaustion_receipt.json`。主搜索部分内层分配仍为FEASIBLE；`repair_inner --jobs 4 --effort-units 100 --resume`只写额外验证，不覆盖冻结硬件、旧种子、证书或主结果。
+
+大型原始证明和搜索输出保留在 `results/E3/certificate_archives/` 的独立压缩分块中，逐成员 SHA 和恢复命令见各子目录 README/manifest。Git 不提交当前机器指向 `/tmp` 的原始目录链接，也不提交超过 50 MiB 的未压缩输出。`workload_extreme.json` 等派生摘要明确记录原始输出哈希；恢复证明应提取完整检查点，不能用摘要代替。四份真实输入已随本分支保留。
+
+全部配置执行完后依次运行 `final_receipts`、`audit_tables`、`figures`、`finalize_delivery`、`report`。`finalize_delivery` 只更新交付元数据，保留各阶段原 README/PROVENANCE 快照，并分别记录实际数值执行提交和元数据生成提交；它不重算性能，也不关闭未完成的最优性证明。最终覆盖范围和继续命令以 `DELIVERY_STATUS.md` 为准。

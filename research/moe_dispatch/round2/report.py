@@ -172,7 +172,9 @@ def test_receipts(e):
         if not log.is_file() or hashlib.sha256(log.read_bytes()).hexdigest() != item.get("log_sha256"):
             continue
         passed = re.findall(r"(\d+) passed", log.read_text())
-        latest["round2"] = {"returncode": 0, "tests": int(passed[-1]) if passed else "see log",
+        full_suite = any(str(v).rstrip("/").endswith("research/moe_dispatch/round2") for v in item.get("command", []))
+        suite_name = "round2" if full_suite else "round2_subset_" + item.get("label", "unknown")
+        latest[suite_name] = {"returncode": 0, "tests": int(passed[-1]) if passed else "see log",
                             "failures": 0, "errors": 0, "receipt": str(path.relative_to(e.root)),
                             "commit": item.get("execution_commit"), "source_hash_checked": list(current_sources)}
     required = ("research", "analytical", "rust", "main_rust", "round2")
@@ -425,7 +427,9 @@ def delivery_status(e, args):
     checks["5.3"]["resume_commands"] = [f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage grid --jobs {args.jobs} --point-seconds {args.point_seconds}",
                                               point_resume_command(e, "grid", args),
                                               f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.extreme --jobs {args.jobs} --max-evaluations 500 --point-seconds {args.point_seconds} --verify-seconds {args.resume_seconds}",
-                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.resume --certificate {shlex.quote(str(e.path('results/E3/workload_extreme.json')))} --seconds {args.resume_seconds}"]
+                                              "# 从 E3 目录提取原始完整精度检查点；workload_extreme.json 是派生摘要，不用它恢复\n" +
+                                              f"tar -xzf {shlex.quote(str(e.path('results/E3/certificate_archives/extreme_final/part_000.tar.gz')))} -C {shlex.quote(str(e.path('results/E3')))} cma_verification/final_delta0.json\n" +
+                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.resume --certificate {shlex.quote(str(e.path('results/E3/cma_verification/final_delta0.json')))} --seconds {args.resume_seconds}"]
     checks["5.4"]["completed_scope"] = {"objective_rows": len(robust), "stability_rows": len(stability),
                                            "bootstrap_draw_counts": sorted({r.get("bootstrap_draws") for r in stability})}
     if not stability or any(number(r.get("bootstrap_draws")) != 200 for r in stability):
@@ -660,6 +664,26 @@ def render_report(e, status, args):
     add(5, "T_lb 是 CP-SAT 专家分配的已证资源约束松弛下界；只有 solver_status=OPTIMAL 才取得该分配问题的最优解 T*，否则所有 CP-SAT/LPT 数字只是已知可执行分配见证，不能称最优分配。LPT 完整流式回放是可执行调度。该模型目标的最优性不等于任意时序调度、RTL 或实芯片最优性。B0/B1/B2 三列为 E4 冻结基线上下文，没有假造 B0 的独立求解差距。")
     add(5, "冻结三族×三模式×153 窗口的调度差距共 1,377 行，最优性状态见 CSV；主搜索访问种子的内层状态另列：`" + json.dumps(status["sections"]["5.2"]["completed_scope"].get("visited_seed_assignment_statuses", {}), ensure_ascii=False, sort_keys=True) + "`。即使最终冻结点全部精确求解，也不能由此把有 FEASIBLE 状态的全部搜索叶子写成精确解；任务书 5.2 的全叶子精确性据此仍标部分完成。")
     add(5, "BnB 实际叶子状态与内层最优性标记：`" + json.dumps(status["sections"]["5.2"]["completed_scope"].get("visited_leaf_statuses", {}), ensure_ascii=False, sort_keys=True) + "`。invalid_or_unresolved 含不可行模板，不能一概计作可行未证解。未证叶子不会凭可行见证被标为完整最优性证明。")
+    diagnostic_path = "results/logs/heterogeneous_runtime_gap_diagnostic.json"
+    if e.path(diagnostic_path).is_file():
+        diagnostic = e.data(diagnostic_path)
+        window = diagnostic.get("window", {})
+        dr = diagnostic.get("results", {})
+        shared = next((i for i, item in enumerate(window.get("experts", [])) if item.get("is_shared")), None)
+        rows = []
+        for key, label in (("milp_sched", "离线分配＋LPT"), ("runtime", "在线 EFT")):
+            value = dr.get(key, {})
+            task = next((t for t in value.get("tasks", []) if t.get("expert_index") == shared), {})
+            binding = next((b for b in value.get("bindings", []) if b.get("expert_index") == shared), {})
+            core = task.get("core")
+            z = value.get("ledger", {}).get("private", {}).get("z_bytes", [])
+            rows.append((label, fmt(value.get("latency_ms")), fmt(number(value.get("hbm_bytes")) / 2**20, 2),
+                         str(core), fmt(z[core] / 1024, 0) if core is not None and core < len(z) else "缺失",
+                         fmt(number(task.get("start")) / 1e6), fmt(number(task.get("nominal_cycles")) / 1e6),
+                         str(binding.get("physical_legal_cores", binding.get("legal_cores", "缺失"))), str(binding.get("legal_cores", "缺失"))))
+        add(5, "一个已定位的因果实例：`" + window.get("id", "缺失") + "`。同一冻结异构硬件和同一真实路由，在线 EFT 在有限描述符窗与核队列限制下将 Shared 留到后面；绑定时两核物理上都可执行，但策略只允许当时能接单的核。选择小核后，32 KiB 私有 Z 导致分块和权重重读，HBM 流量近乎翻倍。名义成本已经包含重读，因此不能把它全部归为预测时间算错；任务先后次序与是否等待合适核同样关键。")
+        add(5, table(("同窗口调度", "整层 ms", "实际 HBM MiB", "Shared 核", "该核 Z KiB", "Shared 开始 ms", "Shared 名义 ms", "物理合法核数", "策略可接核数"), rows))
+        add(5, "原始任务、绑定、阶段和流量见 [完整诊断](" + diagnostic_path + ")。这一实例只说明该窗口的因果，不代表所有窗口都由同一原因限制。")
     inner = status["sections"]["5.2"]["completed_scope"].get("higher_effort_diagnostic", {})
     if inner.get("completed"):
         iv = e.rows("results/E3/inner_assignment_verification.csv")
@@ -697,6 +721,7 @@ def render_report(e, status, args):
         add(6, f"CMA-ES 实际评估 {extreme.get('CMA_evaluations', '缺失')} 次（上限 500）；最强已评估负载参数 `{json.dumps(extreme.get('best_evaluated_workload_parameters', {}), ensure_ascii=False)}`。δ=0 复验 Δ vs 单核={fmt(100 * extreme['delta_vs_single'], 3) if number(extreme.get('delta_vs_single')) is not None else '缺失'}%，vs 同构={fmt(100 * extreme['delta_vs_homo'], 3) if number(extreme.get('delta_vs_homo')) is not None else '缺失'}%；证明闭合={extreme.get('verification_full_domain_certificate', {}).get('proof_complete', '缺失')}。最近真实窗口 `{near.get('window_id', '缺失')}`，batch log2 距离={fmt(near.get('batch_log2_distance'))}，Me 直方图 KL={fmt(near.get('Me_hist_KL_synthetic_to_real'))}，distinct 合成/真实={near.get('distinct_synthetic', '缺失')}/{near.get('distinct_real', '缺失')}。")
     add(6, "负载点 best 与 Δ 均按各点证书解释；未闭合时只是候选估计。图中真实标记的来源与映射见图说明。\n\n![异构候选收益区域](figures/fig_workload_map.png)")
     add(6, "网格 stage 命令只补缺失负载点；已经记录但未认证的点必须用 resume CLI 继续各自证书。各点未剪下界/差距见 workload_map.csv，完整开放区间保留在 search_certificates/grid/；具体批量继续命令见 DELIVERY_STATUS.md。")
+    add(6, "大型原始搜索输出以分块压缩包保留，逐成员 SHA、实际执行收据和恢复方法见 [certificate_archives](results/E3/certificate_archives/)；workload_extreme.json 是明确标记的派生摘要，完整原始输出和独立 δ=0 恢复点保存在 extreme_final 压缩包中。新 checkout 应先按各压缩包 README 提取需要恢复的证书；不依赖当前机器的 /tmp 链接，也不把摘要当成原始证明前沿。")
 
     robust = e.rows("results/E3/robust_objectives.csv")
     stability = e.rows("results/E3/selection_stability.csv")
@@ -827,6 +852,8 @@ def render_report(e, status, args):
         add(13, "- 闭合或收紧参数点的搜索误差后，优先测量 ST 最大的 " + "、".join(r["param"] for r in sorted(ranked, key=lambda r: float(r["ST"]), reverse=True)[:2]) + "，以核对结论是否跨进入校准边界。")
     if status["sections"]["8"]["status"] != "完成":
         add(13, "- 捕获与本次 DeepSeek 输入及层映射匹配的 attention/router/norm 层时序，再计算整模型每 token 时间。")
+    if e.path("results/logs/heterogeneous_runtime_gap_diagnostic.json").is_file():
+        add(13, "- 下一轮控制器消融应先针对已观测的 Shared 晚绑定和小 Z 重读：允许等待更合适的核、提前保留可容纳完整工作集的任务槽，并比较提前处理 Shared 的代价。三种组织都使用同一机制、在开发集选参数；本轮冻结结果保持不变，不能预先保证异构因此胜出。")
     passing = [r for r in main if r.get("entry", "").startswith("best_") and r.get("sched_type") == "runtime" and truth(r.get("gate_5pct_pass")) and r.get("onchip_mode") != "fixed_issue"]
     if passing:
         add(13, "- 对达到进入校准门槛的等资源模式冻结候选做后续时序校准；校准后仍需相对 B1/B2 至少 10% 且配对 bootstrap 95% 下界至少 5% 才能讨论胜出。")
