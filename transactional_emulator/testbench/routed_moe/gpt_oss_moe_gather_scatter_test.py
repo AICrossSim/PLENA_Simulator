@@ -292,8 +292,7 @@ def _slot_route_matrix(
 
 
 def _expert_hbm_stride(prog: PlenaCompiler, shape: tuple[int, int]) -> int:
-    raw_size = int(shape[0] * shape[1] * prog.real_data_ratio)
-    return _align_to(raw_size, prog.mlen)
+    return prog.hbm_tensor_size(shape[0] * shape[1])
 
 
 def _build_true_expert_weight_table(
@@ -657,7 +656,7 @@ def run_address_stage(args: argparse.Namespace) -> dict:
     _neg_alpha = prog.fp_var("neg_alpha", size=slot_rows)
 
     x_input = prog.input("X", shape=(rows, hidden))
-    gathered = prog.moe_gather_token_rows_from_hbm_v0(
+    gathered = prog.gpt_oss_gather_token_rows_from_hbm_v0(
         x_input,
         token_offsets_int_base=0,
         pair_count=1,
@@ -832,7 +831,7 @@ def run_four_pair_stage(args: argparse.Namespace) -> dict:
     neg_alpha = prog.fp_var("neg_alpha", size=slot_rows)
 
     x_input = prog.input("X", shape=(rows, hidden))
-    gathered = prog.moe_gather_token_rows_from_hbm_v0(
+    gathered = prog.gpt_oss_gather_token_rows_from_hbm_v0(
         x_input,
         token_offsets_int_base=0,
         pair_count=pair_count,
@@ -875,7 +874,7 @@ def run_four_pair_stage(args: argparse.Namespace) -> dict:
         )
         next_bias_addr += aligned_size
 
-    output_vram = prog.moe_expert_v0(
+    output_vram = prog.gpt_oss_expert_v0(
         gathered,
         (w_gate_input, w_up_input, w_down_input),
         biases=tuple(bias_vrams),
@@ -1076,7 +1075,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
         strict=False,
         physical_shape=(acc_physical_rows, hidden),
     )
-    prog.moe_true_zero_vram_rows_v0(
+    prog.gpt_oss_true_zero_vram_rows_v0(
         accumulator,
         rows=list(range(rows)),
         hidden=hidden,
@@ -1103,7 +1102,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
         token_offsets_base = len(int_preload_values)
         int_preload_values.extend([token * hidden for token in token_indices])
 
-        gathered_by_expert[expert_id] = prog.moe_gather_token_rows_from_hbm_v0(
+        gathered_by_expert[expert_id] = prog.gpt_oss_gather_token_rows_from_hbm_v0(
             x_input,
             token_offsets_int_base=token_offsets_base,
             pair_count=pair_count,
@@ -1207,7 +1206,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
 
     for spec in expert_specs:
         expert_id = int(spec["expert_id"])
-        output_vram = prog.moe_expert_v0(
+        output_vram = prog.gpt_oss_expert_v0(
             gathered_by_expert[expert_id],
             weight_inputs[expert_id],
             biases=bias_vrams[expert_id],
@@ -1217,7 +1216,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
             name=f"full_vram_e{expert_id}",
         )
         prog.vram_mul(output_vram, route_vrams[expert_id], num_rows=int(spec["slot_rows"]))
-        prog.moe_scatter_add_active_rows_v0(
+        prog.gpt_oss_scatter_add_active_rows_v0(
             accumulator,
             output_vram,
             token_indices=list(spec["token_indices"]),
@@ -1246,7 +1245,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
             physical_shape=(blen, hidden),
         )
         for token_idx in store_token_indices:
-            prog.moe_true_zero_vram_rows_v0(
+            prog.gpt_oss_true_zero_vram_rows_v0(
                 store_slot,
                 rows=list(range(blen)),
                 hidden=hidden,
@@ -1255,7 +1254,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
                 stage="scatter_combine",
                 name=f"hbm_store_t{token_idx}_zero",
             )
-            prog.moe_scatter_add_active_rows_v0(
+            prog.gpt_oss_scatter_add_active_rows_v0(
                 store_slot,
                 accumulator,
                 token_indices=[0],
@@ -1759,7 +1758,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
         vram_preload=vram_preload,
     )
 
-    logits = prog.moe_router_logits_bf16_v0(
+    logits = prog.gpt_oss_router_logits_bf16_v0(
         router_x,
         router_w,
         rows=rows,
@@ -1774,11 +1773,13 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
     token_offsets_int_base = rows * top_k
     token_offsets = [token_idx * hidden for token_idx in range(rows) for _ in range(top_k)]
     for token_idx in range(rows):
-        prog.moe_router_select_v0(
+        prog.gpt_oss_router_topk_softmax_v0(
             logits,
             token_idx=token_idx,
             weights_fp_base=topk_weights_fp_base + token_idx * top_k,
             indices_int_base=topk_indices_int_base + token_idx * top_k,
+            num_experts=num_experts,
+            top_k=top_k,
             name=f"token{token_idx}",
         )
 
@@ -1789,7 +1790,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
         strict=False,
         physical_shape=(physical_rows, hidden),
     )
-    prog.moe_true_zero_vram_rows_v0(
+    prog.gpt_oss_true_zero_vram_rows_v0(
         accumulator,
         rows=list(range(rows)),
         hidden=hidden,
@@ -1802,7 +1803,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
     for pair_idx in range(pair_count):
         token_idx = pair_idx // top_k
         if vram_source:
-            gathered = prog.moe_gather_token_rows_from_vram_v0(
+            gathered = prog.gpt_oss_gather_token_rows_from_vram_v0(
                 router_x,
                 token_indices=[token_idx],
                 hidden=hidden,
@@ -1810,7 +1811,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
                 name=f"step6_pair{pair_idx}_vram_gather_t{token_idx}",
             )
         else:
-            gathered = prog.moe_gather_token_rows_from_hbm_v0(
+            gathered = prog.gpt_oss_gather_token_rows_from_hbm_v0(
                 x_input,
                 token_offsets_int_base=token_offsets_int_base + pair_idx,
                 pair_count=1,
@@ -1818,7 +1819,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
                 zero_row=shared_zero_row,
                 name=f"step6_pair{pair_idx}_gather_t{token_idx}",
             )
-        output = prog.moe_dynamic_expert_pair_v0(
+        output = prog.gpt_oss_dynamic_expert_pair_v0(
             gathered,
             weight_templates,
             weight_table_bases=weight_table_bases,
@@ -1834,7 +1835,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
             route_fp_scratch=route_fp_scratch,
             name=f"step6_pair{pair_idx}",
         )
-        prog.moe_scatter_add_active_rows_v0(
+        prog.gpt_oss_scatter_add_active_rows_v0(
             accumulator,
             output,
             token_indices=[token_idx],
