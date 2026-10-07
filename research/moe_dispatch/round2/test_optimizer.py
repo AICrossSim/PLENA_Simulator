@@ -112,6 +112,44 @@ def test_grouped_enum_preserves_single_legal_core_and_cap_zero_rejects():
     assert o.solve_assignment(ww,dd,pp)["owners"]==[0,0,0]
 
 
+@pytest.mark.parametrize("mode",["pipelined","port_tight","fixed_issue"])
+def test_fixed_t_integer_sat_unsat_bracket_contains_raw_exact_minimum(mode):
+    ww=w((1,2,3,4));dd=d(("OS","WS"));pp=o.Parameters(onchip_mode=mode);q=1e-6
+    table=o._costs(ww,dd,pp);values=[]
+    for owners in itertools.product((0,1),repeat=4):
+        loads={"hbm":o._down(o._common_spill(ww)/pp.hbm_bandwidth,q)};dep=0
+        for i,c in enumerate(owners):
+            co=table[i][c];dep=max(dep,o._down(co.dependency_floor,q))
+            for r,t in o._resource_services(co,dd,c,pp).items():loads[r]=loads.get(r,0)+o._down(t,q)
+        values.append(max([dep,*loads.values()]))
+    exact=min(values);a=o._solve_fixed_t(ww,dd,pp);b=o._solve_fixed_t(ww,dd,pp)
+    assert a==b and a["lower_ticks"]<=exact<=a["upper_ticks"]
+    assert a["optimal"]==(a["lower_ticks"]==a["upper_ticks"])
+    for query in a["trace"]:
+        assert query["lower_before"]<=exact<=query["upper_before"]
+        assert query["lower_after"]<=exact<=query["upper_after"]
+        if query["status"]=="UNSAT":assert query["target"]<exact
+        if query["status"]=="SAT":assert query["target"]>=exact
+
+
+@pytest.mark.parametrize("shape,flows",[
+    ((2,12,256),("OS","WS")),((2,24,128),("OS","WS")),((2,24,128),("IS","WS"))])
+def test_real_large_port_tight_fixed_t_repeats_and_closes_exact_bracket(shape,flows):
+    # Exact development-capture histogram from the formerly >400s native
+    # minimization kernel. Constant-T SAT/UNSAT queries preserve all ticks.
+    from research.moe_dispatch.round2.common import inputs
+    ww=next(x for x in inputs()["development"] if x["id"]=="v3_captured_mixed_development_t96_l13")
+    dd=o.Design((o.Core(*shape),o.Core(*shape)),flows=flows);pp=o.Parameters(onchip_mode="port_tight")
+    a=o.evaluate_design(ww,dd,pp,detail=False);b=o.evaluate_design(ww,dd,pp,detail=False)
+    assert a==b
+    sol=a["assignment"];bracket=sol["integer_objective_bracket"]
+    assert sol["status"]=="OPTIMAL" and bracket["closed"]
+    assert bracket["lower_ticks"]==bracket["upper_ticks"]
+    assert len(bracket["queries"])<=64
+    assert sol["solver_budget"]["use_sat_inprocessing"] is False
+    assert a["lb_cycles"]<=a["milp_sched"]["cycles"]+1e-6
+
+
 def test_down_keeps_exact_integer_coefficients_and_floors_exact_binary_ratio():
     assert o._down(25088.,1e-6)==25088000000
     rng=random.Random(2461)

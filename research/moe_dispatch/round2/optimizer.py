@@ -191,6 +191,81 @@ def _enumerate_assignment(workload,design,params,quantum=1e-6,max_combinations=1
         'pruned_nodes':pruned,'aggregated_task_types':len(groups),'group_counts':bestchoices}
 
 
+
+def _solve_fixed_t(w,d,p,quantum=1e-6,queries=64,total_work=.1, *, table=None, groups=None):
+    """Same quantized integer model, queried at a constant objective bound.
+
+    Integer SAT witnesses tighten UB; exact UNSAT proofs raiseLB=T+1.
+    Unknown responses do not move either side. Only a closed integer bracket
+    is OPTIMAL. This avoids native minimization's tick-sized lazy encoding.
+    The <=64 queries share the configured deterministic work budget.
+    """
+    table=_costs(w,d,p) if table is None else table
+    groups=_group_tasks(w,table) if groups is None else groups
+    coeffs=[];deps=[]
+    for row in table:
+        coeffs.append([None if co is None else {r:_down(t,quantum) for r,t in _resource_services(co,d,c,p).items()} for c,co in enumerate(row)])
+        deps.append([None if co is None else _down(co.dependency_floor,quantum) for co in row])
+    shared=('hbm','vector_global');constant=_down(_common_spill(w)/p.hbm_bandwidth,quantum)
+    def obj(owners):
+        loads={'hbm':constant};dep=0
+        for i,c in enumerate(owners):
+            dep=max(dep,deps[i][c])
+            for r,t in coeffs[i][c].items():loads[r]=loads.get(r,0)+t
+        return max([dep,*loads.values()])
+    # Two independent legal witness heuristics, neither used as a lower bound.
+    greedy=[min((c for c in range(len(d.cores)) if table[i][c] is not None),key=lambda c:(table[i][c].isolated_cycles,c)) for i in range(len(table))]
+    loads={'hbm':constant};dep=0;balanced=[None]*len(table)
+    for i in sorted(range(len(table)),key=lambda i:-min(table[i][c].isolated_cycles for c in range(len(d.cores)) if table[i][c] is not None)):
+        choices=[]
+        for c in range(len(d.cores)):
+            if table[i][c] is None:continue
+            new=loads.copy()
+            for r,t in coeffs[i][c].items():new[r]=new.get(r,0)+t
+            choices.append((max([dep,deps[i][c],*new.values()]),c,new))
+        _,c,loads=min(choices,key=lambda x:(x[0],x[1]));dep=max(dep,deps[i][c]);balanced[i]=c
+    owner=min((greedy,balanced),key=lambda x:(obj(x),tuple(x)));upper=obj(owner)
+    lows=[max(min(x for x in row if x is not None) for row in deps)]
+    for r in shared:
+        lows.append((constant if r=='hbm' else 0)+sum(min(v.get(r,0) for v in row if v is not None) for row in coeffs))
+    for kind in ('compute','W','X','acc','vector'):
+        total=sum(min(v.get((kind,c),0) for c,v in enumerate(row) if v is not None) for row in coeffs)
+        lows.append((total+len(d.cores)-1)//len(d.cores))
+    lower=max(lows);trace=[];spent=0.0
+    assert lower<=upper
+    for qi in range(queries):
+        if lower==upper or spent>=total_work:break
+        target=(lower+upper)//2;model=cp_model.CpModel();ns={};resources={}
+        for g,(_,ids) in enumerate(groups):
+            count=len(ids);i=ids[0];choices=[]
+            for c,co in enumerate(table[i]):
+                if co is None or deps[i][c]>target:continue
+                var=model.NewIntVar(0,count,f'n_{g}_{c}');ns[g,c]=var;choices.append(var)
+                for r,t in coeffs[i][c].items():
+                    if t:resources.setdefault(r,[]).append(t*var)
+                model.AddHint(var,sum(owner[j]==c for j in ids))
+            model.Add(sum(choices)==count)
+        for r,terms in resources.items():model.Add(sum(terms)+(constant if r=='hbm' else 0)<=target)
+        solver=cp_model.CpSolver();solver.parameters.num_search_workers=1;solver.parameters.random_seed=20261007;solver.parameters.linearization_level=2;solver.parameters.use_sat_inprocessing=False;solver.parameters.cp_model_presolve=True;solver.parameters.stop_after_first_solution=True;solver.parameters.max_deterministic_time=min(total_work/16,max(1e-12,total_work-spent))
+        status=solver.Solve(model);s=solver.StatusName(status);used=solver.ResponseProto().deterministic_time;spent+=used
+        row={'target':target,'status':('SAT' if status in (cp_model.OPTIMAL,cp_model.FEASIBLE) else 'UNSAT' if status==cp_model.INFEASIBLE else s),'cp_status':s,'lower_before':lower,'upper_before':upper,'deterministic_work':used}
+        if status in (cp_model.OPTIMAL,cp_model.FEASIBLE):
+            witness=[None]*len(table)
+            for g,(_,ids) in enumerate(groups):
+                cur=0
+                for c in range(len(d.cores)):
+                    if (g,c) not in ns:continue
+                    num=solver.Value(ns[g,c])
+                    for j in ids[cur:cur+num]:witness[j]=c
+                    cur+=num
+            upper=min(upper,obj(witness));owner=witness
+        elif status==cp_model.INFEASIBLE:lower=target+1
+        else:
+            row.update(lower_after=lower,upper_after=upper);trace.append(row);break
+        row.update(lower_after=lower,upper_after=upper);trace.append(row)
+    return {'owners':owner,'lower_ticks':lower,'upper_ticks':upper,'optimal':lower==upper,'status':'OPTIMAL' if lower==upper else 'FEASIBLE','trace':trace,'quantum':quantum,'total_work':total_work,'actual_deterministic_work':spent}
+
+
 def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters(),
                      *,max_seconds: float=10.0,quantum: float=1e-6) -> dict:
     """Exact integer assignment relaxation via enumeration or deterministic CP-SAT.
@@ -201,7 +276,9 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
     fabricates an assignment. Task types with identical costs are aggregated
     into integer counts; this preserves the assignment feasible set exactly.
     Grouped domains up to1,000,000 combinations use exact count enumeration;
-    larger domains retain CP-SAT at the same deterministic work limit.
+    larger domains use fixed-TCP-SAT SAT/UNSAT queries sharing the same
+    deterministic work limit. A nonclosed bracket staysFEASIBLE with an
+    explicit gap, neverOPTIMAL.
 
     ``max_seconds`` is a retained compatibility name for solver effort, NOT
     a wall-clock deadline: one effort unit maps to0.01 CP-SAT deterministic
@@ -242,80 +319,26 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
                     "visited_nodes":enum["visited_nodes"],"evaluated_leaves":enum["evaluated_leaves"],
                     "pruned_nodes":enum["pruned_nodes"]},
                 "scope":"exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule"}
-    grouped_costs=[table[ids[0]] for _,ids in groups]
-    # Bound the integer objective using a deterministic legal assignment.
-    greedy=[min((c for c,co in enumerate(row) if co is not None),
-                key=lambda c:(row[c].isolated_cycles,c)) for row in table]
-    upper=allocation_objective(workload,design,params,greedy)
-    upper_tick=max(1,math.ceil(upper/quantum)+n+1)
-    model=cp_model.CpModel()
-    T=model.NewIntVar(0,upper_tick,"T")
-    ns={}
-    resource_terms={}
-    for g,((_,ids),costrow) in enumerate(zip(groups,grouped_costs)):
-        count=len(ids)
-        choices=[]
-        for c,co in enumerate(costrow):
-            if co is None:
-                continue
-            var=model.NewIntVar(0,count,f"n_{g}_{c}")
-            ns[g,c]=var
-            choices.append(var)
-            used=model.NewBoolVar(f"used_{g}_{c}")
-            model.Add(var>=used)
-            model.Add(var<=count*used)
-            model.Add(T>=_down(co.dependency_floor,quantum)*used)
-            for r,service in _resource_services(co,design,c,params).items():
-                coeff=_down(service,quantum)
-                if coeff:
-                    resource_terms.setdefault(r,[]).append(coeff*var)
-        model.Add(sum(choices)==count)
-    for resource,terms in resource_terms.items():
-        constant=_down(_common_spill(workload)/params.hbm_bandwidth,quantum) if resource=="hbm" else 0
-        model.Add(sum(terms)+constant<=T)
-    model.Minimize(T)
-    solver=cp_model.CpSolver()
-    solver.parameters.num_search_workers=1
-    solver.parameters.random_seed=20261007
-    solver.parameters.max_deterministic_time=deterministic_limit
-    # Full linearization bounds the mixed-dataflow integer resource loads.
-    # The installed default level1 can spend minutes enumerating tick-sized
-    # objective improvements, even on three expert types at unchanged work.
-    solver.parameters.linearization_level=2
-    solver.parameters.cp_model_presolve=True
-    status_code=solver.Solve(model)
-    status=solver.StatusName(status_code)
-    if status_code not in (cp_model.OPTIMAL,cp_model.FEASIBLE):
-        # Greedy is a legal assignment of the relaxation; no completed
-        # optimal solve is claimed when timeout occurs before a witness.
-        owners=greedy
-        bound=max(0.0,solver.BestObjectiveBound())*quantum
-    else:
-        owners=[None]*n
-        for g,(_,ids) in enumerate(groups):
-            cursor=0
-            for c in range(len(design.cores)):
-                if (g,c) not in ns:
-                    continue
-                count=int(solver.Value(ns[g,c]))
-                for i in ids[cursor:cursor+count]:
-                    owners[i]=c
-                cursor+=count
-        assert all(c is not None for c in owners)
-        bound=max(0.0,solver.BestObjectiveBound())*quantum
-    # A FEASIBLE solver incumbent can retain slack in the objective T.
-    # Replay/gaps must use the actual physical resource load of the immutable
-    # owner witness, not that incidental solver variable value.
-    objective=allocation_objective(workload,design,params,owners)
-    return {"lb_cycles":bound,"owners":owners,"status":status,"quantum":quantum,
-            "objective_upper_cycles":objective,"optimal":status_code==cp_model.OPTIMAL,
+    bracket=_solve_fixed_t(workload,design,params,quantum,total_work=deterministic_limit,
+                           table=table,groups=groups)
+    objective=allocation_objective(workload,design,params,bracket["owners"])
+    bound=bracket["lower_ticks"]*quantum
+    backend="CP-SAT fixed-T feasibility bracket"
+    budget={**solver_budget,"selected_backend":backend,"enumeration_cap_combinations":1_000_000,
+            "query_policy":"at most64 fixed-T satisfaction queries; SATtightensUB, UNSATraisesLB; UNKNOWNkeepsopen",
+            "query_limit":64,"per_query_work_max":deterministic_limit/16,
+            "use_sat_inprocessing":False,"stop_after_first_solution":True,
+            "actual_deterministic_work":bracket["actual_deterministic_work"]}
+    return {"lb_cycles":bound,"owners":bracket["owners"],"status":bracket["status"],"quantum":quantum,
+            "objective_upper_cycles":objective,"optimal":bracket["optimal"],
             "assignment_gap_cycles":max(0.0,objective-bound),"aggregated_task_types":len(groups),
             "quantization_direction":"all resource/critical coefficients rounded down",
             "quantization_loss_bound_cycles":(n+1)*quantum,
             "storage_chunks":len(storage_chunks(workload)),"common_activation_spill_bytes":_common_spill(workload),
-            "solver_budget":{**solver_budget,"selected_backend":"CP-SAT","enumeration_cap_combinations":1_000_000},
-            "assignment_backend":"CP-SAT","solver_algorithm":"CP-SAT",
-            "scope":"exact quantized assignment/resource relaxation; not an optimal temporal schedule"}
+            "solver_budget":budget,"assignment_backend":backend,"solver_algorithm":backend,
+            "integer_objective_bracket":{"lower_ticks":bracket["lower_ticks"],"upper_ticks":bracket["upper_ticks"],
+                "closed":bracket["optimal"],"queries":bracket["trace"]},
+            "scope":"exact quantized assignment/resource relaxation; fixed-TCP SAT/UNSAT bracket, not an optimal temporal schedule"}
 
 
 def evaluate_design(workload: dict,design: Design,params: Parameters=Parameters(),
