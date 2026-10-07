@@ -6,6 +6,7 @@ from dataclasses import replace,asdict
 from concurrent.futures import ProcessPoolExecutor
 from .common import *
 from .predictors import Predictor
+from .oracle_replay import same_schedule_oracle
 from .model import shape_oracle, _task_cached
 from .optimizer import solve_assignment,evaluate_design
 
@@ -232,7 +233,7 @@ def e4(args):
 
 
 def e5(args):
-    data=inputs();dev=data['development'];ws=data['heldout'];sel=selection_file();dr=[];pr=[];states=[];taskrows=[]
+    data=inputs();dev=data['development'];ws=data['heldout'];sel=selection_file();dr=[];pr=[];states=[];taskrows=[];profile_pr=[];replay_rows=[]
     for mode in MODES:
       p=Parameters(onchip_mode=mode);ds=designs_from_selection(sel,mode)
       for name in ('best_hetero','fixed_4+2'):
@@ -253,22 +254,31 @@ def e5(args):
             dr.append({'design':name,'geometry':d.geometry,'onchip_mode':mode,'policy':policy,'batch':batch,
                 'threshold_tuned_on_dev':threshold,'geomean_ms':gmean(rr[i]['latency_ms'] for i in ids),
                 'ratio_vs_milp_sched':gmean(rr[i]['cycles']/baseline[i]['cycles'] for i in ids)})
-        predictor_results={};stats={}
-        for pname in ('random','static','btb','ema','ours','oracle'):
-          # Repeat complete warmup+heldout sequence with fresh identical initial state, not each individual learned window.
-          repeats=[]
-          for repeat in range(2):
-            predictor=Predictor(pname);warm=[];rr=[]
-            for w in dev:
-                warm.append(simulate(w,d,p,policy='eft',predictor=predictor))
-            for w in ws:
-                if pname=='oracle':
-                    # First pass profiles the same policy; its ownership may change on replay. Residual is measured.
-                    profile=simulate(w,d,p,policy='eft',predictor=predictor);predictor.absorb_profile(profile,w)
+        predictor_results={};stats={};ours_repeats=None
+        for pname in ('random','static','btb','ema','ours','oracle_profile_guided','oracle'):
+          # Two fresh whole sequences; conditional oracle physically replays
+          # the completed ours sequence, with its admitted action plan frozen.
+          if pname=='oracle':
+            assert ours_repeats is not None
+            repeats=[[same_schedule_oracle(plan,d,p) for plan in seq] for seq in ours_repeats]
+          else:
+            repeats=[]
+            for repeat in range(2):
+              predictor=Predictor('oracle' if pname=='oracle_profile_guided' else pname);warm=[];rr=[]
+              for w in dev:warm.append(simulate(w,d,p,policy='eft',predictor=predictor))
+              for w in ws:
+                if pname=='oracle_profile_guided':
+                    profile=simulate(w,d,p,policy='eft',predictor=predictor)
+                    predictor.absorb_profile(profile,w)
                 rr.append(simulate(w,d,p,policy='eft',predictor=predictor))
-            repeats.append(rr)
+              repeats.append(rr)
           assert canonical(repeats[0])==canonical(repeats[1]),'predictor sequence not reproducible'
+          if pname=='ours':ours_repeats=repeats
           rr=repeats[0];predictor_results[pname]=rr
+          if pname=='oracle':
+            for w,r in zip(ws,rr):
+                replay_rows.append({'design':name,'onchip_mode':mode,'window_id':w['id'],
+                                    'repeats':2,'fresh_ours_sequences_identical':True,**r['oracle_replay']})
           errors=[];success=0;late=0;stall=0;nnext=0
           for w,r in zip(ws,rr):
            for t in r['tasks']:
@@ -287,27 +297,39 @@ def e5(args):
                 'dataflow':d.flows[t['core']]})
           stats[pname]={'mae_pct':100*sum(errors)/len(errors),'success_pct':100*success/nnext if nnext else None,
             'late_pct':100*late/nnext if nnext else None,'stall_cycles':stall,'next_samples':nnext}
-          states.append({'design':name,'onchip_mode':mode,'predictor':pname,'predictor_state_bits':predictor.state_bits(),
+          states.append({'design':name,'onchip_mode':mode,'predictor':pname,'predictor_state_bits':None if pname=='oracle' else predictor.state_bits(),
             'task_fifo_bits':8*512,'core_current_next_bits':2*2*512,'credit_slot_scoreboard_bits':2*(32*5+8*16),
             'synthesized_area':None,'synthesized_fmax':None,'scope':'state estimate; excludes queues common to all policies'})
           print('E5',mode,name,pname,flush=True)
-        oracle=predictor_results['oracle'];ours=predictor_results['ours']
+        oracle=predictor_results['oracle'];ours=predictor_results['ours'];profile=predictor_results['oracle_profile_guided']
         for pname,rr in predictor_results.items():
-          pr.append({'design':name,'onchip_mode':mode,'predictor':pname,**stats[pname],
+          row={'design':name,'onchip_mode':mode,'predictor':pname,**stats[pname],
             'e2e_ratio_vs_oracle':gmean(r['cycles']/b['cycles'] for r,b in zip(rr,oracle)),
             'e2e_ratio_vs_ours':gmean(r['cycles']/b['cycles'] for r,b in zip(rr,ours)),
+            'e2e_ratio_vs_profile_guided':gmean(r['cycles']/b['cycles'] for r,b in zip(rr,profile)),
             'geomean_ms':gmean(r['latency_ms'] for r in rr),
-            'oracle_caveat':'profile-guided two-pass; changed ownership can leave residual error'})
+            'oracle_kind':'conditional_same_actual_schedule',
+            'oracle_caveat':'physical second-pass replay of frozen ours actions; accuracy reference, not an optimal or clairvoyant scheduler; roundoff error retained'}
+          if pname=='oracle_profile_guided':
+              row.update(oracle_kind='profile_guided_two_pass',
+                         normalization_oracle_kind='conditional_same_actual_schedule',
+                         oracle_caveat='two-pass profile-guided decisions may change ownership/prefetch; measured residual is retained; denominator is the frozen ours conditional replay')
+          (profile_pr if pname=='oracle_profile_guided' else pr).append(row)
     out=RESULTS_DIRECTORY/'E5';write_csv(out/'dispatch_table.csv',dr);write_csv(out/'predictor_table.csv',pr)
-    write_csv(out/'dispatcher_state_bits.csv',states);write_csv(out/'task_prediction_errors.csv',taskrows)
-    summary='# E5 在线派工与预测\n\n所有预测器先按同一18开发窗口序列预热，再按同一135留出窗口计数，两次完整序列一致。Runtime为8项候选窗、每核Current+Next最多2项，实际资源检查后绑定，支持等待；估计不能替代就绪/依赖检查。\n\n'
+    write_csv(out/'profile_guided_reference.csv',profile_pr)
+    write_csv(out/'oracle_replay_validation.csv',replay_rows)
+    write_csv(out/'dispatcher_state_bits.csv',[s for s in states if s['predictor']!='oracle_profile_guided'])
+    write_csv(out/'profile_guided_state_bits.csv',[s for s in states if s['predictor']=='oracle_profile_guided'])
+    write_csv(out/'task_prediction_errors.csv',[t for t in taskrows if t['predictor']!='oracle_profile_guided'])
+    write_csv(out/'profile_guided_task_errors.csv',[t for t in taskrows if t['predictor']=='oracle_profile_guided'])
+    summary='# E5 在线派工与预测\n\noracle是同一实际调度的条件时长参考：物理重放验证完成时间与HBM守恒，E2E与固定ours计划相同，不是全局最优派工上界。每窗口的重放最大时间误差、字节守恒、源码和计划哈希见oracle_replay_validation.csv。\n\n所有可实现预测器先按同一18开发窗口序列预热，再按同一135留出窗口计数，两次完整序列一致。Runtime为8项候选窗、每核Current+Next最多2项，实际资源检查后绑定，支持等待；估计不能替代就绪/依赖检查。\n\n'
     for mode in MODES:
      for name in ('best_hetero','fixed_4+2'):
       ss=[r for r in dr if r['design']==name and r['onchip_mode']==mode and r['batch']=='all'];a=next(r for r in ss if r['policy']=='threshold_2');b=next(r for r in ss if r['policy'].startswith('threshold_fallback'));eft=next(r for r in ss if r['policy']=='eft')
-      ps=[r for r in pr if r['design']==name and r['onchip_mode']==mode];best=min(ps,key=lambda r:r['geomean_ms']);worst=max(ps,key=lambda r:r['geomean_ms'])
+      ps=[r for r in pr if r['design']==name and r['onchip_mode']==mode and r['predictor']!='oracle'];best=min(ps,key=lambda r:r['geomean_ms']);worst=max(ps,key=lambda r:r['geomean_ms'])
       summary+=f"- {mode}/{name}: 纯阈值比回退慢{100*(a['geomean_ms']/b['geomean_ms']-1):.3f}%；EFT/MILP-LPT={eft['ratio_vs_milp_sched']:.5f}；预测器最好{best['predictor']}与最差{worst['predictor']}延迟相差{100*(worst['geomean_ms']/best['geomean_ms']-1):.3f}%。\n"
     finalize(out,command_for('E5',args),summary,
-        'MAE=平均|预测时长−实测时长|/实测时长。成功窗口为Current结束前两个权重块的近似计算服务时间；WS每块服务ceil(Me/PM)个M发射，OS/IS每次装入服务一个M发射。排除HBM/端口，不能称精确tile时序。late=第一块晚于Current结束；stall为暴露权重等待，不与端口占用相加。oracle是profile-guided参考而非同一固定调度的完美先知；此精确oracle协议尚未完成。状态账本仅为可量化状态，不声称综合面积。')
+        'MAE=平均|预测时长−实测时长|/实测时长。成功窗口为Current结束前两个权重块的近似计算服务时间；WS每块服务ceil(Me/PM)个M发射，OS/IS每次装入服务一个M发射。排除HBM/端口，不能称精确tile时序。late=第一块晚于Current结束；stall为暴露权重等待，不与端口占用相加。oracle在第二遍以共享HBM、私有端口和有限W槽重放ours第一遍的固定归属/绑定/预取/相位释放，重新算完成时间并核对，不强制写MAE=0；保留浮点残差。其E2E等于固定ours计划，不能作为完美预测派工的性能上界；未选择核的反事实时长不在此oracle定义内。旧两遍profile-guided先知另存profile_guided_reference.csv，允许残差与改变调度。状态账本仅为可量化状态，不声称综合面积。')
 
 
 def e6(args):
