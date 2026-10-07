@@ -249,7 +249,14 @@ def resume_command(e, mode, proof, args):
 
 def point_resume_command(e, kind, args):
     directory = e.path(f"results/E3/search_certificates/{kind}")
-    return ("for certificate in " + shlex.quote(str(directory)) + "/*.json; do\n"
+    archives = e.path(f"results/E3/certificate_archives/{kind}")
+    restore = ("# 新 checkout 先恢复原证书；现有完整原始目录保持不动\n" +
+               "if [ ! -d " + shlex.quote(str(directory)) + " ]; then\n" +
+               "  for archive in " + shlex.quote(str(archives)) + "/part_*.tar.gz; do\n" +
+               '    [ -f "$archive" ] || continue\n' +
+               '    tar -xzf "$archive" -C ' + shlex.quote(str(e.path("results/E3"))) + "\n" +
+               "  done\nfi\n")
+    return (restore + "for certificate in " + shlex.quote(str(directory)) + "/*.json; do\n"
             '  [ -f "$certificate" ] || continue\n'
             '  case "$certificate" in *_continued.json) continue;; esac\n'
             '  while [ -f "${certificate%.json}_continued.json" ]; do\n'
@@ -427,11 +434,10 @@ def delivery_status(e, args):
     checks["5.3"]["remaining"] = {"extreme_open_lower_bound_ms": verification.get("open_lb_ms"), "extreme_gap_pct": verification.get("gap_pct"),
                                      "grid_uncertified_points": len(grid) - certified_grid,
                                      "pointwise_bounds_and_gaps": "results/E3/workload_map.csv: open_lb_ms, gap_pct, proof_complete; exact open frontiers in search_certificates/grid/<point_index:04d>.json"}
-    checks["5.3"]["resume_commands"] = [f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage grid --jobs {args.jobs} --point-seconds {args.point_seconds}",
-                                              point_resume_command(e, "grid", args),
-                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.extreme --jobs {args.jobs} --max-evaluations 500 --point-seconds {args.point_seconds} --verify-seconds {args.resume_seconds}",
+    checks["5.3"]["resume_commands"] = [point_resume_command(e, "grid", args),
                                               "# 从 E3 目录提取原始完整精度检查点；workload_extreme.json 是派生摘要，不用它恢复\n" +
-                                              f"tar -xzf {shlex.quote(str(e.path('results/E3/certificate_archives/extreme_final/part_000.tar.gz')))} -C {shlex.quote(str(e.path('results/E3')))} cma_verification/final_delta0.json\n" +
+                                              f"if [ ! -f {shlex.quote(str(e.path('results/E3/cma_verification/final_delta0.json')))} ]; then\n" +
+                                              f"  tar -xzf {shlex.quote(str(e.path('results/E3/certificate_archives/extreme_final/part_000.tar.gz')))} -C {shlex.quote(str(e.path('results/E3')))} cma_verification/final_delta0.json\nfi\n" +
                                               f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.resume --certificate {shlex.quote(str(e.path('results/E3/cma_verification/final_delta0.json')))} --seconds {args.resume_seconds}"]
     checks["5.4"]["completed_scope"] = {"objective_rows": len(robust), "stability_rows": len(stability),
                                            "bootstrap_draw_counts": sorted({r.get("bootstrap_draws") for r in stability})}
@@ -455,9 +461,7 @@ def delivery_status(e, args):
         partial("5.5", "部分敏感性采样的硬件搜索未闭合，Sobol 是候选估计的指数")
     checks["5.5"]["remaining"] = {"pointwise_bounds_and_gaps": "results/E3/sobol_samples.csv: open_lb_ms, gap_pct, proof_complete; exact open frontiers in search_certificates/sobol/*.json and search_certificates/flip/*.json",
                                      "uncertified_Saltelli_samples": sum(not truth(r.get("proof_complete")) for r in sobol)}
-    checks["5.5"]["resume_commands"] = [f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage sobol --jobs {args.jobs} --point-seconds {args.point_seconds}",
-                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage flip --jobs {args.jobs} --point-seconds {args.point_seconds}",
-                                              point_resume_command(e, "sobol", args), point_resume_command(e, "flip", args)]
+    checks["5.5"]["resume_commands"] = [point_resume_command(e, "sobol", args), point_resume_command(e, "flip", args)]
     checks["6"]["completed_scope"] = {"main_table_rows": len(main), "modes": sorted({r.get("onchip_mode") for r in main}),
                                          "schedulers": sorted({r.get("sched_type") for r in main})}
     entries = (*BASELINES, "fixed_3+3", "fixed_4+2", "best_5+1", "best_4+2", "best_2+4", "best_hetero", "U1", "U2")
@@ -613,7 +617,7 @@ def render_report(e, status, args):
             add(4, f"{kind}{'（CP-SAT 分配见证的 LPT 可执行回放；非 OPTIMAL 状态不称最优分配）' if kind == 'milp' else ''}：各 batch 与 all 均为同一窗口集合的延迟几何平均 ms。")
             add(4, table(("条目", "冻结形状", *("B" + str(b) for b in BATCHES), "all ms"),
                          [(hardware_label(r["entry"], family_certified(e, mode, r["entry"])), r["design"], *(fmt(r.get("B" + str(b))) for b in BATCHES), fmt(r.get("all_geomean"))) for r in rr]))
-            add(4, table(("条目", "候选/B1", "候选/B2", "95% 速度降低下界 vs B1 %", "vs B2 %", "进入校准 5%"),
+            add(4, table(("条目", "候选/B1", "候选/B2", "95% 延迟降低下界 vs B1 %", "vs B2 %", "进入校准 5%"),
                          [(hardware_label(r["entry"], family_certified(e, mode, r["entry"])), fmt(r.get("ratio_vs_B1")), fmt(r.get("ratio_vs_B2")), fmt(r.get("ci95_low_vs_B1"), 2), fmt(r.get("ci95_low_vs_B2"), 2),
                            "诊断参考" if r["entry"] in ("U1", "U2") else "达到" if truth(r.get("gate_5pct_pass")) else "未达到") for r in rr]))
         best = selection.get("modes", {}).get(mode, {}).get("heterogeneous", {})
@@ -805,8 +809,11 @@ def render_report(e, status, args):
         dr = [r for r in dispatch if r.get("onchip_mode") == mode and r.get("batch") == "all"]
         pr = [r for r in predictors if r.get("onchip_mode") == mode]
         add(10, f"{mode}{'（非等资源参考）' if mode == 'fixed_issue' else ''}；B0/B1/B2 为 E4 主表冻结基线延迟上下文 ms，未补造基线预测器观测。")
-        add(10, table(("硬件", "分派", "开发最优 T", "ms", "比 MILP-LPT", "B0 ms", "B1 ms", "B2 ms"),
-                      [(hardware_label(r["design"]), r["policy"], r.get("threshold_tuned_on_dev"), fmt(r.get("geomean_ms")), fmt(r.get("ratio_vs_milp_sched")), *context) for r in dr]) if dr else "分派表尚缺。")
+        add(10, table(("硬件", "分派", "实际阈值 T", "ms", "比 MILP-LPT", "B0 ms", "B1 ms", "B2 ms"),
+                      [(hardware_label(r["design"]), r["policy"], "2" if r["policy"] == "threshold_2" else
+                        r.get("threshold_tuned_on_dev") if r["policy"].startswith("threshold_fallback") else
+                        "逐层自适应" if r["policy"] == "adaptive" else "不适用",
+                        fmt(r.get("geomean_ms")), fmt(r.get("ratio_vs_milp_sched")), *context) for r in dr]) if dr else "分派表尚缺。")
         add(10, table(("硬件", "预测器", "MAE %", "success %", "late %", "stall cycles", "E2E/oracle", "E2E/ours", "B0 ms", "B1 ms", "B2 ms"),
                       [(hardware_label(r["design"]), r["predictor"], *(fmt(r.get(k), 3) for k in ("mae_pct", "success_pct", "late_pct", "stall_cycles", "e2e_ratio_vs_oracle", "e2e_ratio_vs_ours")), *context) for r in pr]) if pr else "预测器表尚缺。")
         for name in ("best_hetero", "fixed_4+2"):
