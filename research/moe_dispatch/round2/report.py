@@ -359,6 +359,7 @@ def delivery_status(e, args):
     if {(r.get("onchip_mode"), r.get("proof")) for r in runs} != {(m, p) for m in MODES for p in ("A", "B")}:
         partial("5.1", "六个模式×证明 A/B 运行未全部记录")
     remaining = []
+    single_receipt = e.data("results/E3/single_exhaustion_receipt.json")
     for run in runs:
         result = run.get("result", {})
         families = result.get("families", {})
@@ -372,13 +373,15 @@ def delivery_status(e, args):
                    "open_frontiers": len(live), "open_lattice_points": sum(int(x.get("lattice_points", 0)) for x in live)}
             remaining.append(row)
             if not truth(data.get("proof_complete")) or number(data.get("coverage_pct")) != 100:
-                partial("5.1", f"{run.get('onchip_mode')}/{run.get('proof')}/{family} 仍有未剪区域，族最优未证明")
+                direct = single_receipt.get("modes", {}).get(run.get("onchip_mode"), {})
+                note = ("通用证书前沿仍开放；有限单核域另已直接穷举" if family == "single" and
+                        truth(direct.get("single_family_proof_complete")) else "仍有未剪区域，族最优未证明")
+                partial("5.1", f"{run.get('onchip_mode')}/{run.get('proof')}/{family} {note}")
         if not families:
             partial("5.1", f"{run.get('onchip_mode')}/{run.get('proof')} 缺少分族证明范围")
         if not truth(result.get("proof_complete")):
             checks["5.1"]["resume_commands"].append(resume_command(e, run.get("onchip_mode"), run.get("proof"), args))
     checks["5.1"]["remaining"] = {"family_frontiers": remaining}
-    single_receipt = e.data("results/E3/single_exhaustion_receipt.json")
     checks["5.1"]["completed_scope"]["direct_single_exhaustion"] = single_receipt
     gaps = e.rows("results/E3/schedule_gaps.csv")
     checks["5.2"]["completed_scope"] = {"rows": len(gaps), "expected_rows": 3 * 3 * (len(dev_ids) + len(held_ids)),
