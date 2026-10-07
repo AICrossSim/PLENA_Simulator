@@ -15,10 +15,12 @@ def main():
     target=folder/(a.label+'_'+stamp+'.json');log=folder/(a.label+'_'+stamp+'.log')
     env=os.environ.copy()
     for k in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS'):env[k]='1'
+    env['PYTHONHASHSEED']='20261007'
     rec={'label':a.label,'command':cmd,'started_utc':datetime.now(timezone.utc).isoformat(),
         'execution_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip(),
         'source_sha256':{p.name:sha(p) for p in sorted(ROOT.glob('*.py'))},
         'frozen_input_manifest_sha256':sha(ROOT/'results/E0/frozen_inputs.json'),
+        'environment':{k:env[k] for k in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','PYTHONHASHSEED')},
         'log':str(log.relative_to(ROOT)),'returncode':None}
     write_json(target,rec);start=time.monotonic()
     with log.open('w') as f:proc=subprocess.run(cmd,cwd=repo,env=env,stdout=f,stderr=subprocess.STDOUT)

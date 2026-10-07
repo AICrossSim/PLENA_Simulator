@@ -4,6 +4,7 @@
 
 ```bash
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+export PYTHONHASHSEED=20261007
 /tmp/plena-round2-venv/bin/python -m pytest research/moe_dispatch/round2/test_model.py research/moe_dispatch/round2/test_optimizer.py research/moe_dispatch/round2/test_search.py research/moe_dispatch/round2/test_robust.py -q
 /tmp/plena-round2-venv/bin/python -m research.moe_dispatch.round2.main_search --stage search --jobs 16 --search-seconds 120
 /tmp/plena-round2-venv/bin/python -m research.moe_dispatch.round2.main_search --stage validity --jobs 16
