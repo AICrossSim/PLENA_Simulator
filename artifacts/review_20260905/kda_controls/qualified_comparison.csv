@@ -1,0 +1,2 @@
+model,batch,tokens,seed,common_numeric_budget_passed,experimental_fp32_dot,timing_qualified,D_speedup_vs_B_qualified,scope
+kimi_k3_kda,1,2,20260903,False,False,False,,controlled packed VV explicit/static address reuse vs L_TILE; not historical Arlo replay

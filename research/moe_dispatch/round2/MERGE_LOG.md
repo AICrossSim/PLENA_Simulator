@@ -102,3 +102,62 @@
 - `transactional_emulator/testbench/aten/matrix_lcompute_execution_compare.py`：旧快照0e7effade1d4（659行）与当前583行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
 - `transactional_emulator/testbench/aten/matrix_lcompute_recurrence_test.py`：旧快照0e7effade1d4（647行）与当前647行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
 - `transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py`：旧快照0e7effade1d4（130行）与当前116行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：_comparison_row, _control_results, test_common_accuracy_is_required_before_publishing_a_speedup；旧接口不接回新ISA。合并后运行全套相关单测验证。
+
+- `research/projection-pipeline-20260928` `57d2b051aee4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `origin/research/projection-pipeline-20260928` `6ea7434697bc` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-layer-service` `b013406fa916` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-full-layer` `60d3dec21c47` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-analytic-v3` `db3e59afac35` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `local/moe-bottleneck-diagnostic-20260911` `da93c32a2203` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-output-pool-20260909` `582c1f9e11ef` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-refinement-20260909` `5d0ce828f8c5` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/matrix-sram-lcompute` `3b284f93752a` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/moe-dual-normal-20260905` `fe6768aac2e4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/matrix-lcompute-20260905` `44693edaf041` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `origin/review/moe-dual-normal-20260905` `ddcfae5d0f2f` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `archive/pr-116-before-mechanism-scope-20260905` `0e7effade1d4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `archive/pr-116-before-scope-cleanup-20260905` gitlink `PLENA_Compiler`：双方指针归档，暂保留当前指针；独立Compiler整合结束后统一更新。
+
+## archive/pr-116-before-scope-cleanup-20260905 (2cd96e29eb7c)
+
+- 使用 `git merge --no-ff --no-commit`；28 个冲突，双方版本已归档。
+- `README.md`：旧快照2cd96e29eb7c（399行）与当前185行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/matrix_lcompute_campaign.py`：旧快照2cd96e29eb7c（2759行）与当前2762行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/test_kda_stage_calibration.py`：旧快照2cd96e29eb7c（246行）与当前250行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/hybrid_lcompute_packet_v2/campaign.json`：旧快照2cd96e29eb7c（1行）与当前14446行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/hybrid_lcompute_paper2048_batch_v1/campaign.json`：旧快照2cd96e29eb7c（1行）与当前22449行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/hybrid_lcompute_paper2048_v1/campaign.json`：旧快照2cd96e29eb7c（1行）与当前14853行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/matrix_lcompute_agentic_v1/campaign.json`：旧快照2cd96e29eb7c（1行）与当前28247行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/matrix_lcompute_agentic_v2/campaign.json`：旧快照2cd96e29eb7c（1行）与当前44430行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/matrix_lcompute_e2e_v1/campaign.json`：旧快照2cd96e29eb7c（1行）与当前38559行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/matrix_lcompute_e2e_v5/campaign.json`：旧快照2cd96e29eb7c（1行）与当前260689行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `artifacts/matrix_lcompute_e2e_v6/campaign.json`：旧快照2cd96e29eb7c（1行）与当前263821行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `docs/MATRIX_LCOMPUTE_PRE_RTL_FREEZE_ZH.md`：旧快照2cd96e29eb7c（348行）与当前343行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `justfile`：旧快照2cd96e29eb7c（559行）与当前558行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/sram/src/matrix.rs`：旧快照2cd96e29eb7c（2390行）与当前2439行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/access.rs`：旧快照2cd96e29eb7c（1057行）与当前1093行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/dispatch.rs`：旧快照2cd96e29eb7c（2204行）与当前2334行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/mod.rs`：旧快照2cd96e29eb7c（122行）与当前132行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/mview.rs`：旧快照2cd96e29eb7c（260行）与当前268行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/mview_recurrence_tests.rs`：旧快照2cd96e29eb7c（2390行）与当前2337行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：execute_oversized_ltile_line, ltile_dot_reduce_rejects_a_column_wider_than_vlen, ltile_outer_update_rejects_a_row_wider_than_vlen, ltile_scale_accum_rejects_a_row_wider_than_vlen；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/matrix_machine.rs`：旧快照2cd96e29eb7c（941行）与当前1422行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/op.rs`：旧快照2cd96e29eb7c（1640行）与当前1742行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/runner.rs`：旧快照2cd96e29eb7c（423行）与当前461行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/runtime_config.rs`：旧快照2cd96e29eb7c（81行）与当前132行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/timing.rs`：旧快照2cd96e29eb7c（209行）与当前245行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/vector_machine.rs`：旧快照2cd96e29eb7c（1923行）与当前2249行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/aten/matrix_lcompute_execution_compare.py`：旧快照2cd96e29eb7c（659行）与当前583行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py`：旧快照2cd96e29eb7c（119行）与当前116行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。

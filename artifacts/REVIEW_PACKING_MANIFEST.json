@@ -1,0 +1,94 @@
+{
+  "scope": "Review-only JSON whitespace compaction; every parsed value is unchanged. CSV, summary JSON and GPU profiles are untouched.",
+  "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+  "files": [
+    {
+      "path": "artifacts/hybrid_lcompute_packet_v2/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "661006a94ee0184dd13c38be9371f9d9797349add8f0ff2af1d08722c73c4cce",
+      "review_sha256": "6a74292f243893fcb1254c1b311123c64f91c4026a43d4a4857b9a8ffad4fa6a",
+      "canonical_content_sha256": "28f2c88f67f909c13f3535f3b83fd769340c707d90992711df3bbee9af362c50",
+      "original_bytes": 531371,
+      "review_bytes": 319826,
+      "original_lines": 14446,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/hybrid_lcompute_paper2048_batch_v1/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "76ac1b2ff67eea7cd58119a5c7f6ab3f4a8fff78ad72cef1d98236140e5d8271",
+      "review_sha256": "8f40d15e3250f9c3c19bbc40bf3ef228d4201b75d21f540c632a65f6d046e452",
+      "canonical_content_sha256": "d24bc51f838f11fc03f4da84290ed8871747197f1ac575fad5d05475e4dd6d14",
+      "original_bytes": 802990,
+      "review_bytes": 491617,
+      "original_lines": 22449,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/hybrid_lcompute_paper2048_v1/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "8fe87427578f0f4c7837713703a9f55e240ecef7ba6a4ef9a5d41eccace85c2b",
+      "review_sha256": "c767c9fe30c33e32080ec8274dfa50ac33af14ce7012cfe6975c2972d0ba3cca",
+      "canonical_content_sha256": "4b97cf587b72c55c0bb83231905e6ef81ba376c6338e38260b8afff5bb17f15c",
+      "original_bytes": 543952,
+      "review_bytes": 327437,
+      "original_lines": 14853,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/matrix_lcompute_agentic_v1/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "a0a7c6e3eb144dce1fbf5fc07a2ae5a5537c6f9c550021f61e593ad715bfbb2a",
+      "review_sha256": "417a9a0d7adea2d2aee5ea82bf53d1c5eb9888c8d31530eef8b3823a1b078727",
+      "canonical_content_sha256": "b9bbd6686ca4a266e671a37653878672203311c75d5ba8e8a4f49c0735b1f727",
+      "original_bytes": 1090674,
+      "review_bytes": 698811,
+      "original_lines": 28247,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/matrix_lcompute_agentic_v2/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "e4625ab418a56ef4bae3978d8d50e8e42d30069ba86b51c86807dc16fedc640d",
+      "review_sha256": "b9419041d5416dc81a949bc88df7b821bdb591f8f2cafeccad16ca59d9defdd2",
+      "canonical_content_sha256": "cd7d897df3246f6a07726a323c9d0b46fbe05d8ea0b2212c00bd03db18de5441",
+      "original_bytes": 1704455,
+      "review_bytes": 1026055,
+      "original_lines": 44430,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/matrix_lcompute_e2e_v1/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "5fb3cd050b66b38bbd533486734e0a36d41a77d85f1f569a07fa125a458846d9",
+      "review_sha256": "dd0759c2b77ace13a2d7981e369e412b168703a2996e77b96386fb22ec2a9ff6",
+      "canonical_content_sha256": "7532a7762df88ae352e4efdb59e9a721d9e4650603fd2f0f67cc4ef4adddf709",
+      "original_bytes": 1412322,
+      "review_bytes": 765049,
+      "original_lines": 38559,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/matrix_lcompute_e2e_v5/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "db6fdd8e164dafa4d7e8739b218bf00bb6cfaf71dabdb74cadec19a6b70662d6",
+      "review_sha256": "891f3f66a494c9be28666db1158d13ea3a754dc25805dc43f79506c2ca60b0e8",
+      "canonical_content_sha256": "963bfe0555ed3865ac7d0b4c9a3f1e925e7364985f7d3977baf29d531a344e25",
+      "original_bytes": 12278279,
+      "review_bytes": 7472057,
+      "original_lines": 260689,
+      "review_lines": 1
+    },
+    {
+      "path": "artifacts/matrix_lcompute_e2e_v6/campaign.json",
+      "source_commit": "ad201c3953e15df0b49e1e8358af3937e96e1009",
+      "original_sha256": "83eb8c07ac32522e3f10522facb859596b90c229adb3152382c4f6edcf18deda",
+      "review_sha256": "eb247db14d989851fd2b4f7ccaf143a97dfd74538994fc87422a040a85312dd9",
+      "canonical_content_sha256": "ff94f35bd48db09280e3d6c6c751420d1682aafe55b513b4da3675325e21d4e5",
+      "original_bytes": 12390453,
+      "review_bytes": 7534805,
+      "original_lines": 263821,
+      "review_lines": 1
+    }
+  ]
+}
