@@ -903,6 +903,21 @@ def generate(root, destination, args):
     value["status"] = "部分完成" if value["missing_files"] else "完成"
     status["all_requested_sections_complete"] = all(x["status"] == "完成" for x in status["sections"].values()) and all(status["global_requirements"].values())
     report = render_report(e, status, args)
+    # Preserve exact proof payloads in E3; the delivery index must not embed
+    # duplicate megabytes of certificates, leaves and resumable frontiers.
+    compact_runs = []
+    for run in status["proof_runs"]:
+        result = {k: v for k, v in run.get("result", {}).items() if k not in ("certificate", "leaves", "resume", "families")}
+        result["families"] = {}
+        for family, value in run.get("result", {}).get("families", {}).items():
+            result["families"][family] = {k: v for k, v in value.items() if k != "open_regions"}
+            result["families"][family]["open_regions_count"] = len(value.get("open_regions", []))
+        relative = f"results/E3/bnb_{run['onchip_mode']}_{run['proof']}.json"
+        compact_runs.append({"onchip_mode": run["onchip_mode"], "proof": run["proof"], "result": result,
+                             "full_certificate_path": relative,
+                             "full_certificate_sha256": hashlib.sha256(e.path(relative).read_bytes()).hexdigest()})
+    status["proof_runs"] = compact_runs
+    status["proof_index_scope"] = "Compact delivery index. Complete certificate/leaves/resume/frontier payloads remain verbatim in the SHA-linked E3 files and portable archives."
     status["evidence_files"] = dict(sorted(e.files.items()))
     status["evidence_read_errors"] = list(e.errors)
     (destination / "REPORT_ZH.md").write_text(report)
