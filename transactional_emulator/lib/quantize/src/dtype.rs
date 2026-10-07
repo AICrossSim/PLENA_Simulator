@@ -112,16 +112,17 @@ impl FpType {
                 (exponent + ((new_exponent_mask - exponent_mask) >> 1), 0)
             }
             _ => {
-                // TODO: Needs to reimplment the underflow and overflow treatment.
-                let bias_diff = (exponent - new_exponent_mask) >> 1;
-                if exponent <= bias_diff {
+                let src_bias = (exponent_mask >> 1) as i32;
+                let dst_bias = (new_exponent_mask >> 1) as i32;
+                let dst_exponent = exponent as i32 - src_bias + dst_bias;
+                if dst_exponent <= 0 {
                     // Underflow: saturate to zero (subnormal)
                     (0, 0)
-                } else if exponent - bias_diff >= new_exponent_mask {
+                } else if dst_exponent >= new_exponent_mask as i32 {
                     // Overflow: saturate to infinity
                     (new_exponent_mask, 0)
                 } else {
-                    (exponent - bias_diff, 0)
+                    (dst_exponent as u32, 0)
                 }
             }
         };
@@ -215,6 +216,30 @@ fn test_f16() {
         ty.convert_bits_to_f32(f16::NEG_INFINITY.to_bits() as u32),
         f32::NEG_INFINITY
     );
+}
+
+#[test]
+fn test_e6m5_bias_conversion_from_f32() {
+    let ty = FpType {
+        sign: true,
+        exponent: 6,
+        mantissa: 5,
+    };
+
+    for (value, expected_bits) in [
+        (1.0, 0x03e0),
+        (-1.0, 0x0be0),
+        (31.0, 0x047e),
+        (2.0f32.powi(-30), 0x0020),
+        (2.0f32.powi(31), 0x07c0),
+        (2.0f32.powi(32), 0x07e0),
+    ] {
+        let bits = ty.bits_from_f32(value);
+        assert_eq!(bits, expected_bits, "E6M5 encoding for {value}");
+        if value.is_finite() && value.abs() <= 2.0f32.powi(31) {
+            assert_eq!(ty.convert_bits_to_f32(bits), value);
+        }
+    }
 }
 
 #[test]
