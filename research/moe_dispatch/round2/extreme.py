@@ -67,6 +67,7 @@ def _search_point(job):
 def run(args):
     import cma
     from .common import ROOT,inputs,write_json,write_csv,decode_design
+    from .regions import delta_intervals
     from .optimizer import search_workloads
     from .model import Parameters
     out=ROOT/"results/E3";ws=inputs();cal=json.loads((out/"synthetic_calibration.json").read_text())
@@ -98,7 +99,8 @@ def run(args):
             row={"evaluation":len(rows),**par,"delta_vs_single":value,"delta_vs_homo":b["geomean_ms"]/h["geomean_ms"]-1,
                  "best_single_ms":a["geomean_ms"],"best_hetero_ms":b["geomean_ms"],"best_homo_ms":h["geomean_ms"],
                  "single_design":json.dumps(a["design"],sort_keys=True),"hetero_design":json.dumps(b["design"],sort_keys=True),
-                 "proof_complete":result["proof_complete"],"gap_pct":result["gap_pct"],"full_domain_search":True}
+                 "proof_complete":result["proof_complete"],"gap_pct":result["gap_pct"],"full_domain_search":True,
+                 **delta_intervals(result)}
             rows.append(row);vals.append(value)
             write_json(out/"cma_certificates"/f"evaluation_{row['evaluation']:04d}.json",result)
             if best is None or value<best[0]:best=(value,par,w,p,result)
@@ -114,6 +116,7 @@ def run(args):
     write_csv(out/"workload_cma_evaluations.csv",rows)
     write_json(out/"workload_extreme.json",{"best_evaluated_workload_parameters":par,"workload":w,
         "delta_vs_single":b["geomean_ms"]/a["geomean_ms"]-1,"delta_vs_homo":b["geomean_ms"]/h["geomean_ms"]-1,
+        "family_optimum_delta_intervals":delta_intervals(exact),
         "requested_verification_delta":0,"verification_full_domain_certificate":exact,
         "distance_from_real":_distance(w,par,ws["development"]),"CMA_evaluations":len(rows),"max_allowed_evaluations":500,
         "CMA_stop":{str(k):str(v) for k,v in es.stop().items()},"continuous_parameter_projection":

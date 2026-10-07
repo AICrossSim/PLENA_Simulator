@@ -37,21 +37,40 @@ def me_hist(w):
     a+=1e-8;return a/a.sum()
 
 def calibration(dev):
-    # Fit the concentrated endpoint to SWE development captures, never heldout.
+    # Both endpoint targets are selected from development captures only.
     swe=[w for w in dev if 'swe' in w['id'].lower()]
     if not swe:raise ValueError('SWE development trace required')
-    def loss(logalpha):
-        alpha=math.exp(logalpha);values=[]
-        for j,w in enumerate(swe):
-            ref=me_hist(w);n=sum(not e['is_shared'] for e in w['experts']);pred=[]
-            for seed in range(8):
-                v=synthetic(w['batch'],alpha,2,64,6,1408,20261007+31*j+seed)
-                h=me_hist(v);dist=sum(not e['is_shared'] for e in v['experts'])
-                pred.append(np.sum(ref*np.log(ref/h))+(dist-n)**2/max(1,n*n))
-            values.append(np.mean(pred))
-        return float(np.mean(values))
-    fit=minimize_scalar(loss,bounds=(math.log(.003),math.log(100)),method='bounded',options={'xatol':.015})
-    lo=math.exp(fit.x);hi=100.0
+    cohorts={}
+    for w in dev:
+        name=w['id'].lower()
+        if 'swe' in name:continue
+        cohort=next((key for key in ('bfcl','gpqa') if key in name),
+                    'non_swe_mixed' if 'mixed' in name else 'other_development')
+        cohorts.setdefault(cohort,[]).append(w)
+    if not cohorts:raise ValueError('Non-SWE development trace required for diffuse endpoint')
+    def route_entropy(w):
+        counts=np.asarray([e['Me'] for e in w['experts'] if not e['is_shared']],dtype=float)
+        probs=counts/counts.sum()
+        ceiling=min(64,w['batch']*w.get('top_k',6))
+        return float(-np.sum(probs*np.log(probs))/math.log(ceiling))
+    scores={name:float(np.mean([route_entropy(w) for w in rows])) for name,rows in cohorts.items()}
+    diffuse_name=min(cohorts,key=lambda name:(-scores[name],name))
+    diffuse=cohorts[diffuse_name]
+    def fit_endpoint(windows):
+        def loss(logalpha):
+            alpha=math.exp(logalpha);values=[]
+            for j,w in enumerate(windows):
+                ref=me_hist(w);n=sum(not e['is_shared'] for e in w['experts']);pred=[]
+                for seed in range(8):
+                    v=synthetic(w['batch'],alpha,2,64,6,1408,20261007+31*j+seed)
+                    h=me_hist(v);dist=sum(not e['is_shared'] for e in v['experts'])
+                    pred.append(np.sum(ref*np.log(ref/h))+(dist-n)**2/max(1,n*n))
+                values.append(np.mean(pred))
+            return float(np.mean(values))
+        result=minimize_scalar(loss,bounds=(math.log(.003),math.log(100)),method='bounded',options={'xatol':.015})
+        return {'alpha':math.exp(result.x),'loss':float(result.fun),'source_ids':[w['id'] for w in windows]}
+    concentrated_fit=fit_endpoint(swe);diffuse_fit=fit_endpoint(diffuse)
+    lo=min(concentrated_fit['alpha'],diffuse_fit['alpha']);hi=max(concentrated_fit['alpha'],diffuse_fit['alpha'])
     levels=np.geomspace(hi,lo,5).tolist();rows=[]
     for w in dev:
         ref=me_hist(w);routed=sum(not e['is_shared'] for e in w['experts'])
@@ -61,7 +80,20 @@ def calibration(dev):
             rows.append({'window_id':w['id'],'batch':w['batch'],'concentration_level':level,'alpha':alpha,
                 'real_distinct':routed,'synthetic_mean_distinct':float(distinct),
                 'distinct_relative_error':float((distinct-routed)/routed),'me_hist_KL_real_to_synthetic':float(np.sum(ref*np.log(ref/meanhist)))})
-    return {'levels':levels,'concentrated_fit_loss':float(fit.fun),'fit_source_ids':[w['id'] for w in swe],
+    return {'levels':levels,'concentrated_fit_loss':concentrated_fit['loss'],'fit_source_ids':concentrated_fit['source_ids'],
+            'diffuse_fit_loss':diffuse_fit['loss'],'diffuse_fit_source_ids':diffuse_fit['source_ids'],
+            'endpoint_fits':{'concentrated_swe':concentrated_fit,'diffuse_development':diffuse_fit},
+            'fitted_endpoint_order_matches_expected':diffuse_fit['alpha']>=concentrated_fit['alpha'],
+            'selection_protocol':{'scope':'development only; no heldout input',
+                'diffuse_rule':'Highest cohort mean normalized routed-token entropy among non-SWE development cohorts; lexical tie break',
+                'entropy_normalization':'Shannon entropy of expert Me / total routed tokens, divided by log(min(64, batch * topk))',
+                'cohort_entropy_scores':scores,'selected_diffuse_cohort':diffuse_name,
+                'cohort_source_ids':{name:[w['id'] for w in windows] for name,windows in cohorts.items()},
+                'endpoint_label_scope':'Empirical diffuse and SWE fits; finite alpha does not assert exactly uniform routing',
+                'loss':'Mean across endpoint windows of KL(real Me histogram || synthetic histogram) plus squared relative distinct-count error',
+                'alpha_fit_bounds':[.003,100],'log_alpha_xatol':.015,
+                'fit_seed_rule':'20261007 + 31 * endpoint_window_index + draw_index',
+                'grid_level_order':'Five geometric levels from larger fitted alpha to smaller fitted alpha'},
             'fit_samples_per_window':8,'synthetic_draws_for_validation':16,'seed':20261007},rows
 
 
@@ -76,6 +108,33 @@ def _family(result,name):
     x=result.get('families',result.get('best',{})).get(name)
     if not x:return None
     return x
+
+def delta_intervals(result):
+    """Bound ratios of family optima using independently certified LB/U pairs."""
+    bounds={};fields={}
+    for family,label in (('single','single'),('heterogeneous','hetero'),('homogeneous','homo')):
+        row=_family(result,family) or {}
+        lower=row.get('certified_global_lb_ms');upper=row.get('geomean_ms')
+        lower=float(lower) if lower is not None else None
+        upper=float(upper) if upper is not None else None
+        if lower is not None and (not math.isfinite(lower) or lower<0):
+            raise ValueError('Invalid certified family lower bound')
+        if upper is not None and (not math.isfinite(upper) or upper<=0):
+            raise ValueError('Invalid family incumbent latency')
+        if lower is not None and upper is not None and lower>upper+max(1e-12,abs(upper)*1e-10):
+            raise ValueError('Certified family lower bound exceeds incumbent latency')
+        if lower is not None and upper is not None:lower=min(lower,upper)
+        bounds[family]=(lower,upper)
+        fields[label+'_certified_lb_ms']=lower
+        fields[label+'_incumbent_ms']=upper
+    lh,uh=bounds['heterogeneous']
+    for baseline,label in (('single','single'),('homogeneous','homo')):
+        lb,ub=bounds[baseline]
+        fields['delta_lower_vs_'+label+'_pct']=100*(lh/ub-1) if lh is not None and ub else None
+        fields['delta_upper_vs_'+label+'_pct']=100*(uh/lb-1) if uh is not None and lb else None
+    fields['candidate_delta_scope']='Incumbent ratio is a candidate estimate; family-optimum ratio lies in [LB_hetero / U_baseline, U_hetero / LB_baseline] when the displayed bounds exist'
+    return fields
+
 
 def grid(args):
     ws=inputs();cal,rows=calibration(ws['development']);out=ROOT/'results/E3'
@@ -105,7 +164,7 @@ def grid(args):
             'hetero_design':canonical(b['design']) if b else None,
             'proof_complete':res.get('proof_complete',False),'open_lb_ms':res.get('open_lb_ms'),
             'gap_pct':res.get('gap_pct'),'search_seconds':res.get('elapsed_seconds'),
-            'hypothetical_bw_override':True,'model_scope':'synthetic_only'}
+            'hypothetical_bw_override':True,'model_scope':'synthetic_only',**delta_intervals(res)}
         results.append(row)
         if len(results)%32==0:write_csv(out/'workload_map.csv',sorted(results,key=lambda r:int(r['point_index'])));print('grid',len(results),'/4320',flush=True)
     write_csv(out/'workload_map.csv',sorted(results,key=lambda r:int(r['point_index'])))
@@ -125,12 +184,15 @@ def _sobol_job(job):
     res['resume_workloads']=dev
     a=_family(res,'single');b=_family(res,'heterogeneous')
     write_json(ROOT/'results/E3/search_certificates/sobol'/f'{index:04d}.json',res)
+    interval=delta_intervals(res)
     return {'sample_index':index,'weight_tile_service_cycles':tau,'bank_Bpc':bank,'dotstagecycles':dot,'credits':int(round(credits)),
         'vector_scale':vector,'timing_model_sha256':p.timing_model_sha256,'delta':b['geomean_ms']/a['geomean_ms']-1,
         'single_ms':a['geomean_ms'],'hetero_ms':b['geomean_ms'],
         'single_design':canonical(a['design']),'hetero_design':canonical(b['design']),
         'proof_complete':res.get('proof_complete',False),'gap_pct':res.get('gap_pct'),
-        'open_lb_ms':res.get('open_lb_ms')}
+        'open_lb_ms':res.get('open_lb_ms'),**interval,
+        'delta_lower':interval['delta_lower_vs_single_pct']/100 if interval['delta_lower_vs_single_pct'] is not None else None,
+        'delta_upper':interval['delta_upper_vs_single_pct']/100 if interval['delta_upper_vs_single_pct'] is not None else None}
 
 
 def sobol(args):
@@ -164,6 +226,7 @@ def sobol(args):
         'parameter_class':'SensitivityParameters','timing_model_sha256':source_sha256(),
         'weight_tile_service_semantics':'Shared W frontend total bandwidth min(64 * bank_Bpc, 4096 / tau); per-core share w_banks / 64; datapath issue interval stays 1',
         'universal_W_bound_scope':'Ignores the extra frontend cap; remains conservative but may be looser',
+        'delta_interval_semantics':'True family-optimum H/S delta lies in [LB_H/U_S - 1, U_H/LB_S - 1]; delta_lower/delta_upper are fractions, *_pct fields are percentages',
         'certified_samples':sum(str(r['proof_complete']).lower()=='true' for r in rows)})
 
 
@@ -182,10 +245,13 @@ def flip(args):
     with ProcessPoolExecutor(max_workers=args.jobs) as pool:
       for i,res in pool.map(_flip_job,jobs,chunksize=1):
         key,value=metadata[i];a=_family(res,'single');b=_family(res,'heterogeneous')
+        interval=delta_intervals(res)
         defresult.append({'param':key,'value':value,'delta':b['geomean_ms']/a['geomean_ms']-1,
             'single_ms':a['geomean_ms'],'hetero_ms':b['geomean_ms'],'proof_complete':res['proof_complete'],
             'gap_pct':res['gap_pct'],'timing_model_sha256':source_sha256(),
-            'slice':'all other parameters frozen at main defaults'})
+            'slice':'all other parameters frozen at main defaults',**interval,
+            'delta_lower':interval['delta_lower_vs_single_pct']/100 if interval['delta_lower_vs_single_pct'] is not None else None,
+            'delta_upper':interval['delta_upper_vs_single_pct']/100 if interval['delta_upper_vs_single_pct'] is not None else None})
         write_json(out/'search_certificates/flip'/f'{i:03d}.json',res)
     write_csv(out/'flip_samples.csv',defresult)
     crossings=[]
@@ -210,6 +276,7 @@ def flip(args):
         'weight_tile_service_semantics':'Shared W frontend total bandwidth min(64 * bank_Bpc, 4096 / tau); per-core share w_banks / 64; datapath issue interval stays 1',
         'universal_W_bound_scope':'Ignores the extra frontend cap; remains conservative but may be looser',
         'slice':'All other parameters fixed at main defaults; tau defaults to 1 cycle',
+        'delta_interval_semantics':'True family-optimum H/S delta lies in [LB_H/U_S - 1, U_H/LB_S - 1]; delta_lower/delta_upper are fractions, *_pct fields are percentages',
         'boundary_scope':'Linear interpolation of evaluated candidate ratios; open certificates are not global family optima'})
 
 def _flip_job(job):
