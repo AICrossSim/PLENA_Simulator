@@ -75,6 +75,43 @@ def test_assignment_repeat_is_bit_identical():
     assert a==b
 
 
+@pytest.mark.parametrize("mode",["pipelined","port_tight","fixed_issue"])
+def test_exact_grouped_count_enum_matches_raw_owner_integer_bruteforce(mode):
+    ww=w((1,1,2,3,3));dd=d(("IS","WS"));pp=o.Parameters(onchip_mode=mode)
+    q=1e-6;table=o._costs(ww,dd,pp);best=None
+    for owners in itertools.product((0,1),repeat=len(ww["experts"])):
+        loads={"hbm":o._down(o._common_spill(ww)/pp.hbm_bandwidth,q)};dep=0
+        for i,c in enumerate(owners):
+            co=table[i][c];dep=max(dep,o._down(co.dependency_floor,q))
+            for r,t in o._resource_services(co,dd,c,pp).items():
+                loads[r]=loads.get(r,0)+o._down(t,q)
+        candidate=max([dep,*loads.values()]);best=candidate if best is None else min(best,candidate)
+    result=o._enumerate_assignment(ww,dd,pp,q)
+    assert result["objective_ticks"]==best
+    assert result["domain_combinations"]==3*2*3
+    assert result["evaluated_leaves"]>0
+    a=o.solve_assignment(ww,dd,pp);b=o.solve_assignment(ww,dd,pp)
+    assert a==b and a["status"]=="OPTIMAL"
+    assert a["assignment_backend"]=="exact_grouped_count_enumeration"
+    assert a["solver_budget"]["cp_sat_work_consumed"] is False
+
+
+def test_grouped_enum_cap_does_not_reduce_large_feasible_set():
+    ww=w(tuple(range(1,22)));dd=d();pp=o.Parameters()
+    assert o._enumerate_assignment(ww,dd,pp,max_combinations=1_000_000) is None
+    # A small explicit cap likewise returns control to CP-SAT, not a partial
+    # incumbent advertised as an exact result.
+    assert o._enumerate_assignment(w((1,2,3)),dd,pp,max_combinations=2) is None
+
+
+def test_grouped_enum_preserves_single_legal_core_and_cap_zero_rejects():
+    dd=o.Design((o.Core(1,2,64),o.Core(5,19,128)),flows=("IS","WS"),
+        x_bytes=(11*1024,1024));ww=w((1,2,3));pp=o.Parameters()
+    result=o._enumerate_assignment(ww,dd,pp)
+    assert result["domain_combinations"]==1 and result["owners"]==[0,0,0]
+    assert o.solve_assignment(ww,dd,pp)["owners"]==[0,0,0]
+
+
 def test_down_keeps_exact_integer_coefficients_and_floors_exact_binary_ratio():
     assert o._down(25088.,1e-6)==25088000000
     rng=random.Random(2461)

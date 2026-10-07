@@ -209,7 +209,10 @@ def _evaluate(d,workloads,p,max_seconds):
             "runtime_latencies_ms":[x["runtime"]["latency_ms"] for x in results],
             "lb_ms":[x["lb_cycles"]/1e6 for x in results],
             "allocations_optimal":all(x["assignment"]["optimal"] for x in results),
-            "repeat_identical":True,"parameters":asdict(p),"workload_sha256":_workload_hash(workloads),"engine_sha256":_engine_hash(),"schedule_objective":"CP-SAT assignment witness replayed by finite LPT streaming"},None
+            "allocation_statuses":[x["assignment"]["status"] for x in results],
+            "solver_algorithms":[x["assignment"].get("solver_algorithm","CP-SAT") for x in results],
+            "enumeration_state_counts":[x["assignment"].get("enumeration",{}) for x in results],
+            "repeat_identical":True,"parameters":asdict(p),"workload_sha256":_workload_hash(workloads),"engine_sha256":_engine_hash(),"schedule_objective":"exact integer-assignment witness replayed by finite LPT streaming"},None
 
 
 def _warmstarts(families):

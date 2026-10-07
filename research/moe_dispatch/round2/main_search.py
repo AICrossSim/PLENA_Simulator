@@ -40,6 +40,8 @@ def _point(job):
             'runtime_latencies_ms':[r['runtime']['latency_ms'] for r in first],
             'allocations_optimal':all(r['assignment']['optimal'] for r in first),
             'allocation_statuses':[r['assignment']['status'] for r in first],
+            'solver_algorithms':[r['assignment'].get('solver_algorithm','CP-SAT') for r in first],
+            'enumeration_state_counts':[r['assignment'].get('enumeration',{}) for r in first],
             'lb_ms':[r['lb_cycles']/1e6 for r in first],'repeat_identical':True,
             'parameters':asdict(p),'workload_sha256':_workload_hash(dev),'engine_sha256':_engine_hash()}
     except (ValueError,RuntimeError) as error:return {**meta,'invalid':str(error)}
@@ -211,19 +213,47 @@ def main_search(args):
         for mode in MODES for r in json.loads((out/f'seed_points_{mode}.json').read_text())])
 
 
+def _gap_job(job):
+    index,w,d,p,family=job
+    a=evaluate_design(w,d,p);b=evaluate_design(w,d,p)
+    assert canonical(a)==canonical(b),'gap replay mismatch: '+w['id']
+    return index,{'design':family,'geometry':d.geometry,'window_id':w['id'],'batch':w['batch'],
+        'onchip_mode':p.onchip_mode,'T_lb':a['lb_cycles']/1e6,
+        'T_milp_sched':a['milp_sched']['latency_ms'],'T_runtime_eft':a['runtime']['latency_ms'],
+        'gap_sched_pct':a['gap_sched_pct'],'gap_runtime_pct':a['gap_runtime_pct'],
+        'solver_status':a['assignment']['status'],
+        'solver_algorithm':a['assignment'].get('solver_algorithm','CP-SAT'),
+        'assignment_backend':a['assignment'].get('assignment_backend','CP-SAT'),
+        'enumeration_domain_combinations':a['assignment'].get('enumeration',{}).get('domain_combinations'),
+        'enumeration_visited_nodes':a['assignment'].get('enumeration',{}).get('visited_nodes'),'allocation_optimal':a['assignment']['optimal'],
+        'units':'ms','repeat_identical':True}
+
+
 def schedule_gaps(args):
-    dev=inputs()['development'];held=inputs()['heldout'];sel=json.loads((ROOT/'results/E3/FROZEN_SELECTION.json').read_text());rows=[]
+    dev=inputs()['development'];held=inputs()['heldout']
+    sel=json.loads((ROOT/'results/E3/FROZEN_SELECTION.json').read_text());jobs=[]
     for mode,m in sel['modes'].items():
       p=Parameters(onchip_mode=mode)
       for family in ('single','homogeneous','heterogeneous'):
         d=decode_design(m[family]['design'])
-        for w in dev+held:
-          a=evaluate_design(w,d,p);b=evaluate_design(w,d,p);assert canonical(a)==canonical(b)
-          rows.append({'design':family,'geometry':d.geometry,'window_id':w['id'],'batch':w['batch'],'onchip_mode':mode,
-            'T_lb':a['lb_cycles']/1e6,'T_milp_sched':a['milp_sched']['latency_ms'],'T_runtime_eft':a['runtime']['latency_ms'],
-            'gap_sched_pct':a['gap_sched_pct'],'gap_runtime_pct':a['gap_runtime_pct'],
-            'solver_status':a['assignment']['status'],'units':'ms'})
+        for w in dev+held:jobs.append((len(jobs),w,d,p,family))
+    completed={}
+    with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+      futures=[pool.submit(_gap_job,job) for job in jobs]
+      for future in as_completed(futures):
+        i,row=future.result();completed[i]=row
+        if len(completed)%90==0 or len(completed)==len(jobs):
+            print('schedule gaps',len(completed),'/',len(jobs),flush=True)
+    rows=[completed[i] for i in range(len(jobs))]
     write_csv(ROOT/'results/E3/schedule_gaps.csv',rows)
+    from collections import Counter
+    write_json(ROOT/'results/E3/schedule_gaps_protocol.json',{
+        'planned_cases':len(jobs),'completed_cases':len(rows),'repeats':2,
+        'development_windows':len(dev),'heldout_windows':len(held),'workers':args.jobs,
+        'solver_status_counts':dict(Counter(row['solver_status'] for row in rows)),
+        'repeat_identical':all(row['repeat_identical'] for row in rows),
+        'engine_sha256':_engine_hash(),
+        'scope':'fixed CP-SAT owner witness plus LPT finite replay; unresolved allocations remain flagged'})
 
 
 def main():

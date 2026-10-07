@@ -119,15 +119,89 @@ def allocation_objective(workload: dict,design: Design,params: Parameters,
     return max([single,*loads.values()],default=0.0)
 
 
+
+def _enumerate_assignment(workload,design,params,quantum=1e-6,max_combinations=1_000_000, *, table=None, groups=None):
+    """Exact deterministic enumeration of the quantized grouped-count model.
+
+    The full finite assignment feasible set is unchanged. Domains above the
+    frozen one-million-combination cap returnNone and retain CP-SAT. Safe
+    suffix minima prune only regions unable to beat a complete incumbent;
+    all resource coefficients use the identical exact binary-ratio floor.
+    An exact result certifies assignment/resources, never temporal schedule.
+    """
+    table=_costs(workload,design,params) if table is None else table
+    if any(all(co is None for co in row) for row in table):return None
+    groups=_group_tasks(workload,table) if groups is None else groups
+    counts=[len(ids) for _,ids in groups]
+    choices=[];resources=[];critical=[]
+    allkeys=set()
+    for (_,ids) in groups:
+        row=table[ids[0]];count=len(ids)
+        legal=[c for c,co in enumerate(row) if co is not None]
+        if len(row)==1:options=[(count,)]
+        elif len(legal)==1:options=[tuple(count if c==legal[0] else 0 for c in range(len(row)))]
+        else:options=[(a,count-a) for a in range(count+1)]
+        rr=[];cc=[]
+        for c,co in enumerate(row):
+            r={} if co is None else {key:_down(value,quantum) for key,value in _resource_services(co,design,c,params).items()}
+            rr.append(r);allkeys.update(r);cc.append(0 if co is None else _down(co.dependency_floor,quantum))
+        choices.append(options);resources.append(rr);critical.append(cc)
+    domain=math.prod(len(x) for x in choices)
+    if domain>max_combinations:return None
+    keys=sorted(allkeys,key=str);keyindex={k:i for i,k in enumerate(keys)};nr=len(keys)
+    # Group alternatives have exact integer demands. Suffix minima are legal
+    # independent optimistic bounds, not forced slow/fast owner decisions.
+    alternatives=[]
+    for g,options in enumerate(choices):
+        a=[]
+        for ns in options:
+            loads=[sum(ns[c]*resources[g][c].get(r,0) for c in range(len(ns))) for r in keys]
+            dep=max((critical[g][c] for c in range(len(ns)) if ns[c]),default=0)
+            a.append((ns,loads,dep))
+        alternatives.append(a)
+    suffix=[[0]*nr for _ in range(len(groups)+1)];deps=[0]*(len(groups)+1)
+    for g in reversed(range(len(groups))):
+        suffix[g]=[suffix[g+1][j]+min(a[1][j] for a in alternatives[g]) for j in range(nr)]
+        deps[g]=max(deps[g+1],min(a[2] for a in alternatives[g]))
+    initial=[0]*nr
+    if 'hbm' in keyindex:initial[keyindex['hbm']]=_down(_common_spill(workload)/params.hbm_bandwidth,quantum)
+    best=math.inf;bestchoices=None;nodes=0;leaves=0;pruned=0;counts_selected=[]
+    def visit(g,loads,dep):
+        nonlocal best,bestchoices,nodes,leaves,pruned
+        nodes+=1
+        lower=max([dep,deps[g],*(loads[j]+suffix[g][j] for j in range(nr))],default=0)
+        if lower>=best:
+            pruned+=1;return
+        if g==len(groups):
+            leaves+=1;best=lower;bestchoices=tuple(counts_selected);return
+        for ns,add,d in alternatives[g]:
+            counts_selected.append(ns)
+            visit(g+1,[loads[j]+add[j] for j in range(nr)],max(dep,d))
+            counts_selected.pop()
+    visit(0,initial,0)
+    owners=[None]*len(table)
+    for (_,ids),ns in zip(groups,bestchoices):
+        cursor=0
+        for c,num in enumerate(ns):
+            for i in ids[cursor:cursor+num]:owners[i]=c
+            cursor+=num
+    return {'owners':owners,'objective_ticks':int(best),'lb_cycles':int(best)*quantum,
+        'objective_upper_cycles':allocation_objective(workload,design,params,owners),
+        'domain_combinations':domain,'visited_nodes':nodes,'evaluated_leaves':leaves,
+        'pruned_nodes':pruned,'aggregated_task_types':len(groups),'group_counts':bestchoices}
+
+
 def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters(),
                      *,max_seconds: float=10.0,quantum: float=1e-6) -> dict:
-    """Exact integer assignment relaxation, solved with one deterministic worker.
+    """Exact integer assignment relaxation via enumeration or deterministic CP-SAT.
 
     Returns lb_cycles, owners, status, quantum, and explicit solver/gap scope.
     A work-limited FEASIBLE result uses BestObjectiveBound for its lower bound
     and the available assignment for executable replay. INFEASIBLE never
     fabricates an assignment. Task types with identical costs are aggregated
     into integer counts; this preserves the assignment feasible set exactly.
+    Grouped domains up to1,000,000 combinations use exact count enumeration;
+    larger domains retain CP-SAT at the same deterministic work limit.
 
     ``max_seconds`` is a retained compatibility name for solver effort, NOT
     a wall-clock deadline: one effort unit maps to0.01 CP-SAT deterministic
@@ -152,6 +226,22 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
         return {"lb_cycles":None,"owners":None,"status":"INFEASIBLE","quantum":quantum,
                 "optimal":False,"solver_budget":solver_budget,"scope":"an expert has no physically legal core"}
     groups=_group_tasks(workload,table)
+    enum=_enumerate_assignment(workload,design,params,quantum,table=table,groups=groups)
+    if enum is not None:
+        budget={**solver_budget,"kind":"exact_finite_enumeration","selected_backend":"exact_grouped_count_enumeration",
+                "enumeration_cap_combinations":1_000_000,"cp_sat_work_consumed":False}
+        return {"lb_cycles":enum["lb_cycles"],"owners":enum["owners"],"status":"OPTIMAL",
+                "quantum":quantum,"objective_upper_cycles":enum["objective_upper_cycles"],
+                "optimal":True,"assignment_gap_cycles":max(0.0,enum["objective_upper_cycles"]-enum["lb_cycles"]),
+                "aggregated_task_types":enum["aggregated_task_types"],
+                "quantization_direction":"all resource/critical coefficients rounded down",
+                "quantization_loss_bound_cycles":(n+1)*quantum,
+                "storage_chunks":len(storage_chunks(workload)),"common_activation_spill_bytes":_common_spill(workload),
+                "solver_budget":budget,"assignment_backend":"exact_grouped_count_enumeration","solver_algorithm":"exact_grouped_count_enumeration",
+                "enumeration":{"domain_combinations":enum["domain_combinations"],
+                    "visited_nodes":enum["visited_nodes"],"evaluated_leaves":enum["evaluated_leaves"],
+                    "pruned_nodes":enum["pruned_nodes"]},
+                "scope":"exact quantized assignment/resource relaxation; deterministic complete grouped-count search, not an optimal temporal schedule"}
     grouped_costs=[table[ids[0]] for _,ids in groups]
     # Bound the integer objective using a deterministic legal assignment.
     greedy=[min((c for c,co in enumerate(row) if co is not None),
@@ -223,7 +313,8 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
             "quantization_direction":"all resource/critical coefficients rounded down",
             "quantization_loss_bound_cycles":(n+1)*quantum,
             "storage_chunks":len(storage_chunks(workload)),"common_activation_spill_bytes":_common_spill(workload),
-            "solver_budget":solver_budget,
+            "solver_budget":{**solver_budget,"selected_backend":"CP-SAT","enumeration_cap_combinations":1_000_000},
+            "assignment_backend":"CP-SAT","solver_algorithm":"CP-SAT",
             "scope":"exact quantized assignment/resource relaxation; not an optimal temporal schedule"}
 
 
