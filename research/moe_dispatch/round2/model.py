@@ -447,6 +447,7 @@ def _one_layer(workload: dict, design: Design, params: Parameters, policy: str,
     costs, predicted, queues = {}, {}, [[] for _ in range(ncores)]
     availability = [0.0]*ncores
     bindings = []
+    binding_ready = {}
     rng = random.Random(params.seed)
     ctrl = 0.0
     order = list(range(len(es)))
@@ -505,6 +506,7 @@ def _one_layer(workload: dict, design: Design, params: Parameters, policy: str,
         bindings.append({"expert_index":i,"expert_id":es[i].get("id",i),"core":c,
                          "legal_cores":legal,"predicted_cycles":pred,"nominal_cycles":costs[i,c].isolated_cycles,"bind_cycle":ctrl,
                          "predicted_finish":availability[c]+pred})
+        binding_ready[i] = ctrl
         availability[c] += pred
         queues[c].append(i)
     # Only an eight-entry control window is installed. Layer descriptors live
@@ -634,6 +636,7 @@ def _one_layer(workload: dict, design: Design, params: Parameters, policy: str,
                     "nominal_cycles":costs[i,c].isolated_cycles,
                     "bind_cycle":ctrl,"predicted_finish":availability[c],"online":True,
                     "bounded_core_queue_depth":len(queues[c])-positions[c]})
+                binding_ready[i] = ctrl
                 if was_empty:
                     event(ctrl,"bound_ready",c,i,0)
                 else:
@@ -648,6 +651,12 @@ def _one_layer(workload: dict, design: Design, params: Parameters, policy: str,
             finishes[c]=at
             return
         i=queues[c][positions[c]]
+        # A queued Next descriptor can become the queue head while its
+        # serialized binding/ownership update is still in flight. Neither
+        # the cold HBM request nor task execution may precede that grant.
+        if at < binding_ready[i]:
+            event(binding_ready[i],"bound_ready",c,i,0)
+            return
         task_started[i]=at
         eta_end[i]=at+predicted[i,c]
         task_done_work[i]=0.0
@@ -738,7 +747,7 @@ def _one_layer(workload: dict, design: Design, params: Parameters, policy: str,
                     positions[c]+=1
                     next_i=queues[c][positions[c]] if positions[c]<len(queues[c]) else None
                     begin_task(c,at)
-                    if next_i is not None:
+                    if next_i is not None and next_i in tasks:
                         tasks[next_i]["current_end"]=at
                     try_bind(at)
             elif kind=="prefetch":
