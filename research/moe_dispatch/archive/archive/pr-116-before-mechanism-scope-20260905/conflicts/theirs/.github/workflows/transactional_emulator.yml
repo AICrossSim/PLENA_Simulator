@@ -1,0 +1,168 @@
+name: Transactional Emulator
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'docs/matrix_lcompute.md'
+      - 'PLENA_Tools/**'
+      # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
+      # stage-attribution guard below.
+      - 'PLENA_Compiler'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'docs/matrix_lcompute.md'
+      - 'PLENA_Tools/**'
+      - 'PLENA_Compiler'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Pinned: with `-D warnings`, a rolling channel reds unrelated PRs.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      # clippy compiles the workspace; torch-sys fetches ~200 MB per run.
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: clippy-${{ runner.os }}-1.97.1-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            clippy-${{ runner.os }}-1.97.1-
+
+      - name: Check formatting
+        working-directory: transactional_emulator
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        working-directory: transactional_emulator
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
+  # runs alongside the Rust jobs rather than behind them.
+  stage-attribution-guard:
+    name: MoE stage-attribution guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      # Named individually rather than by directory: most of `testbench/` needs
+      # torch and a built emulator. `test_every_guard_file_is_wired_into_ci`
+      # asserts this list stays complete.
+      - name: Run the testbench stage-attribution guard
+        run: |
+          python3 -m pytest \
+            transactional_emulator/testbench/test_testbench_stage_attribution.py \
+            transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            transactional_emulator/testbench/moe_timing/campaign/test_run_subset_gates.py \
+            -v
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build Rust emulator
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Run Rust tests
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release -- --test-threads=1"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run ATen linear integration test
+        run: |
+          nix develop --command bash -c "just test-aten-linear"
+
+      - name: Run routed-MoE substrate integration tests
+        run: |
+          nix develop --command bash -c "just test-routed-moe-topk && just test-routed-moe-clamp && just test-routed-moe-activation && just test-routed-moe-gate-up && just test-routed-moe-expert && just test-routed-moe-combine"
+
+
+      - name: Run shared-expert MoE and routing-policy tests
+        run: |
+          nix develop --command bash -c "just test-moe-shared-all"
+
+      # The only check that can catch a timing-model regression. It computed its
+      # verdict and threw it away until the exit code landed, and nothing ran it
+      # even then -- a gate nobody invokes is the same as no gate.
+      - name: Run emulator timing gates
+        run: |
+          nix develop --command bash -c "just test-timing-gates"
+
+
+      - name: Run Mamba-2 and KDA stage integration tests
+        run: |
+          nix develop --no-write-lock-file --command bash -c "just test-mamba2-all && just test-mamba2-reference && just test-kda-all"
+
+      - name: Run Matrix-SRAM Compiler-to-Rust integration
+        run: |
+          nix develop --no-write-lock-file --command just test-matrix-lcompute-integration PLENA_Compiler
+
+      - name: Run analytical operator regressions
+        run: |
+          nix develop --no-write-lock-file --command just test-perf-model

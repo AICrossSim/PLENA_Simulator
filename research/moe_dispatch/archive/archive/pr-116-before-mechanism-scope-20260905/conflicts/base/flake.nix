@@ -1,0 +1,232 @@
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    systems.url = "github:nix-systems/default-linux";
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+      inputs.systems.follows = "systems";
+    };
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = {
+    self,
+    nixpkgs,
+    flake-utils,
+    rust-overlay,
+    ...
+  } @ inputs: let
+    lib = nixpkgs.lib;
+  in
+    flake-utils.lib.eachDefaultSystem (system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ rust-overlay.overlays.default ];
+      };
+      rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        extensions = [ "rust-src" "rust-analyzer" ];
+      };
+      rustPlatform = pkgs.makeRustPlatform {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
+      llvm14 = pkgs.llvmPackages_14;
+
+      # Pre-fetch libtorch for tch-rs (torch-sys crate)
+      libtorch = pkgs.stdenv.mkDerivation {
+        pname = "libtorch";
+        version = "2.7.0";
+        src = pkgs.fetchzip {
+          url = "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcpu.zip";
+          hash = "sha256-8REMU+E0DZQDRUw1zx0K5oMqVsTBJ8g88dqnLpUfcjM=";
+        };
+        dontBuild = true;
+        installPhase = ''
+          mkdir -p $out
+          cp -r * $out/
+        '';
+      };
+    in rec {
+      # ---------- Formatter ----------
+      formatter = pkgs.alejandra;
+
+      # ---------- Packages ----------
+      packages =
+        let
+          customPkgs = if builtins.pathExists ./transactional_emulator/pkgs
+                      then import ./transactional_emulator/pkgs { inherit pkgs; }
+                      else {};
+        in customPkgs // rec {
+        # Build the transactional emulator as a Nix package
+        transactional-emulator = rustPlatform.buildRustPackage {
+          pname = "transactional-emulator";
+          version = "0.1.0";
+          src = pkgs.lib.cleanSource ./transactional_emulator;
+
+          # Use the Cargo.lock from the transactional_emulator subdir
+          cargoLock = {
+            lockFile = ./transactional_emulator/Cargo.lock;
+          };
+
+          # Add any system libraries your Rust crate needs
+          buildInputs = with pkgs; [
+            openssl
+            libtorch
+          ] ++ (if customPkgs ? ramulator2 then [ customPkgs.ramulator2 ] else []);
+
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+          ];
+
+          # Point torch-sys to pre-fetched libtorch
+          LIBTORCH = "${libtorch}";
+          LIBTORCH_CXX11_ABI = "1";
+
+          # Set up library paths for ramulator2
+          preBuild = if customPkgs ? ramulator2 then ''
+            export LD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:${libtorch}/lib:$LD_LIBRARY_PATH"
+            export LIBRARY_PATH="${customPkgs.ramulator2}/lib:${libtorch}/lib:$LIBRARY_PATH"
+          '' else ''
+            export LD_LIBRARY_PATH="${libtorch}/lib:$LD_LIBRARY_PATH"
+            export LIBRARY_PATH="${libtorch}/lib:$LIBRARY_PATH"
+          '';
+
+          # Set environment variables if needed
+          # RUSTFLAGS = "-C target-cpu=native";
+        };
+
+        # Make transactional-emulator the default package
+        default = transactional-emulator;
+      };
+
+      # ---------- Development Shells ----------
+      devShells =
+        let
+          customPkgs = if builtins.pathExists ./transactional_emulator/pkgs
+                      then import ./transactional_emulator/pkgs { inherit pkgs; }
+                      else {};
+        in {
+        default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            # Include ramulator2 from your custom packages
+            (if customPkgs ? ramulator2 then customPkgs.ramulator2 else null)
+
+            # --- C++ standard library (needed for PyTorch) ---
+            stdenv.cc.cc.lib
+
+            # --- Compilers / build tools ---
+            gcc
+            gnumake
+            cmake
+            ninja
+            pkg-config
+            autoconf
+            flex
+            bison
+            ccache
+            help2man
+
+            # --- LLVM/Clang (plus specific 14.x, if needed) ---
+            clang
+            llvmPackages.clang-unwrapped
+            llvmPackages.lld
+            clang-tools
+            llvm14.clang
+            llvm14.lld
+
+            # --- General dev / utils ---
+            git
+            wget
+            unzip
+            vim
+            htop
+            xdg-utils
+            parallel
+            just
+
+            # --- Crypto / SSL / IDN ---
+            openssl
+            libidn
+
+            # --- Performance / NUMA ---
+            gperftools
+            numactl
+
+            # --- Python ---
+            python312
+            python312Packages.pip
+            python312Packages.sphinx
+            python312Packages.pytorch
+            python312Packages.toml
+            python312Packages.tomlkit
+            python312Packages.bitstring
+            python312Packages.pyyaml
+            python312Packages.numpy
+            python312Packages.pydantic
+
+            # --- Math / BLAS / LAPACK / Fortran ---
+            openblas
+            lapack
+            gfortran
+
+            # --- Graphics / docs ---
+            graphviz
+
+            # --- Multimedia / FFmpeg (libavformat, libswscale) ---
+            ffmpeg
+
+            # --- SDL 1.2 + SDL2 stacks ---
+            SDL
+            SDL_image
+            SDL_mixer
+            SDL_ttf
+            smpeg
+            portmidi
+            SDL2
+            SDL2_image
+            SDL2_mixer
+            SDL2_ttf
+            xorg.libXtst
+          ];
+
+          nativeBuildInputs = with pkgs; [
+            rustToolchain
+            uv
+          ];
+
+          # Set up environment for ramulator2 and libtorch libraries
+          shellHook = let
+            ramulatorPath = if customPkgs ? ramulator2 then "${customPkgs.ramulator2}/lib" else "";
+            libtorchPath = "${libtorch}/lib";
+            stdcxxPath = "${pkgs.stdenv.cc.cc.lib}/lib";
+          in ''
+            export PYTHONPATH="$PWD:$PWD/tools:''${PYTHONPATH:-}"
+            # LIBTORCH is for Rust tch-rs crate builds only
+            export LIBTORCH="${libtorch}"
+            export LIBTORCH_CXX11_ABI="1"
+            # Note: libtorch is NOT added to LD_LIBRARY_PATH to avoid conflicts with Python's pytorch
+            export LD_LIBRARY_PATH="${stdcxxPath}:''${LD_LIBRARY_PATH:-}"
+            # LIBRARY_PATH is for compile-time linking (Rust builds)
+            export LIBRARY_PATH="${libtorchPath}:''${LIBRARY_PATH:-}"
+            ${if customPkgs ? ramulator2 then ''
+              export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
+              export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
+              export PKG_CONFIG_PATH="${ramulatorPath}/pkgconfig:$PKG_CONFIG_PATH"
+            '' else ""}
+
+            echo ">>> Toolchain versions:"
+            echo "Clang:        $(clang --version | head -n1 2>/dev/null || echo not found)"
+            echo "GCC:          $(gcc --version | head -n1 2>/dev/null || echo not found)"
+            echo "CMake:        $(cmake --version | head -n1 2>/dev/null || echo not found)"
+            echo "Python 3.12:  $(python3.12 --version 2>/dev/null || echo not found)"
+            echo "FFmpeg:       $(ffmpeg -version | head -n1 2>/dev/null || echo not found)"
+            echo "Ramulator2:   ${if customPkgs ? ramulator2 then "library at ${ramulatorPath}" else "not available"}"
+            echo "Libtorch:     ${libtorchPath}"
+          '';
+        };
+      };
+    });
+}
