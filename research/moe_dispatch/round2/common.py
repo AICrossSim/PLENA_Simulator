@@ -103,7 +103,7 @@ def finalize(directory,command,summary,extra=''):
     (directory/'README.md').write_text('# Reproducible round-two evidence\n\n'+
         f'Execution commit: `{commit}`. BF16 only. 1 hypothetical cycle = 1 ns; ms = cycles / 1e6.\n\n'+
         'Boundary: post-router MoE Gate/Up, SiLU/Z, Down, combine. Phase-fluid analytical estimates, not RTL/native HBM measurements.\n\n'+
-        'Command:\n```sh\n'+command+'\n```\n\nSource hashes:\n```json\n'+json.dumps(hashes,indent=2)+'\n```\n\n'+
+        'Command:\n```sh\nenv PYTHONHASHSEED=20261007 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 '+command+'\n```\n\nSource hashes:\n```json\n'+json.dumps(hashes,indent=2)+'\n```\n\n'+
         'Frozen input hashes:\n```json\n'+json.dumps(frozen['input_sha256'],indent=2)+'\n```\n\n'+extra+'\n')
     rows=[{'file':str(p.relative_to(directory)),'sha256':sha(p),'execution_commit':commit,
         'input_manifest_sha256':sha(ROOT/'results/E0/frozen_inputs.json')} for p in sorted(directory.rglob('*'))
