@@ -593,6 +593,8 @@ def render_report(e, status, args):
     add(5, f"下界合法性实际审计 {audit['lower_bound_checks']:,} 行、独立键 {audit['lower_bound_unique_checks']:,}，全部 ok={audit['all_lb_ok']}；要求 2,000 个具体设计×18 开发窗口。随机检查支持实现可信度，不能替代理论下界证明。")
     gaps = e.rows("results/E3/schedule_gaps.csv")
     grows = []
+    backend_counts = Counter(r.get("assignment_backend", "未记录") for r in gaps)
+    add(5, "内层求解的是同一个整数专家分配与资源约束问题：小型分配域使用完整精确枚举，较大域使用 CP-SAT；不改变量化精度、约束或模型。实际后端计数：`" + json.dumps(dict(backend_counts), ensure_ascii=False, sort_keys=True) + "`。表中的 MILP 表示这一分配问题及其见证回放，不表示求解了任意时序调度。")
     held = set(frozen.get("heldout_window_ids", []))
     for mode in MODES:
         for family in ("single", "homogeneous", "heterogeneous"):
