@@ -117,6 +117,52 @@
                       then import ./transactional_emulator/pkgs { inherit pkgs; }
                       else {};
         in {
+        # Reproducible cross-repository environment for Mamba-2 bring-up.
+        # Keep this shell intentionally small: the default shell also carries
+        # documentation, graphics, and multimedia dependencies unrelated to
+        # Compiler/Simulator/RTL correctness.
+        mamba = pkgs.mkShell {
+          packages = with pkgs; [
+            rustToolchain
+            gcc
+            gnumake
+            cmake
+            ninja
+            pkg-config
+            just
+
+            python312
+            python312Packages.pytorch
+            python312Packages.pytest
+            python312Packages.pyyaml
+            python312Packages.numpy
+            python312Packages.cocotb
+            python312Packages.bitstring
+            python312Packages.toml
+
+            verilator
+            iverilog
+            yosys
+            haskellPackages.sv2v
+          ] ++ lib.optional (customPkgs ? ramulator2) customPkgs.ramulator2;
+
+          LIBTORCH = "${libtorch}";
+          LIBTORCH_CXX11_ABI = "1";
+
+          shellHook = let
+            ramulatorPath = if customPkgs ? ramulator2 then "${customPkgs.ramulator2}/lib" else "";
+            libtorchPath = "${libtorch}/lib";
+          in ''
+            export PYTHONPATH="$PWD:''${PYTHONPATH:-}"
+            export LIBRARY_PATH="${libtorchPath}:''${LIBRARY_PATH:-}"
+            export LC_ALL=C.UTF-8
+            ${if customPkgs ? ramulator2 then ''
+              export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
+              export PKG_CONFIG_PATH="${ramulatorPath}/pkgconfig:''${PKG_CONFIG_PATH:-}"
+            '' else ""}
+          '';
+        };
+
         default = pkgs.mkShell {
           buildInputs = with pkgs; [
             # Include ramulator2 from your custom packages

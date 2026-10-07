@@ -1,0 +1,1193 @@
+{
+  "canonical_sha256": "09ca12098ad0c232f98de97bdfa145eddc27d06898d0b0f52c60ad14eed4ffc5",
+  "contract_name": "plena-nemotron3-mamba2",
+  "hardware_profiles": {
+    "rtl_fpga_mlen8": {
+      "blen": 4,
+      "hbm_address_registers": 8,
+      "hlen": 8,
+      "mamba_command_queues": 16,
+      "mamba_event_slots": 16,
+      "matrix_sram_rows": 1024,
+      "mlen": 8,
+      "vector_sram_rows": 1024,
+      "vlen": 8
+    },
+    "sim_reference_mlen64": {
+      "blen": 4,
+      "hbm_address_registers": 16,
+      "hlen": 16,
+      "mamba_command_queues": 16,
+      "mamba_event_slots": 256,
+      "matrix_sram_rows": 4096,
+      "mlen": 64,
+      "vector_sram_rows": 4194304,
+      "vlen": 64
+    }
+  },
+  "instruction": {
+    "bit_order": "lsb0",
+    "bits": 32,
+    "formats": {
+      "I18": [
+        [
+          "opcode",
+          0,
+          6
+        ],
+        [
+          "rd",
+          6,
+          4
+        ],
+        [
+          "rs1",
+          10,
+          4
+        ],
+        [
+          "imm",
+          14,
+          18
+        ]
+      ],
+      "I22": [
+        [
+          "opcode",
+          0,
+          6
+        ],
+        [
+          "rd",
+          6,
+          4
+        ],
+        [
+          "imm",
+          10,
+          22
+        ]
+      ],
+      "NONE": [],
+      "R": [
+        [
+          "opcode",
+          0,
+          6
+        ],
+        [
+          "rd",
+          6,
+          4
+        ],
+        [
+          "rs1",
+          10,
+          4
+        ],
+        [
+          "rs2",
+          14,
+          4
+        ]
+      ],
+      "R_FUNCT": [
+        [
+          "opcode",
+          0,
+          6
+        ],
+        [
+          "rd",
+          6,
+          4
+        ],
+        [
+          "rs1",
+          10,
+          4
+        ],
+        [
+          "rs2",
+          14,
+          4
+        ],
+        [
+          "rstride",
+          18,
+          4
+        ],
+        [
+          "funct1",
+          22,
+          4
+        ]
+      ],
+      "R_MASK": [
+        [
+          "opcode",
+          0,
+          6
+        ],
+        [
+          "rd",
+          6,
+          4
+        ],
+        [
+          "rs1",
+          10,
+          4
+        ],
+        [
+          "rs2",
+          14,
+          4
+        ],
+        [
+          "rmask",
+          18,
+          4
+        ]
+      ]
+    },
+    "funct_bits": 4,
+    "imm2_bits": 18,
+    "imm_bits": 22,
+    "opcode_bits": 6,
+    "operand_bits": 4
+  },
+  "mamba": {
+    "completion_record": {
+      "alignment_bytes": 64,
+      "elapsed_cycles_semantics": "cycles from command issue through globally visible output/state writes, or through terminal status determination for a pre-execution failure; excludes completion-record DMA",
+      "fields": [
+        [
+          "status",
+          0,
+          "u32"
+        ],
+        [
+          "completion_event",
+          4,
+          "u32"
+        ],
+        [
+          "elapsed_cycles",
+          8,
+          "u64"
+        ]
+      ],
+      "size_bytes": 16,
+      "status_values": {
+        "ADDRESS_ERROR": 4,
+        "EMPTY": 0,
+        "INTERNAL_ERROR": 255,
+        "INVALID_DESCRIPTOR": 2,
+        "STATE_HAZARD": 5,
+        "SUCCESS": 1,
+        "UNSUPPORTED_PROFILE": 3
+      }
+    },
+    "descriptor": {
+      "alignment_bytes": 64,
+      "endianness": "little",
+      "fields": [
+        [
+          "magic",
+          0,
+          "u32"
+        ],
+        [
+          "version",
+          4,
+          "u16"
+        ],
+        [
+          "size_bytes",
+          6,
+          "u16"
+        ],
+        [
+          "flags",
+          8,
+          "u32"
+        ],
+        [
+          "context_id",
+          12,
+          "u32"
+        ],
+        [
+          "sequence_length",
+          16,
+          "u32"
+        ],
+        [
+          "batch_size",
+          20,
+          "u32"
+        ],
+        [
+          "d_model",
+          24,
+          "u32"
+        ],
+        [
+          "d_inner",
+          28,
+          "u32"
+        ],
+        [
+          "num_heads",
+          32,
+          "u32"
+        ],
+        [
+          "head_dim",
+          36,
+          "u32"
+        ],
+        [
+          "state_dim",
+          40,
+          "u32"
+        ],
+        [
+          "groups",
+          44,
+          "u32"
+        ],
+        [
+          "chunk_size",
+          48,
+          "u32"
+        ],
+        [
+          "conv_kernel",
+          52,
+          "u32"
+        ],
+        [
+          "precision_policy",
+          56,
+          "u32"
+        ],
+        [
+          "rms_norm_eps_f32_bits",
+          60,
+          "u32"
+        ],
+        [
+          "input_addr",
+          64,
+          "u64"
+        ],
+        [
+          "output_addr",
+          72,
+          "u64"
+        ],
+        [
+          "in_proj_weight_addr",
+          80,
+          "u64"
+        ],
+        [
+          "in_proj_bias_addr",
+          88,
+          "u64"
+        ],
+        [
+          "conv_weight_addr",
+          96,
+          "u64"
+        ],
+        [
+          "conv_bias_addr",
+          104,
+          "u64"
+        ],
+        [
+          "a_log_addr",
+          112,
+          "u64"
+        ],
+        [
+          "d_skip_addr",
+          120,
+          "u64"
+        ],
+        [
+          "norm_weight_addr",
+          128,
+          "u64"
+        ],
+        [
+          "out_proj_weight_addr",
+          136,
+          "u64"
+        ],
+        [
+          "out_proj_bias_addr",
+          144,
+          "u64"
+        ],
+        [
+          "ssm_state_addr",
+          152,
+          "u64"
+        ],
+        [
+          "conv_state_addr",
+          160,
+          "u64"
+        ],
+        [
+          "scratch_addr",
+          168,
+          "u64"
+        ],
+        [
+          "completion_addr",
+          176,
+          "u64"
+        ],
+        [
+          "dt_bias_addr",
+          184,
+          "u64"
+        ],
+        [
+          "input_batch_stride",
+          192,
+          "u32"
+        ],
+        [
+          "input_token_stride",
+          196,
+          "u32"
+        ],
+        [
+          "output_batch_stride",
+          200,
+          "u32"
+        ],
+        [
+          "output_token_stride",
+          204,
+          "u32"
+        ],
+        [
+          "state_request_stride",
+          208,
+          "u32"
+        ],
+        [
+          "state_head_stride",
+          212,
+          "u32"
+        ],
+        [
+          "conv_request_stride",
+          216,
+          "u32"
+        ],
+        [
+          "scratch_bytes",
+          220,
+          "u32"
+        ],
+        [
+          "dependency_event",
+          224,
+          "u32"
+        ],
+        [
+          "completion_event",
+          228,
+          "u32"
+        ],
+        [
+          "layer_id",
+          232,
+          "u32"
+        ],
+        [
+          "dt_min_f32_bits",
+          236,
+          "u32"
+        ],
+        [
+          "dt_max_f32_bits",
+          240,
+          "u32"
+        ],
+        [
+          "d_mlp",
+          244,
+          "u32"
+        ],
+        [
+          "reserved3",
+          248,
+          "u64"
+        ]
+      ],
+      "magic": 843205968,
+      "size_bytes": 256,
+      "version": 1
+    },
+    "descriptor_flags": {
+      "CONTINUE_STATE": 0,
+      "PROFILE": 2,
+      "WRITE_COMPLETION": 1
+    },
+    "events": {
+      "completion": "a command with a valid envelope and successful event reservation publishes completion_event after terminal output/state writes and any requested completion DMA attempt; validation and execution failures publish, while pre-envelope and reservation failures do not",
+      "completion_dma_failure": "a denied or corrupt completion DMA returns INTERNAL_ERROR but still publishes an already-reserved terminal event after the failed attempt is acknowledged",
+      "delivery": "one-shot; one dependency consumes the completed event and permits ID reuse",
+      "dependency": "producer must be issued before its consumer; unknown dependency_event is STATE_HAZARD",
+      "envelope": "descriptor bytes must be readable and the magic, version, size, and reserved header fields valid before completion or event fields are trusted",
+      "namespace": "global within one Mamba engine",
+      "no_event": 4294967295,
+      "reservation": "after a valid envelope, dependency consumption and completion_event reservation precede terminal publication; reservation failure returns STATE_HAZARD, may write a safe completion record, and publishes no event"
+    },
+    "isa_operands": {
+      "funct1": "Mamba sub-operation",
+      "rd": "GP register containing context_id; must equal descriptor.context_id",
+      "rs1": "GP register containing descriptor byte offset",
+      "rs2": "HBM address-register index containing descriptor base; portable range is 0..7",
+      "rstride": "4-bit command queue id immediate; it is not a GP register"
+    },
+    "precision_policies": {
+      "BF16_ACTIVATION_FP32_STATE": {
+        "accumulator": "fp32",
+        "activation": "bf16",
+        "output_storage": "bf16",
+        "reduction": "fp32",
+        "state": "fp32",
+        "transcendental": "fp32",
+        "value": 1,
+        "weight": "bf16"
+      },
+      "FP32_REFERENCE": {
+        "accumulator": "fp32",
+        "activation": "fp32",
+        "output_storage": "fp32",
+        "reduction": "fp32",
+        "state": "fp32",
+        "transcendental": "fp32",
+        "value": 0,
+        "weight": "fp32"
+      }
+    },
+    "state_layout": {
+      "address_unit": "byte",
+      "baseline_dtype": "fp32",
+      "conv": "request,conv_channel,conv_kernel",
+      "conv_channel": "d_inner + 2 * groups * state_dim",
+      "conv_contiguous_dimension": "conv_kernel",
+      "layer_addressing": "descriptor state base addresses already select one layer; layer_id is an identity and hazard key",
+      "ssm": "request,head,head_dim,state_dim",
+      "ssm_contiguous_dimension": "state_dim"
+    },
+    "subops": {
+      "PREFILL": 0,
+      "STATE_RESET": 2,
+      "STEP": 1,
+      "WAIT": 3
+    },
+    "tensor_layouts": {
+      "a_log": "head",
+      "conv_bias": "conv_channel",
+      "conv_weight": "conv_channel,conv_kernel",
+      "d_skip": "head",
+      "dt_bias": "head",
+      "in_proj_bias": "projection",
+      "in_proj_weight": "projection,d_model",
+      "input": "batch,sequence,d_model",
+      "norm_weight": "d_inner",
+      "out_proj_bias": "d_model",
+      "out_proj_weight": "d_model,d_inner_plus_d_mlp",
+      "output": "batch,sequence,d_model"
+    }
+  },
+  "model_profiles": {
+    "mamba_rtl_smoke": {
+      "chunk_size": 8,
+      "conv_channels": 80,
+      "conv_kernel": 4,
+      "d_inner": 16,
+      "d_mlp": 0,
+      "d_model": 16,
+      "groups": 2,
+      "head_dim": 8,
+      "num_heads": 2,
+      "projection_size": 98,
+      "state_dim": 16
+    },
+    "nemotron3_nano_mamba2": {
+      "chunk_size": 128,
+      "conv_channels": 6144,
+      "conv_kernel": 4,
+      "conv_state_bytes_per_layer_request": 98304,
+      "d_inner": 4096,
+      "d_mlp": 0,
+      "d_model": 2688,
+      "dt_max_f32_bits": 2139095040,
+      "dt_min_f32_bits": 0,
+      "groups": 8,
+      "head_dim": 64,
+      "num_heads": 64,
+      "projection_size": 10304,
+      "rms_norm_eps_f32_bits": 925353388,
+      "state_bytes_per_layer_request": 2097152,
+      "state_dim": 128,
+      "state_dtype": "fp32"
+    }
+  },
+  "model_sources": {
+    "nemotron3_nano_mamba2": {
+      "config": "config.json",
+      "implementation": "modeling_nemotron_h.py",
+      "repository": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+      "revision": "2d59de1cbd51c0adf384eb906b766d1aee0e0517"
+    }
+  },
+  "opcodes": [
+    {
+      "class": "invalid",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "NONE",
+      "name": "INVALID_OPCODE",
+      "value": 0
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_MM",
+      "value": 1
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_TMM",
+      "value": 2
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_BMM",
+      "value": 3
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_BTMM",
+      "value": 4
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I22",
+      "name": "M_BMM_WO",
+      "value": 5
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "M_MM_WO",
+      "value": 6
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_MV",
+      "value": 7
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_TMV",
+      "value": 8
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_BMV",
+      "value": 9
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "M_BTMV",
+      "value": 10
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I22",
+      "name": "M_MV_WO",
+      "value": 11
+    },
+    {
+      "class": "matrix",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I22",
+      "name": "M_BMV_WO",
+      "value": 12
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_ADD_VV",
+      "value": 13
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_ADD_VF",
+      "value": 14
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_SUB_VV",
+      "value": 15
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_FUNCT",
+      "name": "V_SUB_VF",
+      "value": 16
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_MUL_VV",
+      "value": 17
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_MUL_VF",
+      "value": 18
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_EXP_V",
+      "value": 19
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_RECI_V",
+      "value": 20
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_RED_SUM",
+      "value": 21
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_RED_MAX",
+      "value": 22
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_ADD_FP",
+      "value": 23
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_SUB_FP",
+      "value": 24
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_MAX_FP",
+      "value": 25
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_MUL_FP",
+      "value": 26
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_EXP_FP",
+      "value": 27
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_RECI_FP",
+      "value": 28
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_SQRT_FP",
+      "value": 29
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "S_LD_FP",
+      "value": 30
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "S_ST_FP",
+      "value": 31
+    },
+    {
+      "class": "scalar_fp",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "S_MAP_V_FP",
+      "value": 32
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_ADD_INT",
+      "value": 33
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "S_ADDI_INT",
+      "value": 34
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_SUB_INT",
+      "value": 35
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "S_MUL_INT",
+      "value": 36
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I22",
+      "name": "S_LUI_INT",
+      "value": 37
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "S_LD_INT",
+      "value": 38
+    },
+    {
+      "class": "scalar_int",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I18",
+      "name": "S_ST_INT",
+      "value": 39
+    },
+    {
+      "class": "memory",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_FUNCT",
+      "name": "H_PREFETCH_M",
+      "value": 40
+    },
+    {
+      "class": "memory",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_FUNCT",
+      "name": "H_PREFETCH_V",
+      "value": 41
+    },
+    {
+      "class": "memory",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_FUNCT",
+      "name": "H_STORE_V",
+      "value": 42
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "C_SET_ADDR_REG",
+      "value": 43
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "C_SET_SCALE_REG",
+      "value": 44
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "C_SET_STRIDE_REG",
+      "value": 45
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "C_SET_V_MASK_REG",
+      "value": 46
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "I22",
+      "name": "C_LOOP_START",
+      "value": 47
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "C_LOOP_END",
+      "value": 48
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler"
+      ],
+      "format": "R",
+      "name": "V_PS_V",
+      "value": 49
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "V_SHFT_V",
+      "value": 50
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "rtl",
+        "compiler"
+      ],
+      "format": "R",
+      "name": "C_HADAMARD_TRANSFORM",
+      "value": 51
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "NONE",
+      "name": "C_BREAK",
+      "value": 52
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_MAX_VF",
+      "value": 53
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_MIN_VF",
+      "value": 54
+    },
+    {
+      "class": "vector",
+      "declared_by": [
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_MASK",
+      "name": "V_TOPK",
+      "value": 55
+    },
+    {
+      "class": "control",
+      "declared_by": [
+        "compiler",
+        "simulator"
+      ],
+      "format": "R",
+      "name": "C_SET_TOPK_REG",
+      "value": 56
+    },
+    {
+      "class": "mamba",
+      "declared_by": [
+        "rtl",
+        "compiler",
+        "simulator"
+      ],
+      "format": "R_FUNCT",
+      "name": "X_MAMBA",
+      "value": 57
+    }
+  ],
+  "schema_version": 2
+}
