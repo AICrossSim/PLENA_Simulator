@@ -1,0 +1,131 @@
+{
+  "projection_scatter_contract": {
+    "contract": "plena.projection_scatter",
+    "version": 1,
+    "transport": "l-scatter-m-v1-plus-lowered-trace-debug-view",
+    "isa_opcode": 63,
+    "semantics": {
+      "fifo": "L_SCATTER_M applies the descriptor FIFO and buffering policy to Matrix writeback values.",
+      "spill": "Materialized values retain fallback_vram_addr while the physical bank mapping is explicit.",
+      "replay": "X_STATE consumes the staged physical layout only after the matching L_SCATTER_M command.",
+      "layout": "The bank mapping is encoded by an L_SCATTER_M descriptor and remains absent from X_STATE descriptors.",
+      "skew_kinds": "none, local_row_stride, field_constant, group_stride"
+    },
+    "sha256": "813f75fc7145bdf0d3454f6e1e33a1c314bb75be3cdce9f2bbe57cc444810c6b"
+  },
+  "projection_scatters": [
+    {
+      "event_index": 4,
+      "operation": "PROJECTION_SCATTER",
+      "plan": {
+        "algorithm": "kda",
+        "phase": "decode",
+        "context_id": 0,
+        "request_id": 0,
+        "layer_id": 0,
+        "token_offset": 0,
+        "valid_tokens": 1,
+        "activation_bytes": 2,
+        "source_input_features": 7168,
+        "source_values_per_token": 49248,
+        "source_projections": 5,
+        "layout": "group_major_skewed",
+        "banks": 16,
+        "ports_per_bank": 1,
+        "groups": 96,
+        "group_span_values": 528,
+        "physical_values_per_token": 50688,
+        "physical_buffer_index": 0,
+        "physical_buffer_base_row": 0,
+        "physical_token_stride_rows": 3168,
+        "physical_buffer_rows": 50688,
+        "fallback_vram_addr": 0,
+        "fallback_token_stride": 49280,
+        "flow": "buffered",
+        "fifo_capacity_values": 64,
+        "producer_burst_values": 64,
+        "spill_write_values_per_cycle": 16,
+        "spill_policy": "always",
+        "head_lanes": 8,
+        "head_dim_lanes": 4,
+        "state_dim_lanes": 8,
+        "fields": [
+          {
+            "name": "q",
+            "producer": "qkv_projection",
+            "consumer": "state",
+            "source_offset": 0,
+            "values_per_group": 128,
+            "physical_offset": 0,
+            "physical_span": 128,
+            "local_rows": 1,
+            "local_lanes": 128,
+            "group_shared": false,
+            "skew_kind": "none",
+            "skew_stride": 0
+          },
+          {
+            "name": "k",
+            "producer": "qkv_projection",
+            "consumer": "state",
+            "source_offset": 12288,
+            "values_per_group": 128,
+            "physical_offset": 128,
+            "physical_span": 128,
+            "local_rows": 1,
+            "local_lanes": 128,
+            "group_shared": false,
+            "skew_kind": "field_constant",
+            "skew_stride": 8
+          },
+          {
+            "name": "v",
+            "producer": "qkv_projection",
+            "consumer": "state",
+            "source_offset": 24576,
+            "values_per_group": 128,
+            "physical_offset": 256,
+            "physical_span": 128,
+            "local_rows": 1,
+            "local_lanes": 128,
+            "group_shared": false,
+            "skew_kind": "none",
+            "skew_stride": 0
+          },
+          {
+            "name": "decay",
+            "producer": "decay_beta_projection",
+            "consumer": "state",
+            "source_offset": 36864,
+            "values_per_group": 128,
+            "physical_offset": 384,
+            "physical_span": 128,
+            "local_rows": 1,
+            "local_lanes": 128,
+            "group_shared": false,
+            "skew_kind": "none",
+            "skew_stride": 0
+          },
+          {
+            "name": "beta",
+            "producer": "decay_beta_projection",
+            "consumer": "state",
+            "source_offset": 49152,
+            "values_per_group": 1,
+            "physical_offset": 512,
+            "physical_span": 16,
+            "local_rows": 1,
+            "local_lanes": 1,
+            "group_shared": false,
+            "skew_kind": "group_stride",
+            "skew_stride": 1
+          }
+        ],
+        "contract": "plena.projection_scatter",
+        "version": 1,
+        "padding_values_per_token": 1440,
+        "mapping_sha256": "b69dd435727f3a3beb668b3314ae7845a45c8456b1ef7ae6fdc36cf3c5364bbe"
+      }
+    }
+  ]
+}

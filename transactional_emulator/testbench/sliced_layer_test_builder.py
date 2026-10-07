@@ -240,10 +240,49 @@ def _load_to_vector_fp(tensor: torch.Tensor, hbm_precision, vector_precision) ->
     return quantize_to_vector_fp(quantize_to_mxfp(tensor, hbm_precision), vector_precision)
 
 
-def _rms_norm_vector_ref(x: torch.Tensor, eps: float, precision) -> torch.Tensor:
-    x_q = quantize_to_vector_fp(x, precision)
-    rms = quantize_to_vector_fp(torch.rsqrt(x_q.float().pow(2).mean(-1, keepdim=True) + eps), precision)
-    return quantize_to_vector_fp(x_q * rms, precision)
+def _rms_norm_vector_ref(
+    x: torch.Tensor,
+    eps: float,
+    precision,
+    *,
+    vlen: int | None = None,
+) -> torch.Tensor:
+    """Reference RMSNorm, optionally mirroring every ISA rounding point.
+
+    Existing model goldens retain the historical aggregate expression when
+    ``vlen`` is omitted.  Passing ``vlen`` selects the hardware-accurate path:
+    the ISA squares in vector precision, reduces one VLEN chunk at a time into
+    a scalar FP register, then executes multiply, add, sqrt, and reciprocal as
+    separately rounded scalar instructions.  Those boundaries matter for
+    Kimi's 512-wide MLA latent.
+    """
+
+    def qvfp(value: torch.Tensor) -> torch.Tensor:
+        return quantize_to_vector_fp(value, precision)
+
+    x_q = qvfp(x)
+    if vlen is None:
+        rms = qvfp(torch.rsqrt(x_q.float().pow(2).mean(-1, keepdim=True) + eps))
+        return qvfp(x_q * rms)
+
+    hidden = x_q.shape[-1]
+    chunk = vlen
+    if chunk <= 0 or hidden % chunk:
+        raise ValueError(f"RMSNorm reference requires hidden={hidden} to be divisible by vlen={chunk}")
+
+    accumulator = torch.zeros_like(x_q[..., :1])
+    for start in range(0, hidden, chunk):
+        values = x_q[..., start : start + chunk]
+        squares = qvfp(values * values)
+        accumulator = qvfp(accumulator + squares.float().sum(dim=-1, keepdim=True))
+
+    reciprocal_hidden = qvfp(torch.as_tensor(1.0 / hidden, device=x_q.device))
+    epsilon = qvfp(torch.as_tensor(eps, device=x_q.device))
+    mean_square = qvfp(accumulator * reciprocal_hidden)
+    mean_square = qvfp(mean_square + epsilon)
+    root = qvfp(torch.sqrt(mean_square))
+    reciprocal_root = qvfp(torch.reciprocal(root))
+    return qvfp(x_q * reciprocal_root)
 
 
 # ---------------------------------------------------------------------------

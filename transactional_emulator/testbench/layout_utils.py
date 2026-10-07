@@ -4,9 +4,39 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import torch
+
+
+def read_bf16_vram_matrix(
+    path: Path,
+    *,
+    address: int,
+    rows: int,
+    width: int,
+    physical_rows: int,
+    mlen: int,
+) -> torch.Tensor:
+    """Read a column-block-major BF16 matrix from a raw VRAM dump."""
+    result = torch.empty(rows, width, dtype=torch.bfloat16)
+    with path.open("rb") as stream:
+        for row in range(rows):
+            blocks = []
+            for column_block in range(math.ceil(width / mlen)):
+                element_offset = (
+                    address + column_block * physical_rows * mlen + row * mlen
+                )
+                stream.seek(element_offset * 2)
+                raw = stream.read(mlen * 2)
+                if len(raw) != mlen * 2:
+                    raise AssertionError("VRAM dump ended inside a matrix row")
+                blocks.append(
+                    torch.frombuffer(bytearray(raw), dtype=torch.bfloat16).clone()
+                )
+            result[row] = torch.cat(blocks)[:width]
+    return result
 
 
 def _materialize(value: Any) -> Any:

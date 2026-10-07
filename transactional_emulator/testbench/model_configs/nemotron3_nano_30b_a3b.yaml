@@ -1,0 +1,58 @@
+# NVIDIA Nemotron 3 Nano 30B-A3B BF16.
+# Pinned workload facts mirror the public HuggingFace config; weights are not required.
+
+model_id: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+nickname: nemotron3-nano
+trust_remote_code: true
+family: nemotron3_nano
+
+architecture:
+  text:
+    hidden_size: 2688
+    inter_dim: 1856
+    num_heads: 32
+    num_kv_heads: 2
+    head_dim: 128
+    num_layers: 52
+    rope_theta: 10000
+    rms_norm_eps: 1.0e-5
+    vocab_size: 131072
+    model_type: nemotron_h
+    layer_pattern: MEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEMEM*EMEMEMEME
+    mamba:
+      num_heads: 64
+      head_dim: 64
+      state_dim: 128
+      groups: 8
+      conv_kernel: 4
+      chunk_size: 128
+      cache_dtype: float32
+    moe:
+      num_experts: 128
+      experts_per_token: 6
+      intermediate_size: 1856
+      shared_experts: 1
+      shared_intermediate_size: 3712
+
+# This preset matches the current analytic configuration's attention geometry.
+# It is a design point, not a claim about an implemented FPGA configuration.
+hardware:
+  mode: analytic
+  mlen: 2048
+  vlen: 2048
+  blen: 128
+  batch_size: 1
+  hlen: 128
+  broadcast: 16
+  mram_tile_capacity: 64
+
+hardware_presets:
+  analytic_2048x2048x128_b1:
+    mode: analytic
+    mlen: 2048
+    vlen: 2048
+    blen: 128
+    batch_size: 1
+    hlen: 128
+    broadcast: 16
+    mram_tile_capacity: 64

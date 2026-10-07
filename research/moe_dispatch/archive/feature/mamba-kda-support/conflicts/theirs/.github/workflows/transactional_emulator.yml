@@ -1,0 +1,187 @@
+name: Transactional Emulator
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'PLENA_Tools/**'
+      # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
+      # stage-attribution guard below.
+      - 'PLENA_Compiler'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'justfile'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'PLENA_Tools/**'
+      - 'PLENA_Compiler'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'justfile'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analytic-and-reference:
+    name: Common-state analytic and numerical reference tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # CPU-only: workload arithmetic, profile contracts, DSE, and numerical
+      # references need neither CUDA nor a model checkpoint.
+      - name: Install lightweight test dependencies
+        run: |
+          python3 -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install pytest numpy toml pydantic pyyaml
+
+      - name: Run common-state Python guards
+        run: |
+          python3 -m pytest -q -rs \
+            analytic_models/performance \
+            analytic_models/reference \
+            transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
+            transactional_emulator/testbench/test_x_state_contract_sync.py
+
+  rust-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Native ramulator/libtorch libraries and the pinned Rust toolchain come
+      # from the flake. Bare cargo cannot link all-target clippy.
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      # clippy compiles the workspace; torch-sys fetches ~200 MB per run.
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: clippy-${{ runner.os }}-${{ hashFiles('flake.lock', 'transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            clippy-${{ runner.os }}-
+
+      - name: Check formatting
+        run: nix develop --command bash -c "cd transactional_emulator && cargo fmt --all -- --check"
+
+      - name: Run clippy
+        run: nix develop --command bash -c "cd transactional_emulator && cargo clippy --workspace --all-targets -- -D warnings"
+
+  # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
+  # runs alongside the Rust jobs rather than behind them.
+  stage-attribution-guard:
+    name: MoE stage-attribution guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      # Named individually rather than by directory: most of `testbench/` needs
+      # torch and a built emulator. `test_every_guard_file_is_wired_into_ci`
+      # asserts this list stays complete.
+      - name: Run the testbench stage-attribution guard
+        run: |
+          python3 -m pytest \
+            transactional_emulator/testbench/test_testbench_stage_attribution.py \
+            transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            transactional_emulator/testbench/moe_timing/campaign/test_run_subset_gates.py \
+            -v
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build Rust emulator
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Run Rust tests
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run ATen linear integration test
+        run: |
+          nix develop --command bash -c "just test-aten-linear"
+
+      - name: Run routed-MoE substrate integration tests
+        run: |
+          nix develop --command bash -c "just test-routed-moe-topk && just test-routed-moe-clamp && just test-routed-moe-activation && just test-routed-moe-gate-up && just test-routed-moe-expert && just test-routed-moe-combine"
+
+
+      - name: Run shared-expert MoE and routing-policy tests
+        run: |
+          nix develop --command bash -c "just test-moe-shared-all"
+
+      # One chained case per model covers Matrix/Vector handoff, L_SCATTER_M,
+      # X_STATE, residual ownership, and routed/shared expert execution.
+      - name: Run hybrid connected numerical smoke tests
+        run: |
+          nix develop --command bash -c "just test-kimi3-connected --stage chain && \
+            just test-kimi3-kda-connected --stage kda_attnres_moe && \
+            just test-nemotron3-mamba-connected --stage mamba_moe"
+
+      # The only check that can catch a timing-model regression. It computed its
+      # verdict and threw it away until the exit code landed, and nothing ran it
+      # even then -- a gate nobody invokes is the same as no gate.
+      - name: Run emulator timing gates
+        run: |
+          nix develop --command bash -c "just test-timing-gates"

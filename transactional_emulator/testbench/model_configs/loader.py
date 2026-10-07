@@ -21,6 +21,68 @@ _CONFIG_DIR = Path(__file__).parent
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class MambaArchConfig:
+    num_heads: int
+    head_dim: int
+    state_dim: int
+    groups: int
+    conv_kernel: int
+    chunk_size: int
+    cache_dtype: str = "float32"
+
+    def __post_init__(self) -> None:
+        for name in ("num_heads", "head_dim", "state_dim", "groups", "conv_kernel", "chunk_size"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"Mamba {name} must be positive")
+        if self.num_heads % self.groups:
+            raise ValueError("Mamba num_heads must be divisible by groups")
+
+    @property
+    def d_inner(self) -> int:
+        return self.num_heads * self.head_dim
+
+    @property
+    def heads_per_group(self) -> int:
+        return self.num_heads // self.groups
+
+    @property
+    def conv_channels(self) -> int:
+        return self.d_inner + 2 * self.groups * self.state_dim
+
+    @property
+    def projection_size(self) -> int:
+        # Nemotron 3 Nano has d_mlp=0: [gate, x/B/C, dt].
+        return self.d_inner + self.conv_channels + self.num_heads
+
+    @property
+    def state_elements(self) -> int:
+        return self.num_heads * self.head_dim * self.state_dim
+
+
+@dataclass(frozen=True)
+class MoeArchConfig:
+    num_experts: int
+    experts_per_token: int
+    intermediate_size: int
+    shared_experts: int
+    shared_intermediate_size: int
+
+    def __post_init__(self) -> None:
+        for name in (
+            "num_experts",
+            "experts_per_token",
+            "intermediate_size",
+            "shared_intermediate_size",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"MoE {name} must be positive")
+        if self.shared_experts < 0:
+            raise ValueError("MoE shared_experts must be non-negative")
+        if self.experts_per_token > self.num_experts:
+            raise ValueError("MoE experts_per_token cannot exceed num_experts")
+
+
 @dataclass
 class ModelArchConfig:
     hidden_size: int
@@ -33,10 +95,36 @@ class ModelArchConfig:
     rms_norm_eps: float
     vocab_size: int | None = None
     model_type: str = "llama"
+    layer_pattern: str | None = None
+    mamba: MambaArchConfig | None = None
+    moe: MoeArchConfig | None = None
+
+    def __post_init__(self) -> None:
+        if self.layer_pattern is None:
+            return
+        if len(self.layer_pattern) != self.num_layers:
+            raise ValueError(f"layer_pattern length ({len(self.layer_pattern)}) != num_layers ({self.num_layers})")
+        invalid = sorted(set(self.layer_pattern) - {"M", "E", "*", "-"})
+        if invalid:
+            raise ValueError(f"unsupported layer_pattern symbols: {invalid}")
+        if "M" in self.layer_pattern and self.mamba is None:
+            raise ValueError("layer_pattern contains Mamba layers but no Mamba config")
+        if "E" in self.layer_pattern and self.moe is None:
+            raise ValueError("layer_pattern contains MoE layers but no MoE config")
 
     @property
     def gqa_ratio(self) -> int:
         return self.num_heads // self.num_kv_heads
+
+    @property
+    def layer_types(self) -> list[str]:
+        if self.layer_pattern is None:
+            return ["attention"] * self.num_layers
+        names = {"M": "mamba", "E": "moe", "*": "attention", "-": "mlp"}
+        return [names[symbol] for symbol in self.layer_pattern]
+
+    def count_layers(self, layer_type: str) -> int:
+        return self.layer_types.count(layer_type)
 
     @classmethod
     def from_hf_config(cls, hf_config: Any) -> ModelArchConfig:
@@ -56,17 +144,49 @@ class ModelArchConfig:
         if kv_heads is None:
             kv_heads = getattr(cfg, "n_kv_heads", heads)
 
+        layer_pattern = getattr(cfg, "hybrid_override_pattern", None)
+        mamba = None
+        if layer_pattern and "M" in layer_pattern:
+            mamba = MambaArchConfig(
+                num_heads=int(cfg.mamba_num_heads),
+                head_dim=int(cfg.mamba_head_dim),
+                state_dim=int(cfg.ssm_state_size),
+                groups=int(getattr(cfg, "n_groups", getattr(cfg, "mamba_n_groups", 1))),
+                conv_kernel=int(getattr(cfg, "conv_kernel", getattr(cfg, "mamba_d_conv", 4))),
+                chunk_size=int(getattr(cfg, "chunk_size", getattr(cfg, "mamba_chunk_size", 128))),
+                cache_dtype=str(getattr(cfg, "mamba_ssm_cache_dtype", "float32")),
+            )
+
+        moe = None
+        if layer_pattern and "E" in layer_pattern:
+            moe = MoeArchConfig(
+                num_experts=int(cfg.n_routed_experts),
+                experts_per_token=int(cfg.num_experts_per_tok),
+                intermediate_size=int(cfg.moe_intermediate_size),
+                shared_experts=int(getattr(cfg, "n_shared_experts", 0)),
+                shared_intermediate_size=int(
+                    getattr(cfg, "moe_shared_expert_intermediate_size", cfg.moe_intermediate_size)
+                ),
+            )
+
         return cls(
             hidden_size=hidden,
             inter_dim=inter,
             num_heads=heads,
             num_kv_heads=kv_heads,
-            head_dim=hidden // heads,
+            head_dim=int(getattr(cfg, "head_dim", hidden // heads)),
             num_layers=getattr(cfg, "num_hidden_layers", getattr(cfg, "n_layers", 0)),
             rope_theta=getattr(cfg, "rope_theta", 10000.0),
-            rms_norm_eps=getattr(cfg, "rms_norm_eps", 1e-5),
+            rms_norm_eps=getattr(
+                cfg,
+                "rms_norm_eps",
+                getattr(cfg, "layer_norm_epsilon", getattr(cfg, "norm_eps", 1e-5)),
+            ),
             vocab_size=getattr(cfg, "vocab_size", None),
             model_type=getattr(cfg, "model_type", "unknown"),
+            layer_pattern=layer_pattern,
+            mamba=mamba,
+            moe=moe,
         )
 
 
@@ -111,6 +231,7 @@ KNOWN_MODELS = {
     "llada_8b_instruct": "llada_8b_instruct.yaml",
     "llada_8b_base": "llada_8b_base.yaml",
     "clm_60m": "clm_60m.yaml",
+    "nemotron3_nano_30b_a3b": "nemotron3_nano_30b_a3b.yaml",
 }
 
 
@@ -129,12 +250,21 @@ def load_model_config(model_key: str, model_id_override: str | None = None) -> M
     for name, preset_raw in raw.get("hardware_presets", {}).items():
         presets[name] = HardwarePreset(**preset_raw)
 
+    arch_raw = dict(raw["architecture"]["text"])
+    mamba_raw = arch_raw.pop("mamba", None)
+    moe_raw = arch_raw.pop("moe", None)
+    arch = ModelArchConfig(
+        **arch_raw,
+        mamba=MambaArchConfig(**mamba_raw) if mamba_raw is not None else None,
+        moe=MoeArchConfig(**moe_raw) if moe_raw is not None else None,
+    )
+
     return ModelConfig(
         model_id=raw["model_id"],
         nickname=raw.get("nickname", model_key),
         trust_remote_code=raw.get("trust_remote_code", False),
         family=raw["family"],
-        arch=ModelArchConfig(**raw["architecture"]["text"]),
+        arch=arch,
         hardware=HardwarePreset(**raw["hardware"]),
         hardware_presets=presets,
         raw=raw,

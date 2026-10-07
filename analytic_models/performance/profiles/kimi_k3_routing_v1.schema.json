@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PLENA Kimi K3 empirical routing trace v1",
+  "type": "object",
+  "required": ["schema_version", "model", "source", "events"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "model": {
+      "type": "object",
+      "required": ["name", "revision", "experts", "top_k"],
+      "properties": {
+        "name": {"const": "moonshotai/Kimi-K3"},
+        "revision": {"const": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"},
+        "experts": {"const": 896},
+        "top_k": {"const": 16}
+      },
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "object",
+      "required": ["prompt_sha256", "phase", "batch_size"],
+      "properties": {
+        "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "phase": {"enum": ["prefill", "decode", "both"]},
+        "batch_size": {"const": 1}
+      },
+      "additionalProperties": true
+    },
+    "events": {
+      "type": "array",
+      "minItems": 92,
+      "items": {
+        "type": "object",
+        "required": ["phase", "step", "layer_id", "active_experts"],
+        "properties": {
+          "phase": {"enum": ["prefill", "decode"]},
+          "step": {"type": "integer", "minimum": 0},
+          "layer_id": {"type": "integer", "minimum": 1, "maximum": 92},
+          "active_experts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 896,
+            "uniqueItems": true,
+            "items": {"type": "integer", "minimum": 0, "maximum": 895}
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

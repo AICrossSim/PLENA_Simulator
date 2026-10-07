@@ -1,0 +1,453 @@
+{
+  "schema_version": 1,
+  "status": "deterministic_cpu_state_storage_sensitivity_not_task_accuracy",
+  "token_counts": [
+    2048,
+    8192,
+    32768
+  ],
+  "generator": "analytic_models.performance.hybrid_system_dse.precision_error_sweep",
+  "nemotron3_mamba2": [
+    {
+      "experiment": {
+        "tokens": 2048,
+        "batch_size": 1,
+        "num_heads": 4,
+        "head_dim": 2,
+        "state_dim": 128,
+        "groups": 2,
+        "seed": 17,
+        "arithmetic": "FP32 update and reduction; quantized persistent state only",
+        "mx8_definition": "E4M3FN values + one power-of-two scale per 128-state block (PLENA MX8-B128)"
+      },
+      "fp32_state_bytes": 4096,
+      "results": [
+        {
+          "storage": "bf16",
+          "state_bytes": 2048,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 9.608912606040576e-06,
+            "rmse": 1.5262598330364794e-05,
+            "max_abs": 0.00010587647557258606,
+            "relative_l2": 0.003474579074425226,
+            "cosine": 0.9999940282592688
+          },
+          "output_error": {
+            "mae": 7.563292643397723e-06,
+            "rmse": 1.1918249079115172e-05,
+            "max_abs": 8.074566721916199e-05,
+            "relative_l2": 0.0010190114501499948,
+            "cosine": 0.9999994811801397
+          }
+        },
+        {
+          "storage": "fp16",
+          "state_bytes": 2048,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 1.2032164278252822e-06,
+            "rmse": 1.8672997008140735e-06,
+            "max_abs": 1.2446194887161255e-05,
+            "relative_l2": 0.0004250967185070376,
+            "cosine": 0.999999909648521
+          },
+          "output_error": {
+            "mae": 9.360112298573142e-07,
+            "rmse": 1.47504708912399e-06,
+            "max_abs": 1.0163523256778717e-05,
+            "relative_l2": 0.0001261166689293053,
+            "cosine": 0.9999999920474046
+          }
+        },
+        {
+          "storage": "mx8_b128",
+          "state_bytes": 1032,
+          "compression_vs_fp32": 3.9689922480620154,
+          "state_error": {
+            "mae": 0.00014814629295756276,
+            "rmse": 0.00023542770085785794,
+            "max_abs": 0.0015373011119663715,
+            "relative_l2": 0.0535958652147274,
+            "cosine": 0.998581675001471
+          },
+          "output_error": {
+            "mae": 0.00014343259742410908,
+            "rmse": 0.00024208805307043547,
+            "max_abs": 0.00215359590947628,
+            "relative_l2": 0.02069855197569066,
+            "cosine": 0.9997865123501366
+          }
+        }
+      ]
+    },
+    {
+      "experiment": {
+        "tokens": 8192,
+        "batch_size": 1,
+        "num_heads": 4,
+        "head_dim": 2,
+        "state_dim": 128,
+        "groups": 2,
+        "seed": 17,
+        "arithmetic": "FP32 update and reduction; quantized persistent state only",
+        "mx8_definition": "E4M3FN values + one power-of-two scale per 128-state block (PLENA MX8-B128)"
+      },
+      "fp32_state_bytes": 4096,
+      "results": [
+        {
+          "storage": "bf16",
+          "state_bytes": 2048,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 9.353668545486471e-06,
+            "rmse": 1.4697034432048599e-05,
+            "max_abs": 0.00010899268090724945,
+            "relative_l2": 0.003459438688563532,
+            "cosine": 0.9999940351515075
+          },
+          "output_error": {
+            "mae": 7.602733582856569e-06,
+            "rmse": 1.1962103778345043e-05,
+            "max_abs": 9.414926171302795e-05,
+            "relative_l2": 0.0010359294943769744,
+            "cosine": 0.9999994634249052
+          }
+        },
+        {
+          "storage": "fp16",
+          "state_bytes": 2048,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 1.1628798404217378e-06,
+            "rmse": 1.786470687405577e-06,
+            "max_abs": 1.0378193110227585e-05,
+            "relative_l2": 0.00042050563605668123,
+            "cosine": 0.9999999115875458
+          },
+          "output_error": {
+            "mae": 9.47868569828314e-07,
+            "rmse": 1.4915491983232743e-06,
+            "max_abs": 1.1324882507324219e-05,
+            "relative_l2": 0.0001291695704608894,
+            "cosine": 0.9999999916578194
+          }
+        },
+        {
+          "storage": "mx8_b128",
+          "state_bytes": 1032,
+          "compression_vs_fp32": 3.9689922480620154,
+          "state_error": {
+            "mae": 0.0001807062037784135,
+            "rmse": 0.0003784222618105215,
+            "max_abs": 0.0050911675207316875,
+            "relative_l2": 0.08907433803559225,
+            "cosine": 0.9962462816238278
+          },
+          "output_error": {
+            "mae": 0.00014377238421903193,
+            "rmse": 0.00024267847443643705,
+            "max_abs": 0.002173999324440956,
+            "relative_l2": 0.021016185277895238,
+            "cosine": 0.9997797161675286
+          }
+        }
+      ]
+    },
+    {
+      "experiment": {
+        "tokens": 32768,
+        "batch_size": 1,
+        "num_heads": 4,
+        "head_dim": 2,
+        "state_dim": 128,
+        "groups": 2,
+        "seed": 17,
+        "arithmetic": "FP32 update and reduction; quantized persistent state only",
+        "mx8_definition": "E4M3FN values + one power-of-two scale per 128-state block (PLENA MX8-B128)"
+      },
+      "fp32_state_bytes": 4096,
+      "results": [
+        {
+          "storage": "bf16",
+          "state_bytes": 2048,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 1.0486700485756728e-05,
+            "rmse": 1.5624630196283085e-05,
+            "max_abs": 0.00011513987556099892,
+            "relative_l2": 0.003332331580209776,
+            "cosine": 0.9999944571285766
+          },
+          "output_error": {
+            "mae": 7.613730885029646e-06,
+            "rmse": 1.1982026928343529e-05,
+            "max_abs": 0.00010225176811218262,
+            "relative_l2": 0.0010430531385156882,
+            "cosine": 0.9999994560199716
+          }
+        },
+        {
+          "storage": "fp16",
+          "state_bytes": 2048,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 1.285633398850905e-06,
+            "rmse": 1.9171580952845147e-06,
+            "max_abs": 1.4121877029538155e-05,
+            "relative_l2": 0.00040888049092459067,
+            "cosine": 0.9999999167490072
+          },
+          "output_error": {
+            "mae": 9.51867227358405e-07,
+            "rmse": 1.498179879224953e-06,
+            "max_abs": 1.2598466128110886e-05,
+            "relative_l2": 0.00013041877091680767,
+            "cosine": 0.9999999914954405
+          }
+        },
+        {
+          "storage": "mx8_b128",
+          "state_bytes": 1032,
+          "compression_vs_fp32": 3.9689922480620154,
+          "state_error": {
+            "mae": 0.00019307045988270488,
+            "rmse": 0.00032366471616998224,
+            "max_abs": 0.0025307460746262223,
+            "relative_l2": 0.06902935567393087,
+            "cosine": 0.9976612522009587
+          },
+          "output_error": {
+            "mae": 0.00014378377071373825,
+            "rmse": 0.00024396935900567016,
+            "max_abs": 0.0025516096502542496,
+            "relative_l2": 0.021237892982076147,
+            "cosine": 0.9997750228690117
+          }
+        }
+      ]
+    }
+  ],
+  "kimi_k3_kda": [
+    {
+      "experiment": {
+        "tokens": 2048,
+        "batch_size": 1,
+        "num_heads": 2,
+        "key_dim": 128,
+        "value_dim": 8,
+        "seed": 29,
+        "arithmetic": "FP32 KDA update/reduction; quantized persistent recurrent state only",
+        "normalization": "rsqrt(sum(x^2) + 1e-6), matching FlashKDA",
+        "mx8_definition": "E4M3FN values + one power-of-two scale per 128-key block"
+      },
+      "fp32_state_bytes": 8192,
+      "results": [
+        {
+          "storage": "bf16",
+          "state_bytes": 4096,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 6.672440016064485e-06,
+            "rmse": 1.3644897456045972e-05,
+            "max_abs": 0.00012161955237388611,
+            "relative_l2": 0.0017538241842890974,
+            "cosine": 0.9999984662833155
+          },
+          "output_error": {
+            "mae": 1.0793049725769987e-07,
+            "rmse": 1.8574686711243142e-07,
+            "max_abs": 2.8527574613690376e-06,
+            "relative_l2": 0.0002175265292597587,
+            "cosine": 0.999999976342016
+          }
+        },
+        {
+          "storage": "fp16",
+          "state_bytes": 4096,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 8.245327998146479e-07,
+            "rmse": 1.6628279033548423e-06,
+            "max_abs": 1.4826655387878418e-05,
+            "relative_l2": 0.00021372881698881937,
+            "cosine": 0.9999999772954843
+          },
+          "output_error": {
+            "mae": 1.3623951669155523e-08,
+            "rmse": 2.323771611614513e-08,
+            "max_abs": 2.8277281671762466e-07,
+            "relative_l2": 2.7213485822126728e-05,
+            "cosine": 0.9999999996297066
+          }
+        },
+        {
+          "storage": "mx8_b128",
+          "state_bytes": 2064,
+          "compression_vs_fp32": 3.9689922480620154,
+          "state_error": {
+            "mae": 0.00010571266624781472,
+            "rmse": 0.00021641133753772383,
+            "max_abs": 0.0019161701202392578,
+            "relative_l2": 0.027816071080829983,
+            "cosine": 0.9996150309702836
+          },
+          "output_error": {
+            "mae": 1.7157526895780978e-06,
+            "rmse": 2.886265941703775e-06,
+            "max_abs": 3.4625118132680655e-05,
+            "relative_l2": 0.003380080765719956,
+            "cosine": 0.9999942882449231
+          }
+        }
+      ]
+    },
+    {
+      "experiment": {
+        "tokens": 8192,
+        "batch_size": 1,
+        "num_heads": 2,
+        "key_dim": 128,
+        "value_dim": 8,
+        "seed": 29,
+        "arithmetic": "FP32 KDA update/reduction; quantized persistent recurrent state only",
+        "normalization": "rsqrt(sum(x^2) + 1e-6), matching FlashKDA",
+        "mx8_definition": "E4M3FN values + one power-of-two scale per 128-key block"
+      },
+      "fp32_state_bytes": 8192,
+      "results": [
+        {
+          "storage": "bf16",
+          "state_bytes": 4096,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 1.3934876931465112e-05,
+            "rmse": 2.2910148717835284e-05,
+            "max_abs": 0.00012035667896270752,
+            "relative_l2": 0.0016707880955430185,
+            "cosine": 0.9999986069198665
+          },
+          "output_error": {
+            "mae": 1.0904572595525315e-07,
+            "rmse": 1.8597980084228132e-07,
+            "max_abs": 2.9118964448571205e-06,
+            "relative_l2": 0.00021600772206019106,
+            "cosine": 0.9999999766712709
+          }
+        },
+        {
+          "storage": "fp16",
+          "state_bytes": 4096,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 1.8370649259580318e-06,
+            "rmse": 3.032325796538581e-06,
+            "max_abs": 1.498684287071228e-05,
+            "relative_l2": 0.00022114102815581243,
+            "cosine": 0.9999999755840876
+          },
+          "output_error": {
+            "mae": 1.3717342991911143e-08,
+            "rmse": 2.3476841606646924e-08,
+            "max_abs": 3.656823537312448e-07,
+            "relative_l2": 2.726736480872079e-05,
+            "cosine": 0.999999999628228
+          }
+        },
+        {
+          "storage": "mx8_b128",
+          "state_bytes": 2064,
+          "compression_vs_fp32": 3.9689922480620154,
+          "state_error": {
+            "mae": 0.00022657823484184547,
+            "rmse": 0.0003688115573996317,
+            "max_abs": 0.0019607767462730408,
+            "relative_l2": 0.026896637258503525,
+            "cosine": 0.9996396941501623
+          },
+          "output_error": {
+            "mae": 1.744864511374312e-06,
+            "rmse": 2.979711205946952e-06,
+            "max_abs": 4.335213452577591e-05,
+            "relative_l2": 0.0034608093302543746,
+            "cosine": 0.9999940114502914
+          }
+        }
+      ]
+    },
+    {
+      "experiment": {
+        "tokens": 32768,
+        "batch_size": 1,
+        "num_heads": 2,
+        "key_dim": 128,
+        "value_dim": 8,
+        "seed": 29,
+        "arithmetic": "FP32 KDA update/reduction; quantized persistent recurrent state only",
+        "normalization": "rsqrt(sum(x^2) + 1e-6), matching FlashKDA",
+        "mx8_definition": "E4M3FN values + one power-of-two scale per 128-key block"
+      },
+      "fp32_state_bytes": 8192,
+      "results": [
+        {
+          "storage": "bf16",
+          "state_bytes": 4096,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 6.677965596502133e-06,
+            "rmse": 1.2463236082972654e-05,
+            "max_abs": 0.00011012330651283264,
+            "relative_l2": 0.0017029913455860286,
+            "cosine": 0.9999985520824786
+          },
+          "output_error": {
+            "mae": 1.0904136310576408e-07,
+            "rmse": 1.8610065898596804e-07,
+            "max_abs": 3.4010736271739006e-06,
+            "relative_l2": 0.0002180048165559647,
+            "cosine": 0.999999976236926
+          }
+        },
+        {
+          "storage": "fp16",
+          "state_bytes": 4096,
+          "compression_vs_fp32": 2.0,
+          "state_error": {
+            "mae": 8.247781808634613e-07,
+            "rmse": 1.5455645915640956e-06,
+            "max_abs": 1.3820827007293701e-05,
+            "relative_l2": 0.00021118777707130392,
+            "cosine": 0.9999999778964554
+          },
+          "output_error": {
+            "mae": 1.3655676618106745e-08,
+            "rmse": 2.328083038868209e-08,
+            "max_abs": 4.784669727087021e-07,
+            "relative_l2": 2.7271978432585163e-05,
+            "cosine": 0.9999999996280654
+          }
+        },
+        {
+          "storage": "mx8_b128",
+          "state_bytes": 2064,
+          "compression_vs_fp32": 3.9689922480620154,
+          "state_error": {
+            "mae": 0.00010290114857358645,
+            "rmse": 0.00019044338388993296,
+            "max_abs": 0.001886710524559021,
+            "relative_l2": 0.02602240962375463,
+            "cosine": 0.9996622237226056
+          },
+          "output_error": {
+            "mae": 1.74087107582972e-06,
+            "rmse": 2.9657935414950897e-06,
+            "max_abs": 5.6777847930788994e-05,
+            "relative_l2": 0.003474234215394165,
+            "cosine": 0.9999939648747462
+          }
+        }
+      ]
+    }
+  ],
+  "scope": "Real recurrence formulas and state dimension 128 are retained; head/value parallelism is reduced because each head is independent. Weights and language-task quality are outside this CPU state-storage experiment."
+}

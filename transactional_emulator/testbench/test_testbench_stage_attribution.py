@@ -37,6 +37,7 @@ COMPILER_GUARD = REPO_ROOT / "PLENA_Compiler" / "aten" / "tests" / "test_moe_sta
 #: and silently drop a call site from the count this exists to pin.
 _EXPECTED_STAGE_ARGUMENT_SITES = {
     "models/gpt_oss/attention_semantics_test.py": 2,
+    "models/nemotron3/mamba_connected_test.py": 1,
     "moe_timing/qwen/qwen3_trace_replay.py": 1,
     "routed_moe/gpt_oss_moe_gather_scatter_test.py": 3,
     "routed_moe/moe_shared_expert_test.py": 1,
