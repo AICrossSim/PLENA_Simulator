@@ -161,3 +161,49 @@
 - `transactional_emulator/src/vector_machine.rs`：旧快照2cd96e29eb7c（1923行）与当前2249行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
 - `transactional_emulator/testbench/aten/matrix_lcompute_execution_compare.py`：旧快照2cd96e29eb7c（659行）与当前583行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
 - `transactional_emulator/testbench/test_matrix_lcompute_execution_helpers.py`：旧快照2cd96e29eb7c（119行）与当前116行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+
+- `research/projection-pipeline-20260928` `57d2b051aee4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `origin/research/projection-pipeline-20260928` `6ea7434697bc` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-layer-service` `b013406fa916` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-full-layer` `60d3dec21c47` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-analytic-v3` `db3e59afac35` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `local/moe-bottleneck-diagnostic-20260911` `da93c32a2203` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-output-pool-20260909` `582c1f9e11ef` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-refinement-20260909` `5d0ce828f8c5` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/matrix-sram-lcompute` `3b284f93752a` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/moe-dual-normal-20260905` `fe6768aac2e4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/matrix-lcompute-20260905` `44693edaf041` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `origin/review/moe-dual-normal-20260905` `ddcfae5d0f2f` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `archive/pr-116-before-mechanism-scope-20260905` `0e7effade1d4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `archive/pr-116-before-scope-cleanup-20260905` `2cd96e29eb7c` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-dual-normal-v0` gitlink `PLENA_Compiler`：双方指针归档，暂保留当前指针；独立Compiler整合结束后统一更新。
+
+## feat/moe-dual-normal-v0 (f74f454d2fab)
+
+- 使用 `git merge --no-ff --no-commit`；13 个冲突，双方版本已归档。
+- `.github/workflows/transactional_emulator.yml`：旧快照f74f454d2fab（153行）与当前225行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/memory/src/lib.rs`：旧快照f74f454d2fab（342行）与当前452行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/ramulator/src/model.rs`：旧快照f74f454d2fab（552行）与当前921行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/mod.rs`：旧快照f74f454d2fab（104行）与当前132行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：set_coalesce_hbm_bursts；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/bin/moe_dual_normal.rs`：旧快照f74f454d2fab（181行）与当前255行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/moe_normal/engine.rs`：旧快照f74f454d2fab（1444行）与当前2253行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/moe_normal/mod.rs`：旧快照f74f454d2fab（15行）与当前21行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/moe_normal/tests.rs`：旧快照f74f454d2fab（741行）与当前935行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/moe_normal/types.rs`：旧快照f74f454d2fab（241行）与当前414行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/emulator_runner.py`：旧快照f74f454d2fab（650行）与当前744行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py`：旧快照f74f454d2fab（385行）与当前775行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/moe_timing/replay/test_compare_moe_normal.py`：旧快照f74f454d2fab（432行）与当前776行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。

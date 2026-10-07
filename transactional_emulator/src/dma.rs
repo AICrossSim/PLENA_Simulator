@@ -138,6 +138,7 @@ pub(crate) fn transfer_mx_from_hbm(
     load_dim: u32,
     load_amount: u32,
     write_amount: u32,
+    coalesce_hbm_bursts: bool,
 ) -> Receiver<QuantTensor> {
     // input: load_amount is how many "reads", write_amount is how many sram writes
     // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
@@ -234,7 +235,11 @@ pub(crate) fn transfer_mx_from_hbm(
             }
         }
 
-        let gathered = memory::chunked::gather(&hbm, total_bytes + total_scale_bytes, reads).await;
+        let gathered = if coalesce_hbm_bursts {
+            memory::chunked::gather_coalesced(&hbm, total_bytes + total_scale_bytes, reads).await
+        } else {
+            memory::chunked::gather(&hbm, total_bytes + total_scale_bytes, reads).await
+        };
         let bytes = &gathered[..total_bytes];
         let scale_bytes = &gathered[total_bytes..];
 
