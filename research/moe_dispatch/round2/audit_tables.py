@@ -64,7 +64,10 @@ ps=read('E5/predictor_table.csv')
 if ps:
  fail(len(ps)==36,'E5 two designs*three modes*six predictors')
  fail(all(float(r['mae_pct'])>=0 and float(r['e2e_ratio_vs_oracle'])>0 for r in ps),'E5 prediction errors and reference ratios legal')
- fail(all(r.get('oracle_caveat') for r in ps),'E5 profile-guided oracle caveat retained')
+ fail(all(r.get('oracle_caveat') and r.get('oracle_kind')=='conditional_same_actual_schedule' for r in ps),'E5 conditional same-schedule oracle scope retained')
+ fail(all(abs(float(r['e2e_ratio_vs_ours'])-1)<=1e-9 for r in ps if r['predictor']=='oracle'),'E5 conditional oracle replay preserves frozen ours E2E')
+ replay=read('E5/oracle_replay_validation.csv')
+ fail(len(replay)==810 and all(r['physically_replayed']=='True' and int(r['repeats'])==2 for r in replay),'E5 full810window conditional physical replay receipts repeated twice')
 whole=read('E6/model_token_e2e.csv')
 if whole:
  fail(all(not r['token_ms'] and not r['non_moe_ms_per_layer'] and r['status']=='missing_matching_DeepSeek_non_MoE_layer_timing' for r in whole),'E6 matching nonMoE unavailable; whole-model fields must remain missing')

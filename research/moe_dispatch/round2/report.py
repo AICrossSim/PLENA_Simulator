@@ -162,7 +162,7 @@ def test_receipts(e):
                                          "receipt": str(path.relative_to(e.root)), "commit": "standalone XML; see E0 provenance"}
             except (ET.ParseError, OSError, ValueError) as error:
                 e.errors.append(f"{path}: {error}")
-    current_sources = ("model.py", "optimizer.py", "search.py", "run.py", "predictors.py", "regions.py", "sensitivity.py")
+    current_sources = ("model.py", "optimizer.py", "search.py", "run.py", "predictors.py", "oracle_replay.py", "regions.py", "sensitivity.py")
     for path in sorted(e.path("results/executions").glob("round2_*unit_suite_*.json")):
         item = e.data(str(path.relative_to(e.root)))
         if item.get("returncode") != 0 or not all(item.get("source_sha256", {}).get(name) ==
@@ -454,6 +454,14 @@ def delivery_status(e, args):
         partial("7", "分派策略组合键不等于要求全集")
     if predictor and any(r.get('predictor') == 'oracle' and 'profile-guided' in r.get('oracle_caveat', '') for r in predictor):
         partial("7", "oracle 是同政策 profile/replay 参考，归属或预取动作可能改变；尚非任务书要求的同一实际调度真实时长 oracle")
+    replay = e.rows("results/E5/oracle_replay_validation.csv")
+    replay_keys = {(r.get("design"), r.get("onchip_mode"), r.get("window_id")) for r in replay}
+    expected_replay = {(name, mode, w) for name in ("best_hetero", "fixed_4+2") for mode in MODES for w in held_ids}
+    checks["7"]["completed_scope"]["conditional_oracle_replay_rows"] = len(replay)
+    if replay_keys != expected_replay or len(replay) != len(expected_replay) or any(
+            not truth(r.get("physically_replayed")) or number(r.get("repeats")) != 2 or
+            not truth(r.get("fresh_ours_sequences_identical")) for r in replay):
+        partial("7", "同一固定调度的条件 oracle 物理重放收据尚未覆盖两硬件×三模式×135 留出窗口的两次重复")
     checks["8"]["completed_scope"] = {"moe_rows": len(e.rows("results/E6/moe_layer_e2e.csv")), "model_rows": len(model),
                                          "model_token_timing_rows_available": sum(number(r.get("token_ms")) is not None for r in model)}
     if not model or any(number(r.get("token_ms")) is None for r in model):
@@ -630,7 +638,11 @@ def render_report(e, status, args):
         add(6, f"真实路由校准记录 {len(calibration)} 行；真实→合成 Me 直方图 KL 范围 [{min(kval):.5g}, {max(kval):.5g}]，distinct 数相对误差绝对值范围 [{min(dval):.3%}, {max(dval):.3%}]。完整逐窗口/浓度数据见 [synthetic_calibration.csv](results/E3/synthetic_calibration.csv)。")
     if valid_grid:
         best = min(valid_grid, key=lambda r: float(r["delta_vs_single_pct"]))
-        add(6, "全网格中已评估最强候选点：`" + json.dumps({k: best.get(k) for k in ("batch", "concentration", "alpha", "shared_units", "E", "topk", "F", "bw_or_mac_scale", "delta_vs_single_pct", "delta_vs_homo_pct", "proof_complete", "open_lb_ms", "gap_pct")}, ensure_ascii=False) + "`。真实点为 E=64、top-k=6、routed F=1408、Shared=2 当量、主信用供数上限及捕获 batch；浓度只由开发路由拟合，逐窗口 KL 决定其接近程度。")
+        add(6, "全网格中已评估最强候选点：`" + json.dumps({k: best.get(k) for k in ("batch", "concentration", "alpha", "shared_units", "E", "topk", "F", "bw_or_mac_scale", "delta_vs_single_pct", "delta_vs_homo_pct", "delta_lower_vs_single_pct", "delta_upper_vs_single_pct", "delta_lower_vs_homo_pct", "delta_upper_vs_homo_pct", "proof_complete", "open_lb_ms", "gap_pct")}, ensure_ascii=False) + "`。真实点为 E=64、top-k=6、routed F=1408、Shared=2 当量、主信用供数上限及捕获 batch；浓度只由开发路由拟合，逐窗口 KL 决定其接近程度。")
+        intervals = [r for r in valid_grid if number(r.get("delta_upper_vs_single_pct")) is not None and number(r.get("delta_upper_vs_homo_pct")) is not None]
+        bounded_benefits = sum(float(r["delta_upper_vs_single_pct"]) < 0 and float(r["delta_upper_vs_homo_pct"]) < 0 for r in intervals)
+        bounded_5pct = sum(float(r["delta_upper_vs_single_pct"]) <= -5 and float(r["delta_upper_vs_homo_pct"]) <= -5 for r in intervals)
+        add(6, f"有合法比值区间的合成点 {len(intervals)} 个；其中区间已排除异构慢于单核和同构两者的点 {bounded_benefits} 个，区间上端对两者都不高于 −5% 的点 {bounded_5pct} 个。区间由各族下界 L 与可执行候选 U 推出：真实最优比值位于 [L_hetero/U_baseline, U_hetero/L_baseline]。这不是统计置信区间，也不是真实留出集或 RTL 的胜出判定。")
     if extreme:
         near = extreme.get("distance_from_real", {}).get("nearest_real_window", {})
         add(6, f"CMA-ES 实际评估 {extreme.get('CMA_evaluations', '缺失')} 次（上限 500）；最强已评估负载参数 `{json.dumps(extreme.get('best_evaluated_workload_parameters', {}), ensure_ascii=False)}`。δ=0 复验 Δ vs 单核={fmt(100 * extreme['delta_vs_single'], 3) if number(extreme.get('delta_vs_single')) is not None else '缺失'}%，vs 同构={fmt(100 * extreme['delta_vs_homo'], 3) if number(extreme.get('delta_vs_homo')) is not None else '缺失'}%；证明闭合={extreme.get('verification_full_domain_certificate', {}).get('proof_complete', '缺失')}。最近真实窗口 `{near.get('window_id', '缺失')}`，batch log2 距离={fmt(near.get('batch_log2_distance'))}，Me 直方图 KL={fmt(near.get('Me_hist_KL_synthetic_to_real'))}，distinct 合成/真实={near.get('distinct_synthetic', '缺失')}/{near.get('distinct_real', '缺失')}。")
@@ -717,7 +729,10 @@ def render_report(e, status, args):
             b = next((r for r in ss if r["policy"].startswith("threshold_fallback")), {})
             if number(a.get("geomean_ms")) and number(b.get("geomean_ms")):
                 add(10, f"{mode}/{hardware_label(name)}：纯 T=2 阈值比阈值+回退慢 {100 * (float(a['geomean_ms']) / float(b['geomean_ms']) - 1):.3f}%。")
-    add(10, "MAE=平均 |预测时长−实际时长|/实际时长；success=Next 第一权重块落在 Current 结束前 W 内的比例。W近似计两个块的纯计算服务：WS每块含ceil(Me/PM)个M发射，OS/IS装入后只含一个M发射；排除HBM/端口，不是精确tile时序。late=块晚于 Current 结束；stall=暴露权重等待。oracle 为相同政策两次 profile/replay 参考，若分配改变会留残差；任务书的同一实际调度真实时长oracle尚未实现，E5按部分完成交付。状态 bit 只是状态量估计，没有综合面积或频率。")
+    add(10, "MAE=平均 |预测时长−实际时长|/实际时长；success=Next 第一权重块落在 Current 结束前 W 内的比例。W近似计两个块的纯计算服务：WS每块含ceil(Me/PM)个M发射，OS/IS装入后只含一个M发射；排除HBM/端口，不是精确tile时序。late=块晚于 Current 结束；stall=暴露权重等待。oracle 冻结 ours 第一遍的实际归属、绑定、预取与相位释放，再重新计算共享 HBM、私有端口与有限槽的服务时间；它是同一计划的时长准确率参考，不是最优派工或反事实核选择的性能上界。其 E2E 与冻结 ours 计划相同，数值残差保留，未强制写 MAE=0。旧 profile-guided 两遍参考另存 profile_guided_reference.csv，其控制动作可改变。状态 bit 只是状态量估计，没有综合面积或频率。")
+    replays = e.rows("results/E5/oracle_replay_validation.csv")
+    if replays:
+        add(10, f"条件 oracle 完成 {len(replays)} 个窗口重放收据；最大时间差 {max(float(r['max_timing_difference_cycles']) for r in replays):.6g} 周期，最大 HBM 字节差 {max(float(r['max_hbm_difference_bytes']) for r in replays):.6g} B，详见 [oracle_replay_validation.csv](results/E5/oracle_replay_validation.csv)。")
     add(10, "![预测器误差与端到端](figures/fig_predictor.png)")
 
     moe = e.rows("results/E6/moe_layer_e2e.csv")

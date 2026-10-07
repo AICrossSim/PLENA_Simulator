@@ -45,7 +45,7 @@ def main():
         raise RuntimeError("Complete, current-engine frozen selection required")
     folder = ROOT / "results"
     status_file = folder / "HELDOUT_RUN_STATUS.json"
-    guard = {name: sha(ROOT / name) for name in ("model.py", "optimizer.py", "search.py", "common.py", "run.py")}
+    guard = {name: sha(ROOT / name) for name in ("model.py", "optimizer.py", "search.py", "common.py", "run.py", "predictors.py", "oracle_replay.py")}
     selection_hash = sha(folder / "E3/FROZEN_SELECTION.json")
     record = {"started_utc": datetime.now(timezone.utc).isoformat(), "jobs": args.jobs,
               "source_sha256": guard, "selection_sha256": selection_hash, "stages": [], "complete": False}

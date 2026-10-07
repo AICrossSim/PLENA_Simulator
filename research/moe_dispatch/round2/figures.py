@@ -162,9 +162,9 @@ class Figures:
             locations=defaultdict(int)
             for _,level,batch in closest.values():locations[level,math.log2(batch)-1]+=1
             for (level,y),count in locations.items():ax.scatter(level,y,s=30+6*count,facecolors='none',edgecolors='black',lw=1.5)
-            ax.set_xticks(range(5),['0\nuniform','1','2','3','4\nconcentrated']);ax.set_yticks(range(len(batches)),[f'B{b}' for b in batches]);ax.set_xlabel('Calibrated synthetic concentration level');ax.set_title(f'Effective HBM {bw:.1f} GB/s')
+            ax.set_xticks(range(5),['0\ndiffuse','1','2','3','4\nconcentrated']);ax.set_yticks(range(len(batches)),[f'B{b}' for b in batches]);ax.set_xlabel('Calibrated synthetic concentration level');ax.set_title(f'Effective HBM {bw:.1f} GB/s')
             fig.colorbar(image,ax=ax,label='Selected hetero / single latency change (%)')
-        self.save(fig,'fig_workload_map','Synthetic region only: E=64, top-6, routed F=1408, Shared=2 units. Circles mark real development captures at nearest calibrated histogram level (mixed B96 positioned on log2 batch axis). * = open hardware-search proof; candidate estimate, not certified optimum.')
+        self.save(fig,'fig_workload_map','Synthetic region only: E=64, top-6, routed F=1408, Shared=2 units. Both concentration endpoints are fitted on development captures; diffuse does not mean perfectly uniform. Circles mark captures at nearest calibrated histogram level (mixed B96 on log2 batch axis). * = open hardware-search proof; candidate estimate, not certified optimum.')
 
     def sobol(self):
         rows=self.csv('E3/sobol.csv');x=np.arange(len(rows));fig,ax=plt.subplots(figsize=(9,4.8))
@@ -179,13 +179,15 @@ class Figures:
         for ax,key in zip(axes.flat,params):
             rs=sorted((r for r in rows if r['param']==key),key=lambda r:number(r['value']))
             x=[number(r['value']) for r in rs];y=[100*number(r['delta']) for r in rs];ax.plot(x,y,color=COLORS[0],lw=1.5)
+            if all(r.get('delta_lower') not in (None,'') and r.get('delta_upper') not in (None,'') for r in rs):
+                ax.fill_between(x,[100*number(r['delta_lower']) for r in rs],[100*number(r['delta_upper']) for r in rs],color=COLORS[0],alpha=.12)
             for xx,yy,r in zip(x,y,rs):ax.plot(xx,yy,'o',color=COLORS[0],markerfacecolor=COLORS[0] if truth(r['proof_complete']) else 'white',ms=4)
             ax.axhline(0,color='black',lw=.7);ax.axhline(-5,color=COLORS[2],lw=.7,ls='--')
             for r in flips:
                 if r['param']==key and np.isfinite(number(r['value'])):ax.axvline(number(r['value']),color=COLORS[1],alpha=.5,ls=':')
             ax.set_xlabel(key);ax.set_ylabel('Hetero / single latency change (%)');ax.grid(alpha=.2)
         for ax in list(axes.flat)[len(params):]:ax.set_visible(False)
-        self.save(fig,'fig_flip_boundary','One parameter varies; hardware is reoptimized at each sampled point. Hollow markers: open search proof. Dotted crossings are interpolation guides between sampled candidates; 0% and -5% lines are comparison thresholds, not RTL-calibrated wins.')
+        self.save(fig,'fig_flip_boundary','One parameter varies; hardware is reoptimized at each sampled point. Hollow markers: open search proof. Shading, when available: legal family-optimum ratio intervals from lower bounds and executable incumbents, not statistical confidence. Dotted crossings interpolate sampled candidates; thresholds are not RTL-calibrated wins.')
 
     def dataflow_grid(self):
         rows=self.csv('E2/layer_grid.csv');names=('B1','fixed_4+2','previous_asym','best_hetero');fig,axes=plt.subplots(4,3,figsize=(12,12))
@@ -224,7 +226,7 @@ class Figures:
           for mi,mode in enumerate(MODES):
             ss=[r for r in rows if r['design']==name and r['onchip_mode']==mode];rr=[next(r for r in ss if r['predictor']==p) for p in order];x=np.arange(len(order))
             ax=axes[2*di,mi];ax.bar(x,[number(r['mae_pct']) for r in rr],color=COLORS);ax.set_ylabel('Mean absolute relative error (%)');ax.set_title(NAMES[name]+' / '+self.title(mode),fontsize=9);ax.grid(axis='y',alpha=.2)
-            ax2=axes[2*di+1,mi];ax2.bar(x,[number(r['e2e_ratio_vs_oracle']) for r in rr],color=COLORS);ax2.axhline(1,color='black',lw=.8);ax2.set_ylabel('MoE latency / profile-guided reference');ax2.grid(axis='y',alpha=.2)
+            ax2=axes[2*di+1,mi];ax2.bar(x,[number(r['e2e_ratio_vs_oracle']) for r in rr],color=COLORS);ax2.axhline(1,color='black',lw=.8);ax2.set_ylabel('MoE latency / frozen-ours timing reference');ax2.grid(axis='y',alpha=.2)
             for target in (ax,ax2):target.set_xticks(x,order,rotation=25,ha='right')
         self.save(fig,'fig_predictor','Same development warmup and held-out sequence, repeated with fresh initial states. MAE measures task duration prediction; latency is post-router MoE only. Oracle is a two-pass profile-guided reference, not a provably optimal or zero-error predictor; no circuit area claims.')
 

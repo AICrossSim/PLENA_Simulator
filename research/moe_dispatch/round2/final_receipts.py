@@ -60,7 +60,7 @@ def main():
         "E1": ("model.py", "optimizer.py", "run.py"),
         "E2layer": ("model.py", "run.py"),
         "E4": ("model.py", "optimizer.py", "run.py"),
-        "E5": ("model.py", "predictors.py", "run.py"),
+        "E5": ("model.py", "predictors.py", "oracle_replay.py", "run.py"),
         "E6": ("run.py",),
         "E3_grid": ("model.py", "optimizer.py", "search.py", "regions.py"),
         "E3_extreme": ("model.py", "optimizer.py", "search.py", "regions.py", "extreme.py"),
