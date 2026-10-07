@@ -2,6 +2,9 @@
 
 use half::bf16;
 
+use super::lstream::{AffineView, ConfigField, ScalarPacketView, StreamTable, StreamTarget};
+use super::mview::{MatrixViewDescriptor, MatrixViewTable};
+
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
     gp_reg: [u32; 16],
@@ -21,10 +24,21 @@ pub(super) struct AcceleratorRegFile {
     /// `topk > 0` — the program would abort with "topk must be positive", which
     /// says nothing about the missing `C_SET_TOPK_REG`.
     topk_policy: Option<u32>,
+    lstream: StreamTable,
+    mviews: MatrixViewTable,
 }
 
 impl AcceleratorRegFile {
-    pub(super) fn new() -> Self {
+    #[cfg(test)]
+    pub(super) fn new(lstream_banks: u32) -> Self {
+        Self::new_with_matrix(lstream_banks, lstream_banks, 1)
+    }
+
+    pub(super) fn new_with_matrix(
+        lstream_banks: u32,
+        mview_banks: u32,
+        mview_bank_width: u32,
+    ) -> Self {
         Self {
             gp_reg: [0; 16],
             fp_reg: [bf16::ZERO; 8],
@@ -36,12 +50,18 @@ impl AcceleratorRegFile {
             bmm_scale: 0.25,
             v_mask: 0,
             topk_policy: None,
+            lstream: StreamTable::new(lstream_banks),
+            mviews: MatrixViewTable::new(mview_banks, mview_bank_width),
         }
     }
 
     /// Read a general-purpose register by its 4-bit ISA encoding.
     pub(super) fn read_gp(&self, r: u8) -> u32 {
         self.gp_reg[r as usize]
+    }
+
+    pub(super) fn read_gp_view(&self, r: u8, lmask: u8) -> u32 {
+        self.lstream.resolve_gp(lmask, r, self.read_gp(r))
     }
 
     /// Read a floating-point register by its 3-bit ISA encoding.
@@ -118,6 +138,69 @@ impl AcceleratorRegFile {
             .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
     }
 
+    pub(super) fn configure_lstream(
+        &mut self,
+        value: u32,
+        target: u8,
+        slot: u8,
+        field: ConfigField,
+    ) -> Result<(), String> {
+        self.lstream.configure(value, target, slot, field)
+    }
+
+    pub(super) fn configure_mview(
+        &mut self,
+        slot: u8,
+        shape_register: u8,
+        map_register: u8,
+    ) -> Result<(), String> {
+        self.mviews.configure(
+            slot,
+            self.read_gp(shape_register),
+            self.read_gp(map_register),
+        )
+    }
+
+    pub(super) fn matrix_view(&self, slot: u8) -> Result<MatrixViewDescriptor, String> {
+        self.mviews.get(slot)
+    }
+
+    pub(super) fn lstream_fp_address(&self, lmask: u8, register: u8) -> Option<u32> {
+        self.lstream.fp_address(lmask, register)
+    }
+
+    pub(super) fn lstream_fp_packet(&self, lmask: u8, register: u8) -> Option<ScalarPacketView> {
+        self.lstream.fp_packet(lmask, register)
+    }
+
+    pub(super) fn lstream_gp_affine_view(&self, lmask: u8, register: u8) -> Option<AffineView> {
+        self.lstream.gp_affine_view(lmask, register)
+    }
+
+    pub(super) fn validate_lstream_mask(
+        &self,
+        lmask: u8,
+        targets: impl IntoIterator<Item = StreamTarget>,
+    ) -> Result<(), String> {
+        self.lstream.validate_mask(lmask, targets)
+    }
+
+    pub(super) fn validate_lstream_producer_mask(
+        &self,
+        lmask: u8,
+        target_register: u8,
+    ) -> Result<(), String> {
+        self.lstream.validate_producer_mask(lmask, target_register)
+    }
+
+    pub(super) fn lstream_producer_mask(&self, register: u8) -> u8 {
+        self.lstream.producer_mask(register)
+    }
+
+    pub(super) fn advance_lstream_mask(&mut self, lmask: u8) {
+        self.lstream.advance_mask(lmask);
+    }
+
     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP
     /// instructions (S_ADD_INT / S_SUB_INT / S_MUL_INT).
     pub(super) fn binop_gp<F: FnOnce(u32, u32) -> u32>(
@@ -153,7 +236,7 @@ mod tests {
 
     #[test]
     fn new_register_file_uses_isa_defaults() {
-        let regs = AcceleratorRegFile::new();
+        let regs = AcceleratorRegFile::new_with_matrix(16, 16, 4);
 
         assert_eq!(regs.read_gp(3), 0);
         assert_eq!(regs.read_fp(2), bf16::ZERO);
@@ -166,7 +249,7 @@ mod tests {
 
     #[test]
     fn register_file_reads_writes_and_binary_ops_use_isa_indices() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(16);
 
         regs.write_gp(1, 10);
         regs.write_gp(2, 3);
@@ -230,7 +313,7 @@ mod tests {
                 packed <= TOPK_MAX_PACKED,
                 "packed {packed} for {experts}/{top_k} is past _TOPK_POLICY_MAX_PACKED"
             );
-            let mut regs = AcceleratorRegFile::new();
+            let mut regs = AcceleratorRegFile::new(16);
             regs.set_topk_policy(packed);
             assert_eq!(
                 regs.topk_policy(),
@@ -243,6 +326,6 @@ mod tests {
     #[test]
     fn topk_policy_is_none_until_c_set_topk_reg_runs() {
         // Fail-closed: V_TOPK rmask=15 traps on the unset policy.
-        assert_eq!(AcceleratorRegFile::new().topk_policy(), None);
+        assert_eq!(AcceleratorRegFile::new(16).topk_policy(), None);
     }
 }

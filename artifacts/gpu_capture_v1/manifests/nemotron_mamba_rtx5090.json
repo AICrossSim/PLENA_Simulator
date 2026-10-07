@@ -1,0 +1,453 @@
+{
+  "schema": "plena-public-gpu-capture-v1",
+  "campaign": "nemotron_mamba_rtx5090",
+  "source_directory_label": "NEMOTRON3_NANO_5090_ingested_e0a33f64",
+  "files": [
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/environment.txt",
+      "published_path": "results/NEMOTRON3_NANO_5090/environment.txt",
+      "source_sha256": "7b4fad2ee1580b9d3d192ba1bc8354a89de84fa707fca7397dd8f47f222b206b",
+      "source_bytes": 4524,
+      "published_sha256": "7b4fad2ee1580b9d3d192ba1bc8354a89de84fa707fca7397dd8f47f222b206b",
+      "published_bytes": 4524,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/mamba_layer_latency.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/mamba_layer_latency.csv",
+      "source_sha256": "c0dece3ec0a2da8d2b01c52c19648c5a4d04c0e4b2f28ab8ce4890fe0a7af5e6",
+      "source_bytes": 5274,
+      "published_sha256": "c0dece3ec0a2da8d2b01c52c19648c5a4d04c0e4b2f28ab8ce4890fe0a7af5e6",
+      "published_bytes": 5274,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/mamba_layer_latency_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/mamba_layer_latency_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_mamba_decode_b1.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_mamba_decode_b1.csv",
+      "source_sha256": "118eb696a58d61931584547c8ac3208501d231d3ec5b1d444a84b86371743209",
+      "source_bytes": 974,
+      "published_sha256": "118eb696a58d61931584547c8ac3208501d231d3ec5b1d444a84b86371743209",
+      "published_bytes": 974,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_mamba_decode_b8.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_mamba_decode_b8.csv",
+      "source_sha256": "e9a727b5dcbd8a4dc8335bed914369d9009f536b4aac9c74a5fee18b5ced8d9b",
+      "source_bytes": 975,
+      "published_sha256": "e9a727b5dcbd8a4dc8335bed914369d9009f536b4aac9c74a5fee18b5ced8d9b",
+      "published_bytes": 975,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_mamba_prefill.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_mamba_prefill.csv",
+      "source_sha256": "552f29e550c337e0fa5ae2dfb19fbdc7f0b14fd8ab09eccd21b571e03f8f26ee",
+      "source_bytes": 2316,
+      "published_sha256": "552f29e550c337e0fa5ae2dfb19fbdc7f0b14fd8ab09eccd21b571e03f8f26ee",
+      "published_bytes": 2316,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_metric_resolution.txt",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_metric_resolution.txt",
+      "source_sha256": "8184a382992223da88cba1ee7eeb2fbc292070b51f0f1e5e23ede47297dc757d",
+      "source_bytes": 71461,
+      "published_sha256": "8184a382992223da88cba1ee7eeb2fbc292070b51f0f1e5e23ede47297dc757d",
+      "published_bytes": 71461,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_metrics_available.txt",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_metrics_available.txt",
+      "source_sha256": "ef94887bee2cd197433979af9081db83e634b973c3805d51a5acc2166bcd613f",
+      "source_bytes": 1436544,
+      "published_sha256": "ef94887bee2cd197433979af9081db83e634b973c3805d51a5acc2166bcd613f",
+      "published_bytes": 1436544,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b1_case.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b1_case.csv",
+      "source_sha256": "b613ee06f006aa350fabb19039702d4c712c7f15834f13d8507366fd4304b0e3",
+      "source_bytes": 1062,
+      "published_sha256": "b613ee06f006aa350fabb19039702d4c712c7f15834f13d8507366fd4304b0e3",
+      "published_bytes": 1062,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b1_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b1_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b1_raw.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b1_raw.csv",
+      "source_sha256": "501d5efca180b1088906217eb259aabebaad5e2536ba681defc97c146b64bc6a",
+      "source_bytes": 15072,
+      "published_sha256": "501d5efca180b1088906217eb259aabebaad5e2536ba681defc97c146b64bc6a",
+      "published_bytes": 15072,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b8_case.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b8_case.csv",
+      "source_sha256": "17c76a4c91be3135b3d79e8d4b9115131f0aa60b3079b1fe61bf220dcfbba9b2",
+      "source_bytes": 1056,
+      "published_sha256": "17c76a4c91be3135b3d79e8d4b9115131f0aa60b3079b1fe61bf220dcfbba9b2",
+      "published_bytes": 1056,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b8_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b8_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b8_raw.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_decode_b8_raw.csv",
+      "source_sha256": "d0dd0f853aea2540631af703b4ac4dce7411119daad7da0596cbcb0bea4582c3",
+      "source_bytes": 15079,
+      "published_sha256": "d0dd0f853aea2540631af703b4ac4dce7411119daad7da0596cbcb0bea4582c3",
+      "published_bytes": 15079,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_prefill_b1_s2048_case.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_prefill_b1_s2048_case.csv",
+      "source_sha256": "b007f14318f82693fb2cf16e73b5b86109ad0d584df473e21b66cf2f5a214ed4",
+      "source_bytes": 1072,
+      "published_sha256": "b007f14318f82693fb2cf16e73b5b86109ad0d584df473e21b66cf2f5a214ed4",
+      "published_bytes": 1072,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_prefill_b1_s2048_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_prefill_b1_s2048_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_prefill_b1_s2048_raw.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/ncu_raw/mamba_prefill_b1_s2048_raw.csv",
+      "source_sha256": "2925330ea238ad4f5f24d4d5ddfad3e3f579233f141b0cb42f8a21c8d2ba27ff",
+      "source_bytes": 23743,
+      "published_sha256": "2925330ea238ad4f5f24d4d5ddfad3e3f579233f141b0cb42f8a21c8d2ba27ff",
+      "published_bytes": 23743,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1.nsys-rep",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1.nsys-rep",
+      "source_sha256": "772488d70f36dfe6d7e3a426284479b0e21fcac71543f2414c46f447c9ce13df",
+      "source_bytes": 8746541,
+      "published_sha256": "772488d70f36dfe6d7e3a426284479b0e21fcac71543f2414c46f447c9ce13df",
+      "published_bytes": 8746541,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1_case.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1_case.csv",
+      "source_sha256": "29a24e150f22891726015bcd4b4deb1b239728494eb8f013a625dc97f41ac94a",
+      "source_bytes": 1072,
+      "published_sha256": "29a24e150f22891726015bcd4b4deb1b239728494eb8f013a625dc97f41ac94a",
+      "published_bytes": 1072,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1_measured_state_update_cuda_gpu_kern_sum_nvtx=mamba_state_update_output_fused-21.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1_measured_state_update_cuda_gpu_kern_sum_nvtx=mamba_state_update_output_fused-21.csv",
+      "source_sha256": "7cce59966d70c43a99f1aa5b65e1386246691e92853f5917974e0fd5f882deb4",
+      "source_bytes": 159,
+      "published_sha256": "7cce59966d70c43a99f1aa5b65e1386246691e92853f5917974e0fd5f882deb4",
+      "published_bytes": 159,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b1_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8.nsys-rep",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8.nsys-rep",
+      "source_sha256": "564b1755a25d845b780da8755721c9da9e9cc38be55fe8bb25ecfd83a382df90",
+      "source_bytes": 8033406,
+      "published_sha256": "564b1755a25d845b780da8755721c9da9e9cc38be55fe8bb25ecfd83a382df90",
+      "published_bytes": 8033406,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8_case.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8_case.csv",
+      "source_sha256": "34167f5c76274d89fe85065876c3a34b9a41fdcad154e767e1fde9c26c21ca05",
+      "source_bytes": 1066,
+      "published_sha256": "34167f5c76274d89fe85065876c3a34b9a41fdcad154e767e1fde9c26c21ca05",
+      "published_bytes": 1066,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8_measured_state_update_cuda_gpu_kern_sum_nvtx=mamba_state_update_output_fused-21.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8_measured_state_update_cuda_gpu_kern_sum_nvtx=mamba_state_update_output_fused-21.csv",
+      "source_sha256": "2190568053779a81f3b1d12d4eef53c7009b577ccd3b95febcfcde4def7e3987",
+      "source_bytes": 159,
+      "published_sha256": "2190568053779a81f3b1d12d4eef53c7009b577ccd3b95febcfcde4def7e3987",
+      "published_bytes": 159,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_decode_b8_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048.nsys-rep",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048.nsys-rep",
+      "source_sha256": "3371b2c129a25145cfd99e55f0bb13ef5fb1e3696f5c6f303405599448fe753d",
+      "source_bytes": 7603170,
+      "published_sha256": "3371b2c129a25145cfd99e55f0bb13ef5fb1e3696f5c6f303405599448fe753d",
+      "published_bytes": 7603170,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048.sqlite",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048.sqlite",
+      "source_sha256": "9f0b9644cd95c343d26f287e65a1f2733aaa2e72e785643f812d6ac4d5177e57",
+      "source_bytes": 18567168,
+      "published_sha256": "9f0b9644cd95c343d26f287e65a1f2733aaa2e72e785643f812d6ac4d5177e57",
+      "published_bytes": 18567168,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_case.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_case.csv",
+      "source_sha256": "ea777cfb0a97c67fb7e934ec6695e18ef044136df78997c6656fff5d9c488e4c",
+      "source_bytes": 1072,
+      "published_sha256": "ea777cfb0a97c67fb7e934ec6695e18ef044136df78997c6656fff5d9c488e4c",
+      "published_bytes": 1072,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_measured_scan_cuda_gpu_kern_sum_nvtx=mamba_state_update_output_fused-20.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_measured_scan_cuda_gpu_kern_sum_nvtx=mamba_state_update_output_fused-20.csv",
+      "source_sha256": "f0f3d6c79beda3eee4be35ca96d229008f677ef5c0309aa678fffbe90bebf78b",
+      "source_bytes": 415,
+      "published_sha256": "f0f3d6c79beda3eee4be35ca96d229008f677ef5c0309aa678fffbe90bebf78b",
+      "published_bytes": 415,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_meta.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_meta.json",
+      "source_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "source_bytes": 1129,
+      "published_sha256": "685cac43c5eea583640db1bc84ab427cacc086f64d3a7578fa4f2bfd31e869a4",
+      "published_bytes": 1129,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_nvtx_ranges_nvtx_sum.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys/mamba_prefill_b1_s2048_nvtx_ranges_nvtx_sum.csv",
+      "source_sha256": "a358d5f1e6ae23c733dd03db8d48b1ff2f8f91d723417f410501ba9e4f3582b0",
+      "source_bytes": 812,
+      "published_sha256": "a358d5f1e6ae23c733dd03db8d48b1ff2f8f91d723417f410501ba9e4f3582b0",
+      "published_bytes": 812,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys_nvtx_stage_summary/nvtx_stage_cuda_kernel_summary.csv",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys_nvtx_stage_summary/nvtx_stage_cuda_kernel_summary.csv",
+      "source_sha256": "056da2a6dca752d24c65a10bdf2267f66d87b287507aa389afa2644a22fb646e",
+      "source_bytes": 5313,
+      "published_sha256": "056da2a6dca752d24c65a10bdf2267f66d87b287507aa389afa2644a22fb646e",
+      "published_bytes": 5313,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/nsys_nvtx_stage_summary/nvtx_stage_cuda_kernel_summary.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/nsys_nvtx_stage_summary/nvtx_stage_cuda_kernel_summary.json",
+      "source_sha256": "30ea69425039588b47e15e5c19fcf89fb5dbb81f51b8781887b88befdf0a5eda",
+      "source_bytes": 5058,
+      "published_sha256": "30ea69425039588b47e15e5c19fcf89fb5dbb81f51b8781887b88befdf0a5eda",
+      "published_bytes": 5058,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/official_source_manifest.json",
+      "published_path": "results/NEMOTRON3_NANO_5090/official_source_manifest.json",
+      "source_sha256": "a158697686feaba58aa8793a1c521e0545c5bdd0dedea431c495adf093666b01",
+      "source_bytes": 703,
+      "published_sha256": "a158697686feaba58aa8793a1c521e0545c5bdd0dedea431c495adf093666b01",
+      "published_bytes": 703,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/profiling_notes.md",
+      "published_path": "results/NEMOTRON3_NANO_5090/profiling_notes.md",
+      "source_sha256": "5f077fcd24c49d7c69ce742047baccc7fca542ecaab6d3b956b8c1892c3fa0f3",
+      "source_bytes": 5817,
+      "published_sha256": "5f077fcd24c49d7c69ce742047baccc7fca542ecaab6d3b956b8c1892c3fa0f3",
+      "published_bytes": 5817,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/requirements-overlay-lock.txt",
+      "published_path": "results/NEMOTRON3_NANO_5090/requirements-overlay-lock.txt",
+      "source_sha256": "2cb1675e89c0fea9581878b23ecee40c047738dcdc6cffb948157d340fe3c3b1",
+      "source_bytes": 714,
+      "published_sha256": "2cb1675e89c0fea9581878b23ecee40c047738dcdc6cffb948157d340fe3c3b1",
+      "published_bytes": 714,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "results/NEMOTRON3_NANO_5090/requirements-profile.txt",
+      "published_path": "results/NEMOTRON3_NANO_5090/requirements-profile.txt",
+      "source_sha256": "b56ddce30ea844051a28bb697b2e85da137fd3e74c3f56b24c7de172f1058ee0",
+      "source_bytes": 428,
+      "published_sha256": "b56ddce30ea844051a28bb697b2e85da137fd3e74c3f56b24c7de172f1058ee0",
+      "published_bytes": 428,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/collect_nemotron3_environment.py",
+      "published_path": "scripts/collect_nemotron3_environment.py",
+      "source_sha256": "ab6b80bf41d9af61ffa106051ac82464948dc4b383cf3e40b18ad6903d987fd8",
+      "source_bytes": 4469,
+      "published_sha256": "ab6b80bf41d9af61ffa106051ac82464948dc4b383cf3e40b18ad6903d987fd8",
+      "published_bytes": 4469,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/export_nemotron3_nsys_nvtx.py",
+      "published_path": "scripts/export_nemotron3_nsys_nvtx.py",
+      "source_sha256": "96f8c11a3e05f3707843dd6e10490b8ad4a226e0db461b87b10cf49639a11c8b",
+      "source_bytes": 9045,
+      "published_sha256": "96f8c11a3e05f3707843dd6e10490b8ad4a226e0db461b87b10cf49639a11c8b",
+      "published_bytes": 9045,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/normalize_nemotron3_ncu.py",
+      "published_path": "scripts/normalize_nemotron3_ncu.py",
+      "source_sha256": "dd0912891e4359d5ac1469e63aa3603a2a6a6d540b8377e76090e42caecb69ed",
+      "source_bytes": 3218,
+      "published_sha256": "dd0912891e4359d5ac1469e63aa3603a2a6a6d540b8377e76090e42caecb69ed",
+      "published_bytes": 3218,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/profile_nemotron3_mamba_5090.py",
+      "published_path": "scripts/profile_nemotron3_mamba_5090.py",
+      "source_sha256": "26f09d7c90f6c47d7240d368306bfbe52847995b639066fa085423bf57254ccf",
+      "source_bytes": 18624,
+      "published_sha256": "26f09d7c90f6c47d7240d368306bfbe52847995b639066fa085423bf57254ccf",
+      "published_bytes": 18624,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/run_nemotron3_mamba_5090.sh",
+      "published_path": "scripts/run_nemotron3_mamba_5090.sh",
+      "source_sha256": "385be9ee7fd16405b69a1720ed38c866841ae922e05c62393bede974ffd0e962",
+      "source_bytes": 4019,
+      "published_sha256": "385be9ee7fd16405b69a1720ed38c866841ae922e05c62393bede974ffd0e962",
+      "published_bytes": 4019,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/setup_nemotron3_mamba_5090.sh",
+      "published_path": "scripts/setup_nemotron3_mamba_5090.sh",
+      "source_sha256": "9d369846ad21aeac487115636dc867f4c8d96a836a9d3d6de651bce4815f7ed3",
+      "source_bytes": 1922,
+      "published_sha256": "9d369846ad21aeac487115636dc867f4c8d96a836a9d3d6de651bce4815f7ed3",
+      "published_bytes": 1922,
+      "field_transformations": {},
+      "jsonl_rows": null
+    },
+    {
+      "source_path": "scripts/setup_nsight_compute_2026_2_1.sh",
+      "published_path": "scripts/setup_nsight_compute_2026_2_1.sh",
+      "source_sha256": "4b1e8e04cfaf4d48905ad7d848dd6d46e7f6d815301128c3edc82b0523215ae4",
+      "source_bytes": 693,
+      "published_sha256": "4b1e8e04cfaf4d48905ad7d848dd6d46e7f6d815301128c3edc82b0523215ae4",
+      "published_bytes": 693,
+      "field_transformations": {},
+      "jsonl_rows": null
+    }
+  ],
+  "excluded": [],
+  "notes": [
+    "Native profiler files are byte-preserved; no model checkpoint is packaged.",
+    "Original checksum files describe source bytes; use root SHA256SUMS for this export.",
+    "Vocabulary-token/content hashes replace the original arrays; private strict importers are not compatible with this publication schema."
+  ]
+}

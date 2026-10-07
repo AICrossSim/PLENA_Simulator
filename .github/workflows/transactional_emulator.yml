@@ -6,6 +6,11 @@ on:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'artifacts/matrix_lcompute*/**'
+      - 'artifacts/gpu_energy_reanalysis_v1/**'
+      - 'docs/MATRIX_LCOMPUTE*'
+      - 'doc/**'
       - 'PLENA_Tools/**'
       # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
       # stage-attribution guard below.
@@ -13,16 +18,25 @@ on:
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
+      - 'justfile'
+      - 'plena_settings.toml'
       - 'uv.lock'
   pull_request:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'artifacts/matrix_lcompute*/**'
+      - 'artifacts/gpu_energy_reanalysis_v1/**'
+      - 'docs/MATRIX_LCOMPUTE*'
+      - 'doc/**'
       - 'PLENA_Tools/**'
       - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
+      - 'justfile'
+      - 'plena_settings.toml'
       - 'uv.lock'
 
 concurrency:
@@ -33,7 +47,13 @@ jobs:
   rust-lint:
     runs-on: ubuntu-latest
     steps:
+      # Submodules: clippy compiles `--all-targets`, and one test guard reads the
+      # compiler's `doc/operation.svh` through `include_str!` to check that every
+      # opcode the compiler emits decodes here. Without the submodule that is a
+      # compile error, not a skipped test.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # Pinned: with `-D warnings`, a rolling channel reds unrelated PRs.
       - name: Install Rust toolchain
@@ -118,7 +138,7 @@ jobs:
 
       - name: Run Rust tests
         run: |
-          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release"
+          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release -- --test-threads=1"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -147,3 +167,50 @@ jobs:
       - name: Run emulator timing gates
         run: |
           nix develop --command bash -c "just test-timing-gates"
+
+      # Mamba-2 / selective SSM. Synthetic like the tests above -- no checkpoint,
+      # no HF libs. Inputs are drawn exactly representable in MX-FP8 so the
+      # reported error is the kernel's rather than the input quantisation's.
+      #
+      # All four cases are bit-exact (max absolute error 0.000000), so any
+      # regression shows up as a hard failure rather than as tolerance drift.
+      - name: Run Mamba-2 stage tests
+        run: |
+          nix develop --command bash -c "just test-mamba2-all"
+
+      # The chunked-SSD reference vs the plain recurrence, plus the cross-repo
+      # stage-marker contract. Pure torch.
+      - name: Run Mamba-2 reference cross-check
+        run: |
+          nix develop --command bash -c "just test-mamba2-reference"
+
+      # Assembles and executes every KDA stage on the Rust emulator. The second
+      # half crosses two 64-lane blocks, matching Kimi's 128x128 head geometry.
+      - name: Run KDA transactional stage tests
+        run: |
+          nix develop --command bash -c "just test-kda-all"
+
+      # Executes the actual Matrix writeback -> affine bank placement ->
+      # explicitly marked Vector-consumer path, then regenerates and hashes the
+      # two checked Compiler/Simulator campaigns.
+      - name: Run Hybrid L-Compute integration and artifact guards
+        run: |
+          nix develop --command bash -c "just test-lcompute-affine-projection && just test-hybrid-lcompute"
+
+      # The canonical Matrix-view v3 gate uses the checked-out Compiler pin and
+      # includes legal/invalid allocation cases plus actual Compiler-to-Rust DMA.
+      - name: Run canonical Matrix L-Compute pre-RTL gate
+        run: |
+          nix develop --no-write-lock-file --command just test-matrix-lcompute PLENA_Compiler
+
+      # Bandwidth term + the two KV-cost bugs it exposed in the analytic model.
+      - name: Run analytic performance-model regression tests
+        run: |
+          nix develop --command bash -c "just test-perf-model"
+
+      # Small, path-independent CSV/JSON contracts. This validates the real
+      # workload shapes and baselines without downloading checkpoints or raw
+      # Nsight reports.
+      - name: Validate GPU evidence contracts
+        run: |
+          nix develop --command bash -c "just test-gpu-evidence"

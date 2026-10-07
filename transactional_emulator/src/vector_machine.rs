@@ -9,15 +9,19 @@
 //! updated.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use half::bf16;
-use quantize::{QuantTensor, tensor_from_f32_slice};
+use quantize::{QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
 use sram::VectorSram;
-use tch::Tensor;
+use tch::{IndexOp, Tensor};
 
+#[cfg(test)]
+use crate::accelerator::PacketTestView;
+use crate::accelerator::{AffineView, PacketService, PhysicalCoord, packet_service};
 use crate::runtime_config::{
     VECTOR_ADD_CYCLES, VECTOR_EXP_CYCLES, VECTOR_MAX_CYCLES, VECTOR_MIN_CYCLES, VECTOR_MUL_CYCLES,
-    VECTOR_RECI_CYCLES, VECTOR_SUM_CYCLES, VLEN,
+    VECTOR_RECI_CYCLES, VECTOR_SOFTPLUS_CYCLES, VECTOR_SUM_CYCLES, VLEN,
 };
 use crate::{cycle, op};
 
@@ -27,6 +31,120 @@ pub(crate) struct VectorMachine {
     pub(crate) vram: Arc<VectorSram>,
     tile_size: u32,
     mask_unit: u32,
+    packet_counters: PacketCounters,
+    dot_accumulator: Option<Vec<f32>>,
+    pub(crate) update_lane: crate::ltile_v2::UpdateLane,
+}
+
+#[derive(Debug, Default)]
+struct PacketCounters {
+    read_packets: AtomicU64,
+    write_packets: AtomicU64,
+    bank_words: AtomicU64,
+    service_cycles: AtomicU64,
+    bandwidth_floor_cycles: AtomicU64,
+    conflict_stall_cycles: AtomicU64,
+    lane_restore_values: AtomicU64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PacketCounterSnapshot {
+    pub(crate) read_packets: u64,
+    pub(crate) write_packets: u64,
+    pub(crate) bank_words: u64,
+    pub(crate) service_cycles: u64,
+    pub(crate) bandwidth_floor_cycles: u64,
+    pub(crate) conflict_stall_cycles: u64,
+    pub(crate) lane_restore_values: u64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ScalarOperand {
+    Broadcast(f32),
+    Segmented { values: Vec<f32>, storage_atom: u32 },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum VectorBinaryOp {
+    Add,
+    Sub,
+    Mul,
+}
+
+/// Coefficient representation selected by the Matrix-view descriptor.
+/// A one-tile packet has the same length in either representation, so packet
+/// length cannot identify whether coefficients are global or packet-local.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum TileScaleLayout {
+    Compact { first_tile: u32 },
+    Expanded,
+}
+
+impl TileScaleLayout {
+    fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+        assert!(width as usize >= per_tile);
+        match self {
+            Self::Compact { first_tile } => {
+                assert_eq!(values, width as usize);
+                assert!(
+                    per_tile * (first_tile as usize + tiles) <= values,
+                    "compact L_TILE coefficients must cover every addressed tile"
+                );
+            }
+            Self::Expanded => assert_eq!(values, tiles * width as usize),
+        }
+    }
+
+    fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+        match self {
+            Self::Compact { first_tile } => per_tile * (first_tile as usize + tile),
+            Self::Expanded => tile * width as usize,
+        }
+    }
+}
+
+impl From<f32> for ScalarOperand {
+    fn from(value: f32) -> Self {
+        Self::Broadcast(value)
+    }
+}
+
+impl ScalarOperand {
+    fn tensor(&self, tile_size: u32) -> Tensor {
+        match self {
+            Self::Broadcast(value) => Tensor::from(*value as f64),
+            Self::Segmented {
+                values,
+                storage_atom,
+            } => {
+                let expanded: Vec<f32> = values
+                    .iter()
+                    .flat_map(|value| std::iter::repeat_n(*value, *storage_atom as usize))
+                    .collect();
+                assert_eq!(
+                    expanded.len(),
+                    tile_size as usize,
+                    "segmented scalar packet must expand to one Vector tile"
+                );
+                tensor_from_f32_slice(&expanded)
+            }
+        }
+    }
+
+    fn require_broadcast(&self) -> f32 {
+        match self {
+            Self::Broadcast(value) => *value,
+            Self::Segmented { .. } => {
+                panic!("masked Vector operations do not support segmented scalar packets")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct VectorOperandViews {
+    pub(crate) destination: Option<AffineView>,
+    pub(crate) source: Option<AffineView>,
 }
 
 impl VectorMachine {
@@ -35,6 +153,228 @@ impl VectorMachine {
             vram,
             tile_size,
             mask_unit,
+            packet_counters: PacketCounters::default(),
+            dot_accumulator: None,
+            update_lane: crate::ltile_v2::UpdateLane::new(crate::ltile_v2::UpdateConfig::from_env()),
+        }
+    }
+
+    /// Explicit experimental storage: 4*VLEN bytes plus valid state. No SRAM
+    /// capacity/port credit; FP32 mul/add throughput is a modeling assumption.
+    pub(crate) async fn dot_reset(&mut self) {
+        self.dot_accumulator = Some(vec![0.0; self.tile_size as usize]);
+        crate::timing::charge_arithmetic_cycles(1).await;
+    }
+
+    pub(crate) async fn dot_acc(&mut self, source1: u32, source2: u32) {
+        assert!(self.dot_accumulator.is_some(), "V_DOT_ACC requires RESET");
+        let (a, b) = tokio::join!(self.vram.read(source1), self.vram.read(source2));
+        crate::timing::charge_ordinary_bank_cycles(2).await;
+        let a = tensor_to_f32_vec(a.as_tensor());
+        let b = tensor_to_f32_vec(b.as_tensor());
+        let accumulator = self.dot_accumulator.as_mut().unwrap();
+        assert_eq!(a.len(), accumulator.len());
+        assert_eq!(b.len(), accumulator.len());
+        for ((sum, x), y) in accumulator.iter_mut().zip(a).zip(b) {
+            *sum += x * y;
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+    }
+
+    pub(crate) async fn dot_write(&mut self, destination: u32) {
+        let accumulator = self
+            .dot_accumulator
+            .take()
+            .expect("V_DOT_WRITE requires RESET");
+        let value = QuantTensor::quantize(tensor_from_f32_slice(&accumulator), self.vram.ty());
+        // Charge the ordinary single-port write service and conversion.
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        crate::timing::charge_arithmetic_cycles(1).await;
+        self.vram.write(destination, value).await;
+    }
+
+    pub(crate) fn tile_size(&self) -> u32 {
+        self.tile_size
+    }
+
+    pub(crate) fn packet_counter_snapshot(&self) -> PacketCounterSnapshot {
+        PacketCounterSnapshot {
+            read_packets: self.packet_counters.read_packets.load(Ordering::Relaxed),
+            write_packets: self.packet_counters.write_packets.load(Ordering::Relaxed),
+            bank_words: self.packet_counters.bank_words.load(Ordering::Relaxed),
+            service_cycles: self.packet_counters.service_cycles.load(Ordering::Relaxed),
+            bandwidth_floor_cycles: self
+                .packet_counters
+                .bandwidth_floor_cycles
+                .load(Ordering::Relaxed),
+            conflict_stall_cycles: self
+                .packet_counters
+                .conflict_stall_cycles
+                .load(Ordering::Relaxed),
+            lane_restore_values: self
+                .packet_counters
+                .lane_restore_values
+                .load(Ordering::Relaxed),
+        }
+    }
+
+    #[cfg(test)]
+    fn reset_packet_counters(&self) {
+        for counter in [
+            &self.packet_counters.read_packets,
+            &self.packet_counters.write_packets,
+            &self.packet_counters.bank_words,
+            &self.packet_counters.service_cycles,
+            &self.packet_counters.bandwidth_floor_cycles,
+            &self.packet_counters.conflict_stall_cycles,
+            &self.packet_counters.lane_restore_values,
+        ] {
+            counter.store(0, Ordering::Relaxed);
+        }
+    }
+
+    fn record_packet_service(&self, service: PacketService, write: bool, restore: bool) {
+        let packets = if write {
+            &self.packet_counters.write_packets
+        } else {
+            &self.packet_counters.read_packets
+        };
+        packets.fetch_add(1, Ordering::Relaxed);
+        self.packet_counters
+            .bank_words
+            .fetch_add(service.bank_words as u64, Ordering::Relaxed);
+        self.packet_counters
+            .service_cycles
+            .fetch_add(service.service_cycles as u64, Ordering::Relaxed);
+        self.packet_counters
+            .bandwidth_floor_cycles
+            .fetch_add(service.bandwidth_floor_cycles as u64, Ordering::Relaxed);
+        self.packet_counters
+            .conflict_stall_cycles
+            .fetch_add(service.conflict_stall_cycles() as u64, Ordering::Relaxed);
+        if restore {
+            self.packet_counters.lane_restore_values.fetch_add(
+                service.values as u64 * self.vram.bank_width() as u64,
+                Ordering::Relaxed,
+            );
+        }
+    }
+
+    fn view_coordinates(&self, addr: u32, view: AffineView) -> Vec<PhysicalCoord> {
+        let bank_width = self.vram.bank_width();
+        assert_eq!(
+            view.storage_atom(),
+            bank_width,
+            "affine storage atom must equal one physical bank word"
+        );
+        let logical_addresses: Vec<u32> = if view.is_packetized() {
+            assert_eq!(
+                view.packet_elements(),
+                self.tile_size,
+                "packetized Vector operands must contain exactly VLEN elements"
+            );
+            let segments = view.packet_elements() / view.storage_atom();
+            (0..segments)
+                .map(|segment| addr + segment * view.packet_stride())
+                .collect()
+        } else {
+            (0..self.tile_size)
+                .step_by(bank_width as usize)
+                .map(|offset| addr + offset)
+                .collect()
+        };
+        logical_addresses
+            .into_iter()
+            .map(|logical| {
+                let coordinate = view
+                    .place(logical, self.vram.banks())
+                    .unwrap_or_else(|error| panic!("invalid affine Vector address: {error}"));
+                assert_eq!(coordinate.sublane, 0);
+                coordinate
+            })
+            .collect()
+    }
+
+    async fn read_view(&self, addr: u32, view: Option<AffineView>) -> QuantTensor {
+        let Some(view) = view else {
+            return self.vram.read(addr).await;
+        };
+        assert!(
+            view.restores_lanes(),
+            "an affine Vector operand must request lane restoration"
+        );
+        let bank_width = self.vram.bank_width();
+        let coordinates = self.view_coordinates(addr, view);
+        if view.is_packetized() {
+            let service = packet_service(&coordinates, self.vram.banks(), 2)
+                .expect("valid packet read service");
+            self.record_packet_service(service, false, view.restores_lanes());
+            let stalls = service.conflict_stall_cycles();
+            if stalls > 0 {
+                cycle!(stalls);
+            }
+        }
+
+        let mut chunks = Vec::with_capacity(coordinates.len());
+        let mut data_type = None;
+        for coordinate in coordinates {
+            let physical = self.vram.read(coordinate.bank_row * self.tile_size).await;
+            data_type.get_or_insert(physical.data_type());
+            chunks
+                .push(physical.as_tensor().i((coordinate.bank * bank_width) as i64
+                    ..((coordinate.bank + 1) * bank_width) as i64));
+        }
+        QuantTensor::quantize(
+            Tensor::cat(&chunks, 0),
+            data_type.expect("an affine Vector row contains at least one bank word"),
+        )
+    }
+
+    async fn write_view(&self, addr: u32, view: Option<AffineView>, value: QuantTensor) {
+        let Some(view) = view else {
+            self.vram.write(addr, value).await;
+            return;
+        };
+        assert!(
+            view.restores_lanes(),
+            "an affine Vector operand must request lane restoration"
+        );
+        let bank_width = self.vram.bank_width();
+        let coordinates = self.view_coordinates(addr, view);
+        if view.is_packetized() {
+            let unique: std::collections::BTreeSet<_> = coordinates.iter().copied().collect();
+            assert_eq!(
+                unique.len(),
+                coordinates.len(),
+                "packetized Vector destination aliases two logical atoms"
+            );
+            let service = packet_service(&coordinates, self.vram.banks(), 1)
+                .expect("valid packet write service");
+            self.record_packet_service(service, true, false);
+            let stalls = service.conflict_stall_cycles();
+            if stalls > 0 {
+                cycle!(stalls);
+            }
+        }
+        for (logical_offset, coordinate) in coordinates.into_iter().enumerate() {
+            let physical_addr = coordinate.bank_row * self.tile_size;
+            let old = self.vram.read(physical_addr).await;
+            let physical = old.as_tensor().shallow_clone();
+            physical
+                .i((coordinate.bank * bank_width) as i64
+                    ..((coordinate.bank + 1) * bank_width) as i64)
+                .copy_(
+                    &value
+                        .as_tensor()
+                        .i((logical_offset as u32 * bank_width) as i64
+                            ..((logical_offset as u32 + 1) * bank_width) as i64),
+                );
+            self.vram
+                .write(
+                    physical_addr,
+                    QuantTensor::quantize(physical, old.data_type()),
+                )
+                .await;
         }
     }
 
@@ -42,7 +382,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor() + (f as f64), a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             // mask is a bitmask; each bit controls whether to apply 'f' to corresponding mask_unit-section
@@ -61,7 +401,7 @@ impl VectorMachine {
                 // else leave unchanged
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -76,14 +416,15 @@ impl VectorMachine {
         rorder: op::VectorOrder,
     ) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         if rmask == 0 {
             if matches!(rorder, op::VectorOrder::Normal) {
                 let c = QuantTensor::quantize(a.as_tensor() - (f as f64), a.data_type());
-                cycle!(*VECTOR_ADD_CYCLES);
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
                 self.vram.write(vd, c).await;
             } else {
                 let c = QuantTensor::quantize((f as f64) - a.as_tensor(), a.data_type());
-                cycle!(*VECTOR_ADD_CYCLES);
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
                 self.vram.write(vd, c).await;
             }
         } else {
@@ -107,18 +448,29 @@ impl VectorMachine {
                 // else leave unchanged
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
 
-    pub(crate) async fn mul_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
-        let a = self.vram.read(vs1).await;
+    pub(crate) async fn mul_scalar(
+        &self,
+        vd: u32,
+        vs1: u32,
+        f: ScalarOperand,
+        rmask: u8,
+        mask: u32,
+        views: VectorOperandViews,
+    ) {
+        let a = self.read_view(vs1, views.source).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() * (f as f64), a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            let scalar = f.tensor(self.tile_size);
+            let c = QuantTensor::quantize(a.as_tensor() * scalar, a.data_type());
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
+            self.write_view(vd, views.destination, c).await;
         } else {
+            let f = f.require_broadcast();
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
@@ -131,16 +483,62 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
+            self.write_view(vd, views.destination, c).await;
+        }
+    }
+
+    /// `Vector[vd] += Vector[vs1] * f`.
+    ///
+    /// Mirrors `mul_scalar` but reads the destination too, so the accumulate is
+    /// part of the instruction rather than a separate `V_ADD_VV` over a scratch
+    /// row. The quantisation happens once, on the sum -- which is what makes it
+    /// a *fused* multiply-add and not just a shorter encoding of the pair.
+    pub(crate) async fn fma_scalar(
+        &self,
+        vd: u32,
+        vs1: u32,
+        f: ScalarOperand,
+        rmask: u8,
+        mask: u32,
+        views: VectorOperandViews,
+    ) {
+        let a = self.read_view(vs1, views.source).await;
+        let d = self.read_view(vd, views.destination).await;
+        if rmask == 0 {
+            let scalar = f.tensor(self.tile_size);
+            let c = QuantTensor::quantize(d.as_tensor() + a.as_tensor() * scalar, d.data_type());
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
+            self.write_view(vd, views.destination, c).await;
+        } else {
+            let f = f.require_broadcast();
+            // Masked-off heads keep the destination's existing value, so the
+            // result starts as d and not as a -- the opposite of mul_scalar,
+            // where the source is the base.
+            let result = d.as_tensor().shallow_clone();
+            let total_heads = self.tile_size / self.mask_unit;
+            for head in 0..total_heads {
+                if (mask & (1 << head)) != 0 {
+                    let start = (head * self.mask_unit) as i64;
+                    let end = ((head + 1) * self.mask_unit) as i64;
+                    let sliced = result.narrow(0, start, end - start);
+                    let addend = a.as_tensor().narrow(0, start, end - start) * (f as f64);
+                    let updated = &sliced + &addend;
+                    result.narrow(0, start, end - start).copy_(&updated);
+                }
+            }
+            let c = QuantTensor::quantize(result, d.data_type());
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
+            self.write_view(vd, views.destination, c).await;
         }
     }
 
     pub(crate) async fn max_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().clamp_min(f as f64), a.data_type());
-            cycle!(*VECTOR_MAX_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -155,7 +553,7 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MAX_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -164,7 +562,7 @@ impl VectorMachine {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().clamp_max(f as f64), a.data_type());
-            cycle!(*VECTOR_MIN_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MIN_CYCLES).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -179,13 +577,14 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MIN_CYCLES);
+            crate::timing::charge_arithmetic_cycles(*VECTOR_MIN_CYCLES).await;
             self.vram.write(vd, c).await;
         }
     }
 
     pub(crate) async fn shift_scalar(&self, vd: u32, vs1: u32, shift: u32) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
         let tensor = a.as_tensor();
         let len = tensor.size()[0];
         let shift_amount = shift as i64;
@@ -205,64 +604,60 @@ impl VectorMachine {
             Tensor::cat(&[zeros, shifted_part], 0)
         };
         let c = QuantTensor::quantize(result, a.data_type());
-        cycle!(*VECTOR_MUL_CYCLES);
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
         self.vram.write(vd, c).await;
     }
 
     pub(crate) async fn add(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() + b.as_tensor(), a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        } else {
-            let result = a.as_tensor().shallow_clone();
-            let total_heads = self.tile_size / self.mask_unit;
-            for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
-                    let start = (head * self.mask_unit) as i64;
-                    let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced + b.as_tensor().narrow(0, start, end - start);
-                    result.narrow(0, start, end - start).copy_(&updated);
-                }
-            }
-            let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        }
+        crate::timing::charge_ordinary_bank_cycles(2).await;
+        let result = self
+            .binary_packet(VectorBinaryOp::Add, a, b, rmask, mask)
+            .await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        self.vram.write(vd, result).await;
     }
 
     pub(crate) async fn sub(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() - b.as_tensor(), a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        } else {
-            let result = a.as_tensor().shallow_clone();
-            let total_heads = self.tile_size / self.mask_unit;
-            for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
-                    let start = (head * self.mask_unit) as i64;
-                    let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced - b.as_tensor().narrow(0, start, end - start);
-                    result.narrow(0, start, end - start).copy_(&updated);
-                }
-            }
-            let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        }
+        crate::timing::charge_ordinary_bank_cycles(2).await;
+        let result = self
+            .binary_packet(VectorBinaryOp::Sub, a, b, rmask, mask)
+            .await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        self.vram.write(vd, result).await;
     }
 
     pub(crate) async fn mul(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() * b.as_tensor(), a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+        crate::timing::charge_ordinary_bank_cycles(2).await;
+        let result = self
+            .binary_packet(VectorBinaryOp::Mul, a, b, rmask, mask)
+            .await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        self.vram.write(vd, result).await;
+    }
+
+    /// Apply the existing Vector ALU to already-resolved operands.
+    ///
+    /// Matrix-view addressing uses this entry point after the Matrix SRAM has
+    /// restored logical lane order. It does not add a new arithmetic unit or a
+    /// model-specific formula; the ordinary Vector methods above share it.
+    pub(crate) async fn binary_packet(
+        &self,
+        op: VectorBinaryOp,
+        a: QuantTensor,
+        b: QuantTensor,
+        rmask: u8,
+        mask: u32,
+    ) -> QuantTensor {
+        let apply = |lhs: &Tensor, rhs: &Tensor| match op {
+            VectorBinaryOp::Add => lhs + rhs,
+            VectorBinaryOp::Sub => lhs - rhs,
+            VectorBinaryOp::Mul => lhs * rhs,
+        };
+        let result = if rmask == 0 {
+            apply(a.as_tensor(), b.as_tensor())
         } else {
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
@@ -270,25 +665,207 @@ impl VectorMachine {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced * b.as_tensor().narrow(0, start, end - start);
+                    let lhs = result.narrow(0, start, end - start);
+                    let rhs = b.as_tensor().narrow(0, start, end - start);
+                    let updated = apply(&lhs, &rhs);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
-            let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            result
+        };
+        match op {
+            VectorBinaryOp::Add | VectorBinaryOp::Sub => {
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
+            }
+            VectorBinaryOp::Mul => {
+                crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
+            }
         }
+        QuantTensor::quantize(result, a.data_type())
+    }
+
+    /// Generic row-wise affine recurrence primitive used by `L_TILE_EXEC`.
+    pub(crate) async fn tile_scale_accum(
+        &self,
+        destination: QuantTensor,
+        source: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let src = tensor_to_f32_vec(source.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        let rows = dst.len() / row_width as usize;
+        assert_eq!(dst.len(), rows * row_width as usize);
+        assert!(src.len() == row_width as usize || src.len() == dst.len());
+        scale_layout.validate(coeff.len(), rows, scale_width, 2);
+
+        let mut result = vec![0_f32; dst.len()];
+        for row in 0..rows {
+            let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+            let a = coeff[coefficient];
+            let b = coeff[coefficient + 1];
+            for col in 0..row_width as usize {
+                let index = row * row_width as usize + col;
+                let source_index = if src.len() == row_width as usize {
+                    col
+                } else {
+                    index
+                };
+                result[index] = a * dst[index] + b * src[source_index];
+            }
+        }
+        // The v2 profile cannot obtain a hidden full-width FP32 affine unit
+        // for Mamba's dt*x / output skip. Share the bounded update lane bank.
+        // Legacy opcode 0 retains its arithmetic and RNE store (no SR draw).
+        // This old packet interface conservatively drains each L-sized chunk.
+        let cycles = if std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1") {
+            assert!(dst.len() <= self.update_lane.config.lanes as usize);
+            self.update_lane.config.packet_cycles(dst.len())
+        } else {
+            2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES
+        };
+        crate::timing::charge_arithmetic_cycles(cycles).await;
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
+    }
+
+    /// v2 fused delta update; separate from the legacy affine primitive.
+    pub(crate) async fn tile_delta_update(
+        &self,
+        destination: QuantTensor,
+        source: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let src = tensor_to_f32_vec(source.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        assert!(row_width > 0 && dst.len().is_multiple_of(row_width as usize));
+        let rows = dst.len() / row_width as usize;
+        assert!(src.len() == row_width as usize || src.len() == dst.len());
+        assert!(dst.len() <= self.update_lane.config.lanes as usize);
+        scale_layout.validate(coeff.len(), rows, scale_width, 2);
+        let result = dst
+            .iter()
+            .enumerate()
+            .map(|(index, &s)| {
+                let row = index / row_width as usize;
+                let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+                let source_index = if src.len() == row_width as usize {
+                    index % row_width as usize
+                } else {
+                    index
+                };
+                self.update_lane.update(
+                    index,
+                    s,
+                    coeff[coefficient],
+                    coeff[coefficient + 1],
+                    src[source_index],
+                )
+            })
+            .collect::<Vec<_>>();
+        crate::timing::charge_arithmetic_cycles(self.update_lane.config.packet_cycles(dst.len()))
+            .await;
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
+    }
+
+    /// Accumulate one recurrence-row packet into per-tile dot products.
+    ///
+    /// `rows` is laid out as `[tile][row_width]`; each tile owns one scalar in
+    /// the corresponding scale row.  Repeating this primitive over the
+    /// recurrence-row loop computes `sum_k scale[tile,k] * state[tile,k,:]`
+    /// without materialising a transpose or reducing unrelated heads together.
+    pub(crate) async fn tile_dot_accumulate(
+        &self,
+        accumulator: &mut [f32],
+        rows: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) {
+        let values = tensor_to_f32_vec(rows.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        assert!(row_width > 0);
+        assert!(values.len().is_multiple_of(row_width as usize));
+        let row_count = values.len() / row_width as usize;
+        assert_eq!(accumulator.len(), values.len());
+        scale_layout.validate(coeff.len(), row_count, scale_width, 1);
+
+        for row in 0..row_count {
+            let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+            for lane in 0..row_width as usize {
+                let index = row * row_width as usize + lane;
+                accumulator[index] += values[index] * scale;
+            }
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+    }
+
+    /// Generic row-wise outer/rank-1 update used by linear recurrences.
+    pub(crate) async fn tile_outer_update(
+        &self,
+        destination: QuantTensor,
+        vector: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let source = tensor_to_f32_vec(vector.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        let rows = dst.len() / row_width as usize;
+        assert!(
+            source.len() == row_width as usize || source.len() == dst.len(),
+            "OUTER_UPDATE source must be shared by every tile or provide one row per tile"
+        );
+        scale_layout.validate(coeff.len(), rows, scale_width, 1);
+        let mut result = dst;
+        for row in 0..rows {
+            let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+            for col in 0..row_width as usize {
+                let index = row * row_width as usize + col;
+                let source_index = if source.len() == row_width as usize {
+                    col
+                } else {
+                    index
+                };
+                result[index] += source[source_index] * scale;
+            }
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
     }
 
     pub(crate) async fn exp(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
+        if crate::timing::execution_counters().enabled {
+            assert!(
+                crate::runtime_config::VECTOR_SFU.is_some(),
+                "gate SFU requires an explicit finite-width service profile"
+            );
+        }
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
         // This matches what hardware exp units do (saturate instead of producing inf/NaN).
         let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
             let c = QuantTensor::quantize(clamped.exp(), a.data_type());
-            cycle!(*VECTOR_EXP_CYCLES);
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_EXP_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.exp)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         } else {
             let result = clamped.shallow_clone();
@@ -303,16 +880,103 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_EXP_CYCLES);
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_EXP_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.exp)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         }
     }
 
+    /// Elementwise `softplus(x) = log(1 + exp(x))`.
+    ///
+    /// Evaluated as `relu(x) + log1p(exp(-|x|))`. That identity is algebraically
+    /// exact and never feeds `exp` a positive argument, so unlike the naive
+    /// `log1p(exp(x))` it cannot overflow — no input clamp is needed and none is
+    /// applied, which matters because Mamba's `dt` feeds `exp(A*dt)` and a clamp
+    /// would silently flatten the decay for large `dt`.
+    fn softplus_tensor(x: &Tensor) -> Tensor {
+        x.clamp_min(0.0) + x.abs().neg().exp().log1p()
+    }
+
+    pub(crate) async fn softplus(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
+        if crate::timing::execution_counters().enabled {
+            assert!(
+                crate::runtime_config::VECTOR_SFU.is_some(),
+                "gate SFU requires an explicit finite-width service profile"
+            );
+        }
+        let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        if rmask == 0 {
+            let c = QuantTensor::quantize(Self::softplus_tensor(a.as_tensor()), a.data_type());
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_SOFTPLUS_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.softplus)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
+            self.vram.write(vd, c).await;
+        } else {
+            let result = a.as_tensor().shallow_clone();
+            let total_heads = self.tile_size / self.mask_unit;
+            for head in 0..total_heads {
+                if (mask & (1 << head)) != 0 {
+                    let start = (head * self.mask_unit) as i64;
+                    let end = ((head + 1) * self.mask_unit) as i64;
+                    let sliced = result.narrow(0, start, end - start);
+                    let updated = Self::softplus_tensor(&sliced);
+                    result.narrow(0, start, end - start).copy_(&updated);
+                }
+            }
+            let c = QuantTensor::quantize(result, a.data_type());
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_SOFTPLUS_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.softplus)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
+            self.vram.write(vd, c).await;
+        }
+    }
+
+    /// Read one whole VLEN-wide VRAM row out to the scalar domain.
+    ///
+    /// The inverse direction of [`Self::vector_transfer_fp`], and the engine behind
+    /// `S_MAP_FP_V`. Charged the same VLEN cycles as the forward transfer.
+    pub(crate) async fn vector_read_fp(&self, vs1: u32) -> Vec<bf16> {
+        let a = self.vram.read(vs1).await;
+        let values =
+            Vec::<f32>::try_from(a.as_tensor()).expect("VRAM row must be convertible to Vec<f32>");
+        cycle!(*VLEN);
+        values.into_iter().map(bf16::from_f32).collect()
+    }
+
     pub(crate) async fn reciprocal(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        crate::timing::charge_ordinary_bank_cycles(1).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor().reciprocal(), a.data_type());
-            cycle!(*VECTOR_RECI_CYCLES);
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_RECI_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.reciprocal)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
@@ -327,7 +991,15 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_RECI_CYCLES);
+            crate::timing::charge_arithmetic_cycles(
+                crate::runtime_config::VECTOR_SFU
+                    .as_ref()
+                    .map_or(*VECTOR_RECI_CYCLES, |sfu| {
+                        sfu.service(self.tile_size, sfu.reciprocal)
+                    }),
+            )
+            .await;
+            crate::timing::charge_ordinary_bank_cycles(1).await;
             self.vram.write(vd, c).await;
         }
     }
@@ -348,9 +1020,38 @@ impl VectorMachine {
         self.vram.write(vd, c).await;
     }
 
-    pub(crate) async fn reduce_sum(&self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
-        let a = self.vram.read(vs1).await;
-        cycle!(*VECTOR_SUM_CYCLES);
+    pub(crate) async fn reduce_sum(
+        &self,
+        vs1: u32,
+        f: f32,
+        rmask: u8,
+        mask: u32,
+        vs1_view: Option<AffineView>,
+    ) -> f32 {
+        let a = self.read_view(vs1, vs1_view).await;
+        if crate::timing::execution_counters().enabled {
+            assert!(rmask == 0 && vs1_view.is_none());
+            assert_eq!(
+                std::env::var("PLENA_VECTOR_REDUCE_BF16_TREE").as_deref(),
+                Ok("1"),
+                "unified norm reduction needs explicit BF16 tree contract"
+            );
+            crate::timing::charge_bank_cycles(1).await;
+            let mut values = Vec::<f32>::try_from(a.as_tensor().to_kind(tch::Kind::Float)).unwrap();
+            assert!(values.len().is_power_of_two());
+            let stages = values.len().ilog2();
+            while values.len() > 1 {
+                values = values
+                    .chunks_exact(2)
+                    .map(|p| bf16::from_f32(p[0] + p[1]).to_f32())
+                    .collect();
+            }
+            // Registered BF16 add tree, one cycle per stage; this remains an
+            // explicit candidate latency until the existing tree is audited.
+            crate::timing::charge_arithmetic_cycles(stages + 1).await;
+            return f + values[0];
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_SUM_CYCLES).await;
         if rmask == 0 {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
             f + val
@@ -373,7 +1074,8 @@ impl VectorMachine {
 
     pub(crate) async fn reduce_max(&self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
         let a = self.vram.read(vs1).await;
-        cycle!(*VECTOR_MAX_CYCLES);
+        crate::timing::charge_ordinary_bank_cycles(1).await;
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MAX_CYCLES).await;
         if rmask == 0 {
             let val: f32 = a.as_tensor().max().try_into().unwrap();
             f32::max(val, f)
@@ -455,7 +1157,10 @@ impl VectorMachine {
             .collect();
         let indices: Vec<u32> = selected.iter().map(|(idx, _)| *idx as u32).collect();
 
-        cycle!((*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32));
+        crate::timing::charge_arithmetic_cycles(
+            (*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32),
+        )
+        .await;
         (indices, weights)
     }
 }
@@ -471,6 +1176,726 @@ mod tests {
         let len = tensor.size()[0] as usize;
         let data = unsafe { core::slice::from_raw_parts(tensor.data_ptr() as *const f32, len) };
         data.to_vec()
+    }
+
+    async fn run_multirow_rank_update(alpha: u32) -> (Vec<f32>, PacketCounterSnapshot, u64) {
+        const VLEN: u32 = 16;
+        const ROWS: u32 = 8;
+        const ATOM: u32 = 4;
+        let fp_type = DataType::Fp(FpType::BF16);
+        let ty = MxDataType::Plain(fp_type);
+        let vram = Arc::new(VectorSram::with_banks(VLEN, 32, fp_type, 4, 4));
+        let machine = VectorMachine::new(vram.clone(), VLEN, 4);
+        let state_base = 0;
+        let source_base = ROWS * VLEN;
+        let state_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: VLEN,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            packet_elements: VLEN,
+            physical_base_row: state_base / VLEN,
+            packet_stride: VLEN,
+            packetized: true,
+            compact_packet: alpha != 0,
+            write: true,
+        });
+        let source_view = AffineView::packet_test_view(PacketTestView {
+            base: source_base,
+            extent_minor: VLEN,
+            extent_major: ROWS,
+            alpha: 0,
+            storage_atom: ATOM,
+            packet_elements: VLEN,
+            physical_base_row: source_base / VLEN,
+            packet_stride: 0,
+            packetized: true,
+            compact_packet: false,
+            write: false,
+        });
+        let state_read_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: VLEN,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            packet_elements: VLEN,
+            physical_base_row: state_base / VLEN,
+            packet_stride: VLEN,
+            packetized: true,
+            compact_packet: alpha != 0,
+            write: false,
+        });
+        let state: Vec<f32> = (0..ROWS * VLEN).map(|index| index as f32).collect();
+        let source: Vec<f32> = (0..VLEN).map(|index| (index + 1) as f32).collect();
+        vram.write(
+            source_base,
+            QuantTensor::quantize(tensor_from_f32_slice(&source), ty),
+        )
+        .await;
+
+        let minor_steps = VLEN / ATOM;
+        let segments = VLEN / ATOM;
+        for packet_index in 0..ROWS {
+            let minor = packet_index % minor_steps;
+            let block = packet_index / minor_steps;
+            let origin = state_base + minor * ATOM + block * segments * VLEN;
+            let mut packet = Vec::with_capacity(VLEN as usize);
+            for segment in 0..segments {
+                let row = block * segments + segment;
+                let begin = (row * VLEN + minor * ATOM) as usize;
+                packet.extend_from_slice(&state[begin..begin + ATOM as usize]);
+            }
+            machine
+                .write_view(
+                    origin,
+                    Some(state_view),
+                    QuantTensor::quantize(tensor_from_f32_slice(&packet), ty),
+                )
+                .await;
+        }
+
+        machine.reset_packet_counters();
+        let start = Executor::current().now();
+        for packet_index in 0..ROWS {
+            let minor = packet_index % minor_steps;
+            let block = packet_index / minor_steps;
+            let state_origin = state_base + minor * ATOM + block * segments * VLEN;
+            let source_origin = source_base + minor * ATOM;
+            let scalars = (0..segments)
+                .map(|segment| (block * segments + segment + 1) as f32)
+                .collect();
+            machine
+                .fma_scalar(
+                    state_origin,
+                    source_origin,
+                    ScalarOperand::Segmented {
+                        values: scalars,
+                        storage_atom: ATOM,
+                    },
+                    0,
+                    u32::MAX,
+                    VectorOperandViews {
+                        destination: Some(state_view),
+                        source: Some(source_view),
+                    },
+                )
+                .await;
+        }
+        let elapsed = (Executor::current().now() - start).as_picos();
+        let counters = machine.packet_counter_snapshot();
+        let mut output = vec![0.0; state.len()];
+        for packet_index in 0..ROWS {
+            let minor = packet_index % minor_steps;
+            let block = packet_index / minor_steps;
+            let origin = state_base + minor * ATOM + block * segments * VLEN;
+            let packet = tensor_values(
+                machine
+                    .read_view(origin, Some(state_read_view))
+                    .await
+                    .as_tensor(),
+            );
+            for segment in 0..segments {
+                let row = block * segments + segment;
+                let logical_begin = (row * VLEN + minor * ATOM) as usize;
+                let packet_begin = (segment * ATOM) as usize;
+                output[logical_begin..logical_begin + ATOM as usize]
+                    .copy_from_slice(&packet[packet_begin..packet_begin + ATOM as usize]);
+            }
+        }
+        (output, counters, elapsed)
+    }
+
+    #[tokio::test]
+    async fn affine_multirow_packet_eliminates_conflicts_and_preserves_rank_update_values() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            let row = run_multirow_rank_update(0).await;
+            let affine = run_multirow_rank_update(1).await;
+            *got_task.lock().unwrap() = Some((row, affine));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let ((row_values, row_counters, row_time), (affine_values, affine_counters, affine_time)) =
+            got.lock().unwrap().take().unwrap();
+        assert_eq!(
+            row_values, affine_values,
+            "layout must not change recurrence values"
+        );
+        assert!(row_counters.conflict_stall_cycles > 0);
+        assert_eq!(affine_counters.conflict_stall_cycles, 0);
+        assert!(row_time > affine_time);
+        assert_eq!(row_counters.read_packets, affine_counters.read_packets);
+        assert_eq!(row_counters.write_packets, affine_counters.write_packets);
+        assert_eq!(affine_counters.lane_restore_values, 2 * 8 * 16);
+    }
+
+    async fn run_paper_width_short_row_rank_update(
+        alpha: u32,
+    ) -> (Vec<f32>, PacketCounterSnapshot, u64, usize) {
+        const PACKET: u32 = 2048;
+        const ROW_ELEMENTS: u32 = 64;
+        const ROWS: u32 = PACKET / ROW_ELEMENTS;
+        const BANKS: u32 = 32;
+        const ATOM: u32 = 64;
+        let fp_type = DataType::Fp(FpType::BF16);
+        let ty = MxDataType::Plain(fp_type);
+        let vram = Arc::new(VectorSram::with_banks(PACKET, 64, fp_type, 4, BANKS));
+        let machine = VectorMachine::new(vram.clone(), PACKET, ROW_ELEMENTS);
+        let state_base = 0;
+        let source_base = ROWS * ROW_ELEMENTS;
+        let source_physical_row = ROWS;
+        let state_write_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: ROW_ELEMENTS,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            packet_elements: PACKET,
+            physical_base_row: 0,
+            packet_stride: ROW_ELEMENTS,
+            packetized: true,
+            compact_packet: alpha != 0,
+            write: true,
+        });
+        let state_read_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: ROW_ELEMENTS,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            packet_elements: PACKET,
+            physical_base_row: 0,
+            packet_stride: ROW_ELEMENTS,
+            packetized: true,
+            compact_packet: alpha != 0,
+            write: false,
+        });
+        let source_view = AffineView::packet_test_view(PacketTestView {
+            base: source_base,
+            extent_minor: ROW_ELEMENTS,
+            extent_major: 1,
+            alpha: 0,
+            storage_atom: ATOM,
+            packet_elements: PACKET,
+            physical_base_row: source_physical_row,
+            packet_stride: 0,
+            packetized: true,
+            compact_packet: false,
+            write: false,
+        });
+        let physical_rows = (0..ROWS)
+            .map(|row| {
+                state_read_view
+                    .place(row * ROW_ELEMENTS, BANKS)
+                    .expect("valid paper-width state coordinate")
+                    .bank_row
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        let state: Vec<f32> = (0..PACKET)
+            .map(|index| (index % 127) as f32 / 8.0)
+            .collect();
+        let source: Vec<f32> = (0..ROW_ELEMENTS)
+            .map(|index| (index + 1) as f32 / 64.0)
+            .collect();
+        machine
+            .write_view(
+                state_base,
+                Some(state_write_view),
+                QuantTensor::quantize(tensor_from_f32_slice(&state), ty),
+            )
+            .await;
+        vram.write(
+            source_physical_row * PACKET,
+            QuantTensor::quantize(
+                tensor_from_f32_slice(
+                    &source
+                        .iter()
+                        .copied()
+                        .chain(std::iter::repeat_n(0.0, (PACKET - ROW_ELEMENTS) as usize))
+                        .collect::<Vec<_>>(),
+                ),
+                ty,
+            ),
+        )
+        .await;
+
+        machine.reset_packet_counters();
+        let scalars: Vec<f32> = (0..ROWS).map(|row| (row + 1) as f32 / 32.0).collect();
+        let start = Executor::current().now();
+        machine
+            .fma_scalar(
+                state_base,
+                source_base,
+                ScalarOperand::Segmented {
+                    values: scalars,
+                    storage_atom: ATOM,
+                },
+                0,
+                u32::MAX,
+                VectorOperandViews {
+                    destination: Some(state_read_view),
+                    source: Some(source_view),
+                },
+            )
+            .await;
+        let elapsed = (Executor::current().now() - start).as_picos();
+        let counters = machine.packet_counter_snapshot();
+        let output = tensor_values(
+            machine
+                .read_view(state_base, Some(state_read_view))
+                .await
+                .as_tensor(),
+        );
+        (output, counters, elapsed, physical_rows)
+    }
+
+    #[tokio::test]
+    async fn paper_2048_packet_coalesces_32_short_rows_without_bank_conflicts() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            let row = run_paper_width_short_row_rank_update(0).await;
+            let affine = run_paper_width_short_row_rank_update(1).await;
+            *got_task.lock().unwrap() = Some((row, affine));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (
+            (row_values, row_counters, row_time, row_physical_rows),
+            (affine_values, affine_counters, affine_time, affine_physical_rows),
+        ) = got.lock().unwrap().take().unwrap();
+        assert_eq!(
+            row_values, affine_values,
+            "layout must preserve all 2048 values"
+        );
+        assert_eq!(row_counters.read_packets, affine_counters.read_packets);
+        assert_eq!(row_counters.write_packets, affine_counters.write_packets);
+        assert_eq!(row_counters.conflict_stall_cycles, 46);
+        assert_eq!(affine_counters.conflict_stall_cycles, 0);
+        assert_eq!(row_physical_rows, 32);
+        assert_eq!(affine_physical_rows, 1);
+        assert!(row_time > affine_time);
+    }
+
+    #[tokio::test]
+    async fn paper_2048_ordinary_wide_rows_do_not_enter_the_packet_path() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            const VLEN: u32 = 2048;
+            let fp_type = DataType::Fp(FpType::BF16);
+            let ty = MxDataType::Plain(fp_type);
+            let mut outputs = Vec::new();
+            let mut times = Vec::new();
+            let mut counters = Vec::new();
+            for banks in [1, 32] {
+                let vram = Arc::new(VectorSram::with_banks(VLEN, 4, fp_type, 4, banks));
+                let machine = VectorMachine::new(vram.clone(), VLEN, 64);
+                for row in 0..3 {
+                    vram.write(
+                        row * VLEN,
+                        QuantTensor::quantize(
+                            tensor_from_f32_slice(
+                                &(0..VLEN)
+                                    .map(|value| (value + row) as f32 / 128.0)
+                                    .collect::<Vec<_>>(),
+                            ),
+                            ty,
+                        ),
+                    )
+                    .await;
+                }
+                let start = Executor::current().now();
+                machine
+                    .fma_scalar(
+                        0,
+                        VLEN,
+                        0.5.into(),
+                        0,
+                        u32::MAX,
+                        VectorOperandViews::default(),
+                    )
+                    .await;
+                machine.add(0, 0, 2 * VLEN, 0, u32::MAX).await;
+                times.push((Executor::current().now() - start).as_picos());
+                outputs.push(tensor_values(vram.read(0).await.as_tensor()));
+                counters.push(machine.packet_counter_snapshot());
+            }
+            *got_task.lock().unwrap() = Some((outputs, times, counters));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (outputs, times, counters) = got.lock().unwrap().take().unwrap();
+        assert_eq!(outputs[0], outputs[1]);
+        assert_eq!(times[0], times[1]);
+        assert_eq!(counters, vec![PacketCounterSnapshot::default(); 2]);
+    }
+
+    #[tokio::test]
+    async fn ordinary_attention_and_moe_rows_do_not_pay_packet_cycles() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let ty = MxDataType::Plain(fp_type);
+            let mut outputs = Vec::new();
+            let mut times = Vec::new();
+            let mut counters = Vec::new();
+            for banks in [1, 4, 16] {
+                let vram = Arc::new(VectorSram::with_banks(16, 4, fp_type, 4, banks));
+                let machine = VectorMachine::new(vram.clone(), 16, 4);
+                vram.write(
+                    0,
+                    QuantTensor::quantize(
+                        tensor_from_f32_slice(&(0..16).map(|v| v as f32).collect::<Vec<_>>()),
+                        ty,
+                    ),
+                )
+                .await;
+                vram.write(
+                    16,
+                    QuantTensor::quantize(
+                        tensor_from_f32_slice(&(0..16).map(|v| (v + 1) as f32).collect::<Vec<_>>()),
+                        ty,
+                    ),
+                )
+                .await;
+                vram.write(
+                    32,
+                    QuantTensor::quantize(
+                        tensor_from_f32_slice(
+                            &(0..16).map(|v| (2 * v + 1) as f32).collect::<Vec<_>>(),
+                        ),
+                        ty,
+                    ),
+                )
+                .await;
+                let start = Executor::current().now();
+                machine
+                    .fma_scalar(
+                        0,
+                        16,
+                        ScalarOperand::Broadcast(0.5),
+                        0,
+                        u32::MAX,
+                        VectorOperandViews::default(),
+                    )
+                    .await;
+                // Attention residuals and MoE combine use ordinary full-row
+                // binary Vector operations. They must retain the same timing
+                // and never enter the packet banking path.
+                machine.add(0, 0, 32, 0, u32::MAX).await;
+                times.push((Executor::current().now() - start).as_picos());
+                outputs.push(tensor_values(vram.read(0).await.as_tensor()));
+                counters.push(machine.packet_counter_snapshot());
+            }
+            *got_task.lock().unwrap() = Some((outputs, times, counters));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (outputs, times, counters) = got.lock().unwrap().take().unwrap();
+        assert_eq!(outputs[0], outputs[1]);
+        assert_eq!(
+            times[0], times[1],
+            "banking must not slow ordinary wide-row ops"
+        );
+        assert_eq!(counters, vec![PacketCounterSnapshot::default(); 3]);
+    }
+
+    #[tokio::test]
+    async fn ordinary_bank_service_waits_for_source_data() {
+        crate::timing::set_timing_mode(crate::timing::TimingMode::Serial);
+        crate::timing::reset_execution_counters(true);
+        let executor = Executor::new();
+        executor.spawn(async {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let ty = MxDataType::Plain(fp_type);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let (sender, receiver) = tokio::sync::oneshot::channel();
+            vram.write_delayed(0, receiver).await;
+            Executor::current().spawn(async move {
+                Executor::current()
+                    .resolve_at(*crate::runtime_config::PERIOD * 5u32)
+                    .await;
+                assert!(
+                    sender
+                        .send(QuantTensor::quantize(Tensor::from_slice(&[1.0f32; 4]), ty))
+                        .is_ok()
+                );
+            });
+            vram.write(
+                4,
+                QuantTensor::quantize(Tensor::from_slice(&[2.0f32; 4]), ty),
+            )
+            .await;
+            machine.add(8, 0, 4, 0, u32::MAX).await;
+            assert_eq!(tensor_values(vram.read(8).await.as_tensor()), vec![3.0; 4]);
+        });
+        executor.enter(Instant::ETERNITY).await;
+        assert_eq!(
+            executor.now(),
+            Instant::INIT + *crate::runtime_config::PERIOD * (5 + 3 + *VECTOR_ADD_CYCLES)
+        );
+        let counters = crate::timing::execution_counters();
+        assert_eq!(counters.bank_service_cycles, 3);
+        assert_eq!(counters.charged_cycles, 3 + *VECTOR_ADD_CYCLES as u64);
+        crate::timing::reset_execution_counters(false);
+    }
+
+    #[tokio::test]
+    async fn experimental_dot_preserves_cancellation_and_reset_isolation() {
+        crate::timing::set_timing_mode(crate::timing::TimingMode::Serial);
+        crate::timing::reset_execution_counters(true);
+        let executor = Executor::new();
+        executor.spawn(async {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let ty = MxDataType::Plain(fp_type);
+            let mut machine = VectorMachine::new(vram.clone(), 4, 2);
+            vram.write(
+                4,
+                QuantTensor::quantize(tensor_from_f32_slice(&[1.0; 4]), ty),
+            )
+            .await;
+            machine.dot_reset().await;
+            for value in [256.0, 1.0, -256.0] {
+                vram.write(
+                    0,
+                    QuantTensor::quantize(tensor_from_f32_slice(&[value; 4]), ty),
+                )
+                .await;
+                machine.dot_acc(0, 4).await;
+            }
+            machine.dot_write(8).await;
+            assert_eq!(tensor_values(vram.read(8).await.as_tensor()), vec![1.0; 4]);
+            assert!(machine.dot_accumulator.is_none());
+            machine.dot_reset().await;
+            machine.dot_write(8).await;
+            assert_eq!(tensor_values(vram.read(8).await.as_tensor()), vec![0.0; 4]);
+            let counts = crate::timing::execution_counters();
+            assert_eq!(
+                counts.arithmetic_cycles,
+                (4 + 3 * (*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES)) as u64
+            );
+            // Dot instructions: six source reads and two destination writes.
+            assert_eq!(counts.bank_service_cycles, 8);
+        });
+        executor.enter(Instant::ETERNITY).await;
+        crate::timing::reset_execution_counters(false);
+    }
+
+    #[tokio::test]
+    async fn fma_scalar_accumulates_into_the_destination() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]), ty),
+            )
+            .await;
+            vram.write(
+                4,
+                QuantTensor::quantize(Tensor::from_slice(&[10.0f32, 20.0, 30.0, 40.0]), ty),
+            )
+            .await;
+
+            machine
+                .fma_scalar(0, 4, 0.5.into(), 0, u32::MAX, VectorOperandViews::default())
+                .await;
+
+            let out = vram.read(0).await;
+            let src = vram.read(4).await;
+            *got_task.lock().unwrap() = Some((
+                tensor_values(out.as_tensor()),
+                tensor_values(src.as_tensor()),
+            ));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (dst, src) = got.lock().unwrap().take().unwrap();
+        // d + a*f, not a*f: the accumulate is the instruction, not a side effect.
+        assert_eq!(dst, vec![6.0, 12.0, 18.0, 24.0]);
+        assert_eq!(src, vec![10.0, 20.0, 30.0, 40.0], "the source is read-only");
+    }
+
+    #[tokio::test]
+    async fn fma_scalar_leaves_masked_off_heads_holding_the_destination() {
+        // mul_scalar's masked path starts from the *source*; fma's must start
+        // from the destination, or a masked-off lane silently loses whatever it
+        // had accumulated so far.
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]), ty),
+            )
+            .await;
+            vram.write(
+                4,
+                QuantTensor::quantize(Tensor::from_slice(&[10.0f32, 20.0, 30.0, 40.0]), ty),
+            )
+            .await;
+
+            // mask_unit 2, tile 4 -> two heads. Head 0 on, head 1 off.
+            machine
+                .fma_scalar(0, 4, 0.5.into(), 1, 0b01, VectorOperandViews::default())
+                .await;
+
+            let out = vram.read(0).await;
+            *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let dst = got.lock().unwrap().take().unwrap();
+        assert_eq!(dst, vec![6.0, 12.0, 3.0, 4.0]);
+    }
+
+    #[tokio::test]
+    async fn test_softplus_matches_reference_including_the_large_magnitude_tails() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            // -100 and +100 both overflow a naive log1p(exp(x)) in bf16: exp(100) is
+            // inf, and exp(-100) underflows. The relu + log1p(exp(-|x|)) form must
+            // return ~0 and ~100 respectively rather than NaN/inf.
+            let input = Tensor::from_slice(&[-100.0f32, -1.0, 0.0, 100.0]);
+            vram.write(0, QuantTensor::quantize(input, ty)).await;
+
+            machine.softplus(4, 0, 0, 0).await;
+
+            let out = vram.read(4).await;
+            *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let out = got.lock().unwrap().take().unwrap();
+        // softplus(-100) = 3.7e-44 -> 0 in bf16; softplus(0) = ln 2 = 0.6931;
+        // softplus(-1) = 0.3133; softplus(100) = 100 to well beyond bf16 precision.
+        assert!(
+            out[0].abs() < 1e-30,
+            "softplus(-100) should flush to ~0, got {}",
+            out[0]
+        );
+        assert!(
+            (out[1] - 0.3133).abs() < 0.01,
+            "softplus(-1), got {}",
+            out[1]
+        );
+        assert!(
+            (out[2] - std::f32::consts::LN_2).abs() < 0.01,
+            "softplus(0) is ln 2, got {}",
+            out[2]
+        );
+        assert!(
+            (out[3] - 100.0).abs() < 1.0,
+            "softplus(100) should pass through, got {}",
+            out[3]
+        );
+        assert!(
+            out.iter().all(|v| v.is_finite()),
+            "softplus must never produce inf/NaN: {out:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_softplus_honors_the_per_head_mask() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            // tile_size 4, mask_unit 2 -> two heads of two lanes each.
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            let input = Tensor::from_slice(&[0.0f32, 0.0, 0.0, 0.0]);
+            vram.write(0, QuantTensor::quantize(input.copy(), ty)).await;
+            vram.write(4, QuantTensor::quantize(input, ty)).await;
+
+            // mask = 0b01 -> only head 0 (lanes 0..2) is updated.
+            machine.softplus(4, 0, 1, 0b01).await;
+
+            let out = vram.read(4).await;
+            *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let out = got.lock().unwrap().take().unwrap();
+        assert!(
+            (out[0] - std::f32::consts::LN_2).abs() < 0.01,
+            "head 0 lane 0 must be softplus(0) = ln 2"
+        );
+        assert!(
+            (out[1] - std::f32::consts::LN_2).abs() < 0.01,
+            "head 0 lane 1 must be softplus(0) = ln 2"
+        );
+        assert_eq!(out[2], 0.0, "head 1 must be left untouched by the mask");
+        assert_eq!(out[3], 0.0, "head 1 must be left untouched by the mask");
+    }
+
+    #[tokio::test]
+    async fn test_vector_read_fp_round_trips_with_vector_transfer_fp() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+
+            // FP_MEM -> VRAM (S_MAP_V_FP) then VRAM -> FP_MEM (S_MAP_FP_V) must be
+            // the identity: this is the contract the Mamba decay-scalar path relies on.
+            let source: Vec<bf16> = [1.5f32, -2.25, 0.0, 7.0]
+                .iter()
+                .map(|v| bf16::from_f32(*v))
+                .collect();
+            machine.vector_transfer_fp(0, &source).await;
+            let back = machine.vector_read_fp(0).await;
+
+            *got_task.lock().unwrap() = Some((source, back));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (source, back) = got.lock().unwrap().take().unwrap();
+        assert_eq!(
+            source, back,
+            "S_MAP_FP_V must invert S_MAP_V_FP exactly for bf16 values"
+        );
     }
 
     #[tokio::test]

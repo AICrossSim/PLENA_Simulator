@@ -46,6 +46,70 @@ LATENCY_PROFILE_PRESETS: dict[str, dict[str, int]] = {
 }
 
 
+def use_plain_bf16_precision_classes(
+    build_dir: Path,
+    *precision_classes: str,
+) -> None:
+    """Rewrite selected transactional HBM precision classes to Plain BF16.
+
+    Testbenches use a private settings file in ``build_dir``.  Keeping this
+    structured rewrite in one place prevents Mamba and KDA from silently using
+    different state/spill formats while leaving the repository-wide settings
+    untouched.
+    """
+
+    path = build_dir / "plena_settings.toml"
+    if not path.exists():
+        raise FileNotFoundError(f"per-build settings file is missing: {path}")
+    with path.open() as file:
+        config = tomlkit.load(file)
+    precision = config["TRANSACTIONAL"]["PRECISION"]
+    for name in precision_classes:
+        if name not in precision:
+            raise KeyError(f"unknown transactional precision class: {name}")
+        precision[name] = {
+            "format": "Plain",
+            "DATA_TYPE": {
+                "type": "Fp",
+                "sign": True,
+                "exponent": 8,
+                "mantissa": 7,
+            },
+        }
+    with path.open("w") as file:
+        tomlkit.dump(config, file)
+
+
+def use_uniform_bf16_hbm_precision(build_dir: Path) -> None:
+    """Select BF16 for every floating-point HBM traffic class in one test.
+
+    This is intentionally opt-in.  Existing MX-format regression tests keep
+    their shipped precision policy, while checkpoint/prefill evidence can state
+    unambiguously that inputs, spills, and recurrent state all use BF16.
+    """
+
+    use_plain_bf16_precision_classes(
+        build_dir,
+        "HBM_M_WEIGHT_TYPE",
+        "HBM_M_KV_TYPE",
+        "HBM_V_ACT_TYPE",
+        "HBM_V_KV_TYPE",
+        "HBM_STATE_TYPE",
+    )
+
+
+def bf16_uniform(
+    shape: tuple[int, ...],
+    generator: torch.Generator,
+    *,
+    hi: float,
+) -> torch.Tensor:
+    """Draw a bounded input and round it to the architectural BF16 lattice."""
+
+    values = (2.0 * torch.rand(shape, generator=generator) - 1.0) * hi
+    return values.to(torch.bfloat16).to(torch.float32)
+
+
 def apply_latency_profile_config(
     config: dict[str, Any],
     *,

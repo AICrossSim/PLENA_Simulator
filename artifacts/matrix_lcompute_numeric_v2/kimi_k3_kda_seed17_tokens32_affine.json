@@ -1,0 +1,247 @@
+{
+  "schema_version": 3,
+  "matrix_view_contract_version": 3,
+  "model": "kimi_k3_kda",
+  "layout": "affine",
+  "precision": "bf16_uniform_matrix_recurrence",
+  "tokens": 32,
+  "official_shape": {
+    "heads": 96,
+    "state_rows": 128,
+    "row_elements": 128
+  },
+  "compiler_generated_machine_words": 31296,
+  "assembly_sha256": "1291e568c72b704cb3377ce5860e39730a65cd197884a1b53babb69eebc5323b",
+  "machine_code_sha256": "8e0ee274927c902a1a609b09320e86fd13f117ab0f07dd81cafd093ea54fb8a0",
+  "input_hbm_sha256": "bcafa8f724c09b019ef3183c97eaf0f3c90728895c569ca8aa221a72e7628f8e",
+  "l_tile_exec_count": 960,
+  "state_values_compared": 1572864,
+  "output_values_compared": 393216,
+  "state_error": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "acceptance_policy": {
+    "exact": true,
+    "relative_l2_limit": 0,
+    "element_atol": 0,
+    "element_rtol": 0,
+    "zero_rms_floor": 0
+  },
+  "state_sha256": "f38b18cd89ab764348c38bcc45f2d52985497d2fbd1ec31356d29b2f53549d62",
+  "output_sha256_by_token": [
+    "4123fb990ffeccb5bddde338901cf5a20b080c879f193a0de28faf2ed1c4c8c9",
+    "f0685027c3b4d5c08ff352b67bdf3969f2b5a10f0ad2fc35af77754523baecec",
+    "9a34f659101fdd7af0e2b47a564b64e1e7d694f80d491c2d016b7537911704c9",
+    "05ddb0f00b09b7e438e625f9b28a1151fb77b6c5b88b51ed406e76f274313250",
+    "943f124b0f4ff5bb278560133973d3148d6d48e409c51ca9274d35b746a708bb",
+    "f83f1f6cd7e7cee2829b9380080863c99f3dbe1fd47024dbaa2e59a33e3c79fc",
+    "33e2aa1658a2f874855abe539c707bd1084a7712c7e9ea1357d09c6682cf634d",
+    "821b032f2c2787768a04a42ec4d0a682582324e8b62c6b0f60ab8b227a0cfff0",
+    "7199f0c6b8fd2e250ff342225511093e20156f3b8de3c413907a642465a989cc",
+    "856ac73ab1a8dbe635f62449326e009eb07439d87d63bc475d858002b7a80df8",
+    "3852e05cb3ef10ab71b29e8d3da0273002ce72878a189436f6be164f55e741f0",
+    "08ccdb851c6b37cfb4568c835ad466df986eed546934f7e417a5a57a996a1a95",
+    "f424a76ba9c56c0712a5015d4997bf69bba33e10afe0f765558784f018a5fe17",
+    "31ba55cceedafb207549429feee60fe0b68802ba9bc71673d5f27b19bf4aee76",
+    "e822e5349c96e2ff9c5196846ab0a27c5374c4b2c5cbb1d9473cb2edc8db6ddd",
+    "8b7ba7f91654f088509e98b0659aa4b2bd1ae90e70c743711584676fdaeeaf17",
+    "ae32c351a312963d508ea6f922b450547f3bcc7a73740e5a520f02456103f29e",
+    "3bdc476406181c3f7fbd90e32b2a3c04c052558f9f6a0e02c009ee25d1dda197",
+    "804510f4f1d89632b1c98bb9c5327f15165b00de6a03ab3e6cb7f167261d0703",
+    "882042e1544eb1c7f84d4d97cbfb932436f59c950f36961b03e13048590a114b",
+    "b8f96f3874d792b2e9faa98f8effd226398c995ad9cedee3a6457b941b7b1b28",
+    "e0558afbafeb9380fd520bb515c48eecde3d17eea87cc33046783962a86cbbc0",
+    "732412337472de6eea7cc02eab74b30890afc81d765404bca3dac812adadc2d7",
+    "30ba4156131c6c125ee8f58e040e6a4429336cab6fc433770b4c1569e9ab3e98",
+    "876fa776f5d3d46a2da6e3b8bf9f7efa6d98c06097db0447956c32adb1234a96",
+    "ca51862c7c55f320c0c078d1fffbde2ed7bf095ec8135bd66e1da2ffd5f4208a",
+    "be5ce1b89adfd70cbadf8558c57768ec48ef813eba0852ab4d530ce19d1b174f",
+    "14d8d61b15623b6aa36e17af0709b5cae0b1b52872c818b8b77f452239ae6542",
+    "5f8a460d3ae607066f74a89aafb8a94400bd8865a5cf4131592423751b90e180",
+    "a346626e787cc74d92aa78fb47bd98f1ff1b88fdd5f62ffa3adab7580ad1c4b7",
+    "64c720b891885fb3aeafa3e9c868f3d23dbb3e83ebbdda932dfbfd795b215d85",
+    "900ff4a4c16d208b507f8ff9d606846bd8756121fd6591b0e13f6b01f69e0c74"
+  ],
+  "intermediate_state_errors": [
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    }
+  ],
+  "intermediate_state_sha256": [
+    "9ebf39b3e142178c89a76cc405e0ef418253bfc4683ff0eaacde3516d481dafd",
+    "73d360859834c62efcf79f85543196f8b87ab0a1f602792fb396f11d253f7149",
+    "083bb7e61fb4baf376e47dd7c7712b5d697692bf5fbbe22e0577bc8ac27588ff",
+    "ab58172f28268ffe74a4a03685c8ce12b29b17787e630ac58515e3e8891455cb",
+    "188de6f27999cae897750e570befc65b9036b4c6058896f6608f0cd6a986732e",
+    "70d3a3d9ff3865739fff622cbb453d81536cf60d3ccf46bd05ac7c9e167089f7",
+    "f57dcb6635467421798332c9f5eeb796b2223a99c9223499f5b095529c0f72c1",
+    "db744d169e14eb4ef31aaad1126fece30f3aea15deab747fbdcb9a04d9e3227e",
+    "0c0319f03b9d40d559a2de41ec12b25018cc434fb99def378922e7bef5f9be55",
+    "945ab24faf383cc4001daf24293a65138dcda10583bb9be7d3e4a811207705d1",
+    "a75d0742e780fe0179e418233509936424510db769a650a15c0749596e08fd8a",
+    "a26a5755dde90522737e8d3c6a000ed2186ff1950c0114899a831d5a13491d2f",
+    "f7fee4622c75720f50effd0dd271f64a8298ef408f957f4cbafb4cbcfa8c97e0",
+    "6b09017b55e338b87b2c03e72566531476bb8a39279ee1b2684702ad2d0ca2de",
+    "a3608d7970281ef5b6ed5397a2717bd44f49a8a243398525d5820261c1d6bbd9",
+    "15167df83da7e5e6ea4b62ccca28d29d8c67bb25d5e2d6767c7cc674b249c5e8",
+    "6416eedb251343fbbb0ff917acaae8bd15d7738a5f301aa4957dc448420f0bb6",
+    "cb8fc7a9e3c8f0a7283c4efff4506417e5ef879a7139cd18cc40f2855a28726b",
+    "883380bcebdd1da20bd312ace43b15108806cb692cba2474a80c1a61a86ac9e9",
+    "9c5b05bcf06cfd3224b2fa92f5c6d677f4356931f99ec4f70117938e6e6bef3e",
+    "303b9bc32f8ee1951a33276526b8b765a11e891ffc1b721d688ea29ceaebb9ba",
+    "40caee54e330f8d3ffb0f8524281e670c3144ff58f5bf5b7d366b662b14dd18b",
+    "72dc4390c8cc30f95ee8d6312f9388b8ad2e6b8a4f76d15f8b15d89b6f6e98bc",
+    "bce52e7eecc8483d3d02435c06e4b302c5556623bcb68d44504381da8aba4bdd",
+    "88d441ad2fd4d47ecfee2672ea3d2d1d75b4436885ddacb9a31a4ce017041c27",
+    "5fa07d2ac842d6361893ff99d042f0dca4e184e849175c12716b12ff35a21818",
+    "abda4357882fb7f8656a6643980d2a3df17a17e72643c9ef81f233fdcd85332b",
+    "34113294441880bede78c133cedcf3367aa0f661724ffced0d85b987a91e4a68",
+    "df6fdca6ff9a9abcbe7457635a75fddcd48b419d8f9a83b23a78ea32030f2d50",
+    "966db3f6d56411c4aac01528ec3c31d4ffa2a69a090d8926c5d6caa7e5883145",
+    "e8c2f4417e6c0779b8fc5e0a92d2588288129b1002e6f355cc6383561f597cf8",
+    "f38b18cd89ab764348c38bcc45f2d52985497d2fbd1ec31356d29b2f53549d62"
+  ],
+  "snapshot_dma_in_timing": true,
+  "output_error": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "rust_simulation_cycles": 109156081,
+  "matrix_view_packet_counters": {
+    "packets": 298560,
+    "values": 561524736,
+    "bank_words": 19452288,
+    "service_cycles": 371904,
+    "ideal_cycles": 371904,
+    "bank_stall_cycles": 0
+  },
+  "evidence": "Compiler assembly -> Compiler assembler -> Rust opcode decoder -> BF16 banked Matrix SRAM -> explicit HBM state/output readback",
+  "temporary_build_retained": false,
+  "seed": 17
+}

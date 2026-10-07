@@ -14,6 +14,21 @@ The PLENA Simulator provides three main components:
 - **Analytical Latency Model**: Provides fast estimation of PLENA's performance characteristics (TTFT, TPS) based on architectural parameters and instruction latencies for specified workloads.
 - **Utilization Model**: Analyzes the utilization of the systolic array based on architectural parameters and instruction latencies, computing attainable vs theoretical FLOPS.
 
+## Matrix SRAM recurrent sublayers
+
+`feat/matrix-sram-lcompute` is the maintained research branch. It contains Rust
+execution and compiled Python timing for Mamba/KDA coefficient production,
+native recurrence and bounded projection mapping. `PLENA_Compiler` pins the
+matching Compiler commit. The older Draft PR branch remains separate.
+
+- [Current progress, hardware contract and reproduction](doc/l_tile_projection.md)
+- [B1/2/4/8/16 sublayer results and provenance](artifacts/projection_pipeline/README.md)
+- [Analytical services and whole-model limitations](analytic_models/performance/README.md)
+
+These are pre-RTL candidate implementations. Sublayer evidence is distinct from
+whole-model analytical predictions. No integrated timing/PPA, long-chain quality
+acceptance, or speedup over the best untouched PLENA baseline is claimed.
+
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 
 ---
@@ -41,89 +56,19 @@ If you use this simulator in your research, please cite the following paper:
 
 ## Setup
 
-There are two ways to get a working environment. **Option A (Docker)** is the
-recommended path — you only need Docker installed, and it wraps the full toolchain
-in a reproducible container. **Option B (Nix)** runs directly on your machine if you
-prefer native development.
+Use the checked-in Nix environment. This branch does not bundle the historical
+Docker wrapper. Initialize submodules at their pinned commits; do not advance
+submodules to their remote branch tips when reproducing results.
 
-### Option A — Docker (recommended)
-
-You only need Docker installed (no Nix or direnv on the host). All commands run from
-the repository root. Your working tree is bind-mounted into the container at
-`/workspace`, so edits on the host are picked up live and build artifacts persist
-on the host.
-
-**Prerequisites:**
-
-- Docker Engine with the Compose plugin (`docker compose`)
-- (Optional) NVIDIA Container Toolkit for CUDA support
-
-**Build the image and open a shell:**
-
-```bash
-git submodule update --init --recursive   # once, on the host
-just docker-dev
+```sh
+git submodule update --init --recursive
+nix develop --no-write-lock-file
 ```
 
-**Run a test directly (no interactive shell needed):**
-
-```bash
-just docker-test test-aten-linear            # run a just recipe in Docker
-just docker-test test-aten-linear --mlen 128 # ...with args
-```
-
-The first emulator test compiles the Rust binary automatically (one-time, a few
-minutes); it persists on the host and later runs reuse it.
-
-**Common Docker commands** (see [`docker/README.md`](docker/README.md) for the full list):
-
-| Command | Description |
-|---------|-------------|
-| `just docker-dev` | Build, start, and enter the dev container |
-| `just docker-run <cmd>` | Run a command in the dev environment |
-| `just docker-test <recipe> [args...]` | Run a `just` recipe in Docker |
-| `just docker-down` | Stop containers |
-
-**CUDA support:**
-
-```bash
-docker compose -f docker/docker-compose.yml --profile cuda up -d dev-cuda
-docker compose -f docker/docker-compose.yml exec dev-cuda bash
-```
-
-> **Note:** The repository is bind-mounted from the host (owned by your host user)
-> while the container runs as `root`. The image marks `/workspace` as a git
-> `safe.directory` so Nix's flake evaluation doesn't fail with a dubious-ownership
-> error. If you build a custom image, preserve that setting.
-
-### Option B — Nix (native)
-
-**Prerequisites:**
-
-- `nix` package manager (with flakes enabled)
-- `direnv` for environment management
-
-```bash
-# Install direnv hook in your shell
-echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Installation:**
-
-```bash
-# Allow direnv to load the environment
-direnv allow
-
-# Enter the development environment
-nix develop
-
-# Update git submodules
-git submodule update --remote --merge
-```
-
-You are now in a shell with the full toolchain (Rust, Python 3.12, clang, cmake,
-etc.) and can run any of the `just` commands below directly.
+Nix with flakes enabled is required. Direnv is optional. The shell supplies
+Rust, Python, libtorch, Ramulator and the build tools. Follow
+[the current sublayer reproduction guide](doc/l_tile_projection.md) for CPU-only
+checks and analytical runs with temporary outputs outside the checkout.
 
 ---
 

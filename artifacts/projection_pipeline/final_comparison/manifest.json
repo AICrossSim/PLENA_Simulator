@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-29",
+  "case_count": 40,
+  "original_plena_eligible": false,
+  "weight_format": "BF16",
+  "raw_root": "/tmp/plena-projection-final-20260929/final",
+  "files": {
+    "stages.csv": "dd47c9dfd10c6bf68de7483d939acf8ba69936b2a77d7a878e00c46dc6f2a66d",
+    "evidence.json": "193be97c08409306b7a64e8ba2e6d8b6ad378e909966f85e86d75156a5e58b81",
+    "summary.csv": "732a51025272baddf19b4b60dad39b28d8fdf38019129358544fc5899ee8d402",
+    "README.md": "1bfd77d7990e0bca852bef6b3368fb95f83a7fc889704ef3c657d263972b2415",
+    "operators.csv": "f5b9549bb7563821a8f40a566f2ae0dbfe8b45f557e0940bb499e6de22d369ed"
+  },
+  "export_checks": [
+    "complete 4x2x5 grid",
+    "one identical source set",
+    "stage and exclusive-component totals",
+    "HBM byte reconciliation",
+    "machine comparisons exact"
+  ]
+}

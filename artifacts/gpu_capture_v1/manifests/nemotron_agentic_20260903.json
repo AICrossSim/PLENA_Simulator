@@ -1,0 +1,240 @@
+{
+  "schema": "nemotron-public-capture-v1",
+  "original_capture_schema": "historical-private-capture",
+  "source_archive_sha256": "18ff9fa81a8993cc9d5406e1f1db0d3d73357bcfc935751f160ed5a636827435",
+  "source_manifest_entries_verified": 38,
+  "files": [
+    {
+      "published_relative_path": "samples.json",
+      "source_relative_path": "samples.json",
+      "source_sha256": "87acfcc6482c9343da635b7f3f84893330718fa44d73db3b55e3e7d02939cb30",
+      "published_sha256": "8476ca5bed3daedab437d5a6f21cfe6acef85e225572268057d678a0e5bffb85",
+      "published_bytes": 38422,
+      "transformation": "Remove prompt token IDs and tokenizer local path; preserve source IDs/revisions/lengths and add sequence digest",
+      "rows": null
+    },
+    {
+      "published_relative_path": "latency_raw.jsonl",
+      "source_relative_path": "latency_raw.jsonl",
+      "source_sha256": "40259ea06e1818d817e2e3320e2076b12120fb1bd3339d6b11e1440c508eaf93",
+      "published_sha256": "8bd6eee9c6ab98d1676984b6c030cb76bdb8f62dc7a8d525cdafa1736a0f79b1",
+      "published_bytes": 18644128,
+      "transformation": "Every source row retained in original order; lexical token IDs replaced by full/prefix32 sequence digests; timestamps and expert IDs/weights unchanged",
+      "rows": 7200
+    },
+    {
+      "published_relative_path": "routing_raw.jsonl",
+      "source_relative_path": "routing_raw.jsonl",
+      "source_sha256": "75b32c945fa8ef899592b2992599a962fc81ea8657b0e1a93546782e199f5588",
+      "published_sha256": "b2f2c27eb72c21273465e482f370d065108162ef450915b301978a7c71524297",
+      "published_bytes": 502294086,
+      "transformation": "Every source row retained in original order; lexical token IDs replaced by full/prefix32 sequence digests; timestamps and expert IDs/weights unchanged",
+      "rows": 140921
+    },
+    {
+      "published_relative_path": "token_traces.jsonl",
+      "source_relative_path": "token_traces.jsonl",
+      "source_sha256": "1aee998a56c397b28a4bd282ab0272e3152d3eb15fef892013b26dd16ba59227",
+      "published_sha256": "7ccda414c819421cef64a2da3bf9e952a490fe3d7cb3b57d669e451f1f394332",
+      "published_bytes": 36089,
+      "transformation": "Every source row retained in original order; lexical token IDs replaced by full/prefix32 sequence digests; timestamps and expert IDs/weights unchanged",
+      "rows": 48
+    },
+    {
+      "published_relative_path": "token_traces_timing.jsonl",
+      "source_relative_path": "token_traces_timing.jsonl",
+      "source_sha256": "9a17e2a76375606c2cec422b1870e8e546ad6a8ba5477100dbc7edfdfe5e1666",
+      "published_sha256": "47f9f96df1bc97b79202ae55e688e7cd4c8359649c804c8d254da200fbb1eee0",
+      "published_bytes": 20812,
+      "transformation": "Every source row retained in original order; lexical token IDs replaced by full/prefix32 sequence digests; timestamps and expert IDs/weights unchanged",
+      "rows": 48
+    },
+    {
+      "published_relative_path": "power_raw.csv",
+      "source_relative_path": "power_raw.csv",
+      "source_sha256": "5c90e8dcaeee67c648b8d32f97558777beb3cb1d6c2d5997196b9763796e0781",
+      "published_sha256": "82108579cb86cd232cfae8ce69666e1936db8c086a8181959a470fefeec0a3f0",
+      "published_bytes": 10732127,
+      "transformation": "All samples and original order/monotonic timestamps/power retained; remove wall clock, GPU UUID and process identities; publish process counts",
+      "rows": 78661
+    },
+    {
+      "published_relative_path": "latency_summary.csv",
+      "source_relative_path": "latency_summary.csv",
+      "source_sha256": "5416e209459227c53883d04d06457386117412d14bf477155fe0c8e49d1a17dc",
+      "published_sha256": "5416e209459227c53883d04d06457386117412d14bf477155fe0c8e49d1a17dc",
+      "published_bytes": 52407,
+      "transformation": "Unchanged derived summary; all archived energy fields remain legacy/unqualified",
+      "rows": 141
+    },
+    {
+      "published_relative_path": "routing_summary.csv",
+      "source_relative_path": "routing_summary.csv",
+      "source_sha256": "a5ac93a2cd34ac96e00dd57e4ccf9a260452ec471b60475681b6fb6f0d3c7058",
+      "published_sha256": "a5ac93a2cd34ac96e00dd57e4ccf9a260452ec471b60475681b6fb6f0d3c7058",
+      "published_bytes": 664982,
+      "transformation": "Unchanged derived summary; all archived energy fields remain legacy/unqualified",
+      "rows": 1104
+    },
+    {
+      "published_relative_path": "campaign_summary.json",
+      "source_relative_path": "campaign_summary.json",
+      "source_sha256": "bc2c8230c1766d2d66f67672b42b6d975449b95f9d9b871e4d8379986d9dcc0b",
+      "published_sha256": "b4c72c94b13a56f154de3d1d4754f71a17d67db3fe590856fbfd9698a831df84",
+      "published_bytes": 19903,
+      "transformation": "metadata redaction",
+      "rows": null
+    },
+    {
+      "published_relative_path": "capture_manifest.json",
+      "source_relative_path": "manifest.json",
+      "source_sha256": "ae7d0952233bdfc4ab51fa4785f1441a375a37d1aa3621a489988b7dda26ca8a",
+      "published_sha256": "56b291e5903c5543bfd8973f58523fb7f9cf5e8f81761e340a89bb9b504ca682",
+      "published_bytes": 4750,
+      "transformation": "metadata redaction",
+      "rows": null
+    },
+    {
+      "published_relative_path": "timing_metadata.json",
+      "source_relative_path": "timing_metadata.json",
+      "source_sha256": "46fc60b6d2a43a3d61dcb57b97c36994e4c893d77823fec451b1a8ca263f2a9d",
+      "published_sha256": "d6c30c4245a76f134ff2fcb4450df9f5b882d1a0b8bfa714dd01d8f17b86d9e6",
+      "published_bytes": 1303,
+      "transformation": "metadata redaction",
+      "rows": null
+    },
+    {
+      "published_relative_path": "routing_metadata.json",
+      "source_relative_path": "routing_metadata.json",
+      "source_sha256": "eec212c86ccd24e5b8eba5ee284e0f2b650a4a1c520947af2575686c442a57ef",
+      "published_sha256": "2c2b36adf683fe6ad085f330a1eddc58d904af54c49e9e3a24cd006838afd16c",
+      "published_bytes": 1030,
+      "transformation": "metadata redaction",
+      "rows": null
+    },
+    {
+      "published_relative_path": "validation.json",
+      "source_relative_path": "validation.json",
+      "source_sha256": "2a08bd7549ecfc4f6e8a0de94afe7abfc914141bc288a8bc96400fcbed2bfb6e",
+      "published_sha256": "d089af03ed04866cf689adcc00d528781adfc1ed712180a4954450bb0a607a8b",
+      "published_bytes": 1078,
+      "transformation": "metadata redaction",
+      "rows": null
+    },
+    {
+      "published_relative_path": "model_files_sha256.json",
+      "source_relative_path": "model_files_sha256.json",
+      "source_sha256": "c8213648d0ead460b382fb4bae4e606c08b91d0ad37318d843accb1964b15b44",
+      "published_sha256": "d040053313ec2431a39909d46f4c1e4ab4b7f16820661ce07361c6ca7b1c89c1",
+      "published_bytes": 1472,
+      "transformation": "metadata redaction",
+      "rows": null
+    },
+    {
+      "published_relative_path": "environment.json",
+      "source_relative_path": "environment.txt",
+      "source_sha256": "e33c3d0a95669fa698f4ce0456b1d8f169b9c24be5042c8f53cf1c4f939a8492",
+      "published_sha256": "fba78fc14e7d130d2fa29e77c6bb0fb222032d63af90abfde033c060c2de6c5b",
+      "published_bytes": 1111,
+      "transformation": "Allowlist package/driver/backend versions only; omit host, UUID, process inventory and broad pip freeze",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/collect_environment.sh",
+      "source_relative_path": "scripts/collect_environment.sh",
+      "source_sha256": "89fbcee28057d4f632abc885a1f98ef5bf2756514ddd8eec6b30af65a7b74366",
+      "published_sha256": "46b148446f61350253f05399b529524320eb17b33f757f65693e8a457fff5911",
+      "published_bytes": 2629,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/finalize_campaign.py",
+      "source_relative_path": "scripts/finalize_campaign.py",
+      "source_sha256": "a6a26bf6e899eeaf6d53597a0c623b4f478ecc9d0e8d2eb3386dbb8c61bad87f",
+      "published_sha256": "3d8722f5d46781a58a6c1e392264b703d07f34a8925167c0c641431c0932d3af",
+      "published_bytes": 21191,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/prepare_samples.py",
+      "source_relative_path": "scripts/prepare_samples.py",
+      "source_sha256": "d6dddb84e9529f909e6737d5d482ddc4cf9cd6336f781260ac120347e74e2b9e",
+      "published_sha256": "d6dddb84e9529f909e6737d5d482ddc4cf9cd6336f781260ac120347e74e2b9e",
+      "published_bytes": 10630,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/routing_campaign.py",
+      "source_relative_path": "scripts/routing_campaign.py",
+      "source_sha256": "b2256c6a0a9272729fa96a77f67c98b207f84948a4e4e47e16f7152a469bdd81",
+      "published_sha256": "b2256c6a0a9272729fa96a77f67c98b207f84948a4e4e47e16f7152a469bdd81",
+      "published_bytes": 12686,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/run_routing.sh",
+      "source_relative_path": "scripts/run_routing.sh",
+      "source_sha256": "99b960b5496ba6dc9975b32398fa41dd4abb19b0b1b96214236c1a3fcc5690d7",
+      "published_sha256": "054c03e5122b9971cb8a46014d5487880ee92074e679a5161caa68edf7fb3835",
+      "published_bytes": 1287,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/run_timing.sh",
+      "source_relative_path": "scripts/run_timing.sh",
+      "source_sha256": "799ef74dedbf419185201a587d20e7c312631f062ec73f25475c9744bb2b9b5f",
+      "published_sha256": "abd0ffbecc738357c321278a0bee144d105d7cbd15b4fb1924a96fb4e7d4f6dc",
+      "published_bytes": 1269,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "scripts/timing_campaign.py",
+      "source_relative_path": "scripts/timing_campaign.py",
+      "source_sha256": "829f5236cc209e50533b8f900526643a44c3559592f35d7fd0046f3c34a87acc",
+      "published_sha256": "829f5236cc209e50533b8f900526643a44c3559592f35d7fd0046f3c34a87acc",
+      "published_bytes": 22149,
+      "transformation": "Historical capture source; machine/user defaults removed or parameterized; measurement algorithms unchanged",
+      "rows": null
+    },
+    {
+      "published_relative_path": "README.md",
+      "source_relative_path": null,
+      "source_sha256": null,
+      "published_sha256": "0c2bb9d69bb26bcd9688025d2080db433eae77867cf466283e2bf5d07c2cab36",
+      "published_bytes": 3951,
+      "transformation": "New public schema and reproducibility/measurement limitations",
+      "rows": null
+    }
+  ],
+  "validation": {
+    "samples": 48,
+    "benchmarks": {
+      "bfcl_v3": 16,
+      "gpqa_diamond": 16,
+      "swebench_verified": 16
+    },
+    "latency_raw.jsonl_rows": 7200,
+    "routing_raw.jsonl_rows": 140921,
+    "token_traces.jsonl_rows": 48,
+    "token_traces_timing.jsonl_rows": 48,
+    "timing_vs_routing_first_b1_long_trace": {
+      "full_identical": 3,
+      "prefix32_identical": 20
+    },
+    "power_raw.csv_rows": 78661,
+    "content_redaction_and_preserved_numeric_fields": "PASS",
+    "capture_script_syntax": "PASS: Python AST and bash -n; no capture executed",
+    "published_data_files_before_manifest_and_checksums": 23
+  },
+  "sequence_digest_encoding": "SHA256(ASCII compact JSON integer array, separators comma and colon, no newline)",
+  "source_row_index": "zero-based, original order; no rows sampled or omitted",
+  "energy_qualification": "Archived legacy integration, unqualified as corrected batch energy: sample append order was not sorted and exact batch start/end timestamps were not persisted. Per-request energy for batch>1 is equal-share attribution.",
+  "claim_boundary": "Real NVFP4 B200 timing; separate B1 eager routing; workload prompts without benchmark accuracy/task scores; no Kimi capture in this package.",
+  "loader_compatibility": "The original strict agentic importer requires private lexical token IDs and will reject this schema. Use the public raw records directly for timing statistics/expert routing, or an explicitly implemented public-schema adapter."
+}

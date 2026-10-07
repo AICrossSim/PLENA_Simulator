@@ -1,0 +1,14 @@
+{
+  "command": [
+    "c++",
+    "-std=c++17",
+    "-O2",
+    "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator/analytic_models/performance/ltile_memory.cc",
+    "-lramulator",
+    "-o",
+    "/tmp/plena-projection-software-20261001/memory16/ltile_memory"
+  ],
+  "source_sha256": "47f89adf05387e382052399ed43f8f755629af31caca71a044fed1840dd89dab",
+  "binary_sha256": "b2277ec151a022851c3401684b795ad0dcca3e5fa7b509e5557d0a2acf2e0586",
+  "config_sha256": "59814cbcde02438be81f02ece6ed4a41a2d31a23acf56cf86fb21067127ebae5"
+}

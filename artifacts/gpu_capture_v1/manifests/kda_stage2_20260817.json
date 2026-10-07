@@ -1,0 +1,2448 @@
+{
+  "schema": "plena-gpu-publication-v1",
+  "campaign": "kda_stage2_20260817",
+  "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+  "inventory_sha256": "124310aaeec4fa184ec4ec5ce9af95c9f661f573b41b7415f5c70ac409ae75b8",
+  "source_inventory_archive": "stage2",
+  "scope": {
+    "meaning": "Real B200 single-layer GPU execution, deterministic random weights; not trained Kimi checkpoint or 93-layer model.",
+    "shape": {
+      "hidden": 7168,
+      "heads": 96,
+      "head_dim": 128,
+      "conv_kernel": 4
+    },
+    "formal_latency": [
+      {
+        "path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048",
+        "case": "prefill_b1_s2048",
+        "batch": 1,
+        "sequence_length": 2048,
+        "warmup": 20,
+        "measurements": 100,
+        "raw_latency_rows": 100,
+        "median_ms": 1.7858079671859741,
+        "mean_ms": 1.7770758414268493,
+        "weight_dtype": "torch.bfloat16",
+        "state_dtype": "torch.float32",
+        "seed": 20260817
+      },
+      {
+        "path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1",
+        "case": "decode_b1",
+        "batch": 1,
+        "sequence_length": 1,
+        "warmup": 20,
+        "measurements": 100,
+        "raw_latency_rows": 100,
+        "median_ms": 0.7609120011329651,
+        "mean_ms": 0.7640191972255707,
+        "weight_dtype": "torch.bfloat16",
+        "state_dtype": "torch.float32",
+        "seed": 20260817
+      },
+      {
+        "path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8",
+        "case": "decode_b8",
+        "batch": 8,
+        "sequence_length": 1,
+        "warmup": 20,
+        "measurements": 100,
+        "raw_latency_rows": 100,
+        "median_ms": 0.7369119822978973,
+        "mean_ms": 0.7439305591583252,
+        "weight_dtype": "torch.bfloat16",
+        "state_dtype": "torch.float32",
+        "seed": 20260817
+      }
+    ],
+    "historical_fallback": "runs/20260817T013725Z_gpu2_prefill_b1_s2048 and older nsys/20260817T013901Z and ncu/20260817T014018Z are prefill Triton fallback; keep historical label, not FlashKDA.",
+    "formal_backend": {
+      "prefill_b1_s2048": "FlashKDA CUTLASS",
+      "decode_b1": "FLA fused recurrent",
+      "decode_b8": "FLA fused recurrent"
+    },
+    "checkpoint_weights_included": false,
+    "task_benchmark": "Synthetic fixed-shape single-layer tensors; no SWE-bench/BFCL/GPQA task execution or scores."
+  },
+  "source_files": 120,
+  "source_bytes": 156660318,
+  "published_payload_bytes": 156660318,
+  "transformation_events": 0,
+  "files": [
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/README.md",
+      "published_relative_path": "plena-profiles/README.md",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "41c6ce5dc39860c21dd8240e269b4700d660ef288815b309757f2eaf60ec4015",
+      "published_sha256": "41c6ce5dc39860c21dd8240e269b4700d660ef288815b309757f2eaf60ec4015",
+      "source_size_bytes": 2977,
+      "published_size_bytes": 2977,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/check_idle_gpu.sh",
+      "published_relative_path": "plena-profiles/kda/check_idle_gpu.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "480df7c32b551ffc1b166ce2f9fb3d7b4453fb63b3f04c94faed672bc170658b",
+      "published_sha256": "480df7c32b551ffc1b166ce2f9fb3d7b4453fb63b3f04c94faed672bc170658b",
+      "source_size_bytes": 734,
+      "published_size_bytes": 734,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/compare_official_and_layout.py",
+      "published_relative_path": "plena-profiles/kda/compare_official_and_layout.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "61c8264d0496c852ad69c53af09a63be40dab995551a6c556ccc75700dfd39f9",
+      "published_sha256": "61c8264d0496c852ad69c53af09a63be40dab995551a6c556ccc75700dfd39f9",
+      "source_size_bytes": 15349,
+      "published_size_bytes": 15349,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/kda_profile.py",
+      "published_relative_path": "plena-profiles/kda/kda_profile.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "13001558bbd7b22f6137e494a744c46b62e9fcc354502b1d57dc650daf7c9ed2",
+      "published_sha256": "13001558bbd7b22f6137e494a744c46b62e9fcc354502b1d57dc650daf7c9ed2",
+      "source_size_bytes": 10176,
+      "published_size_bytes": 10176,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/kda_projection_layout.json",
+      "published_relative_path": "plena-profiles/kda/kda_projection_layout.json",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "d4dce0af4c78f2c608ad0b93af03b9f8340d6c9056c91084b3fc6fe5cbe05189",
+      "published_sha256": "d4dce0af4c78f2c608ad0b93af03b9f8340d6c9056c91084b3fc6fe5cbe05189",
+      "source_size_bytes": 15529,
+      "published_size_bytes": 15529,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/manifest.sh",
+      "published_relative_path": "plena-profiles/kda/manifest.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "cecd0840f6336fed0f6200ce1b8e6006e6dfdf3748a7917ee37acce8f9b1b60a",
+      "published_sha256": "cecd0840f6336fed0f6200ce1b8e6006e6dfdf3748a7917ee37acce8f9b1b60a",
+      "source_size_bytes": 871,
+      "published_size_bytes": 871,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/package_stage2.sh",
+      "published_relative_path": "plena-profiles/kda/package_stage2.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "536602bf8ac3c86f3429a6cf52d78dd7464d5244c39f8ab5f3bfcb9d330230cf",
+      "published_sha256": "536602bf8ac3c86f3429a6cf52d78dd7464d5244c39f8ab5f3bfcb9d330230cf",
+      "source_size_bytes": 809,
+      "published_size_bytes": 809,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/reproduce_stage2.sh",
+      "published_relative_path": "plena-profiles/kda/reproduce_stage2.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "dbfada68aa0db280d3209fe0f54b3a09b186264dc346eb3348e6473186e08ed5",
+      "published_sha256": "dbfada68aa0db280d3209fe0f54b3a09b186264dc346eb3348e6473186e08ed5",
+      "source_size_bytes": 2253,
+      "published_size_bytes": 2253,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/run_case.sh",
+      "published_relative_path": "plena-profiles/kda/run_case.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "a7d15de0db7bac87d595d38aa64d18769da9e558212b3edd007872f6d06cd404",
+      "published_sha256": "a7d15de0db7bac87d595d38aa64d18769da9e558212b3edd007872f6d06cd404",
+      "source_size_bytes": 853,
+      "published_size_bytes": 853,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/run_ncu.sh",
+      "published_relative_path": "plena-profiles/kda/run_ncu.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "5cf026b901f3dab4c6c73c5a11147db17471035f32752dbb7065f88baa6f5c85",
+      "published_sha256": "5cf026b901f3dab4c6c73c5a11147db17471035f32752dbb7065f88baa6f5c85",
+      "source_size_bytes": 2507,
+      "published_size_bytes": 2507,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/run_nsys.sh",
+      "published_relative_path": "plena-profiles/kda/run_nsys.sh",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "3b25a1c45dde42d1aae1d3be22fd048c91e0f399e9d0a1de38afbe613fe60d68",
+      "published_sha256": "3b25a1c45dde42d1aae1d3be22fd048c91e0f399e9d0a1de38afbe613fe60d68",
+      "source_size_bytes": 1111,
+      "published_size_bytes": 1111,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/stage2_manifest.py",
+      "published_relative_path": "plena-profiles/kda/stage2_manifest.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "c47080172d86bc253356f1a4baf27b799834adf934c02102795f9531ae9a8131",
+      "published_sha256": "c47080172d86bc253356f1a4baf27b799834adf934c02102795f9531ae9a8131",
+      "source_size_bytes": 7511,
+      "published_size_bytes": 7511,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/summarize_ncu.py",
+      "published_relative_path": "plena-profiles/kda/summarize_ncu.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "29a38d60bc57cb4a0769d9bbe8705243f625e5127b521151f86bd7cfb82696f0",
+      "published_sha256": "29a38d60bc57cb4a0769d9bbe8705243f625e5127b521151f86bd7cfb82696f0",
+      "source_size_bytes": 7142,
+      "published_size_bytes": 7142,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/kda/validate_flashkda.py",
+      "published_relative_path": "plena-profiles/kda/validate_flashkda.py",
+      "category": "capture_or_reproduction_code",
+      "source_sha256": "caac6b7ccd690165b0e7cd5386bea5df126f5d0dea9b205f8d0cfa9cc86b8ec3",
+      "published_sha256": "caac6b7ccd690165b0e7cd5386bea5df126f5d0dea9b205f8d0cfa9cc86b8ec3",
+      "source_size_bytes": 2798,
+      "published_size_bytes": 2798,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifest/environment.txt",
+      "published_relative_path": "plena-profiles/manifest/environment.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "2d96c6aff4f7263ffaa2092f2d7f411e47c5c5209918b5573db829bc498e26ba",
+      "published_sha256": "2d96c6aff4f7263ffaa2092f2d7f411e47c5c5209918b5573db829bc498e26ba",
+      "source_size_bytes": 500,
+      "published_size_bytes": 500,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-kda-final.txt",
+      "published_relative_path": "plena-profiles/manifests/pip-freeze-kda-final.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "ab45e499a72ddad44422b7065fc657be7db899df368b32e88f8152ee5e2ace0e",
+      "published_sha256": "ab45e499a72ddad44422b7065fc657be7db899df368b32e88f8152ee5e2ace0e",
+      "source_size_bytes": 1279,
+      "published_size_bytes": 1279,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-nemotron-vllm.txt",
+      "published_relative_path": "plena-profiles/manifests/pip-freeze-nemotron-vllm.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "f33d3f34d3f79bafeec7fd0e3813a70af67eb20a00043ce4f954ee2817252817",
+      "published_sha256": "f33d3f34d3f79bafeec7fd0e3813a70af67eb20a00043ce4f954ee2817252817",
+      "source_size_bytes": 3880,
+      "published_size_bytes": 3880,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-plena-kda-torch213.txt",
+      "published_relative_path": "plena-profiles/manifests/pip-freeze-plena-kda-torch213.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "7877286b803cd4c51e4e97cad74fbf24ac15167e01a19f453ffe685447e6c85d",
+      "published_sha256": "7877286b803cd4c51e4e97cad74fbf24ac15167e01a19f453ffe685447e6c85d",
+      "source_size_bytes": 1381,
+      "published_size_bytes": 1381,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-plena-nemotron-vllm.txt",
+      "published_relative_path": "plena-profiles/manifests/pip-freeze-plena-nemotron-vllm.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "b31695c0239716470aa73bb800ae92ca466f44693f91421f70b6d42723a7e2e4",
+      "published_sha256": "b31695c0239716470aa73bb800ae92ca466f44693f91421f70b6d42723a7e2e4",
+      "source_size_bytes": 3982,
+      "published_size_bytes": 3982,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifests/source-environment-manifest.txt",
+      "published_relative_path": "plena-profiles/manifests/source-environment-manifest.txt",
+      "category": "metadata_or_checksum",
+      "source_sha256": "f9389c12a8af22ffbfabf95a5500edd52867f8f3bec5739ee3644cb4d6d6d7b4",
+      "published_sha256": "f9389c12a8af22ffbfabf95a5500edd52867f8f3bec5739ee3644cb4d6d6d7b4",
+      "source_size_bytes": 635,
+      "published_size_bytes": 635,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/manifests/stage2-environment-source-manifest.json",
+      "published_relative_path": "plena-profiles/manifests/stage2-environment-source-manifest.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "f27586ce027bd1f96ab716e70cf08ebd5f2d11b6e451cef7a533e1fe2c9a949e",
+      "published_sha256": "f27586ce027bd1f96ab716e70cf08ebd5f2d11b6e451cef7a533e1fe2c9a949e",
+      "source_size_bytes": 6094,
+      "published_size_bytes": 6094,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics-details.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics-details.csv",
+      "category": "measurement_table",
+      "source_sha256": "0147fa1ec2db811e7ccbebe8b6acef2d73719a6c97e65d8b53faafe171910fb1",
+      "published_sha256": "0147fa1ec2db811e7ccbebe8b6acef2d73719a6c97e65d8b53faafe171910fb1",
+      "source_size_bytes": 250190,
+      "published_size_bytes": 250190,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics-raw.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics-raw.csv",
+      "category": "measurement_table",
+      "source_sha256": "7172dd7126cce740426028b6b8698199bf3a09cb01d4aff4d409e14aab29417e",
+      "published_sha256": "7172dd7126cce740426028b6b8698199bf3a09cb01d4aff4d409e14aab29417e",
+      "source_size_bytes": 149690,
+      "published_size_bytes": 149690,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics.csv",
+      "category": "measurement_table",
+      "source_sha256": "c37644eadc6b09987079b650d336d872e5092b1f9d66356b7888973a9491508b",
+      "published_sha256": "c37644eadc6b09987079b650d336d872e5092b1f9d66356b7888973a9491508b",
+      "source_size_bytes": 231,
+      "published_size_bytes": 231,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/profile.ncu-rep",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/profile.ncu-rep",
+      "category": "native_profiler_capture",
+      "source_sha256": "f91198aca7ab1b91fafefdee8eed5f17aaf4be919d1200b5fb508feeed45d044",
+      "published_sha256": "f91198aca7ab1b91fafefdee8eed5f17aaf4be919d1200b5fb508feeed45d044",
+      "source_size_bytes": 5116747,
+      "published_size_bytes": 5116747,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/stderr.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/stderr.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_size_bytes": 0,
+      "published_size_bytes": 0,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/stdout.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/stdout.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "41aabe578773c4cb1a7e1099992ba0328fae1047947fc115442cd635f5f402fb",
+      "published_sha256": "41aabe578773c4cb1a7e1099992ba0328fae1047947fc115442cd635f5f402fb",
+      "source_size_bytes": 715,
+      "published_size_bytes": 715,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/unsupported.tsv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/unsupported.tsv",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "fa29361dd3591f1430e93fc1633f0aa3d1ca784acfbed81d6b7651572b0a7128",
+      "published_sha256": "fa29361dd3591f1430e93fc1633f0aa3d1ca784acfbed81d6b7651572b0a7128",
+      "source_size_bytes": 136,
+      "published_size_bytes": 136,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "084a68ef1167488a065b256f7dfe3b88994520cabe3338b82be4ff75e8b7ac5b",
+      "published_sha256": "084a68ef1167488a065b256f7dfe3b88994520cabe3338b82be4ff75e8b7ac5b",
+      "source_size_bytes": 41,
+      "published_size_bytes": 41,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "9154b844ae2d5da44ae13418bd9186f68511d2e0641429e583772194cd665294",
+      "published_sha256": "9154b844ae2d5da44ae13418bd9186f68511d2e0641429e583772194cd665294",
+      "source_size_bytes": 471,
+      "published_size_bytes": 471,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "d2a08dc87eeeb2ab6f510777481f5bdbdae9f324fea32061c73a47cf34a48094",
+      "published_sha256": "d2a08dc87eeeb2ab6f510777481f5bdbdae9f324fea32061c73a47cf34a48094",
+      "source_size_bytes": 247,
+      "published_size_bytes": 247,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics-details.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics-details.csv",
+      "category": "measurement_table",
+      "source_sha256": "49161074125aacc2a9bc85dddc9e8d06434ec515add591af1a5876cea0f3ec82",
+      "published_sha256": "49161074125aacc2a9bc85dddc9e8d06434ec515add591af1a5876cea0f3ec82",
+      "source_size_bytes": 1110199,
+      "published_size_bytes": 1110199,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics-raw.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics-raw.csv",
+      "category": "measurement_table",
+      "source_sha256": "7f9089125d218c11870a7209bf89e8f39e5cc4e5555edc58b588ee5050ce158f",
+      "published_sha256": "7f9089125d218c11870a7209bf89e8f39e5cc4e5555edc58b588ee5050ce158f",
+      "source_size_bytes": 91693,
+      "published_size_bytes": 91693,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics.csv",
+      "category": "measurement_table",
+      "source_sha256": "0e33e77e96e2ce43dc9ac5f5eb98250aa4c87ceb15a95f995e87d899a44fb5e3",
+      "published_sha256": "0e33e77e96e2ce43dc9ac5f5eb98250aa4c87ceb15a95f995e87d899a44fb5e3",
+      "source_size_bytes": 231,
+      "published_size_bytes": 231,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/profile.ncu-rep",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/profile.ncu-rep",
+      "category": "native_profiler_capture",
+      "source_sha256": "7c4786df3baa1c2a2680d72acb7fed402ec07f5500cb8931f415d4464b4f10f0",
+      "published_sha256": "7c4786df3baa1c2a2680d72acb7fed402ec07f5500cb8931f415d4464b4f10f0",
+      "source_size_bytes": 12236624,
+      "published_size_bytes": 12236624,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/stderr.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/stderr.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_size_bytes": 0,
+      "published_size_bytes": 0,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/stdout.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/stdout.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "de8a32f27cbe3aa6dd0ab3426721e0b28d06141159b7ee06d8d4b6efea182ae5",
+      "published_sha256": "de8a32f27cbe3aa6dd0ab3426721e0b28d06141159b7ee06d8d4b6efea182ae5",
+      "source_size_bytes": 760,
+      "published_size_bytes": 760,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/unsupported.tsv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/unsupported.tsv",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "fa29361dd3591f1430e93fc1633f0aa3d1ca784acfbed81d6b7651572b0a7128",
+      "published_sha256": "fa29361dd3591f1430e93fc1633f0aa3d1ca784acfbed81d6b7651572b0a7128",
+      "source_size_bytes": 136,
+      "published_size_bytes": 136,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "cb016ab88f10a5b7fb82467a1671cdb77815ea76193631da32e0586a0390432c",
+      "published_sha256": "cb016ab88f10a5b7fb82467a1671cdb77815ea76193631da32e0586a0390432c",
+      "source_size_bytes": 43,
+      "published_size_bytes": 43,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "27a0ccf2529a5509810eca54212d46cd36736feb1806bef8bbde10851e927f77",
+      "published_sha256": "27a0ccf2529a5509810eca54212d46cd36736feb1806bef8bbde10851e927f77",
+      "source_size_bytes": 505,
+      "published_size_bytes": 505,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "abbaeea624edd1df884fafae3bbc9aeeed8efc8c9e1da37ec536d030760fd579",
+      "published_sha256": "abbaeea624edd1df884fafae3bbc9aeeed8efc8c9e1da37ec536d030760fd579",
+      "source_size_bytes": 258,
+      "published_size_bytes": 258,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics-details.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics-details.csv",
+      "category": "measurement_table",
+      "source_sha256": "43f656bee9dd4d7dd4bc3f017f6864785271a38bd2b5f113d8586d4bc80d0381",
+      "published_sha256": "43f656bee9dd4d7dd4bc3f017f6864785271a38bd2b5f113d8586d4bc80d0381",
+      "source_size_bytes": 24723,
+      "published_size_bytes": 24723,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics-raw.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics-raw.csv",
+      "category": "measurement_table",
+      "source_sha256": "16e80377295f38a9ef39992178e2aec8e51a860914f2a5ebe1ba14415ec0f707",
+      "published_sha256": "16e80377295f38a9ef39992178e2aec8e51a860914f2a5ebe1ba14415ec0f707",
+      "source_size_bytes": 41139,
+      "published_size_bytes": 41139,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics.csv",
+      "category": "measurement_table",
+      "source_sha256": "ef2b40f1d70af3d11b76d0b3137694efa064085a13a344e749f2ed6d10c91030",
+      "published_sha256": "ef2b40f1d70af3d11b76d0b3137694efa064085a13a344e749f2ed6d10c91030",
+      "source_size_bytes": 237,
+      "published_size_bytes": 237,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/profile.ncu-rep",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/profile.ncu-rep",
+      "category": "native_profiler_capture",
+      "source_sha256": "306a11d35723964366313c60d6cce2f6aed6d8987abe55a3397e493c979623aa",
+      "published_sha256": "306a11d35723964366313c60d6cce2f6aed6d8987abe55a3397e493c979623aa",
+      "source_size_bytes": 3164175,
+      "published_size_bytes": 3164175,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/stderr.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/stderr.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_size_bytes": 0,
+      "published_size_bytes": 0,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/stdout.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/stdout.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "1b10083daf3bc7088660270e8b1c9cf5442007119a39a360b1fbba7437dc9e02",
+      "published_sha256": "1b10083daf3bc7088660270e8b1c9cf5442007119a39a360b1fbba7437dc9e02",
+      "source_size_bytes": 661,
+      "published_size_bytes": 661,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/unsupported.tsv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/unsupported.tsv",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "81515cf7fcc6bc77d3991fa769dcf5f616417389c023582ae987a6c5cb64cd98",
+      "published_sha256": "81515cf7fcc6bc77d3991fa769dcf5f616417389c023582ae987a6c5cb64cd98",
+      "source_size_bytes": 175,
+      "published_size_bytes": 175,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/workload/profile_only.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/workload/profile_only.json",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "ce1c24e319350a0ddf49fc08fb4f8076c077fca3c5ca45e9e05b95022c572691",
+      "published_sha256": "ce1c24e319350a0ddf49fc08fb4f8076c077fca3c5ca45e9e05b95022c572691",
+      "source_size_bytes": 146,
+      "published_size_bytes": 146,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/workload/run.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "99f2d4b65c40440c57d4c359073a7677ac5ac79a8c43b7c275f4afaa6822f076",
+      "published_sha256": "99f2d4b65c40440c57d4c359073a7677ac5ac79a8c43b7c275f4afaa6822f076",
+      "source_size_bytes": 518,
+      "published_size_bytes": 518,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics-details.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics-details.csv",
+      "category": "measurement_table",
+      "source_sha256": "1350ea87494ccde445a6fb76d5b15db42d70dc54578012f272356d8f6beda9f6",
+      "published_sha256": "1350ea87494ccde445a6fb76d5b15db42d70dc54578012f272356d8f6beda9f6",
+      "source_size_bytes": 24913,
+      "published_size_bytes": 24913,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics-raw.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics-raw.csv",
+      "category": "measurement_table",
+      "source_sha256": "423c8b1e41f0d156726e733539007874cfed33bb781d5ad2d19e955a166eb905",
+      "published_sha256": "423c8b1e41f0d156726e733539007874cfed33bb781d5ad2d19e955a166eb905",
+      "source_size_bytes": 41293,
+      "published_size_bytes": 41293,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics.csv",
+      "category": "measurement_table",
+      "source_sha256": "91a97c7174cc8976652fb985f7977752c3e492789a20cd352fb8f7d21d6a93a9",
+      "published_sha256": "91a97c7174cc8976652fb985f7977752c3e492789a20cd352fb8f7d21d6a93a9",
+      "source_size_bytes": 237,
+      "published_size_bytes": 237,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/profile.ncu-rep",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/profile.ncu-rep",
+      "category": "native_profiler_capture",
+      "source_sha256": "da9a69cff27d099860cdfbde49de768043ad21639813aaadf3253f0a08216360",
+      "published_sha256": "da9a69cff27d099860cdfbde49de768043ad21639813aaadf3253f0a08216360",
+      "source_size_bytes": 3164432,
+      "published_size_bytes": 3164432,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/stderr.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/stderr.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_size_bytes": 0,
+      "published_size_bytes": 0,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/stdout.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/stdout.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "22d819ee76639b406252da46b16c65912669f7f685a57c67bcc790244d828fce",
+      "published_sha256": "22d819ee76639b406252da46b16c65912669f7f685a57c67bcc790244d828fce",
+      "source_size_bytes": 660,
+      "published_size_bytes": 660,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/unsupported.tsv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/unsupported.tsv",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "81515cf7fcc6bc77d3991fa769dcf5f616417389c023582ae987a6c5cb64cd98",
+      "published_sha256": "81515cf7fcc6bc77d3991fa769dcf5f616417389c023582ae987a6c5cb64cd98",
+      "source_size_bytes": 175,
+      "published_size_bytes": 175,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/workload/profile_only.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/workload/profile_only.json",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "6e84e1e5d0e0c15408548e52f68a3ea47d22b9229e8457858a2062a6bb6efd50",
+      "published_sha256": "6e84e1e5d0e0c15408548e52f68a3ea47d22b9229e8457858a2062a6bb6efd50",
+      "source_size_bytes": 145,
+      "published_size_bytes": 145,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/workload/run.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "494e287ff23cfd62c88a884162c5517e23d87fd2bd3178371f2a6cff2c64d282",
+      "published_sha256": "494e287ff23cfd62c88a884162c5517e23d87fd2bd3178371f2a6cff2c64d282",
+      "source_size_bytes": 518,
+      "published_size_bytes": 518,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics-details.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics-details.csv",
+      "category": "measurement_table",
+      "source_sha256": "71390887b95e56ebd5e6bf2ffe38b0e56b4495ea776e4f441be43bdce43a22e7",
+      "published_sha256": "71390887b95e56ebd5e6bf2ffe38b0e56b4495ea776e4f441be43bdce43a22e7",
+      "source_size_bytes": 66623,
+      "published_size_bytes": 66623,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics-raw.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics-raw.csv",
+      "category": "measurement_table",
+      "source_sha256": "b76e37e8d3626ef21c0d8c94df95ae6f149f53c21bf8b24ec29bb347c6defda5",
+      "published_sha256": "b76e37e8d3626ef21c0d8c94df95ae6f149f53c21bf8b24ec29bb347c6defda5",
+      "source_size_bytes": 33092,
+      "published_size_bytes": 33092,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics.csv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics.csv",
+      "category": "measurement_table",
+      "source_sha256": "417347163b84e948bc2379fa37de5e0bc705272c0968f3c0dfc743ec89027206",
+      "published_sha256": "417347163b84e948bc2379fa37de5e0bc705272c0968f3c0dfc743ec89027206",
+      "source_size_bytes": 243,
+      "published_size_bytes": 243,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/profile.ncu-rep",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/profile.ncu-rep",
+      "category": "native_profiler_capture",
+      "source_sha256": "c5c7c5c7d69d0f2dfac27647aff02e07d2026836ffbcb4199c802c54fc224800",
+      "published_sha256": "c5c7c5c7d69d0f2dfac27647aff02e07d2026836ffbcb4199c802c54fc224800",
+      "source_size_bytes": 11842443,
+      "published_size_bytes": 11842443,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/stderr.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/stderr.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_size_bytes": 0,
+      "published_size_bytes": 0,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/stdout.txt",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/stdout.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "bba02a6f33353745b3f7d33f3f63fc639a8d75c7ed331b1b41eab27aa891973a",
+      "published_sha256": "bba02a6f33353745b3f7d33f3f63fc639a8d75c7ed331b1b41eab27aa891973a",
+      "source_size_bytes": 671,
+      "published_size_bytes": 671,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/unsupported.tsv",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/unsupported.tsv",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "81515cf7fcc6bc77d3991fa769dcf5f616417389c023582ae987a6c5cb64cd98",
+      "published_sha256": "81515cf7fcc6bc77d3991fa769dcf5f616417389c023582ae987a6c5cb64cd98",
+      "source_size_bytes": 175,
+      "published_size_bytes": 175,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/workload/profile_only.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/workload/profile_only.json",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "e08383800afa070afc7023742f7d2d90419278f50499ae74ccf4b26419f4658e",
+      "published_sha256": "e08383800afa070afc7023742f7d2d90419278f50499ae74ccf4b26419f4658e",
+      "source_size_bytes": 145,
+      "published_size_bytes": 145,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/workload/run.json",
+      "published_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "c46ce8fb9d929dede7b4182f0584414e0cb216b46fd5aaf89d89d735689f572f",
+      "published_sha256": "c46ce8fb9d929dede7b4182f0584414e0cb216b46fd5aaf89d89d735689f572f",
+      "source_size_bytes": 529,
+      "published_size_bytes": 529,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/b200-query-metrics-all.txt",
+      "published_relative_path": "plena-profiles/ncu/b200-query-metrics-all.txt",
+      "category": "supporting_log_or_historical_capture",
+      "source_sha256": "573ce29c3a313c05d21d2adf993ef32ba33bd2e2867050d97b3c2846822f774f",
+      "published_sha256": "573ce29c3a313c05d21d2adf993ef32ba33bd2e2867050d97b3c2846822f774f",
+      "source_size_bytes": 102541955,
+      "published_size_bytes": 102541955,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/kda_memory_traffic_summary.csv",
+      "published_relative_path": "plena-profiles/ncu/kda_memory_traffic_summary.csv",
+      "category": "measurement_table",
+      "source_sha256": "8465f230409aab8b95728fecf11f6f7aaa1eb55c0aff6b9a64520e4493503ec1",
+      "published_sha256": "8465f230409aab8b95728fecf11f6f7aaa1eb55c0aff6b9a64520e4493503ec1",
+      "source_size_bytes": 307,
+      "published_size_bytes": 307,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/ncu/kda_memory_traffic_summary.json",
+      "published_relative_path": "plena-profiles/ncu/kda_memory_traffic_summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "f4362819555c5a77025e32498e0ccb28d8fadf8e43af00a096b56351d1b1b1ad",
+      "published_sha256": "f4362819555c5a77025e32498e0ccb28d8fadf8e43af00a096b56351d1b1b1ad",
+      "source_size_bytes": 12027,
+      "published_size_bytes": 12027,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile.sqlite",
+      "published_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile.sqlite",
+      "category": "native_profiler_capture",
+      "source_sha256": "4c3a5abd1506e3da027322a6f87cea2931012e47591014e8d2dea467f77e1e84",
+      "published_sha256": "4c3a5abd1506e3da027322a6f87cea2931012e47591014e8d2dea467f77e1e84",
+      "source_size_bytes": 4276224,
+      "published_size_bytes": 4276224,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile_cuda_gpu_kern_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile_cuda_gpu_kern_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "1ab08602e21a056ead821d1e02914166f4817e559d53f1649d2362d3d2b75088",
+      "published_sha256": "1ab08602e21a056ead821d1e02914166f4817e559d53f1649d2362d3d2b75088",
+      "source_size_bytes": 8058,
+      "published_size_bytes": 8058,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile_nvtx_gpu_proj_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile_nvtx_gpu_proj_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "565b4dd8e0564140d6464e79fbce08d0541442be502cbd65d8a620492b4d87e5",
+      "published_sha256": "565b4dd8e0564140d6464e79fbce08d0541442be502cbd65d8a620492b4d87e5",
+      "source_size_bytes": 807,
+      "published_size_bytes": 807,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "48cf401b70926c61216e7bc669ba7826d2cf101fcd4aff2577234d6737b93069",
+      "published_sha256": "48cf401b70926c61216e7bc669ba7826d2cf101fcd4aff2577234d6737b93069",
+      "source_size_bytes": 87,
+      "published_size_bytes": 87,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "db65e96d65f96ca85f3bf40bf458090d9ace16f98d539b1b993fcca32cfd6b35",
+      "published_sha256": "db65e96d65f96ca85f3bf40bf458090d9ace16f98d539b1b993fcca32cfd6b35",
+      "source_size_bytes": 471,
+      "published_size_bytes": 471,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "733188f20cdc4b51ecfba2bd6a5dbe6b575495fa23bc625763a7c712145e3f5b",
+      "published_sha256": "733188f20cdc4b51ecfba2bd6a5dbe6b575495fa23bc625763a7c712145e3f5b",
+      "source_size_bytes": 257,
+      "published_size_bytes": 257,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile.sqlite",
+      "published_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile.sqlite",
+      "category": "native_profiler_capture",
+      "source_sha256": "23e13353a6c5a9e7701d290c804fa5b1ae08966fb9d25838a1a79e920e7e5e4c",
+      "published_sha256": "23e13353a6c5a9e7701d290c804fa5b1ae08966fb9d25838a1a79e920e7e5e4c",
+      "source_size_bytes": 4116480,
+      "published_size_bytes": 4116480,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile_cuda_gpu_kern_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile_cuda_gpu_kern_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "d846c32ab12e7c0bd50b9836540c52c3bc95e0d26db66aa77d049052536ff2a5",
+      "published_sha256": "d846c32ab12e7c0bd50b9836540c52c3bc95e0d26db66aa77d049052536ff2a5",
+      "source_size_bytes": 7172,
+      "published_size_bytes": 7172,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile_nvtx_gpu_proj_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile_nvtx_gpu_proj_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "41d4c0a357e7fd09484697d33538b0d7b8b7110f2bb5a30f77ee28d3cf68ad87",
+      "published_sha256": "41d4c0a357e7fd09484697d33538b0d7b8b7110f2bb5a30f77ee28d3cf68ad87",
+      "source_size_bytes": 790,
+      "published_size_bytes": 790,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/latency.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "12cb087d929c03abfb14913d61cb3b187ab4e9eca2ee9aa0aa949dbf989ea7a6",
+      "published_sha256": "12cb087d929c03abfb14913d61cb3b187ab4e9eca2ee9aa0aa949dbf989ea7a6",
+      "source_size_bytes": 88,
+      "published_size_bytes": 88,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/run.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "e328eb0c9b151e7679bd36220e306ce56b8451239758e84e151e247e71911c75",
+      "published_sha256": "e328eb0c9b151e7679bd36220e306ce56b8451239758e84e151e247e71911c75",
+      "source_size_bytes": 461,
+      "published_size_bytes": 461,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/summary.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "68e202b907cecbd03a81571c25ba4226dae4245ba2b2f7ad079457f831c5ccce",
+      "published_sha256": "68e202b907cecbd03a81571c25ba4226dae4245ba2b2f7ad079457f831c5ccce",
+      "source_size_bytes": 261,
+      "published_size_bytes": 261,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile.sqlite",
+      "published_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile.sqlite",
+      "category": "native_profiler_capture",
+      "source_sha256": "56e17943fccc80c54af496ab3d56160f1f4f206f10810cae2d168b1a607335e1",
+      "published_sha256": "56e17943fccc80c54af496ab3d56160f1f4f206f10810cae2d168b1a607335e1",
+      "source_size_bytes": 4190208,
+      "published_size_bytes": 4190208,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile_cuda_gpu_kern_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile_cuda_gpu_kern_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "8fd1e56406f41e119ed02d69f6b05087332098b3f91b7f8caf13f6960349b540",
+      "published_sha256": "8fd1e56406f41e119ed02d69f6b05087332098b3f91b7f8caf13f6960349b540",
+      "source_size_bytes": 7182,
+      "published_size_bytes": 7182,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile_nvtx_gpu_proj_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile_nvtx_gpu_proj_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "bf5064f91fc954e852cff60503688ff16d708134ac72fd12284a5b983dab56e9",
+      "published_sha256": "bf5064f91fc954e852cff60503688ff16d708134ac72fd12284a5b983dab56e9",
+      "source_size_bytes": 791,
+      "published_size_bytes": 791,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/latency.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "2f723e0c8ec301d59b5a59b24e843b77ae23e4f50bb4e032db337cd4232f111d",
+      "published_sha256": "2f723e0c8ec301d59b5a59b24e843b77ae23e4f50bb4e032db337cd4232f111d",
+      "source_size_bytes": 88,
+      "published_size_bytes": 88,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/run.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "d73274d6a342e417edc47490c9767cd82cd05c2afde33e8b931a505c2a0f228d",
+      "published_sha256": "d73274d6a342e417edc47490c9767cd82cd05c2afde33e8b931a505c2a0f228d",
+      "source_size_bytes": 461,
+      "published_size_bytes": 461,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/summary.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "de9e9f099a06affb378b0461aaeb260cea96d3e72d45a2f531de5d2b01b0df89",
+      "published_sha256": "de9e9f099a06affb378b0461aaeb260cea96d3e72d45a2f531de5d2b01b0df89",
+      "source_size_bytes": 262,
+      "published_size_bytes": 262,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014236Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T014236Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "db65e96d65f96ca85f3bf40bf458090d9ace16f98d539b1b993fcca32cfd6b35",
+      "published_sha256": "db65e96d65f96ca85f3bf40bf458090d9ace16f98d539b1b993fcca32cfd6b35",
+      "source_size_bytes": 471,
+      "published_size_bytes": 471,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile.sqlite",
+      "published_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile.sqlite",
+      "category": "native_profiler_capture",
+      "source_sha256": "ed7472ee48dc28543ed0d02fdd0664da2b6c4320b5e0fd6b68b4444319f5ef3c",
+      "published_sha256": "ed7472ee48dc28543ed0d02fdd0664da2b6c4320b5e0fd6b68b4444319f5ef3c",
+      "source_size_bytes": 3985408,
+      "published_size_bytes": 3985408,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile_cuda_gpu_kern_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile_cuda_gpu_kern_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "17bd36ee2e7943f4f9207543b1c07f47baee4b903d833ea97e19437d4f520a15",
+      "published_sha256": "17bd36ee2e7943f4f9207543b1c07f47baee4b903d833ea97e19437d4f520a15",
+      "source_size_bytes": 26502,
+      "published_size_bytes": 26502,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile_nvtx_gpu_proj_sum.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile_nvtx_gpu_proj_sum.csv",
+      "category": "measurement_table",
+      "source_sha256": "e86b705788ebe9541f9ea821f1cac2040e699df231ccffe310e62d2c10e8d68e",
+      "published_sha256": "e86b705788ebe9541f9ea821f1cac2040e699df231ccffe310e62d2c10e8d68e",
+      "source_size_bytes": 799,
+      "published_size_bytes": 799,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "published_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "aab5859eb06a46f2d75037d4ea623d4b365c01f224dc8e26f881e0d6e2806be0",
+      "published_sha256": "aab5859eb06a46f2d75037d4ea623d4b365c01f224dc8e26f881e0d6e2806be0",
+      "source_size_bytes": 88,
+      "published_size_bytes": 88,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "e6b07d84c46f7aa5aed4b99b3a5a1d199fa0752083efb3241a92a72794a56ba7",
+      "published_sha256": "e6b07d84c46f7aa5aed4b99b3a5a1d199fa0752083efb3241a92a72794a56ba7",
+      "source_size_bytes": 505,
+      "published_size_bytes": 505,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "published_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "b4793b630775f0386bee16fa4a5eff651f4b2d1aebf71be5dfb9e41fa50969f7",
+      "published_sha256": "b4793b630775f0386bee16fa4a5eff651f4b2d1aebf71be5dfb9e41fa50969f7",
+      "source_size_bytes": 262,
+      "published_size_bytes": 262,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "e262ef7acfdbe43b60072aacbe8eb97e900bf0d4658ca177df585e61068eb084",
+      "published_sha256": "e262ef7acfdbe43b60072aacbe8eb97e900bf0d4658ca177df585e61068eb084",
+      "source_size_bytes": 44,
+      "published_size_bytes": 44,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "9154b844ae2d5da44ae13418bd9186f68511d2e0641429e583772194cd665294",
+      "published_sha256": "9154b844ae2d5da44ae13418bd9186f68511d2e0641429e583772194cd665294",
+      "source_size_bytes": 471,
+      "published_size_bytes": 471,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "2081fdda406828f2fe5e947b5cebc731633a3f4760e415502fb5d7d490406e08",
+      "published_sha256": "2081fdda406828f2fe5e947b5cebc731633a3f4760e415502fb5d7d490406e08",
+      "source_size_bytes": 259,
+      "published_size_bytes": 259,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "8b0ef2709ab3ba5f0b3b1860b79ebd1bd77bc8099e1e3eb2630bed9cf3109b22",
+      "published_sha256": "8b0ef2709ab3ba5f0b3b1860b79ebd1bd77bc8099e1e3eb2630bed9cf3109b22",
+      "source_size_bytes": 44,
+      "published_size_bytes": 44,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "21d37f036401e8ab1d665c06fe02ccbafc0354cb6fa75952c2d2d28c18fb16d7",
+      "published_sha256": "21d37f036401e8ab1d665c06fe02ccbafc0354cb6fa75952c2d2d28c18fb16d7",
+      "source_size_bytes": 461,
+      "published_size_bytes": 461,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "30be8f8443bf147230eb7aec07c82509b2663ea85cd8b9bfd2e1ee148b88b90c",
+      "published_sha256": "30be8f8443bf147230eb7aec07c82509b2663ea85cd8b9bfd2e1ee148b88b90c",
+      "source_size_bytes": 264,
+      "published_size_bytes": 264,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "bd0be124cdaeade53486d761a4f841f42c2b96f011f8ed1e35f0288a0e26dc39",
+      "published_sha256": "bd0be124cdaeade53486d761a4f841f42c2b96f011f8ed1e35f0288a0e26dc39",
+      "source_size_bytes": 43,
+      "published_size_bytes": 43,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "726093c78339f23f544a18a70fbb2ce028651c17106f8e412d9ca2d3fa799d7d",
+      "published_sha256": "726093c78339f23f544a18a70fbb2ce028651c17106f8e412d9ca2d3fa799d7d",
+      "source_size_bytes": 461,
+      "published_size_bytes": 461,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "904b7ac9bc83add132a6733529f7cf4f659cb8dee3a7f54a58b9ab92579a0b38",
+      "published_sha256": "904b7ac9bc83add132a6733529f7cf4f659cb8dee3a7f54a58b9ab92579a0b38",
+      "source_size_bytes": 258,
+      "published_size_bytes": 258,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "70b58b6fb0a2d24721805e29d2e0cad259fca7fea6666dda75350415c86e6778",
+      "published_sha256": "70b58b6fb0a2d24721805e29d2e0cad259fca7fea6666dda75350415c86e6778",
+      "source_size_bytes": 2255,
+      "published_size_bytes": 2255,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "63cf64d33ac650559a2813c7bd2b95bacb718984c1729c756dee3e3226b97e09",
+      "published_sha256": "63cf64d33ac650559a2813c7bd2b95bacb718984c1729c756dee3e3226b97e09",
+      "source_size_bytes": 474,
+      "published_size_bytes": 474,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "b6d2b2b72f5084a905a46214382b399d6f02ec818b1eefaa415042f6362fe43e",
+      "published_sha256": "b6d2b2b72f5084a905a46214382b399d6f02ec818b1eefaa415042f6362fe43e",
+      "source_size_bytes": 258,
+      "published_size_bytes": 258,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "0b00743a47e76188ac041834f37de872aedde101ed62787d0bc4b5b86068d55d",
+      "published_sha256": "0b00743a47e76188ac041834f37de872aedde101ed62787d0bc4b5b86068d55d",
+      "source_size_bytes": 2301,
+      "published_size_bytes": 2301,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "5238cea74eab3aae6c6d83664d593d130812ed36fceb6f7bda1e1756c4571682",
+      "published_sha256": "5238cea74eab3aae6c6d83664d593d130812ed36fceb6f7bda1e1756c4571682",
+      "source_size_bytes": 464,
+      "published_size_bytes": 464,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "0c92f40a439cfd738f6288189df2b62926e9228acb1805f81d1cc9a45d9bb9c9",
+      "published_sha256": "0c92f40a439cfd738f6288189df2b62926e9228acb1805f81d1cc9a45d9bb9c9",
+      "source_size_bytes": 263,
+      "published_size_bytes": 263,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "27f186a180a1704372f521deb479b942aa7f94aced7729e5ab04f3b0f3d57cb3",
+      "published_sha256": "27f186a180a1704372f521deb479b942aa7f94aced7729e5ab04f3b0f3d57cb3",
+      "source_size_bytes": 2302,
+      "published_size_bytes": 2302,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "1730cfbf8e131a04dcaa0e86116347a29c047b04b019180b5fcc1ce12eafe6a7",
+      "published_sha256": "1730cfbf8e131a04dcaa0e86116347a29c047b04b019180b5fcc1ce12eafe6a7",
+      "source_size_bytes": 464,
+      "published_size_bytes": 464,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "2173778671a3edb026865c973239c8b404aad397fc68aa6b13e4e40775ceee81",
+      "published_sha256": "2173778671a3edb026865c973239c8b404aad397fc68aa6b13e4e40775ceee81",
+      "source_size_bytes": 267,
+      "published_size_bytes": 267,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T014226Z_gpu2_prefill_b1_s2048/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T014226Z_gpu2_prefill_b1_s2048/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "63cf64d33ac650559a2813c7bd2b95bacb718984c1729c756dee3e3226b97e09",
+      "published_sha256": "63cf64d33ac650559a2813c7bd2b95bacb718984c1729c756dee3e3226b97e09",
+      "source_size_bytes": 474,
+      "published_size_bytes": 474,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/latency.csv",
+      "published_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/latency.csv",
+      "category": "measurement_table",
+      "source_sha256": "2a36e6ab20759d6f0c40d4a8c1743f08e92cb95bac9eb58230efbb4dad6f0d50",
+      "published_sha256": "2a36e6ab20759d6f0c40d4a8c1743f08e92cb95bac9eb58230efbb4dad6f0d50",
+      "source_size_bytes": 2291,
+      "published_size_bytes": 2291,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/run.json",
+      "published_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/run.json",
+      "category": "metadata_or_checksum",
+      "source_sha256": "c6f095a796412ad1519a06c2e1208aa1d55d75828c268b6a1d984157457c0f88",
+      "published_sha256": "c6f095a796412ad1519a06c2e1208aa1d55d75828c268b6a1d984157457c0f88",
+      "source_size_bytes": 508,
+      "published_size_bytes": 508,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/summary.json",
+      "published_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/summary.json",
+      "category": "summary_or_validation",
+      "source_sha256": "1f2a5a380e56e69333c1b6116ca4c1aba4e33caad269d032f70add9aab29c0cf",
+      "published_sha256": "1f2a5a380e56e69333c1b6116ca4c1aba4e33caad269d032f70add9aab29c0cf",
+      "source_size_bytes": 262,
+      "published_size_bytes": 262,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/validation/flashkda_vs_fla.json",
+      "published_relative_path": "plena-profiles/validation/flashkda_vs_fla.json",
+      "category": "summary_or_validation",
+      "source_sha256": "34732cb4ec50461e1e657fda800accc3cca9ef280204ecfbc2e1216bfb387c0e",
+      "published_sha256": "34732cb4ec50461e1e657fda800accc3cca9ef280204ecfbc2e1216bfb387c0e",
+      "source_size_bytes": 1585,
+      "published_size_bytes": 1585,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    },
+    {
+      "source_archive": "KDA_B200_STAGE2_ingested_6fada27a",
+      "source_relative_path": "plena-profiles/validation/kda_custom_vs_official.json",
+      "published_relative_path": "plena-profiles/validation/kda_custom_vs_official.json",
+      "category": "summary_or_validation",
+      "source_sha256": "5d568376c9f09ab8b506aa335879d0f665efac9e8af2c516c64ff79bbd908fe2",
+      "published_sha256": "5d568376c9f09ab8b506aa335879d0f665efac9e8af2c516c64ff79bbd908fe2",
+      "source_size_bytes": 10017,
+      "published_size_bytes": 10017,
+      "transformations": [],
+      "tensor_metadata_inspected_without_unpickling": false
+    }
+  ],
+  "exclusions": [
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile.nsys-rep",
+      "reason": "credential-containing process metadata in opaque binary; corresponding exported tables retained",
+      "source_size_bytes": 1367761,
+      "source_sha256": "fc572a1aefc367657dcbc7935d9fbe46a6606a1c20f985afaf78681940eed702",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ]
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile.nsys-rep",
+      "reason": "credential-containing process metadata in opaque binary; corresponding exported tables retained",
+      "source_size_bytes": 1355026,
+      "source_sha256": "65999fcb91984d9b3b4d7f2b69c0b634f195dbd5c17f508fd1abca39a8874bcf",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ]
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile.nsys-rep",
+      "reason": "credential-containing process metadata in opaque binary; corresponding exported tables retained",
+      "source_size_bytes": 1403320,
+      "source_sha256": "d52db0865f545261264316e07245a82307615f811de7fbc746c792a3808e62ec",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ]
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014236Z_gpu2_prefill_b1_s2048/profile.nsys-rep",
+      "reason": "credential-containing process metadata in opaque binary; corresponding exported tables retained",
+      "source_size_bytes": 1377382,
+      "source_sha256": "e47357f9b2af2c2cc4cacc9770d7badd087a50ee16b23721729b5590c410c818",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ]
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile.nsys-rep",
+      "reason": "credential-containing process metadata in opaque binary; corresponding exported tables retained",
+      "source_size_bytes": 1363129,
+      "source_sha256": "47df00405d9d1b0e6ad43fce7b483130fd452af7a301b5b74f99dc29c6f7e641",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ]
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/smoke_vllm.py",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 1553,
+      "source_sha256": "63fd80864d18533fcd1d0e0c691eb7e69528a4e9e603c5b49803a6e22c00bcb4"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/run_smoke.sh",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 889,
+      "source_sha256": "d08d2f2ba4eaac0de1f0133d1fd79cf78ad3f0ccf2d27da3f7b477c04f55e205"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T020945Z_gpu2_smoke/run.log",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 24746,
+      "source_sha256": "c5a598e338de087285c78643697428a368ab7bc2a2f5ea686d247ecdbc808e3f"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T020945Z_gpu2_smoke/result.json",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 447,
+      "source_sha256": "fbe992e868e648a71be3e8e877aad805e4c3132155bd26b659c85295378798c6"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T020212Z_gpu2_smoke/run.log",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 31012,
+      "source_sha256": "6b7ee7a61ab73c0e0e248c076eb24134d8bc8492a9e906362e0feb22ce729714"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T020212Z_gpu2_smoke/result.json",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 452,
+      "source_sha256": "e993d3c3f471ac12c33d0a7f9eaea2c3b979c369bc39bbd07cd05255e09c8b4d"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T020114Z_gpu2_smoke/run.log",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 2700644,
+      "source_sha256": "44271654455c0f46fb075fdc7a1bcb0965fbbfa940a85f4d5df31e407894429e"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T015741Z_gpu2_smoke/run.log",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 39248,
+      "source_sha256": "cdb1cacb251d51617a58e8bf8bb8920a18b8f578a292d918b4b728f605596957"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/runs/20260817T015858Z_gpu2_smoke/run.log",
+      "reason": "out_of_completed_KDA_measurement_scope",
+      "source_size_bytes": 2700646,
+      "source_sha256": "f5f53ca9d0fa5e956cd84f0c7b49124c05af0db2e8d14e580d641633a5447572"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/flashinfer_jit.log",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 0,
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/.ninja_deps",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 154468,
+      "source_sha256": "8e150c122d474825410d7da6dba724412ac4a0d7b32b1dd4e6e7216910b96739"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/.ninja_log",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1044,
+      "source_sha256": "5095f56809b6cdfa67196af3448913cf1aa000732760028405508144197b9cd3"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass.so",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 10015632,
+      "source_sha256": "02b57c226fb699893fcdbd17217d5d5e5997dc84bc1e0c7a92131c91dde53641"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass_half_128_128_256.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1221864,
+      "source_sha256": "3670f7b5ce2832dc1e570591543b201c88f8c35b917521df31c56988dac76f4c"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass___nv_bfloat16_128_256_128.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1374328,
+      "source_sha256": "7bfc028bd492006e6f17c7a8bcefca7790b1ace34dbcffac511ccbbb0eaabb12"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass___nv_bfloat16_128_256_256.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1314496,
+      "source_sha256": "706852fcd5b2fce855593c40ea94fbd8b3176b0a2e912f34d387766dddf71517"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass_half_128_256_256.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1312064,
+      "source_sha256": "c463a31b9619ce8088f50e2de4e00c10ac7aa4ccc92578ef522c4fc1d857eb8e"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass___nv_bfloat16_128_64_128.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1217352,
+      "source_sha256": "a6d86757abda3b595261b23577e144d57a343abc40dae4ec7300ac3c2feb4a7d"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/build.ninja",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 4351,
+      "source_sha256": "12f9c819705943f0bcdcface0b2b4767756f70fff973b39ece73880663e3637f"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass___nv_bfloat16_128_128_256.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1224136,
+      "source_sha256": "0cfa382f0af816277bdffb766b66fd5aefe5198745fade7a1fbaaa48b11d3298"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass_half_128_64_128.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1214952,
+      "source_sha256": "4952d5f146f9c1902eec7b527d85043ab7d9a6025deb3299616ad94410bc45d0"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 469664,
+      "source_sha256": "6f241e591974ce8da9ea25848e083e2d4745c3d9dc699cb58d237e30acae8486"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fp4_gemm_cutlass/fp4_gemm_cutlass_half_128_256_128.cuda.o",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1372016,
+      "source_sha256": "65091317f9a573b3b175020f293b7236add350b2a6ac91a8fcad4533d6150341"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/tmp/fused_moe_100.lock",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 0,
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/tmp/fp4_gemm_cutlass.lock",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 0,
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/cached_ops/fused_moe_100/build.ninja",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 93809,
+      "source_sha256": "29ede7f3d6b3294c689ce739423f756265c0d7f900c9e438d14971f740ba6761"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass_half_128_64_128.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1356,
+      "source_sha256": "80848de9baac12bf872c546b5fc882964e8415c3fe3f745ef28dc259db705345"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass_half_128_128_256.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1364,
+      "source_sha256": "5edaab125923fc2260efb997b25c8900a7bd842e301c49a841c6a0057c3db82c"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass_half_128_256_128.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1364,
+      "source_sha256": "021df63bd30a62383ddb7cb14bc422177d489f14685325e6bbe413928a4af256"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass___nv_bfloat16_128_128_256.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1436,
+      "source_sha256": "d53c4e779144d48d86d0e3d50cddb912193553061762179a1c386d7e2659b469"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass___nv_bfloat16_128_256_128.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1436,
+      "source_sha256": "5e65f74ff666251523a4389e2dc8004e55015510c43e407c40bf85782edf719d"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass___nv_bfloat16_128_256_256.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1436,
+      "source_sha256": "ddce85d271ee71d52630fe15b2b6c9175ed3f2b90e7246006bbe704c4efb1343"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass___nv_bfloat16_128_64_128.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1428,
+      "source_sha256": "90db4935962663c9c813b63615f71bfda686c454eda5a8700aa2a94a32f37a74"
+    },
+    {
+      "source_relative_path": "plena-profiles/nemotron/flashinfer-cache-failed-cuda-home/generated/gen_gemm_sm100_cutlass_fp4/fp4_gemm_cutlass_half_128_256_256.cu",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 1364,
+      "source_sha256": "e50b146a545ead27466e6454633caaaf23e7d279a186536469d35e8ee7e20323"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/__pycache__/kda_profile.cpython-39.pyc",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 7653,
+      "source_sha256": "cf82e4cecb6a197e9a11ed5762eec795dc63f7c56194d4a72431a4893bdb56bf"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/__pycache__/kda_profile.cpython-311.pyc",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 17207,
+      "source_sha256": "0b139834a70d7881727f75c621404f7314d1a27f67b30f3b93bdca00c80aaf50"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/__pycache__/summarize_ncu.cpython-39.pyc",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 6415,
+      "source_sha256": "189441359021162f86876f5463d87829f45d461ab10d0992f07b764ae707bbf8"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/__pycache__/compare_official_and_layout.cpython-39.pyc",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 12160,
+      "source_sha256": "dd3b9d4c4b5ddd9c6d4f49f048dcf982bc1868d883a074871bc8038bfa26afb0"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/__pycache__/stage2_manifest.cpython-39.pyc",
+      "reason": "failed_compile_or_python_cache",
+      "source_size_bytes": 6148,
+      "source_sha256": "a36b4f79820de182b322341416615673d327a56e0dc647d485b2c2c7801c5dc8"
+    }
+  ],
+  "credential_screening": [
+    {
+      "source_relative_path": "plena-profiles/README.md",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/check_idle_gpu.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/compare_official_and_layout.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/kda_profile.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/kda_projection_layout.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/manifest.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/package_stage2.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/reproduce_stage2.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/run_case.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/run_ncu.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/run_nsys.sh",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/stage2_manifest.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/summarize_ncu.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/kda/validate_flashkda.py",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifest/environment.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-kda-final.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-nemotron-vllm.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-plena-kda-torch213.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifests/pip-freeze-plena-nemotron-vllm.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifests/source-environment-manifest.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/manifests/stage2-environment-source-manifest.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics-details.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics-raw.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/metrics.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/profile.ncu-rep",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/stderr.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/stdout.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/unsupported.tsv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014018Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics-details.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics-raw.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/metrics.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/profile.ncu-rep",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/stderr.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/stdout.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/unsupported.tsv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T014357Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics-details.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics-raw.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/metrics.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/profile.ncu-rep",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/stderr.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/stdout.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/unsupported.tsv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/workload/profile_only.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025735Z_gpu2_decode_b1_full/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics-details.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics-raw.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/metrics.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/profile.ncu-rep",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/stderr.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/stdout.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/unsupported.tsv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/workload/profile_only.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025754Z_gpu2_decode_b8_full/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics-details.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics-raw.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/metrics.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/profile.ncu-rep",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/stderr.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/stdout.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/unsupported.tsv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/workload/profile_only.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/20260817T025813Z_gpu2_prefill_b1_s2048_raw/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/b200-query-metrics-all.txt",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/kda_memory_traffic_summary.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/ncu/kda_memory_traffic_summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile.nsys-rep",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ],
+      "action": "exclude_opaque"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile.sqlite",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile_cuda_gpu_kern_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/profile_nvtx_gpu_proj_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013901Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile.nsys-rep",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ],
+      "action": "exclude_opaque"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile.sqlite",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile_cuda_gpu_kern_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/profile_nvtx_gpu_proj_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013929Z_gpu2_decode_b1/workload/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile.nsys-rep",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ],
+      "action": "exclude_opaque"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile.sqlite",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile_cuda_gpu_kern_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/profile_nvtx_gpu_proj_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T013950Z_gpu2_decode_b8/workload/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014236Z_gpu2_prefill_b1_s2048/profile.nsys-rep",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ],
+      "action": "exclude_opaque"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014236Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile.nsys-rep",
+      "credential_pattern_categories": [
+        "bearer_token",
+        "openai_token"
+      ],
+      "action": "exclude_opaque"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile.sqlite",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile_cuda_gpu_kern_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/profile_nvtx_gpu_proj_sum.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/nsys/20260817T014322Z_gpu2_prefill_b1_s2048/workload/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013523Z_gpu2_prefill_b1_s2048/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013643Z_gpu2_decode_b1/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013708Z_gpu2_decode_b8/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013725Z_gpu2_prefill_b1_s2048/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013737Z_gpu2_decode_b1/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T013746Z_gpu2_decode_b8/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T014226Z_gpu2_prefill_b1_s2048/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/latency.csv",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/run.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/runs/20260817T014314Z_gpu2_prefill_b1_s2048/summary.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/validation/flashkda_vs_fla.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    },
+    {
+      "source_relative_path": "plena-profiles/validation/kda_custom_vs_official.json",
+      "credential_pattern_categories": [],
+      "action": "retain"
+    }
+  ],
+  "opaque_credential_exclusions": 5,
+  "redaction_policy": "Remove lexical token IDs, prompt/response/message content and credentials recursively from JSON/JSONL/CSV; preserve expert IDs, token positions, counts and numerical measurements.",
+  "binary_policy": "Credential-containing opaque binaries are excluded, with their exported CSV/JSON retained and sanitized. Clean native profiler files and nine synthetic tensor snapshots are preserved byte-for-byte. All source bytes credential-pattern screened; Torch pickle metadata inspected without execution. No credentials or credential-value hashes are published.",
+  "metadata_policy": "Source paths in this manifest are relative to source_archive. Native capture metadata such as GPU UUIDs, host paths and numeric process IDs remains measurement provenance.",
+  "checksum_policy": "SHA256SUMS covers every published regular file except itself, including this manifest. source_SHA256SUMS.txt, if present, refers to original source bytes and may name excluded historical files.",
+  "packaging_tool_sha256": "8b8468f865ae9c16942f9f7e1558a76498edd7c94baa0541d77101636e32c734"
+}

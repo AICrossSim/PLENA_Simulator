@@ -12,7 +12,7 @@ use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
     BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
-    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
+    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STATE_TYPE, STORE_V_AMOUNT,
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
@@ -96,6 +96,7 @@ pub(crate) async fn run_from_cli() {
         vector_sram_size = *VECTOR_SRAM_SIZE,
         matrix_type = ?*MATRIX_SRAM_TYPE,
         vector_type = ?*VECTOR_SRAM_TYPE,
+        recurrent_state_type = ?*STATE_TYPE,
         "SRAM"
     );
     tracing::info!(
@@ -111,11 +112,18 @@ pub(crate) async fn run_from_cli() {
         "Config source"
     );
 
-    let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
-    let vram = Arc::new(VectorSram::from_mx_type(
+    let mram = Arc::new(MatrixSram::with_banks(
+        *MLEN,
+        *MATRIX_SRAM_SIZE,
+        *BLEN,
+        *MATRIX_SRAM_TYPE,
+    )); // Matrix SRAM: MLEN / BLEN physical banks, one BLEN-wide word per bank.
+    let layout_banks = (*VLEN / *BLEN).max(1);
+    let vram = Arc::new(VectorSram::from_mx_type_with_banks(
         *VLEN,
         *VECTOR_SRAM_SIZE,
         *VECTOR_SRAM_TYPE,
+        layout_banks,
     )); // Vector SRAM
 
     let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
@@ -145,8 +153,34 @@ pub(crate) async fn run_from_cli() {
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
+    let controllers = std::env::var("PLENA_HBM_CONTROLLERS")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("invalid HBM controller count")
+        })
+        .unwrap_or(8);
+    assert!(
+        controllers.is_power_of_two() && controllers <= 64,
+        "HBM controller count must be a power of two in 1..=64"
+    );
+    // This captured organization is 2 GiB/controller. Host backing overrides
+    // bound test RSS; they must not invent additional DRAM address capacity.
+    if std::env::var_os("PLENA_HBM_CONTROLLERS").is_some() {
+        assert!(
+            effective_hbm_size as u64 <= controllers as u64 * 2 * 1024u64.pow(3),
+            "HBM host allocation exceeds the selected DRAM organization"
+        );
+    }
+    tracing::info!(
+        controllers,
+        "HBM timing controllers (not physical stack count)"
+    );
+    let dram = ramulator::Ramulator::hbm2_preset(controllers).unwrap();
+    assert_clock_relationship(&dram);
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(dram),
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
@@ -183,7 +217,11 @@ pub(crate) async fn run_from_cli() {
             opts.fpsram
         )
     });
-    accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
+    if opts.fpsram_bf16 {
+        accelerator.load_fpsram_from_bf16_bytes(&fpsram_data);
+    } else {
+        accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
+    }
 
     // - INT SRAM Preload
     if let Some(intsram_path) = opts.intsram {
@@ -235,9 +273,69 @@ pub(crate) async fn run_from_cli() {
         Some(scoreboard) => TimingDriver::Scoreboard { scoreboard },
         None => TimingDriver::Serial,
     };
+    let unified_serial = std::env::var("PLENA_UNIFIED_SERIAL_TIMING").as_deref() == Ok("1");
+    crate::timing::reset_execution_counters(unified_serial);
+    let execution_start = Executor::current().now();
     accelerator
         .do_ops(&decoded_ops, stage_profiler.as_mut(), timing_driver)
         .await;
+
+    if unified_serial {
+        let elapsed = Executor::current().now() - execution_start;
+        let counters = crate::timing::execution_counters();
+        let period = crate::runtime_config::PERIOD.as_picos();
+        let charged_picos = counters.charged_cycles * period;
+        assert!(elapsed.as_picos() >= charged_picos);
+        let report = serde_json::json!({
+            "contract": "controlled-recurrence-serial-v1",
+            "experimental_fp32_dot_enabled": std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref() == Ok("1"),
+            "additional_dot_accumulator_bytes": if std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref() == Ok("1") { 4 * *VLEN } else { 0 },
+            "experimental_dot_latency_assumption": "configured vector FP32 mul+add; reset and BF16 conversion one cycle each",
+            "counters": counters,
+            "hbm_read_bytes": hbm.statistics().total_bytes_read,
+            "hbm_write_bytes": hbm.statistics().total_bytes_written,
+            "dma_write_window": std::env::var("PLENA_DMA_WRITE_WINDOW").ok(),
+            "exact_view_dma": std::env::var("PLENA_EXACT_VIEW_DMA").as_deref() == Ok("1"),
+            "period_picos": period,
+            "total_picos": elapsed.as_picos(),
+            "dma_and_memory_wait_picos": elapsed.as_picos() - charged_picos,
+            "scalar_and_control_cycles": counters.charged_cycles - counters.issue_cycles
+                - counters.bank_service_cycles - counters.arithmetic_cycles - counters.dependency_cycles,
+            "v2": {
+                "lanes": accelerator.v2_config_report(),
+                "retirement": "serial instructions/DMA; resource reservations overlap micro-operations inside each v2 instruction",
+                "attribution": "exclusive elapsed cycles: bank union first, uncovered arithmetic pipeline occupancy second, remaining dependency/drain gaps third; not causal bottleneck fractions",
+                "feedback_wait": "sum of blocked launch delays; overlaps other resource activity, not an additive total component"
+            },
+            "ordinary_bank_policy": "one single-ported all-bank VLEN row per cycle; binary two reads plus one write",
+            "scope": "serial issue + bank + arithmetic + scalar/control + DMA/memory waits; no overlap credit",
+        });
+        dump_to_file(
+            "execution_timing.json",
+            &serde_json::to_vec_pretty(&report).unwrap(),
+        );
+    }
+    let packet = accelerator.lstream_packet_counters();
+    tracing::info!(
+        packet_reads = packet.read_packets,
+        packet_writes = packet.write_packets,
+        packet_bank_words = packet.bank_words,
+        packet_service_cycles = packet.service_cycles,
+        packet_bandwidth_floor_cycles = packet.bandwidth_floor_cycles,
+        packet_conflict_stall_cycles = packet.conflict_stall_cycles,
+        packet_lane_restore_values = packet.lane_restore_values,
+        "L-stream packet counters"
+    );
+    let matrix_packet = accelerator.matrix_view_packet_counters();
+    tracing::info!(
+        packets = matrix_packet.packets,
+        values = matrix_packet.values,
+        bank_words = matrix_packet.bank_words,
+        service_cycles = matrix_packet.service_cycles,
+        ideal_cycles = matrix_packet.ideal_cycles,
+        bank_stall_cycles = matrix_packet.bank_stall_cycles,
+        "Matrix-view packet counters"
+    );
 
     let serial_duration = Executor::current().now() - Instant::INIT;
     if let Some(sb) = scoreboard.as_ref() {
@@ -297,17 +395,22 @@ pub(crate) async fn run_from_cli() {
     let intsram_bytes = accelerator.intsram_dump_bytes();
     dump_to_file("intsram_dump.bin", &intsram_bytes);
 
-    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
-    // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
+    // Dump HBM only on an explicit request or under DEBUG tracing because the
+    // modeled capacity may be 128 GiB+.  The explicit path lets connected
+    // numerical tests inspect state/output writes without enabling noisy logs.
+    if opts.hbm_dump.is_some() || tracing::enabled!(tracing::Level::DEBUG) {
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
             hbm_bytes[..len].copy_from_slice(&f[..len]);
         });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+        let path = opts
+            .hbm_dump
+            .as_deref()
+            .and_then(|path| path.to_str())
+            .unwrap_or("hbm_dump.bin");
+        dump_to_file(path, &hbm_bytes);
     }
 
     let memory_stats = hbm.statistics();
@@ -318,5 +421,41 @@ pub(crate) async fn run_from_cli() {
         memory_stats.total_bytes_read,
         memory_stats.total_bytes_written,
         utilization
+    );
+}
+
+/// State the accelerator clock and its relationship to the DRAM model's, at
+/// startup, instead of letting the two coincide silently.
+///
+/// `stage_profile.rs` already recorded the hazard: a cycle-domain comparison
+/// there "only held because the DRAM tCK happened to equal PERIOD; any preset or
+/// frequency change made it fail". Equal is what the HBM2 preset gives -- 2000
+/// MBPS is a 1 ns command clock, and `CLOCK_PERIOD_PS` defaults to 1000 -- but
+/// that is a property of this preset and this default, not of the design.
+///
+/// The relationship required is that the DRAM period is a whole multiple of the
+/// accelerator period, in either direction. Anything else means a DRAM tick and
+/// an accelerator cycle do not line up on any boundary, and every cycle count
+/// derived by dividing one by the other is off by a fraction nothing reports.
+fn assert_clock_relationship(dram: &ramulator::Ramulator) {
+    let accel_ps = crate::runtime_config::PERIOD.as_picos().max(1);
+    let dram_ps = dram.period().as_picos().max(1);
+    let (hi, lo) = if dram_ps >= accel_ps {
+        (dram_ps, accel_ps)
+    } else {
+        (accel_ps, dram_ps)
+    };
+    assert!(
+        hi % lo == 0,
+        "accelerator clock is {accel_ps} ps ({:.3} GHz, from CLOCK_PERIOD_PS) and the \
+         DRAM model's is {dram_ps} ps; neither divides the other, so ticks never line \
+         up and any cycle count derived from both is off by a fraction nothing reports",
+        1e3 / accel_ps as f64,
+    );
+    println!(
+        "Clock: {accel_ps} ps ({:.3} GHz) from CLOCK_PERIOD_PS -- an assumption, not a \
+         synthesised frequency. DRAM model: {dram_ps} ps ({}x).",
+        1e3 / accel_ps as f64,
+        hi / lo,
     );
 }

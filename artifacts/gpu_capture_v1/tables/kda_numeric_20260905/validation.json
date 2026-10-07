@@ -1,0 +1,8 @@
+{
+  "status": "passed",
+  "rows": 576,
+  "gpu_cpu_reference_exact": true,
+  "first_two_tokens_relative_l2": 0.013485169969499111,
+  "rust_output_hashes_match": true,
+  "scope": "numerical diagnostic only, no new kernel performance or checkpoint execution"
+}

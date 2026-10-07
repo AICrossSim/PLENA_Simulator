@@ -1,0 +1,270 @@
+{
+  "compiler_commit": "0eb5d608fc8434cd8dd8e92f85bb87da479e97da",
+  "compiler_focused": {
+    "passed": 157
+  },
+  "simulator_analytical": {
+    "passed": 268,
+    "skipped": 9
+  },
+  "rust_workspace": {
+    "passed": 328,
+    "format": "passed",
+    "clippy_all_targets": "passed"
+  },
+  "portable_analytical_smoke": {
+    "model": "mamba",
+    "batch": 1,
+    "baseline_cycles": 3063999,
+    "batch_cycles": 2909800
+  },
+  "portable_projection_machine": {
+    "cases": 10,
+    "scope": "distinct synthetic inputs; B1/2/4/8/16; K2305/N65; tile1/tile4",
+    "results": [
+      {
+        "case": "projection_b1_tile1",
+        "status": "passed",
+        "observed": {
+          "issue": 245,
+          "scalar": 181,
+          "sram": 796,
+          "arithmetic": 7680,
+          "dependency": 0,
+          "dma": 8052.0,
+          "total": 16954.0
+        },
+        "prediction": {
+          "issue": 245,
+          "scalar": 181,
+          "frontend": 426,
+          "sram": 796,
+          "arithmetic": 7680,
+          "dependency": 0,
+          "dma": 8052,
+          "total": 16954
+        }
+      },
+      {
+        "case": "projection_b1_tile4",
+        "status": "passed",
+        "observed": {
+          "issue": 245,
+          "scalar": 181,
+          "sram": 796,
+          "arithmetic": 7680,
+          "dependency": 0,
+          "dma": 8052.0,
+          "total": 16954.0
+        },
+        "prediction": {
+          "issue": 245,
+          "scalar": 181,
+          "frontend": 426,
+          "sram": 796,
+          "arithmetic": 7680,
+          "dependency": 0,
+          "dma": 8052,
+          "total": 16954
+        }
+      },
+      {
+        "case": "projection_b2_tile1",
+        "status": "passed",
+        "observed": {
+          "issue": 376,
+          "scalar": 278,
+          "sram": 1481,
+          "arithmetic": 15360,
+          "dependency": 0,
+          "dma": 7404.0,
+          "total": 24899.0
+        },
+        "prediction": {
+          "issue": 376,
+          "scalar": 278,
+          "frontend": 654,
+          "sram": 1481,
+          "arithmetic": 15360,
+          "dependency": 0,
+          "dma": 7404,
+          "total": 24899
+        }
+      },
+      {
+        "case": "projection_b2_tile4",
+        "status": "passed",
+        "observed": {
+          "issue": 259,
+          "scalar": 191,
+          "sram": 890,
+          "arithmetic": 8160,
+          "dependency": 0,
+          "dma": 8161.0,
+          "total": 17661.0
+        },
+        "prediction": {
+          "issue": 259,
+          "scalar": 191,
+          "frontend": 450,
+          "sram": 890,
+          "arithmetic": 8160,
+          "dependency": 0,
+          "dma": 8161,
+          "total": 17661
+        }
+      },
+      {
+        "case": "projection_b4_tile1",
+        "status": "passed",
+        "observed": {
+          "issue": 629,
+          "scalar": 463,
+          "sram": 2851,
+          "arithmetic": 30720,
+          "dependency": 0,
+          "dma": 8772.0,
+          "total": 43435.0
+        },
+        "prediction": {
+          "issue": 629,
+          "scalar": 463,
+          "frontend": 1092,
+          "sram": 2851,
+          "arithmetic": 30720,
+          "dependency": 0,
+          "dma": 8772,
+          "total": 43435
+        }
+      },
+      {
+        "case": "projection_b4_tile4",
+        "status": "passed",
+        "observed": {
+          "issue": 284,
+          "scalar": 208,
+          "sram": 1078,
+          "arithmetic": 9120,
+          "dependency": 0,
+          "dma": 8375.0,
+          "total": 19065.0
+        },
+        "prediction": {
+          "issue": 284,
+          "scalar": 208,
+          "frontend": 492,
+          "sram": 1078,
+          "arithmetic": 9120,
+          "dependency": 0,
+          "dma": 8375,
+          "total": 19065
+        }
+      },
+      {
+        "case": "projection_b8_tile1",
+        "status": "passed",
+        "observed": {
+          "issue": 1135,
+          "scalar": 833,
+          "sram": 5591,
+          "arithmetic": 61440,
+          "dependency": 0,
+          "dma": 10064.0,
+          "total": 79063.0
+        },
+        "prediction": {
+          "issue": 1135,
+          "scalar": 833,
+          "frontend": 1968,
+          "sram": 5591,
+          "arithmetic": 61440,
+          "dependency": 0,
+          "dma": 10064,
+          "total": 79063
+        }
+      },
+      {
+        "case": "projection_b8_tile4",
+        "status": "passed",
+        "observed": {
+          "issue": 451,
+          "scalar": 329,
+          "sram": 2045,
+          "arithmetic": 18240,
+          "dependency": 0,
+          "dma": 9586.0,
+          "total": 30651.0
+        },
+        "prediction": {
+          "issue": 451,
+          "scalar": 329,
+          "frontend": 780,
+          "sram": 2045,
+          "arithmetic": 18240,
+          "dependency": 0,
+          "dma": 9586,
+          "total": 30651
+        }
+      },
+      {
+        "case": "projection_b16_tile1",
+        "status": "passed",
+        "observed": {
+          "issue": 2147,
+          "scalar": 1573,
+          "sram": 11071,
+          "arithmetic": 122880,
+          "dependency": 0,
+          "dma": 11555.0,
+          "total": 149226.0
+        },
+        "prediction": {
+          "issue": 2147,
+          "scalar": 1573,
+          "frontend": 3720,
+          "sram": 11071,
+          "arithmetic": 122880,
+          "dependency": 0,
+          "dma": 11555,
+          "total": 149226
+        }
+      },
+      {
+        "case": "projection_b16_tile4",
+        "status": "passed",
+        "observed": {
+          "issue": 779,
+          "scalar": 565,
+          "sram": 3979,
+          "arithmetic": 36480,
+          "dependency": 0,
+          "dma": 11442.0,
+          "total": 53245.0
+        },
+        "prediction": {
+          "issue": 779,
+          "scalar": 565,
+          "frontend": 1344,
+          "sram": 3979,
+          "arithmetic": 36480,
+          "dependency": 0,
+          "dma": 11442,
+          "total": 53245
+        }
+      }
+    ]
+  },
+  "known_preexisting_failures": {
+    "baseline_commit": "9fd6a59299fd9432e455f674f1bf9d414628ec36",
+    "tests": [
+      "test_qwen_packed_skinny_router_rowpacked_compiles_for_128_experts",
+      "test_mxfp8_is_sole_gap_source"
+    ],
+    "note": "Reproduced on the pre-upload remote baseline in the same environment; no assertions disabled."
+  },
+  "logs_sha256": {
+    "compiler_focused": "75059662ed9fb1971c52c5e57ce5d6585773d453d46a937411c5dd074054ae30",
+    "rust_workspace": "14544fb3500103f361f856a9d1bc2eaf255e017e322494ba044f153b2044138b",
+    "preexisting_compiler_failures": "4ec56117a00e586ae68fa1560dbafdbe00a6c799019bbdca43e02217f2ee32ba"
+  }
+}

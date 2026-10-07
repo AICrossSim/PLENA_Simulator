@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "purpose": "functional comparison; no latency collected",
+  "fixed_seed": 20260817,
+  "official_source": {
+    "repository": "moonshotai/Kimi-K3",
+    "git_commit": "3cb39dfd32e51c3328e2e4b4af21341247d06c43",
+    "huggingface_model_revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+    "file": "/home/mcl123/hf_cache/hub/models--moonshotai--Kimi-K3/snapshots/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/modeling_kimi_linear.py",
+    "class_lines": [
+      477,
+      663
+    ]
+  },
+  "flashkda_git_commit": "1ce47ea3bb22c84eb9cc665028399cf35e8ffb0b",
+  "configuration": {
+    "hidden_size": 7168,
+    "num_heads": 96,
+    "head_dim": 128,
+    "conv_kernel": 4,
+    "weight_dtype": "torch.bfloat16",
+    "recurrent_state_dtype": "torch.float32"
+  },
+  "custom_mode": {
+    "class": "KimiK3KDALayer",
+    "official_semantics": true,
+    "beta_dtype": "torch.float32",
+    "state_layout_keyword": "transpose_state_layout=True",
+    "note": "Both wrappers call the same FLA operator so this isolates wrapper/layout/state handling."
+  },
+  "weight_mapping_bit_identical": true,
+  "weight_tensor_count": 14,
+  "comparisons": [
+    {
+      "sequence_length": 1,
+      "batch": 1,
+      "seed": 20260818,
+      "same_hidden_input": true,
+      "same_initial_conv_state": true,
+      "same_initial_recurrent_state": true,
+      "operator_mode": "fused_recurrent",
+      "output": {
+        "shape": [
+          1,
+          1,
+          7168
+        ],
+        "dtype_custom": "torch.bfloat16",
+        "dtype_official": "torch.bfloat16",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "recurrent_state": {
+        "shape": [
+          1,
+          96,
+          128,
+          128
+        ],
+        "dtype_custom": "torch.float32",
+        "dtype_official": "torch.float32",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "conv_state": {
+        "q": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "k": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "v": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        }
+      }
+    },
+    {
+      "sequence_length": 16,
+      "batch": 1,
+      "seed": 20260833,
+      "same_hidden_input": true,
+      "same_initial_conv_state": true,
+      "same_initial_recurrent_state": true,
+      "operator_mode": "chunk",
+      "output": {
+        "shape": [
+          1,
+          16,
+          7168
+        ],
+        "dtype_custom": "torch.bfloat16",
+        "dtype_official": "torch.bfloat16",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "recurrent_state": {
+        "shape": [
+          1,
+          96,
+          128,
+          128
+        ],
+        "dtype_custom": "torch.float32",
+        "dtype_official": "torch.float32",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "conv_state": {
+        "q": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "k": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "v": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        }
+      }
+    },
+    {
+      "sequence_length": 256,
+      "batch": 1,
+      "seed": 20261073,
+      "same_hidden_input": true,
+      "same_initial_conv_state": true,
+      "same_initial_recurrent_state": true,
+      "operator_mode": "chunk",
+      "output": {
+        "shape": [
+          1,
+          256,
+          7168
+        ],
+        "dtype_custom": "torch.bfloat16",
+        "dtype_official": "torch.bfloat16",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "recurrent_state": {
+        "shape": [
+          1,
+          96,
+          128,
+          128
+        ],
+        "dtype_custom": "torch.float32",
+        "dtype_official": "torch.float32",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "conv_state": {
+        "q": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "k": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "v": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        }
+      }
+    },
+    {
+      "sequence_length": 2048,
+      "batch": 1,
+      "seed": 20262865,
+      "same_hidden_input": true,
+      "same_initial_conv_state": true,
+      "same_initial_recurrent_state": true,
+      "operator_mode": "chunk",
+      "output": {
+        "shape": [
+          1,
+          2048,
+          7168
+        ],
+        "dtype_custom": "torch.bfloat16",
+        "dtype_official": "torch.bfloat16",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "recurrent_state": {
+        "shape": [
+          1,
+          96,
+          128,
+          128
+        ],
+        "dtype_custom": "torch.float32",
+        "dtype_official": "torch.float32",
+        "max_abs": 0.0,
+        "mean_abs": 0.0,
+        "relative_l2": 0.0,
+        "allclose_atol_1e-2_rtol_1e-2": true,
+        "finite_custom": true,
+        "finite_official": true
+      },
+      "conv_state": {
+        "q": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "k": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        },
+        "v": {
+          "shape": [
+            1,
+            12288,
+            4
+          ],
+          "dtype_custom": "torch.bfloat16",
+          "dtype_official": "torch.bfloat16",
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "relative_l2": 0.0,
+          "allclose_atol_1e-2_rtol_1e-2": true,
+          "finite_custom": true,
+          "finite_official": true
+        }
+      }
+    }
+  ]
+}

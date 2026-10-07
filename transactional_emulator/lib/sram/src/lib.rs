@@ -48,14 +48,6 @@ impl<T> Cell<T> {
     }
 }
 
-impl Cell<QuantTensor> {
-    /// Convenience for cells whose payload is already a [`QuantTensor`]; no
-    /// conversion needed.
-    pub(crate) async fn resolve(&mut self) -> &QuantTensor {
-        self.resolve_with(|t| t).await
-    }
-}
-
 /// Convert an element-address into a cell index, asserting both alignment
 /// (`addr` is a multiple of `units_per_cell`) and bounds (`idx < depth`).
 pub(crate) fn addr_to_cell(addr: u32, units_per_cell: u32, depth: usize) -> usize {

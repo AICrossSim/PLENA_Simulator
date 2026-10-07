@@ -1,0 +1,704 @@
+"""Held-out machine-code checks for shared analytical services and schedules."""
+
+import argparse
+from dataclasses import replace
+import json
+import os
+from pathlib import Path
+import subprocess
+import numpy as np
+
+from analytic_models.performance.ltile_platform import ExecutionProfile
+from transactional_emulator.testbench.aten.recurrent_gate_test import Arena, bf, digest, exp
+from transactional_emulator.testbench.aten.recurrent_conv_test import run_program, read
+from transactional_emulator.testbench.aten.matrix_projection_test import reference
+from compiler.aten.plena.isa_matrix_projection import (
+    Projection,
+    lower_batch_projection,
+    lower_b1_projection,
+    lower_compact_projection,
+    lower_resident_projection,
+)
+from compiler.aten.plena.isa_projection_software import lower_software_projection, lower_transposed_projection
+from compiler.aten.plena.recurrent_coefficients import CompactCoefficientLoader, lower_bf16_gather, lower_softmax_rows
+from compiler.aten.plena.prepared_vector_recurrence import PreparedVectorGroup, lower_prepared_vector_recurrence
+from compiler.aten.plena.matrix_recurrence_lowering import NEMOTRON_MAMBA, KIMI_KDA
+
+
+def profile_for(memory):
+    config = json.loads((memory / "ramulator.json").read_text())
+    return ExecutionProfile(hbm_controllers=len(config["memory_system"]["controllers"]))
+
+
+def legacy_mm_case(root, runtime, batch=4):
+    """Original M_MM ABI, packed columns and partial sums across DMA reloads.
+
+    This small original geometry certifies functionality only. Its coarse
+    legacy Matrix timing is deliberately excluded from the bounded-model
+    performance calibration and the full-size sublayer speedup tables.
+    """
+    import tomlkit
+    from compiler.aten.plena import PlenaCompiler
+    from transactional_emulator.testbench.aten.recurrent_gate_test import (
+        AssemblyToBinary, COMPILER_ROOT, MatrixSramPoint, _write_settings,
+    )
+
+    root = root.resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    if batch not in (1, 2, 4, 8, 16):
+        raise ValueError("legacy Matrix check expects batch 1/2/4/8/16")
+    mlen, k, n, slices = 64, 256, 64, 2
+    physical_batch = (batch + 3) // 4 * 4
+    rng = np.random.default_rng(10201 + batch)
+    # Small integers keep the reference exact, isolating addresses and
+    # accumulation lifetime from reduction-order precision differences.
+    x = np.zeros((physical_batch, k), np.float32)
+    x[:batch] = rng.integers(-1, 2, (batch, k)).astype(np.float32)
+    weight = rng.integers(-1, 2, (k, n)).astype(np.float32)
+    groups = k // mlen // slices
+    packed = np.zeros((groups * mlen, n // 4 * mlen), np.float32)
+    for group in range(groups):
+        for column in range(n // 4):
+            for part in range(slices):
+                k0 = (group * slices + part) * mlen
+                packed[group * mlen:(group + 1) * mlen,
+                       column * mlen + part * 4:column * mlen + (part + 1) * 4] = weight[k0:k0 + mlen, column * 4:(column + 1) * 4]
+    p = PlenaCompiler(mlen=mlen, blen=4, mram_tile_capacity=1)
+    source = p.input("X", shape=x.shape, physical_shape=x.shape, real_data_ratio=1.0, hbm_element_bytes=2)
+    weights = p.input("W", shape=packed.shape, physical_shape=packed.shape, real_data_ratio=1.0, hbm_element_bytes=2)
+    resident = p.load_batch(source, name="X_vram")
+    output = p.alloc("Y", physical_batch, n, strict=False, physical_shape=(physical_batch, n))
+    p.vram_sub_projection_packed_skinny_stream_k_accum_to(
+        resident, 0, weights, 0, output, 0, 0, max_k_tiles_per_packed_tile=slices,
+    )
+    text = p.compile()
+    assembly, binary = root / "program.asm", root / "program.mem"
+    assembly.write_text(text)
+    AssemblyToBinary(str(COMPILER_ROOT / "doc/operation.svh"), str(COMPILER_ROOT / "doc/configuration.svh")).generate_binary(str(assembly), str(binary))
+    image = bytearray(1024**2)
+    for name, values in (("X", x), ("W", packed)):
+        address = p._compiler.get_hbm_layout(name).hbm_base_addr
+        payload = (bf(values).view(np.uint32) >> 16).astype("<u2").tobytes()
+        if address + len(payload) > len(image):
+            raise AssertionError("legacy fixture exceeds allocated HBM")
+        image[address:address + len(payload)] = payload
+    (root / "hbm.bin").write_bytes(image)
+    for name in ("fp", "int"):
+        (root / (name + ".bin")).write_bytes(bytes(64))
+    settings = _write_settings(root, MatrixSramPoint(mlen=mlen, banks=16, bank_width=4, capacity_bytes=mlen**2 * 2))
+    config = tomlkit.parse(settings.read_text())
+    for name, value in dict(HLEN=16, BROADCAST_AMOUNT=4, VECTOR_SRAM_SIZE=512, HBM_V_Prefetch_Amount=4).items():
+        config["TRANSACTIONAL"]["CONFIG"][name]["value"] = value
+    for name in ("HBM_M_WEIGHT_TYPE", "HBM_M_KV_TYPE", "HBM_V_ACT_TYPE", "HBM_V_KV_TYPE"):
+        config["TRANSACTIONAL"]["PRECISION"][name] = dict(
+            format="Plain", DATA_TYPE=dict(type="Fp", sign=True, exponent=8, mantissa=7),
+        )
+    settings.write_text(tomlkit.dumps(config))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PLENA_")}
+    env.update(OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", RUST_LOG="warn")
+    if os.environ.get("LIBTORCH"):
+        env["LD_LIBRARY_PATH"] = os.environ["LIBTORCH"] + "/lib:" + env.get("LD_LIBRARY_PATH", "")
+    command = [str(runtime.resolve()), "--opcode", str(binary), "--hbm", str(root / "hbm.bin"),
+               "--fpsram", str(root / "fp.bin"), "--intsram", str(root / "int.bin"),
+               "--settings", str(settings), "--hbm-size", str(len(image))]
+    with (root / "run.log").open("w") as log:
+        subprocess.run(command, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
+    raw = np.fromfile(root / "vram_dump.bin", "<u2")
+    actual = (raw.astype(np.uint32) << 16).view(np.float32)
+    offset = p._compiler.get_vram_addr(output.name)
+    np.testing.assert_array_equal(actual[offset:offset + physical_batch * n].reshape(physical_batch, n), bf(x @ weight))
+    result = dict(case=root.name, status="passed", checked_values=batch * n,
+                  checked_padding_values=(physical_batch - batch) * n,
+                  dimensions=dict(mlen=mlen, blen=4, batch=batch, physical_batch=physical_batch,
+                                  k=k, n=n, packed_k_slices=slices),
+                  logical_weight_bytes=k*n*2, packed_weight_bytes=packed.size*2,
+                  matrix_capacity_bytes=mlen**2 * 2, vector_capacity_bytes=512 * mlen * 2,
+                  mm_instructions=text.count("M_MM 0,"), writeouts=text.count("M_MM_WO"),
+                  runtime_sha256=digest(runtime), program_sha256=digest(binary), command=command,
+                  input_sha256=digest(root / "hbm.bin"), settings_sha256=digest(settings),
+                  scope="functional original M_MM packed columns and live accumulation across DMA reloads; no performance certification")
+    (root / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
+def matrix_case(
+    root, runtime, memory, b, k, n, *, resident=False, compact_tile=None,
+    n_panel_tile=1, projection_segments=1, software_tile=None, vector_rows=58, transposed_k=None,
+):
+    rng = np.random.default_rng(3107 + b + k + n)
+    arena = Arena()
+    zero = arena.add(np.zeros(2048))
+    h = profile_for(memory)
+    spec = Projection(0, 0, 0, 0, k, n, transposed_k or 256)
+    xs = [bf(rng.normal(0, 0.2, k)) for _ in range(b)]
+    inputs = [arena.add(np.pad(x, (0, spec.input_values - k))) for x in xs]
+    w = bf(rng.normal(0, 0.1, (k, n)))
+    padded = np.pad(w, ((0, (-k) % 32), (0, (-n) % 32)))
+    if transposed_k:
+        packets = [padded[k0:k0+rows, col:col+32].T.copy().reshape(-1) for col,k0,rows,_ in spec.packets()]
+        weights = arena.add(np.concatenate(packets))
+    else:
+        weights = arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
+    outputs = [arena.add(np.full(spec.output_values, 7), output=True) for _ in xs]
+    spec = replace(spec, inputs=inputs[0], weights=weights, outputs=outputs[0], zero=zero)
+    if transposed_k:
+        h = replace(h, projection_schedule="transposed", projection_k_tile=transposed_k)
+        assembly = lower_transposed_projection(spec, inputs, outputs, vector_rows=vector_rows)
+    elif software_tile is not None:
+        h = replace(h, projection_schedule="resident", projection_request_tile=software_tile,
+                    projection_vector_rows=vector_rows, projection_codec_rows=6 if vector_rows == 58 else 0)
+        assembly = lower_software_projection(spec, inputs, outputs,
+                                              request_tile=software_tile, vector_rows=vector_rows)
+    elif compact_tile is not None:
+        h = replace(h, projection_schedule="batch" if compact_tile == 4 else "compact")
+        h = replace(h, matrix=replace(
+            h.matrix, weight_replay=True, projection_segments=projection_segments
+        ))
+        assembly = lower_compact_projection(
+            spec, inputs, outputs, batch_tile=compact_tile, n_panel_tile=n_panel_tile
+        )
+    elif resident:
+        assembly = lower_resident_projection(spec, inputs, outputs)
+    elif k <= 16384:
+        assembly = lower_batch_projection(spec, inputs, outputs)
+    else:
+        assembly = "".join(lower_b1_projection(replace(spec, inputs=x, outputs=y)) for x, y in zip(inputs, outputs))
+    image, result = run_program(root, runtime, memory, arena, assembly, profile=h)
+    for x, address in zip(xs, outputs):
+        if not np.array_equal(read(image, address, n), reference(x, w, spec.k_tile, h.matrix)):
+            raise AssertionError("shared-panel numerical mismatch")
+        np.testing.assert_array_equal(read(image, address + 2 * n, spec.output_values - n), 0)
+    return dict(
+        case=root.name,
+        **result,
+        dimensions=dict(
+            batch=b, k=k, n=n, batch_tile=compact_tile, n_panel_tile=n_panel_tile,
+            projection_segments=projection_segments,
+            software_request_tile=software_tile, vector_rows=vector_rows,
+            transposed_k=transposed_k,
+        ),
+        checked_values=b * n,
+        status="passed",
+        projection_relative_l2_vs_fp32=[float(np.linalg.norm(read(image,a,n)-x@w)/max(np.linalg.norm(x@w),1e-30)) for x,a in zip(xs,outputs)],
+        scope=("M_TMV static N-by-K weights; existing operand latches, serial row reads; declared BF16 K boundary"
+               if transposed_k else "M_MM.P replay/slicing, distinct private requests, tail K/N, BF16 partial sums"
+               if compact_tile is not None else "M_MV panel reuse, private requests, tail K/N, final writeback"),
+    )
+
+
+def mixed_projection_case(root, runtime, memory, batch):
+    """Two dependent projections use different panel schedules in one program.
+
+    The second stage reads the first stage's actual committed HBM output.
+    Distinct requests, both K tails, and finite-cache pressure at B16 expose
+    lifetime/stride mistakes that isolated timing comparisons cannot detect.
+    """
+    rng = np.random.default_rng(9280 + batch)
+    arena = Arena()
+    zero = arena.add(np.zeros(2048))
+    k, hidden, n = (6145 if batch == 16 else 2305), 289, 65
+    h = profile_for(memory)
+    h = replace(h, projection_schedule="batch", matrix=replace(h.matrix, weight_replay=True, projection_segments=4),
+                projection_panel_overrides=(("first_projection", 8), ("second_projection", 2)))
+    first = Projection(0, 0, 0, zero, k, hidden, 256)
+    second = Projection(0, 0, 0, zero, hidden, n, 256)
+    xs = [bf(rng.normal(0, 0.2, k)) for _ in range(batch)]
+    inputs = [arena.add(np.pad(x, (0, first.input_values - k))) for x in xs]
+    weights = [bf(rng.normal(0, 0.1, shape)) for shape in ((k, hidden), (hidden, n))]
+
+    def pack(w):
+        padded = np.pad(w, ((0, (-w.shape[0]) % 32), (0, (-w.shape[1]) % 32)))
+        return arena.add(padded.reshape(len(padded), -1, 32).transpose(1, 0, 2).copy())
+
+    weight_bases = [pack(w) for w in weights]
+    middle_count = max(first.output_values, second.input_values)
+    middle = [arena.add(np.zeros(middle_count), output=True) for _ in xs]
+    outputs = [arena.add(np.full(second.output_values, 7), output=True) for _ in xs]
+    first = replace(first, inputs=inputs[0], weights=weight_bases[0], outputs=middle[0])
+    second = replace(second, inputs=middle[0], weights=weight_bases[1], outputs=outputs[0])
+    text = "; @operator=first_projection\n" + lower_compact_projection(first, inputs, middle, batch_tile=4, n_panel_tile=8)
+    text += "; @operator=second_projection\n" + lower_compact_projection(second, middle, outputs, batch_tile=4, n_panel_tile=2)
+    image, result = run_program(root, runtime, memory, arena, text, profile=h)
+    for x, mid, dst in zip(xs, middle, outputs):
+        expected_mid = reference(x, weights[0], 256, h.matrix)
+        expected_out = reference(expected_mid, weights[1], 256, h.matrix)
+        np.testing.assert_array_equal(read(image, mid, hidden), expected_mid)
+        np.testing.assert_array_equal(read(image, dst, n), expected_out)
+        np.testing.assert_array_equal(read(image, mid + hidden * 2, middle_count - hidden), 0)
+        np.testing.assert_array_equal(read(image, dst + n * 2, second.output_values - n), 0)
+    return dict(case=root.name, **result, status="passed", checked_values=batch * (hidden + n),
+                dimensions=dict(batch=batch, k=k, hidden=hidden, n=n, panel_tiles=[8, 2]),
+                scope="dependent BF16 projections with different Compiler panels; actual producer output consumed; no long-chain quality claim")
+
+
+def cached_gather_case(root, runtime, memory):
+    """Repeated subsets, not only identical whole rows; cache pressure fallback."""
+    rng = np.random.default_rng(5819)
+    a = Arena()
+    zero = a.add(np.zeros(2048))
+    one = a.add(np.eye(1, 2048).ravel())
+    values = bf(rng.normal(0, 0.2, (3, 2048)))
+    bases = [a.add(x) for x in values]
+    mappings = []
+    # Row 0/1 share some contributions; row 1/2 share different ones.
+    for r in range(3):
+        row = [None] * 2048
+        for i in range(128):
+            row[2 * i] = (bases[0], (i % 16) if r < 2 else 16 + i % 16)
+            row[2 * i + 1] = (bases[1], (i % 32) if r > 0 else 32 + i % 32)
+        row[-1] = (bases[2], 2047 - r)
+        mappings.extend(row)
+    # Different repeat masks exhaust the static mask budget; fallback is real
+    # grouped ISA, not a host gather. The short final row also tests zero tail.
+    for i in range(60):
+        mappings.extend([(bases[2], i)] * (i + 2) + [None] * (2048 - i - 2))
+    mappings.extend([(bases[2], 2047), None, (bases[0], 0)])
+    outputs, text = [], []
+    for maps in (mappings[:6144], mappings[6144:]):
+        count = (len(maps) + 2047) // 2048 * 2048
+        dst = a.add(np.full(count, 7), output=True)
+        expected = np.zeros(count, np.float32)
+        for index, item in enumerate(maps):
+            if item is not None:
+                expected[index] = values[bases.index(item[0]), item[1]]
+        text.append(lower_bf16_gather(maps, dst, zero, one, strategy="cached"))
+        outputs.append((dst, expected))
+    image, result = run_program(root, runtime, memory, a, "".join(text), profile=profile_for(memory))
+    for dst, expected in outputs:
+        np.testing.assert_array_equal(read(image, dst, len(expected)), expected)
+    return dict(case=root.name, **result, status="passed", checked_values=sum(len(x) for _, x in outputs))
+
+
+def gather_case(root, runtime, memory, strategy="grouped"):
+    rng = np.random.default_rng(741)
+    arena = Arena()
+    zero = arena.add(np.zeros(2048))
+    one = arena.add(np.eye(1, 2048).ravel())
+    source = bf(rng.normal(size=(3, 2048)))
+    bases = [arena.add(row) for row in source]
+    maps = [None if i % 7 == 0 else (bases[(i * 5 + 1) % 3], (i // 19) % 47) for i in range(2301)]
+    dst = arena.add(np.full(4096, 7), output=True)
+    expected = np.zeros(4096, np.float32)
+    for i, pair in enumerate(maps):
+        if pair:
+            expected[i] = source[bases.index(pair[0]), pair[1]]
+    image, result = run_program(
+        root,
+        runtime,
+        memory,
+        arena,
+        lower_bf16_gather(maps, dst, zero, one, strategy=strategy),
+        profile=profile_for(memory),
+    )
+    if not np.array_equal(read(image, dst, 4096), expected):
+        raise AssertionError("gather mismatch")
+    return dict(case=root.name, **result, status="passed", checked_values=4096)
+
+
+def compact_case(root, runtime, memory, kind):
+    rng = np.random.default_rng(194 + len(kind))
+    arena = Arena()
+    zero = arena.add(np.zeros(2048))
+    one = arena.add(np.eye(1, 2048).ravel())
+    heads, width = (32, 64) if kind == "mamba" else (16, 128)
+    spec = replace(NEMOTRON_MAMBA if kind == "mamba" else KIMI_KDA, heads=heads)
+    fields = ("a", "b", "c", "dt", "d") if kind == "mamba" else ("decay", "key", "query", "beta")
+    maps = {}
+    expanded = {}
+    for name in fields:
+        rows = 128 if name in ("b", "c", "decay", "key", "query") else 1
+        values = bf(rng.uniform(0.001, 0.02, (rows, heads)))
+        # Compact row-major capture; each cached row owns its padded tail.
+        flat = np.pad(values.ravel(), (0, (-values.size) % 2048))
+        base = arena.add(flat)
+        for r in range(rows):
+            maps[name, r] = [
+                (base + (r * heads + h) // 2048 * 4096, (r * heads + h) % 2048, h * width, width) for h in range(heads)
+            ]
+        expanded[name] = arena.add(np.repeat(values, width, axis=1))
+    masks = {}
+    for h in range(heads):
+        mask = np.zeros(2048)
+        mask[h * width : (h + 1) * width] = 1
+        masks[h * width, width] = arena.add(mask)
+    loader = CompactCoefficientLoader(maps, masks, one)
+    state = bf(rng.normal(0, 0.02, (128, 2048)))
+    states = [arena.add(state.copy(), output=True) for _ in range(2)]
+    value = arena.add(bf(rng.normal(0, 0.2, 2048)))
+    outputs = [arena.add(np.full(2048, 7), output=True) for _ in range(2)]
+    text = []
+    for index in range(2):
+        f = dict(expanded, zero=zero, output=outputs[index], **{("x" if kind == "mamba" else "value"): value})
+        text.append(
+            lower_prepared_vector_recurrence(
+                spec,
+                (PreparedVectorGroup(states[index], f),),
+                static_address_reuse=True,
+                pairwise_bf16_dot=True,
+                mamba_decay_row_invariant=kind == "mamba",
+                decay_is_delta=True,
+                coefficient_loaders=(loader,) if index else None,
+            )
+        )
+    image, result = run_program(root, runtime, memory, arena, "".join(text), profile=profile_for(memory))
+    for addresses, count in ((states, 128 * 2048), (outputs, 2048)):
+        if not np.array_equal(read(image, addresses[0], count), read(image, addresses[1], count)):
+            raise AssertionError("compact baseline differs from ordinary expanded baseline")
+    return dict(
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=128 * 2048 + 2048,
+        scope="identical ordinary BF16 arithmetic, HBM expansion versus finite Vector software broadcast",
+    )
+
+
+def softmax_case(root, runtime, memory, values, max_latency):
+    rng = np.random.default_rng(88 + values)
+    a = Arena()
+    rows = (values + 2047) // 2048
+    x = np.full(rows * 2048, -16384, np.float32)
+    x[:values] = bf(rng.normal(0, 0.6, values))
+    source = a.add(x)
+    tmp = a.add(np.full_like(x, 7), output=True)
+    out = a.add(np.full_like(x, 7), output=True)
+    mask = np.ones(2048, np.float32)
+    if values % 2048:
+        mask[values % 2048 :] = 0
+    mb = a.add(mask)
+    profile = profile_for(memory)
+    profile = replace(profile, machine=replace(profile.machine, vector_max_cycles=max_latency))
+    image, result = run_program(
+        root,
+        runtime,
+        memory,
+        a,
+        lower_softmax_rows(source, tmp, out, values, mb),
+        profile=profile,
+        fp_constants=[-16384] + [0] * 31,
+    )
+    ex = exp(bf(x - np.max(x)))
+    ex[values:] = 0
+    total = np.float32(0)
+    for r in ex.reshape(rows, 2048):
+        while len(r) > 1:
+            r = bf(r[::2] + r[1::2])
+        total = bf(total + r[0])[0]
+    expected = bf(ex * bf(1 / total))
+    actual = read(image, out, len(x))
+    if not np.array_equal(actual, expected):
+        raise AssertionError(f"softmax rounding mismatch: {np.max(np.abs(actual - expected))}")
+    return dict(
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=len(x),
+        scope="stable BF16 softmax, finite SFU, SRAM/HBM spills, masked tail",
+    )
+
+
+def vector_case(root, runtime, memory):
+    from compiler.aten.plena.recurrent_coefficients import lower_dot_rows, lower_positive_normalize
+    from compiler.aten.plena.prepared_vector_recurrence import _Emitter
+
+    rng = np.random.default_rng(980)
+    a = Arena()
+    x, w = bf(rng.normal(0, 0.2, 4096)), bf(rng.normal(0, 0.2, 4096))
+    x[2307:] = 0
+    w[2307:] = 0
+    source, weights = a.add(x), a.add(w)
+    onehot = a.add(np.eye(1, 2048).ravel())
+    dot = a.add(np.full(2048, 7), output=True)
+    relu = a.add(np.full(4096, 7), output=True)
+    scores = np.zeros(2048, np.float32)
+    scores[:6] = bf(rng.uniform(0.05, 0.9, 6))
+    sb, norm = a.add(scores), a.add(np.full(2048, 7), output=True)
+    text = lower_dot_rows(source, weights, dot, onehot, 2307)
+    text += lower_positive_normalize(sb, norm, 6)
+    e = _Emitter(2048, True)
+    for r in range(2):
+        e.transfer(0, source + r * 4096)
+        e.address(1, 0)
+        e.address(2, 0)
+        e.lines.append("V_MAX_VF gp1, gp2, f0, 0")
+        e.binary("MUL", 0, 0, 0)
+        e.transfer(0, relu + r * 4096, store=True)
+    text += "\n".join(e.lines) + "\n"
+    image, result = run_program(root, runtime, memory, a, text, profile=profile_for(memory))
+
+    def tree(v):
+        while len(v) > 1:
+            v = bf(v[::2] + v[1::2])
+        return v[0]
+
+    total = np.float32(0)
+    for r in bf(x * w).reshape(2, 2048):
+        total = bf(total + tree(r))[0]
+    expected = np.zeros(2048, np.float32)
+    expected[0] = total
+    np.testing.assert_array_equal(read(image, dot, 2048), expected)
+    np.testing.assert_array_equal(read(image, norm, 2048), bf(scores * bf(1 / tree(scores))))
+    np.testing.assert_array_equal(read(image, relu, 4096), bf(np.maximum(x, 0) ** 2))
+    return dict(
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=8192,
+        scope="BF16 dot tail, positive router-score normalization, relu2",
+    )
+
+
+def attention_core_case(root, runtime, memory):
+    """Connect QK -> softmax -> PV without host writes between operators.
+
+    Queries are already scaled. Two query heads share one static KV group;
+    projection/RoPE and incremental KV packing are outside this core check.
+    Extra owned padding covers full Vector DMA reads of the final K tile.
+    """
+    rng = np.random.default_rng(739)
+    a = Arena()
+    profile = profile_for(memory)
+    b, keys, width = 2, 4096, 128
+    q = bf(rng.normal(0, 0.1, (b, width)))
+    key = bf(rng.normal(0, 0.2, (width, keys)))
+    value = bf(rng.normal(0, 0.2, (keys, width)))
+    zero = a.add(np.zeros(2048))
+    mask = a.add(np.ones(2048))
+    qk = Projection(0, 0, 0, zero, width, keys, 256)
+    pv = Projection(0, 0, 0, zero, keys, width, 256)
+
+    def weights(w):
+        return a.add(w.reshape(w.shape[0], -1, 32).transpose(1, 0, 2).copy())
+
+    queries = [a.add(np.pad(row, (0, qk.input_values - width))) for row in q]
+    key_base, value_base = weights(key), weights(value)
+    logits = [a.add(np.full(qk.output_values, 7), output=True) for _ in q]
+    scratch = [a.add(np.full(qk.output_values, 7), output=True) for _ in q]
+    probabilities = [a.add(np.zeros(pv.input_values), output=True) for _ in q]
+    outputs = [a.add(np.full(pv.output_values, 7), output=True) for _ in q]
+    qk = replace(qk, inputs=queries[0], weights=key_base, outputs=logits[0])
+    pv = replace(pv, inputs=probabilities[0], weights=value_base, outputs=outputs[0])
+    text = lower_batch_projection(qk, queries, logits)
+    for source, temporary, destination in zip(logits, scratch, probabilities):
+        text += lower_softmax_rows(source, temporary, destination, keys, mask)
+    text += lower_batch_projection(pv, probabilities, outputs)
+    image, result = run_program(root, runtime, memory, a, text, profile=profile, fp_constants=[-16384] + [0] * 31)
+    for query, lb, pb, ob in zip(q, logits, probabilities, outputs):
+        scores = reference(query, key, 256, profile.matrix)
+        exponentials = exp(bf(scores - np.max(scores)))
+        total = np.float32(0)
+        for row in exponentials.reshape(-1, 2048):
+            while len(row) > 1:
+                row = bf(row[::2] + row[1::2])
+            total = bf(total + row[0])[0]
+        probability = bf(exponentials * bf(1 / total))
+        expected = reference(probability, value, 256, profile.matrix)
+        np.testing.assert_array_equal(read(image, lb, keys), scores)
+        np.testing.assert_array_equal(read(image, pb, keys), probability)
+        np.testing.assert_array_equal(read(image, ob, width), expected)
+    return dict(
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=b * (keys * 2 + width),
+        scope="connected prepared-Q/static-KV attention core; no host intermediate injection; no KV append/router/MLA claim",
+    )
+
+
+def expert_core_case(root, runtime, memory):
+    """Routed expert MLPs and combine, with fixed routing supplied as input.
+
+    Two tokens select experts [0,1] and [0,2]. Expert 0 shares panels across
+    both tokens; the other experts have distinct weights/private results.
+    This checks post-router execution and does not certify top-k selection.
+    """
+    from compiler.aten.plena.prepared_vector_recurrence import _Emitter
+
+    rng = np.random.default_rng(2401)
+    a = Arena()
+    profile = profile_for(memory)
+    hidden, intermediate = 64, 96
+    zero = a.add(np.zeros(2048))
+    x = bf(rng.normal(0, 0.2, (2, hidden)))
+    inputs = [a.add(np.pad(row, (0, 2048 - hidden))) for row in x]
+    output = [a.add(np.full(2048, 7), output=True) for _ in x]
+    selected = [(0, 1), (0,), (1,)]
+    contributions = [[], []]
+    references = [[], []]
+    text = ""
+    for tokens in selected:
+        up = bf(rng.normal(0, 0.2, (hidden, intermediate)))
+        down = bf(rng.normal(0, 0.2, (intermediate, hidden)))
+        up_base = a.add(up.reshape(hidden, -1, 32).transpose(1, 0, 2).copy())
+        down_base = a.add(down.reshape(intermediate, -1, 32).transpose(1, 0, 2).copy())
+        temp = [a.add(np.full(2048, 7), output=True) for _ in tokens]
+        result = [a.add(np.full(2048, 7), output=True) for _ in tokens]
+        source = [inputs[t] for t in tokens]
+        text += lower_batch_projection(
+            Projection(source[0], up_base, temp[0], zero, hidden, intermediate, 256), source, temp
+        )
+        e = _Emitter(2048, True)
+        for address in temp:
+            e.transfer(0, address)
+            e.address(1, 0)
+            e.address(2, 0)
+            e.lines.append("V_MAX_VF gp1, gp2, f0, 0")
+            e.binary("MUL", 0, 0, 0)
+            e.transfer(0, address, store=True)
+        text += "\n".join(e.lines) + "\n"
+        text += lower_batch_projection(
+            Projection(temp[0], down_base, result[0], zero, intermediate, hidden, 256), temp, result
+        )
+        for token, address in zip(tokens, result):
+            activation = bf(np.maximum(reference(x[token], up, 256, profile.matrix), 0) ** 2)
+            references[token].append(reference(activation, down, 256, profile.matrix))
+            contributions[token].append(address)
+    e = _Emitter(2048, True)
+    e.address(4, 0)
+    for addresses, destination in zip(contributions, output):
+        e.transfer(0, zero)
+        for slot, address in enumerate(addresses, 1):
+            e.transfer(1, address)
+            e.lines.append(f"S_LD_FP f1, gp4, {slot}")
+            e.address(1, 2048)
+            e.address(2, 2048)
+            e.lines.append("V_MUL_VF gp1, gp2, f1, 0")
+            e.binary("ADD", 0, 0, 1)
+        e.transfer(0, destination, store=True)
+    text += "\n".join(e.lines) + "\n"
+    image, result = run_program(
+        root, runtime, memory, a, text, profile=profile, fp_constants=[0, 0.25, 0.75] + [0] * 29
+    )
+    for values, address in zip(references, output):
+        expected = bf(bf(values[0] * 0.25) + bf(values[1] * 0.75))
+        np.testing.assert_array_equal(read(image, address, hidden), expected)
+    return dict(
+        case=root.name,
+        **result,
+        status="passed",
+        checked_values=2 * hidden,
+        scope="fixed-route shared/private expert projections, ReLU2 and weighted combine; no dynamic router claim",
+    )
+
+
+def main():
+    p = argparse.ArgumentParser()
+    for arg in ("output", "runtime", "memory-root"):
+        p.add_argument("--" + arg, required=True, type=Path)
+    p.add_argument(
+        "--only", default="all",
+        choices=("all", "auxiliary", "attention", "experts", "resident", "projection", "panel", "mixed", "software", "legacy_mm", "transposed"),
+    )
+    p.add_argument("--segments", nargs="+", type=int, choices=(1, 2, 4), default=[1],
+                   help="Candidate M_MM.P segments for --only panel; default preserves the original path")
+    args = p.parse_args()
+    if len(set(args.segments)) != len(args.segments):
+        p.error("--segments must not repeat values")
+    if args.segments != [1] and args.only not in ("panel", "all"):
+        p.error("--segments applies only to --only panel/all")
+    args.output.mkdir(parents=True, exist_ok=True)
+    results = []
+    jobs = [
+        ("matrix_b2_tail", lambda d: matrix_case(d, args.runtime, args.memory_root, 2, 289, 65)),
+        ("matrix_b4_tail", lambda d: matrix_case(d, args.runtime, args.memory_root, 4, 97, 33)),
+        ("gather_grouped", lambda d: gather_case(d, args.runtime, args.memory_root)),
+        ("gather_pattern", lambda d: gather_case(d, args.runtime, args.memory_root, "pattern")),
+        *[
+            ("compact_" + kind, lambda d, k=kind: compact_case(d, args.runtime, args.memory_root, k))
+            for kind in ("mamba", "kda")
+        ],
+    ]
+    auxiliary = [
+        ("vector_auxiliary", lambda d: vector_case(d, args.runtime, args.memory_root)),
+        ("softmax_4096", lambda d: softmax_case(d, args.runtime, args.memory_root, 4096, 4)),
+        ("softmax_tail_latency8", lambda d: softmax_case(d, args.runtime, args.memory_root, 2307, 8)),
+    ]
+    attention = [("attention_core_4096", lambda d: attention_core_case(d, args.runtime, args.memory_root))]
+    experts = [("routed_expert_core", lambda d: expert_core_case(d, args.runtime, args.memory_root))]
+    resident = [
+        (
+            f"resident_b{b}_k{k}_n{n}",
+            lambda d, b=b, k=k, n=n: matrix_case(d, args.runtime, args.memory_root, b, k, n, resident=True),
+        )
+        for b, k, n in ((1, 2688, 129), (2, 289, 2051), (16, 769, 65), (2, 16417, 33))
+    ] + [("gather_cached_subsets_and_pressure", lambda d: cached_gather_case(d, args.runtime, args.memory_root))]
+    projection = [
+        (
+            f"projection_b{b}_tile{tile}",
+            lambda d, b=b, tile=tile: matrix_case(
+                d, args.runtime, args.memory_root, b, 2305, 65, compact_tile=tile
+            ),
+        )
+        for b in (1, 2, 4, 8, 16) for tile in (1, 4)
+    ]
+    # N=289 spans more than one group even with eight resident N32 panels.
+    # K=2305 crosses an aligned input row and ends with a masked K256 tile.
+    # The pressure case owns 16 * ceil(6145/2048) = 64 input rows, exceeding
+    # the 58-row allocation before private outputs and streaming inputs.
+    panel_shapes = [
+        (b, 2305, 289, 4, panels)
+        for b, panels in ((1, 2), (2, 4), (4, 8), (8, 4), (16, 8))
+    ] + [(2, 2305, 97, 1, 4), (16, 6145, 289, 4, 8), (2, 257, 2051, 4, 8)]
+    panel = [
+        (
+            f"panel_b{b}_k{k}_n{n}_tile{tile}_panels{panels}"
+            + (f"_s{segments}" if segments != 1 else ""),
+            lambda d, b=b, k=k, n=n, tile=tile, panels=panels, segments=segments: matrix_case(
+                d, args.runtime, args.memory_root, b, k, n,
+                compact_tile=tile, n_panel_tile=panels, projection_segments=segments,
+            ),
+        )
+        for b, k, n, tile, panels in panel_shapes
+        for segments in args.segments
+    ]
+    mixed = [
+        (f"mixed_projection_b{batch}", lambda d, b=batch: mixed_projection_case(d, args.runtime, args.memory_root, b))
+        for batch in (1, 2, 4, 8, 16)
+    ]
+    software = [
+        (f"software_b{b}_q{tile}_v{rows}",
+         lambda d, b=b, tile=tile, rows=rows: matrix_case(
+             d, args.runtime, args.memory_root, b, 6145 if b >= 8 else 2305, 65,
+             software_tile=tile, vector_rows=rows))
+        for b in (1, 2, 4, 8, 16) for tile, rows in ((b, 58), (max(1, b // 2), 64))
+    ]
+    transposed = [
+        (f"transposed_b{b}_k{tile}", lambda d, b=b, tile=tile: matrix_case(
+            d, args.runtime, args.memory_root, b, 6145 if b >= 8 else 2305, 65, transposed_k=tile))
+        for b in (1, 2, 4, 8, 16) for tile in (256, 1024)
+    ]
+    # Held-out K grouping and shape: neither appears in the performance sweep.
+    transposed += [
+        (f"transposed_heldout_b{b}_k512", lambda d, b=b: matrix_case(
+            d, args.runtime, args.memory_root, b, 3841, 33, transposed_k=512))
+        for b in (2, 8)
+    ]
+    groups = {
+        "all": jobs + auxiliary + attention + experts + resident + projection + panel + mixed + software + transposed,
+        "auxiliary": auxiliary,
+        "attention": attention,
+        "experts": experts,
+        "resident": resident,
+        "projection": projection,
+        "panel": panel,
+        "mixed": mixed,
+        "software": software,
+        "transposed": transposed,
+        "legacy_mm": [(f"legacy_mm_b{b}_packed_long_k", lambda d, b=b: legacy_mm_case(d, args.runtime, b))
+                      for b in (1, 2, 4, 8, 16)],
+    }
+    jobs = groups[args.only]
+    for name, run in jobs:
+        result = run(args.output / name)
+        results.append(result)
+        (args.output / "validation.json").write_text(
+            json.dumps(dict(status="running", results=results), indent=2) + "\n"
+        )
+        print(name, result.get("prediction", {}).get("total", "functional only"), "passed", flush=True)
+    (args.output / "validation.json").write_text(
+        json.dumps(dict(status="passed", results=results, runtime_sha256=digest(args.runtime)), indent=2) + "\n"
+    )
+
+
+if __name__ == "__main__":
+    main()

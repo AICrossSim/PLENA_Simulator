@@ -120,6 +120,10 @@ pub(crate) struct Opts {
     /// Path to FP SRAM contents for preloading.
     pub(crate) fpsram: PathBuf,
 
+    /// Interpret FP preload as little-endian BF16. Default keeps legacy FP16 files.
+    #[arg(long)]
+    pub(crate) fpsram_bf16: bool,
+
     #[arg(long)]
     /// Path to INT SRAM contents for preloading.
     pub(crate) intsram: Option<PathBuf>,
@@ -164,6 +168,11 @@ pub(crate) struct Opts {
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,
+
+    #[arg(long, help_heading = "Diagnostics")]
+    /// Optional path for the post-run HBM image. Unlike DEBUG logging this is
+    /// explicit and therefore suitable for numerical integration tests.
+    pub(crate) hbm_dump: Option<PathBuf>,
 
     #[arg(long)]
     /// Optional generated ASM source used to derive PC-to-stage labels for a

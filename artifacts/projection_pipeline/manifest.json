@@ -1,0 +1,52 @@
+{
+  "campaign": "projection_pipeline_20260928",
+  "scope": "Compact historical evidence; original weights, memory images and source bundles remain outside this repository.",
+  "files": {
+    "BEFORE_AFTER.csv": {
+      "source": "results/BEFORE_AFTER.csv",
+      "source_sha256": "b06ba1b6dde4205c0392624d81fbc31975d843033335e1efd7046fe10a085a3c",
+      "uploaded_sha256": "6ec889009d10b1e7bce82456bedc163f982bceeafbfec886181e08e874f7ece4",
+      "transformation": "Local result-path prefixes removed and line endings normalized to LF; numeric fields unchanged."
+    },
+    "PARTS_BEFORE_AFTER.csv": {
+      "source": "results/PARTS_BEFORE_AFTER.csv",
+      "source_sha256": "349a264c8d4b93dbfd6b7ada933fe0a44bc1acf059dbd04ba53527258a25d9b7",
+      "uploaded_sha256": "0c824ad6ba2f6131d64ba8826bf782c1cd54bd37e85ca3b943d6b3f32274c289",
+      "transformation": "Local result-path prefixes removed and line endings normalized to LF; numeric fields unchanged."
+    },
+    "stage_comparison.csv": {
+      "source": "results/stage_comparison.csv",
+      "source_sha256": "904e5c0a988dec9b83b6cd59f6d64295719ec262fe0186906bfce95dd75253ad",
+      "uploaded_sha256": "3e1730c3829fcb2f0e290f2a4d59df35b64c816e2a576aaece3a95869bc821af",
+      "transformation": "Local result-path prefixes removed and line endings normalized to LF; numeric fields unchanged."
+    },
+    "fair_recurrence_comparison.csv": {
+      "source": "results/fair_recurrence_comparison.csv",
+      "source_sha256": "cd6576c3ea60c7dadb67a775ac3acc4e627da852b460e9c66f546362e3301796",
+      "uploaded_sha256": "d9e23a6c7225c1241a159dd8eef68fae9f2b3362b50320254baf6bedbc6fd85f",
+      "transformation": "Local result-path prefixes removed and line endings normalized to LF; numeric fields unchanged."
+    },
+    "UNIFIED_SUMMARY.csv": {
+      "source": "results/UNIFIED_SUMMARY.csv",
+      "source_sha256": "839837853acc057152d731333d740c049d518a8a69825af78b062ef4dcfad700",
+      "uploaded_sha256": "524bc4020ef8c54a5e5026a7d3c9cb87e08f8b2959677e28057aec2fcbbd53ae",
+      "transformation": "Local result-path prefixes removed and line endings normalized to LF; numeric fields unchanged."
+    },
+    "UNIFIED_PARTS.csv": {
+      "source": "results/UNIFIED_PARTS.csv",
+      "source_sha256": "9dfd4ae5beaab52e1352f54f680282a6a273793a08e14f8a1e383f58234d38d4",
+      "uploaded_sha256": "dea3daf915512a318177f048995c4d87980f84b16d6ea1b4f944961729c896e9",
+      "transformation": "Local result-path prefixes removed and line endings normalized to LF; numeric fields unchanged."
+    },
+    "hardware.json": {
+      "source": "HARDWARE_CONTRACT.json",
+      "source_sha256": "7c2cdfdf0be96c0e5506c209bbf8e152a490072be510fa13b3fc0c9962d924d1",
+      "uploaded_sha256": "7c2cdfdf0be96c0e5506c209bbf8e152a490072be510fa13b3fc0c9962d924d1"
+    },
+    "numerical_scope.json": {
+      "source": "results/numerical_scope.json",
+      "source_sha256": "9fdb86d451522f6b4f5cdf66e0b530dc477b2e17e7e6a40870c51ac69369e2f9",
+      "uploaded_sha256": "9fdb86d451522f6b4f5cdf66e0b530dc477b2e17e7e6a40870c51ac69369e2f9"
+    }
+  }
+}

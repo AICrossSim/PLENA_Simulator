@@ -1,0 +1,2 @@
+# Preserve captured CSV bytes, including their original CRLF line endings.
+tables/**/*.csv -text whitespace=cr-at-eol

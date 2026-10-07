@@ -1,0 +1,144 @@
+{
+  "generated_utc": "2026-08-19T04:37:56Z",
+  "status": "PASS",
+  "collections": [
+    {
+      "case": "prefill_s128",
+      "layer_type": "Mamba",
+      "result_dir": "/home/mcl123/plena-profiles/nemotron/ncu/20260818T105230Z_gpu3_prefill_s128_Mamba",
+      "validation_status": "PASS",
+      "checks": {
+        "report_importable": true,
+        "kernel_calls_nonzero": true,
+        "duration_nonzero": true,
+        "target_nvtx_only": true,
+        "model_revision_correct": true,
+        "gpu_uuid_correct": true,
+        "physical_gpu_correct": true,
+        "single_visible_device": true,
+        "tensor_parallel_one": true,
+        "eager_mode": true,
+        "context_and_step_correct": true,
+        "expected_hooked_layer_count": true,
+        "required_metrics_finite": true,
+        "no_error_or_pollution_markers": true
+      },
+      "error_findings": []
+    },
+    {
+      "case": "prefill_s128",
+      "layer_type": "Attention",
+      "result_dir": "/home/mcl123/plena-profiles/nemotron/ncu/20260818T110730Z_gpu3_prefill_s128_Attention",
+      "validation_status": "PASS",
+      "checks": {
+        "report_importable": true,
+        "kernel_calls_nonzero": true,
+        "duration_nonzero": true,
+        "target_nvtx_only": true,
+        "model_revision_correct": true,
+        "gpu_uuid_correct": true,
+        "physical_gpu_correct": true,
+        "single_visible_device": true,
+        "tensor_parallel_one": true,
+        "eager_mode": true,
+        "context_and_step_correct": true,
+        "expected_hooked_layer_count": true,
+        "required_metrics_finite": true,
+        "no_error_or_pollution_markers": true
+      },
+      "error_findings": []
+    },
+    {
+      "case": "prefill_s128",
+      "layer_type": "MoE",
+      "result_dir": "/home/mcl123/plena-profiles/nemotron/ncu/20260818T110929Z_gpu3_prefill_s128_MoE",
+      "validation_status": "PASS",
+      "checks": {
+        "report_importable": true,
+        "kernel_calls_nonzero": true,
+        "duration_nonzero": true,
+        "target_nvtx_only": true,
+        "model_revision_correct": true,
+        "gpu_uuid_correct": true,
+        "physical_gpu_correct": true,
+        "single_visible_device": true,
+        "tensor_parallel_one": true,
+        "eager_mode": true,
+        "context_and_step_correct": true,
+        "expected_hooked_layer_count": true,
+        "required_metrics_finite": true,
+        "no_error_or_pollution_markers": true
+      },
+      "error_findings": []
+    },
+    {
+      "case": "decode_step_s2048",
+      "layer_type": "Mamba",
+      "result_dir": "/home/mcl123/plena-profiles/nemotron/ncu/20260819T032703Z_gpu3_decode_step_s2048_Mamba",
+      "validation_status": "PASS",
+      "checks": {
+        "report_importable": true,
+        "kernel_calls_nonzero": true,
+        "duration_nonzero": true,
+        "target_nvtx_only": true,
+        "model_revision_correct": true,
+        "gpu_uuid_correct": true,
+        "physical_gpu_correct": true,
+        "single_visible_device": true,
+        "tensor_parallel_one": true,
+        "eager_mode": true,
+        "context_and_step_correct": true,
+        "expected_hooked_layer_count": true,
+        "required_metrics_finite": true,
+        "no_error_or_pollution_markers": true
+      },
+      "error_findings": []
+    },
+    {
+      "case": "decode_step_s2048",
+      "layer_type": "Attention",
+      "result_dir": "/home/mcl123/plena-profiles/nemotron/ncu/20260819T041827Z_gpu4_decode_step_s2048_Attention",
+      "validation_status": "PASS",
+      "checks": {
+        "report_importable": true,
+        "kernel_calls_nonzero": true,
+        "duration_nonzero": true,
+        "target_nvtx_only": true,
+        "model_revision_correct": true,
+        "gpu_uuid_correct": true,
+        "physical_gpu_correct": true,
+        "single_visible_device": true,
+        "tensor_parallel_one": true,
+        "eager_mode": true,
+        "context_and_step_correct": true,
+        "expected_hooked_layer_count": true,
+        "required_metrics_finite": true,
+        "no_error_or_pollution_markers": true
+      },
+      "error_findings": []
+    },
+    {
+      "case": "decode_step_s2048",
+      "layer_type": "MoE",
+      "result_dir": "/home/mcl123/plena-profiles/nemotron/ncu/20260819T042433Z_gpu6_decode_step_s2048_MoE",
+      "validation_status": "PASS",
+      "checks": {
+        "report_importable": true,
+        "kernel_calls_nonzero": true,
+        "duration_nonzero": true,
+        "target_nvtx_only": true,
+        "model_revision_correct": true,
+        "gpu_uuid_correct": true,
+        "physical_gpu_correct": true,
+        "single_visible_device": true,
+        "tensor_parallel_one": true,
+        "eager_mode": true,
+        "context_and_step_correct": true,
+        "expected_hooked_layer_count": true,
+        "required_metrics_finite": true,
+        "no_error_or_pollution_markers": true
+      },
+      "error_findings": []
+    }
+  ]
+}

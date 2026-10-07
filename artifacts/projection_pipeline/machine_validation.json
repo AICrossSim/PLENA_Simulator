@@ -1,0 +1,717 @@
+{
+  "scope": "Archived 2026-09-28 executions; original result calibration field predates separate calibration record. Not rerun during publication.",
+  "cases": [
+    {
+      "model": "mamba",
+      "batch": 1,
+      "execution": {
+        "status": "passed",
+        "kind": "mamba",
+        "batch": 1,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 39434240,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 2909800.0,
+        "issue": 42795,
+        "scalar": 31830,
+        "sram": 140703,
+        "arithmetic": 1258085,
+        "dependency": 30,
+        "dma": 1436357.0,
+        "hbm_read_bytes": 78885376,
+        "hbm_write_bytes": 1216512,
+        "output_sha256": "fe1415a80b4d3f9adc0d5fba51d4cc858420d3ac3540fd5b4ecf155f5d6cb52b",
+        "manifest_sha256": "8b406b91eb54ed0b19422ca13c1021d8b0d99c5da76ba14c87892953fdba8e4f"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 42795,
+          "scalar": 31830,
+          "sram": 140703,
+          "arithmetic": 1258085,
+          "dependency": 30,
+          "dma": 1436357.0,
+          "total": 2909800.0
+        },
+        "predicted": {
+          "issue": 42795,
+          "scalar": 31830,
+          "frontend": 74625,
+          "sram": 140703,
+          "arithmetic": 1258085,
+          "dependency": 30,
+          "dma": 1436357,
+          "total": 2909800
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "6e35f2655fa3993d73641403bbed6669e1e3fe55bac7939ba34ab0abf4e620d8",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "47d460ce8ceab7c4947f02dc7054005a5612b0d211365010adda645144908ee7",
+        "calibration.json": "662dc007770b720185e32f646e36575cfc13987e77c5cbe38a6b3dbffd212b75"
+      }
+    },
+    {
+      "model": "mamba",
+      "batch": 2,
+      "execution": {
+        "status": "passed",
+        "kind": "mamba",
+        "batch": 2,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 40161280,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 3047989.0,
+        "issue": 47171,
+        "scalar": 35013,
+        "sram": 165430,
+        "arithmetic": 1343530,
+        "dependency": 60,
+        "dma": 1456785.0,
+        "hbm_read_bytes": 80356352,
+        "hbm_write_bytes": 2433024,
+        "output_sha256": "3e3ac56b44993dbf7cdc15025555d9bd8f916aff1a9327e1d0c8bef0a0e04db4",
+        "manifest_sha256": "abfc4f632dd697834db4e96b90911a6e1889228042e5e40947bf27cc1f3bac10"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 47171,
+          "scalar": 35013,
+          "sram": 165430,
+          "arithmetic": 1343530,
+          "dependency": 60,
+          "dma": 1456785.0,
+          "total": 3047989.0
+        },
+        "predicted": {
+          "issue": 47171,
+          "scalar": 35013,
+          "frontend": 82184,
+          "sram": 165430,
+          "arithmetic": 1343530,
+          "dependency": 60,
+          "dma": 1456785,
+          "total": 3047989
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "5ea72f77ee0acc521de476c2b3c421eaf4d49656866c1d37ff3f93f4a7cd6374",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "5c67bf67a9e8fcabdaef1537589ae25a08cd8bb956198e994749d2773c078bbf",
+        "calibration.json": "7492c8557078193f3600b7c225e03e76f49b432a96ad5d7b8d339a24037f259a"
+      }
+    },
+    {
+      "model": "mamba",
+      "batch": 4,
+      "execution": {
+        "status": "passed",
+        "kind": "mamba",
+        "batch": 4,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 41615360,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 3378375.0,
+        "issue": 55893,
+        "scalar": 41349,
+        "sram": 214884,
+        "arithmetic": 1514420,
+        "dependency": 120,
+        "dma": 1551709.0,
+        "hbm_read_bytes": 83298304,
+        "hbm_write_bytes": 4866048,
+        "output_sha256": "3b9de70065aca44096ac1824a7085c27f6a7c31d4beaa41b79c303e3f92802de",
+        "manifest_sha256": "84d5196bbc1507ea36654cd25f6ccf7946b628ebcb15685615e0d12ffd12bed3"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 55893,
+          "scalar": 41349,
+          "sram": 214884,
+          "arithmetic": 1514420,
+          "dependency": 120,
+          "dma": 1551709.0,
+          "total": 3378375.0
+        },
+        "predicted": {
+          "issue": 55893,
+          "scalar": 41349,
+          "frontend": 97242,
+          "sram": 214884,
+          "arithmetic": 1514420,
+          "dependency": 120,
+          "dma": 1551709,
+          "total": 3378375
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "406175d6055656436972bdb2b3b670c12fe8430030865423a8bb804b0d8c0198",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "23acbb593f37818e13effef2c6720e2c13aa93b92bda445d736770bdf7b10cfe",
+        "calibration.json": "a9a8f439266c3d69a237ac0cea2b9ea968a152cd2fdf109e89a073c9e215efb4"
+      }
+    },
+    {
+      "model": "mamba",
+      "batch": 8,
+      "execution": {
+        "status": "passed",
+        "kind": "mamba",
+        "batch": 8,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 44523520,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 5297095.0,
+        "issue": 91142,
+        "scalar": 66940,
+        "sram": 410868,
+        "arithmetic": 3028840,
+        "dependency": 240,
+        "dma": 1699065.0,
+        "hbm_read_bytes": 89182208,
+        "hbm_write_bytes": 9732096,
+        "output_sha256": "17ebd9a6f2a4428c264acb07615b55d10303e41fd5fe3af8b6af2d029cb12e1d",
+        "manifest_sha256": "5c35bc810f6f4de85d4aa2b62bcd2e6479af175959dc3530f950ee5e4203ee3f"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 91142,
+          "scalar": 66940,
+          "sram": 410868,
+          "arithmetic": 3028840,
+          "dependency": 240,
+          "dma": 1699065.0,
+          "total": 5297095.0
+        },
+        "predicted": {
+          "issue": 91142,
+          "scalar": 66940,
+          "frontend": 158082,
+          "sram": 410868,
+          "arithmetic": 3028840,
+          "dependency": 240,
+          "dma": 1699065,
+          "total": 5297095
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "7cebce061d1a287d731aad026727f74d7ab8a0eb5288cbb7861bbb57488089d8",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "05d5b629a6ec597138da22f29b5639d61f0f0247adcb3327694a1d5295fbc476",
+        "calibration.json": "fb20bca1aac112acc0d9544349d8643da283e7685b462d35cf6a244cfac12c0b"
+      }
+    },
+    {
+      "model": "mamba",
+      "batch": 16,
+      "execution": {
+        "status": "passed",
+        "kind": "mamba",
+        "batch": 16,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 50339840,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 9155280.0,
+        "issue": 160831,
+        "scalar": 117313,
+        "sram": 802836,
+        "arithmetic": 6057680,
+        "dependency": 480,
+        "dma": 2016140.0,
+        "hbm_read_bytes": 100950016,
+        "hbm_write_bytes": 19464192,
+        "output_sha256": "b9bd39aafc7815a0fb57688a07ec3da95f9e376d64dde73c01df40d8ee383903",
+        "manifest_sha256": "37d831a709a7f59539270e421627152d961f5ff13ea58cd6690950b793f71733"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 160831,
+          "scalar": 117313,
+          "sram": 802836,
+          "arithmetic": 6057680,
+          "dependency": 480,
+          "dma": 2016140.0,
+          "total": 9155280.0
+        },
+        "predicted": {
+          "issue": 160831,
+          "scalar": 117313,
+          "frontend": 278144,
+          "sram": 802836,
+          "arithmetic": 6057680,
+          "dependency": 480,
+          "dma": 2016140,
+          "total": 9155280
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "aa0233dc11460640d58f4f769ed7aa6f7a14b9e806fe232211d9865897ff46af",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "bbd9891669508c0f27e8d45344e1b133a95abfe578e5724e5a4985aaef0d87f6",
+        "calibration.json": "81fbfbe78b5c3a4b7d01e9624e0b96246361ba5cad61cfbb558784335fdf7104"
+      }
+    },
+    {
+      "model": "kda",
+      "batch": 1,
+      "execution": {
+        "status": "passed",
+        "kind": "kda",
+        "batch": 1,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 445804544,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 32034199.0,
+        "issue": 393674,
+        "scalar": 281644,
+        "sram": 1506436,
+        "arithmetic": 13947886,
+        "dependency": 1752,
+        "dma": 15902807.0,
+        "hbm_read_bytes": 892961152,
+        "hbm_write_bytes": 3899392,
+        "output_sha256": "2b56e22ee70c5036d443fd4ddd2bb2bab071d9efe194e2d4ab0dcc5de205c4e0",
+        "manifest_sha256": "3e674a1d50b47a4f7630c58443a3d096e3044385d82c33c85401363dca3051e0"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 393674,
+          "scalar": 281644,
+          "sram": 1506436,
+          "arithmetic": 13947886,
+          "dependency": 1752,
+          "dma": 15902807.0,
+          "total": 32034199.0
+        },
+        "predicted": {
+          "issue": 393674,
+          "scalar": 281644,
+          "frontend": 675318,
+          "sram": 1506436,
+          "arithmetic": 13947886,
+          "dependency": 1752,
+          "dma": 15902807,
+          "total": 32034199
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "db237275f2566b5694c5531a0d7bd1f904f63fa1477f69f31341ead7a4ea95bc",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "a69c8b4031d4d5a11a181488be336ce74ff31b82fc42c3b9f1562cd992c7a30f",
+        "calibration.json": "94369bb94e2a601f269af9af7ed8a2495391943d8d60600cc0d949f83c06b432"
+      }
+    },
+    {
+      "model": "kda",
+      "batch": 2,
+      "execution": {
+        "status": "passed",
+        "kind": "kda",
+        "batch": 2,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 448028672,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 33324016.0,
+        "issue": 406389,
+        "scalar": 291009,
+        "sram": 1710248,
+        "arithmetic": 14854172,
+        "dependency": 3504,
+        "dma": 16058694.0,
+        "hbm_read_bytes": 898761472,
+        "hbm_write_bytes": 7798784,
+        "output_sha256": "a5f96232165be867c2218fe90d8419bb5ddffa66760cb046d8b4504983710b8e",
+        "manifest_sha256": "a59ad4277ce18e6d581043a839ef7df01ccc026a82d9f9cd07906a418b181f81"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 406389,
+          "scalar": 291009,
+          "sram": 1710248,
+          "arithmetic": 14854172,
+          "dependency": 3504,
+          "dma": 16058694.0,
+          "total": 33324016.0
+        },
+        "predicted": {
+          "issue": 406389,
+          "scalar": 291009,
+          "frontend": 697398,
+          "sram": 1710248,
+          "arithmetic": 14854172,
+          "dependency": 3504,
+          "dma": 16058694,
+          "total": 33324016
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "3024de8b5c78dafbe0864bb7a4a876285fa3172427cc0d74122b99a279533652",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "36952b8042d1e9bf2b2c78ad24ea3aaffbd0c915af419ae49cfe2e05ef98dcad",
+        "calibration.json": "18c14ee036aab481bf32d960d70902ea2e2f4f27bbf7b09682cfa10f2736a433"
+      }
+    },
+    {
+      "model": "kda",
+      "batch": 4,
+      "execution": {
+        "status": "passed",
+        "kind": "kda",
+        "batch": 4,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 452476928,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 35976288.0,
+        "issue": 431691,
+        "scalar": 309611,
+        "sram": 2117872,
+        "arithmetic": 16666744,
+        "dependency": 7008,
+        "dma": 16443362.0,
+        "hbm_read_bytes": 910362112,
+        "hbm_write_bytes": 15597568,
+        "output_sha256": "afcd853949fbd2e636e644e2c994ab54a97f84b62d89a4514bd68bbe51c8ad79",
+        "manifest_sha256": "f8855837788a29738059cfa9d6769d3358936c695e2d5cac6bb07b11fc37791f"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 431691,
+          "scalar": 309611,
+          "sram": 2117872,
+          "arithmetic": 16666744,
+          "dependency": 7008,
+          "dma": 16443362.0,
+          "total": 35976288.0
+        },
+        "predicted": {
+          "issue": 431691,
+          "scalar": 309611,
+          "frontend": 741302,
+          "sram": 2117872,
+          "arithmetic": 16666744,
+          "dependency": 7008,
+          "dma": 16443362,
+          "total": 35976288
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "7aac823b119282989fd2558943d0e0d94c0f0479805f655efea0b9f6186bd476",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "b37ddefc3eed626f5f662cf7a8ca7e58c47553356ba59bce61f0a183e126e2cf",
+        "calibration.json": "4e6a1e8d66840f93107e9973ac5f1e5416b092afed5c7e17246f9637dfbc08b7"
+      }
+    },
+    {
+      "model": "kda",
+      "batch": 8,
+      "execution": {
+        "status": "passed",
+        "kind": "kda",
+        "batch": 8,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "handoff_shared": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 461373440,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 55509874.0,
+        "issue": 662531,
+        "scalar": 471819,
+        "sram": 4020044,
+        "arithmetic": 33333488,
+        "dependency": 14016,
+        "dma": 17007976.0,
+        "hbm_read_bytes": 937217024,
+        "hbm_write_bytes": 31195136,
+        "output_sha256": "495c9f932fa2d9627e1ae2b9b0ed0d64ecc368f08ef48f7b0c65dacac97ac963",
+        "manifest_sha256": "cfc4abb58027088dbccf418a154110981b019855f852846cfb565d6ce886d046"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 662531,
+          "scalar": 471819,
+          "sram": 4020044,
+          "arithmetic": 33333488,
+          "dependency": 14016,
+          "dma": 17007976.0,
+          "total": 55509874.0
+        },
+        "predicted": {
+          "issue": 662531,
+          "scalar": 471819,
+          "frontend": 1134350,
+          "sram": 4020044,
+          "arithmetic": 33333488,
+          "dependency": 14016,
+          "dma": 17007976,
+          "total": 55509874
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "a47e39117eb067e0f51704f0ae54d798c0beb66d7b62027a9c6200a379c8fbd6",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "55b20cf1502abe82f6e0624fb05387ef80aaba93f3957f435a751cd4981cf915",
+        "calibration.json": "19fc6852c6e250860bde01db4f52dae3f84d9e59b8e88bcb37d7a1f402ed7054"
+      }
+    },
+    {
+      "model": "kda",
+      "batch": 16,
+      "execution": {
+        "status": "passed",
+        "kind": "kda",
+        "batch": 16,
+        "schedule": "batch",
+        "replay": true,
+        "handoff": false,
+        "handoff_shared": false,
+        "width": 512,
+        "credits": 4,
+        "checked_bf16_values": 479166464,
+        "exact": true,
+        "calibration": "not yet an analytical calibration",
+        "total_cycles": 101932709.0,
+        "issue": 1325370,
+        "scalar": 943654,
+        "sram": 7878128,
+        "arithmetic": 66666976,
+        "dependency": 28032,
+        "dma": 25090549.0,
+        "hbm_read_bytes": 1211045888,
+        "hbm_write_bytes": 62390272,
+        "output_sha256": "8321c1135e1e54590d9e5c62b4c407c8a263648eecd40c78f75fc92aceb3f703",
+        "manifest_sha256": "1e6effc14ed10e9dbd93bc64b3e5fd8a2d9e0d8d0f3da4c4b6c95b0b3531c161"
+      },
+      "calibration": {
+        "observed": {
+          "issue": 1325370,
+          "scalar": 943654,
+          "sram": 7878128,
+          "arithmetic": 66666976,
+          "dependency": 28032,
+          "dma": 25090549.0,
+          "total": 101932709.0
+        },
+        "predicted": {
+          "issue": 1325370,
+          "scalar": 943654,
+          "frontend": 2269024,
+          "sram": 7878128,
+          "arithmetic": 66666976,
+          "dependency": 28032,
+          "dma": 25090549,
+          "total": 101932709
+        },
+        "errors": {
+          "issue": 0,
+          "scalar": 0,
+          "sram": 0,
+          "arithmetic": 0,
+          "dependency": 0,
+          "dma": 0.0,
+          "total": 0.0
+        },
+        "traffic_errors": {
+          "hbm_read_bytes": 0,
+          "hbm_write_bytes": 0
+        },
+        "exact": true,
+        "numerical_exact": true,
+        "assembly_sha256": "ebb815c1cc9ba6b8f2a3ec490122199c8d7291109c66a640a90d57e3ccaa5dd5",
+        "profile_sha256": "6a992c1cf266ec8a9ad99a60bba726ee1d93391da781cb260eea1993a6134f7f",
+        "scope": "same service contract and Ramulator; independent instruction accounting, not independent RTL validation"
+      },
+      "source_sha256": {
+        "result.json": "116de391ed7f43723fa23a8351e05b8aca30eb55fe5d3b1d179eac4b4709d71b",
+        "calibration.json": "a59c1603b98c56daf70f0f839361ea33317033902ef3c9114a123bdb22f55af8"
+      }
+    }
+  ]
+}

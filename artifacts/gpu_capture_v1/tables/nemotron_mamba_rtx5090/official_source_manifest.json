@@ -1,0 +1,12 @@
+{
+  "schema_version": "nemotron3-official-source-v1",
+  "model_id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+  "revision": "ce1b118ae66ec705d02c241525192832eb045fd3",
+  "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4/tree/ce1b118ae66ec705d02c241525192832eb045fd3",
+  "files": {
+    "config.json": "f4fcbaaaed3ee215f86205a7600636cd930bde069f2b603d7ff908c046a0cd96",
+    "configuration_nemotron_h.py": "09a3179517667d302068c2f8c96c9f059297418a829bf3cb96273040563b955c",
+    "modeling_nemotron_h.py": "4d353ce6e8f495d043f2d8c5acd13496a84ba2b2d45da8279797a55f680309d9",
+    "hf_quant_config.json": "37ff9e85d04311916a38ff7bc28cae1972dfdc54d39da8439d3f85204b9e8fbf"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "resident": {
+    "source_sha256": "9b94e680bd3f71f42b029a1ae28dcb51c1db7103a733bc8e32dcaf650bc1408a",
+    "cases": 60,
+    "weight": "BF16",
+    "clock_hz": 1000000000,
+    "projection_hardware": "existing M_TMV/M_MV; no replay/slicing/segmentation",
+    "projection_k_tile": 256,
+    "coefficient_supply": "native",
+    "reference_pairs_only": true,
+    "transposed_static_weights": false,
+    "extra_projection_storage_bytes": 0,
+    "recurrence": "BF16 ordinary Vector vs FP32 update/BF16 tree L_TILE",
+    "full_model": false,
+    "original_plena_eligible": false,
+    "numerical_validation": "separate machine-code checks",
+    "scope": "input norm through recurrent output projection; excludes residual and MoE",
+    "limitations": [
+      "M_MM not cycle-calibrated",
+      "K grouping is an explicit BF16 rounding contract",
+      "no runtime NVFP4",
+      "no inter-instruction overlap",
+      "finite search, not globally optimal"
+    ]
+  },
+  "transposed": {
+    "source_sha256": "9b94e680bd3f71f42b029a1ae28dcb51c1db7103a733bc8e32dcaf650bc1408a",
+    "cases": 10,
+    "weight": "BF16",
+    "clock_hz": 1000000000,
+    "projection_hardware": "existing M_TMV/M_MV; no replay/slicing/segmentation",
+    "projection_k_tile": 1024,
+    "coefficient_supply": "native",
+    "reference_pairs_only": false,
+    "transposed_static_weights": true,
+    "extra_projection_storage_bytes": 0,
+    "recurrence": "BF16 ordinary Vector vs FP32 update/BF16 tree L_TILE",
+    "full_model": false,
+    "original_plena_eligible": false,
+    "numerical_validation": "separate machine-code checks",
+    "scope": "input norm through recurrent output projection; excludes residual and MoE",
+    "limitations": [
+      "M_MM not cycle-calibrated",
+      "K grouping is an explicit BF16 rounding contract",
+      "no runtime NVFP4",
+      "no inter-instruction overlap",
+      "finite search, not globally optimal"
+    ]
+  },
+  "packed": {
+    "source_sha256": "9b94e680bd3f71f42b029a1ae28dcb51c1db7103a733bc8e32dcaf650bc1408a",
+    "cases": 10,
+    "weight": "BF16",
+    "clock_hz": 1000000000,
+    "projection_hardware": "existing M_TMV/M_MV; no replay/slicing/segmentation",
+    "projection_k_tile": 1024,
+    "coefficient_supply": "packed",
+    "reference_pairs_only": false,
+    "transposed_static_weights": true,
+    "extra_projection_storage_bytes": 0,
+    "recurrence": "BF16 ordinary Vector vs FP32 update/BF16 tree L_TILE",
+    "full_model": false,
+    "original_plena_eligible": false,
+    "numerical_validation": "separate machine-code checks",
+    "scope": "input norm through recurrent output projection; excludes residual and MoE",
+    "limitations": [
+      "M_MM not cycle-calibrated",
+      "K grouping is an explicit BF16 rounding contract",
+      "no runtime NVFP4",
+      "no inter-instruction overlap",
+      "finite search, not globally optimal"
+    ]
+  }
+}

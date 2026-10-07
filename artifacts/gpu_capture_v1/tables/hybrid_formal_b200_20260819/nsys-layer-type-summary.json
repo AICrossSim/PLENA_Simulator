@@ -1,0 +1,102 @@
+[
+  {
+    "case": "prefill_s128",
+    "result_dir": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104634Z_gpu3_prefill_s128",
+    "source_report": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104634Z_gpu3_prefill_s128/profile_nvtx_gpu_proj_sum.csv",
+    "layer_types": {
+      "MoE": {
+        "total_gpu_projected_time_ns": 33199947,
+        "total_cpu_range_time_ns": 34182492,
+        "layer_invocations": 23,
+        "total_gpu_ops": 552
+      },
+      "Mamba": {
+        "total_gpu_projected_time_ns": 29388264,
+        "total_cpu_range_time_ns": 30631100,
+        "layer_invocations": 23,
+        "total_gpu_ops": 563
+      },
+      "Attention": {
+        "total_gpu_projected_time_ns": 1862716,
+        "total_cpu_range_time_ns": 2136926,
+        "layer_invocations": 6,
+        "total_gpu_ops": 36
+      }
+    }
+  },
+  {
+    "case": "prefill_s2048",
+    "result_dir": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104744Z_gpu3_prefill_s2048",
+    "source_report": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104744Z_gpu3_prefill_s2048/profile_nvtx_gpu_proj_sum.csv",
+    "layer_types": {
+      "MoE": {
+        "total_gpu_projected_time_ns": 34614361,
+        "total_cpu_range_time_ns": 29235703,
+        "layer_invocations": 23,
+        "total_gpu_ops": 552
+      },
+      "Mamba": {
+        "total_gpu_projected_time_ns": 25230731,
+        "total_cpu_range_time_ns": 31049757,
+        "layer_invocations": 23,
+        "total_gpu_ops": 563
+      },
+      "Attention": {
+        "total_gpu_projected_time_ns": 1989435,
+        "total_cpu_range_time_ns": 2016662,
+        "layer_invocations": 6,
+        "total_gpu_ops": 36
+      }
+    }
+  },
+  {
+    "case": "prefill_s8192",
+    "result_dir": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104852Z_gpu3_prefill_s8192",
+    "source_report": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104852Z_gpu3_prefill_s8192/profile_nvtx_gpu_proj_sum.csv",
+    "layer_types": {
+      "MoE": {
+        "total_gpu_projected_time_ns": 39914542,
+        "total_cpu_range_time_ns": 31281944,
+        "layer_invocations": 23,
+        "total_gpu_ops": 552
+      },
+      "Mamba": {
+        "total_gpu_projected_time_ns": 31497630,
+        "total_cpu_range_time_ns": 35632121,
+        "layer_invocations": 23,
+        "total_gpu_ops": 563
+      },
+      "Attention": {
+        "total_gpu_projected_time_ns": 5326135,
+        "total_cpu_range_time_ns": 2310161,
+        "layer_invocations": 6,
+        "total_gpu_ops": 36
+      }
+    }
+  },
+  {
+    "case": "decode_s2048_128",
+    "result_dir": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104959Z_gpu3_decode_s2048_128",
+    "source_report": "/home/mcl123/plena-profiles/nemotron/nsys/20260818T104959Z_gpu3_decode_s2048_128/profile_nvtx_gpu_proj_sum.csv",
+    "layer_types": {
+      "MoE": {
+        "total_gpu_projected_time_ns": 4050872981,
+        "total_cpu_range_time_ns": 4148305521,
+        "layer_invocations": 2944,
+        "total_gpu_ops": 70656
+      },
+      "Mamba": {
+        "total_gpu_projected_time_ns": 2375112780,
+        "total_cpu_range_time_ns": 2501704955,
+        "layer_invocations": 2944,
+        "total_gpu_ops": 48696
+      },
+      "Attention": {
+        "total_gpu_projected_time_ns": 192144621,
+        "total_cpu_range_time_ns": 212439510,
+        "layer_invocations": 768,
+        "total_gpu_ops": 3846
+      }
+    }
+  }
+]

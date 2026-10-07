@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "checked_utc": "2026-09-03T19:33:56.800342+00:00",
+  "samples": "PASS: 48 unique fixed source IDs, 16 per benchmark, exact token IDs and prompt SHA256 present",
+  "timing": "PASS: 7200 raw request records, 3525 trials, 5 warmup + 20 measurements per 141 group cases",
+  "routing": "PASS: 140921 events, all 48 samples and all 23 MoE layers, full top-k IDs/weights and counts",
+  "power": "PASS: supported, 78661 samples, no unexpected PID",
+  "model": "PASS: fixed revision, five real NVFP4 shards hashed",
+  "gpu_pollution": "PASS: no unexpected compute PID observed on selected GPU during timing or routing",
+  "ncus": "not_run_by_design",
+  "publication_note": "Historical source metadata, sanitized; original COMPLETE/PASS labels are historical and do not override publication_manifest limitations.",
+  "energy_qualification": "Archived legacy integration, unqualified as corrected batch energy: sample append order was not sorted and exact batch start/end timestamps were not persisted. Per-request energy for batch>1 is equal-share attribution."
+}
