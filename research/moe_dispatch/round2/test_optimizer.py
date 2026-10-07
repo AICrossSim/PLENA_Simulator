@@ -1,6 +1,7 @@
 """Assignment relaxation and regional-bound legality checks."""
 import importlib.util
 import itertools
+from fractions import Fraction
 from pathlib import Path
 import random
 import sys
@@ -72,6 +73,16 @@ def test_assignment_repeat_is_bit_identical():
     a=o.solve_assignment(w(),d())
     b=o.solve_assignment(w(),d())
     assert a==b
+
+
+def test_down_keeps_exact_integer_coefficients_and_floors_exact_binary_ratio():
+    assert o._down(25088.,1e-6)==25088000000
+    rng=random.Random(2461)
+    for value,quantum in [(0.1,1e-6),(1./3,1e-6),(1e8,1e-6),(1e-15,1e-18)]+[
+        (rng.random()*1e8,10.**rng.randint(-9,1)) for _ in range(100)]:
+        k=o._down(value,quantum)
+        v=Fraction.from_float(value);q=Fraction.from_float(quantum)
+        assert k*q<=v<(k+1)*q
 
 
 def test_work_limited_assignment_repeat_and_budget_are_explicit():

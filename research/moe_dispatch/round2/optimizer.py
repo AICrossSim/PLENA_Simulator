@@ -33,10 +33,17 @@ except ImportError:  # External pre-integration draft.
 
 
 def _down(value: float, quantum: float) -> int:
-    """Never round a physical service requirement upward."""
+    """Exact floor of the represented service/quantum ratio.
+
+    Integer-ratio arithmetic avoids floating division rounding upward and
+    avoids gratuitously subtracting one tick from every exact coefficient,
+    which would destroy useful coefficient GCDs in the allocation solver.
+    """
     if value<=0:
         return 0
-    return max(0,math.floor(math.nextafter(value/quantum,-math.inf)))
+    vn,vd=float(value).as_integer_ratio()
+    qn,qd=float(quantum).as_integer_ratio()
+    return max(0,(vn*qd)//(vd*qn))
 
 
 def _group_tasks(workload: dict,table):

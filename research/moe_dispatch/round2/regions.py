@@ -5,7 +5,7 @@ NOT labeled a globally optimized point; downstream indices report that limit.
 """
 from __future__ import annotations
 import argparse,itertools,json,math,time
-from dataclasses import replace
+from dataclasses import asdict,replace
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from scipy.optimize import minimize_scalar
@@ -117,15 +117,16 @@ def grid(args):
 
 
 def _sobol_job(job):
+    from .sensitivity import SensitivityParameters
     index,sample,dev,cap,initial=job
-    ii,bank,dot,credits,vector=sample
-    p=Parameters(tile_issue_cycles=float(ii),bank_Bpc=float(bank),dotstagecycles=float(dot),credits=int(round(credits)),vector_scale=float(vector))
+    tau,bank,dot,credits,vector=sample
+    p=SensitivityParameters(weight_tile_service_cycles=float(tau),bank_Bpc=float(bank),dotstagecycles=float(dot),credits=int(round(credits)),vector_scale=float(vector))
     res=search_workloads(dev,p,delta=.02,time_limit_s=cap,initial_designs=initial,seed=20261007)
     res['resume_workloads']=dev
     a=_family(res,'single');b=_family(res,'heterogeneous')
     write_json(ROOT/'results/E3/search_certificates/sobol'/f'{index:04d}.json',res)
-    return {'sample_index':index,'tile_issue_cycles':ii,'bank_Bpc':bank,'dotstagecycles':dot,'credits':int(round(credits)),
-        'vector_scale':vector,'delta':b['geomean_ms']/a['geomean_ms']-1,
+    return {'sample_index':index,'weight_tile_service_cycles':tau,'bank_Bpc':bank,'dotstagecycles':dot,'credits':int(round(credits)),
+        'vector_scale':vector,'timing_model_sha256':p.timing_model_sha256,'delta':b['geomean_ms']/a['geomean_ms']-1,
         'single_ms':a['geomean_ms'],'hetero_ms':b['geomean_ms'],
         'single_design':canonical(a['design']),'hetero_design':canonical(b['design']),
         'proof_complete':res.get('proof_complete',False),'gap_pct':res.get('gap_pct'),
@@ -133,15 +134,19 @@ def _sobol_job(job):
 
 
 def sobol(args):
+    from .sensitivity import SensitivityParameters,source_sha256
     from SALib.sample import sobol as sampler
     from SALib.analyze import sobol as analyzer
     out=ROOT/'results/E3';ws=inputs();selection=json.loads((out/'FROZEN_SELECTION.json').read_text())
     initial=[decode_design(v['design']) for v in selection['modes']['pipelined'].values() if isinstance(v,dict) and 'design' in v]
-    problem={'num_vars':5,'names':['tile_issue_cycles','bank_Bpc','dotstagecycles','credits','vector_scale'],
+    problem={'num_vars':5,'names':['weight_tile_service_cycles','bank_Bpc','dotstagecycles','credits','vector_scale'],
         'bounds':[[1,30.4],[8,32],[1,4],[256,512],[.5,2]]}
     samples=sampler.sample(problem,256,calc_second_order=False,seed=20261007)
     assert len(samples)==1792
-    old=read_csv(out/'sobol_samples.csv') if (out/'sobol_samples.csv').exists() else [];done={int(r['sample_index']) for r in old}
+    old=read_csv(out/'sobol_samples.csv') if (out/'sobol_samples.csv').exists() else []
+    if any('weight_tile_service_cycles' not in r or r.get('timing_model_sha256')!=source_sha256() for r in old):
+        raise ValueError('Sobol checkpoint uses a different frontend timing model; preserve it separately before starting a new campaign')
+    done={int(r['sample_index']) for r in old}
     rows=list(old);jobs=[(i,s.tolist(),ws['development'],args.point_seconds,initial) for i,s in enumerate(samples) if i not in done]
     with ProcessPoolExecutor(max_workers=args.jobs) as pool:
       for row in pool.map(_sobol_job,jobs,chunksize=1):
@@ -155,18 +160,23 @@ def sobol(args):
         'scope':'indices of time-limited best-evaluated designs if certificates remain open'} for j,name in enumerate(problem['names'])])
     write_json(out/'sobol_protocol.json',{'problem':problem,'baseN':256,'samples':1792,'second_order':False,
         'hardware_reoptimized_per_sample':True,'effective_credits_rounded_to_integer':True,
+        'baseline_parameters':asdict(SensitivityParameters()),
+        'parameter_class':'SensitivityParameters','timing_model_sha256':source_sha256(),
+        'weight_tile_service_semantics':'Shared W frontend total bandwidth min(64 * bank_Bpc, 4096 / tau); per-core share w_banks / 64; datapath issue interval stays 1',
+        'universal_W_bound_scope':'Ignores the extra frontend cap; remains conservative but may be looser',
         'certified_samples':sum(str(r['proof_complete']).lower()=='true' for r in rows)})
 
 
 def flip(args):
+    from .sensitivity import SensitivityParameters,source_sha256
     out=ROOT/'results/E3';dev=inputs()['development'];selection=json.loads((out/'FROZEN_SELECTION.json').read_text())
     initial=[decode_design(v['design']) for v in selection['modes']['pipelined'].values() if isinstance(v,dict) and 'design' in v]
-    ranges={'tile_issue_cycles':np.linspace(1,30.4,21),'bank_Bpc':np.linspace(8,32,21),
+    ranges={'weight_tile_service_cycles':np.linspace(1,30.4,21),'bank_Bpc':np.linspace(8,32,21),
             'dotstagecycles':np.linspace(1,4,21),'credits':np.linspace(256,512,21),'vector_scale':np.linspace(.5,2,21)}
     jobs=[];metadata=[]
     for key,values in ranges.items():
       for value in values:
-        p=replace(Parameters(),**{key:int(round(value)) if key=='credits' else float(value)})
+        p=replace(SensitivityParameters(),**{key:int(round(value)) if key=='credits' else float(value)})
         i=len(jobs);jobs.append((i,dev,p,args.point_seconds,initial));metadata.append((key,float(value)))
     defresult=[]
     with ProcessPoolExecutor(max_workers=args.jobs) as pool:
@@ -174,7 +184,8 @@ def flip(args):
         key,value=metadata[i];a=_family(res,'single');b=_family(res,'heterogeneous')
         defresult.append({'param':key,'value':value,'delta':b['geomean_ms']/a['geomean_ms']-1,
             'single_ms':a['geomean_ms'],'hetero_ms':b['geomean_ms'],'proof_complete':res['proof_complete'],
-            'gap_pct':res['gap_pct'],'slice':'all other parameters frozen at main defaults'})
+            'gap_pct':res['gap_pct'],'timing_model_sha256':source_sha256(),
+            'slice':'all other parameters frozen at main defaults'})
         write_json(out/'search_certificates/flip'/f'{i:03d}.json',res)
     write_csv(out/'flip_samples.csv',defresult)
     crossings=[]
@@ -191,6 +202,15 @@ def flip(args):
         crossings.extend(found or [{'param':key,'target_delta':target,'value':None,'bracket_low':None,
             'bracket_high':None,'status':'no_crossing_in_evaluated_range','proof_complete':False}])
     write_csv(out/'flip_boundary.csv',crossings)
+    write_json(out/'flip_protocol.json',{'planned_points':105,'completed_points':len(defresult),
+        'baseline_parameters':asdict(SensitivityParameters()),
+        'parameter_class':'SensitivityParameters','timing_model_sha256':source_sha256(),
+        'ranges':{key:values.tolist() for key,values in ranges.items()},
+        'effective_credits_rounded_to_integer':True,
+        'weight_tile_service_semantics':'Shared W frontend total bandwidth min(64 * bank_Bpc, 4096 / tau); per-core share w_banks / 64; datapath issue interval stays 1',
+        'universal_W_bound_scope':'Ignores the extra frontend cap; remains conservative but may be looser',
+        'slice':'All other parameters fixed at main defaults; tau defaults to 1 cycle',
+        'boundary_scope':'Linear interpolation of evaluated candidate ratios; open certificates are not global family optima'})
 
 def _flip_job(job):
     i,dev,p,cap,initial=job

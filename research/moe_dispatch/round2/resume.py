@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,json
 from pathlib import Path
 from .common import inputs,write_json,ROOT
-from .model import Parameters
+from .sensitivity import parameters_from_dict
 from .search import search_workloads,_workload_hash
 
 def main():
@@ -20,7 +20,7 @@ def main():
     else:ws=inputs()['development']
     if _workload_hash(ws)!=resume['workload_sha256']:
         raise ValueError('Workload hash differs. Supply the exact saved workload with --workload-json; no new routing sample may replace a certificate.')
-    p=Parameters(**resume['parameters'])
+    p=parameters_from_dict(resume['parameters'])
     r=search_workloads(ws,p,delta=resume['delta'],time_limit_s=a.seconds,
         target_families=tuple(resume['families']),resume_state=result)
     r['resume_workloads']=ws

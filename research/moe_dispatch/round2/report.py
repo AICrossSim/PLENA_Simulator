@@ -519,6 +519,11 @@ def render_report(e, status, args):
         ("估计边界", "post-router Gate/Up、SiLU/Z、Down、combine；有限资源 phase-fluid 解析估计；假设 1 GHz"),
     ]))
     add(2, "资源独立切分：乘法器、私有 W/X/累加/Z 容量、各类 bank 和 vector 份额分别约束总量。B1/B2 每模式均由开发集选定，留出窗口只评估冻结硬件。资源格点的容量分辨率为 1 KiB、bank 与 vector 份额为正整数；这些是模型域限定。")
+    ledger_design = selection.get("modes", {}).get("pipelined", {}).get("single", {}).get("design", {})
+    if isinstance(ledger_design, dict) and all(ledger_design.get(k) for k in ("w_bytes", "x_bytes", "acc_bytes", "z_bytes")):
+        add(2, "已编码资源账本的私有分池总量（从冻结设计 JSON 求和）为 W/X/累加/Z=" +
+            "/".join(str(sum(ledger_design[k])) for k in ("w_bytes", "x_bytes", "acc_bytes", "z_bytes")) +
+            " B；搜索独立改变每池在两核间的切分。共享固定存储和各池总量在本模型中冻结，未搜索存储池之间任意转移；证书的全域措辞只指这个明确声明的模型域。")
     add(2, f"当前分支 `{status['branch']}`；报告生成时提交 `{status['commit_at_report_generation']}`。执行提交见各结果目录 README/PROVENANCE；输入 SHA256 见 [frozen_inputs.json](results/E0/frozen_inputs.json)。")
     cohorts = status["sections"]["1"]["completed_scope"].get("cohorts", {})
     add(2, "E0 实际收据：" + "；".join(f"{name}={x.get('rows', '缺失')} 行，零误差={x.get('all_exact', '缺失')}，重复={x.get('repeats', '缺失')} 次" for name, x in cohorts.items()) + "。旧来源边界见 [SOURCES.md](results/E0/SOURCES.md)，不对旧表跨模型计算加速比。")
@@ -717,6 +722,11 @@ def render_report(e, status, args):
     add(12, "开放证明、未认证负载点、未认证敏感性采样和缺失整模型计时均按交付状态记录。各 batch 的胜格不拼成统一胜出；消融收益与重叠资源占用不相加。运行时间上限只终止搜索，不缩小声明域。")
     add(12, "交付状态如下；文件存在不等于完成。详细范围、残余下界、差距和继续命令见 [DELIVERY_STATUS.json](DELIVERY_STATUS.json)。")
     add(12, "全配置两遍一致的汇总收据：" + ("已记录。" if status["repeat_checks"]["all_configurations_identical_certified"] else "尚缺；已记录的历史/候选逐点重复标志见交付 JSON，不能以这些局部标志代替全部配置完成标准。"))
+    audit_path = "results/FINAL_TABLE_AUDIT.json"
+    if e.path(audit_path).is_file():
+        add(12, "独立跨表核查收据见 [FINAL_TABLE_AUDIT.json](results/FINAL_TABLE_AUDIT.json)，核查单位、带宽、窗口集合、几何平均、下界与证明标志；核查通过不等于关闭硬件搜索证明。")
+    if e.path("figures/FIGURE_PROVENANCE.json").is_file():
+        add(12, "图输入/输出哈希与生成源码哈希见 [FIGURE_PROVENANCE.json](figures/FIGURE_PROVENANCE.json)。")
     add(12, table(("用户节", "状态", "原因"), [(section, value["status"], "；".join(value["reasons"]) or "必须文件和本节范围检查通过") for section, value in status["sections"].items()]))
 
     if not status["sections"]["5.1"]["status"] == "完成":

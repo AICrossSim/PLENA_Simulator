@@ -128,10 +128,27 @@ def e2layer(args):
     # Explicitly report single-wave equality by both traffic and timing, not assumed name equivalence.
     pairs={}
     for r in micro:pairs.setdefault((r['shape'],r['expert_type'],r['Me'],r['onchip_mode']),{})[r['dataflow']]=r
+    comparisons=[]
+    for key,v in pairs.items():
+        shape,typ,me,mode=key
+        comparisons.append({'shape':shape,'expert_type':typ,'Me':int(me),'onchip_mode':mode,
+            'OS_cycles':float(v['OS']['cycles']),'WS_cycles':float(v['WS']['cycles']),
+            'WS_over_OS':float(v['WS']['cycles'])/float(v['OS']['cycles']),
+            'multi_M_wave':int(me)>int(shape.split('x')[0])})
+    write_csv(out/'micro_WS_vs_OS.csv',comparisons)
     for mode in MODES:
         relevant=[v for k,v in pairs.items() if k[3]==mode and int(k[2])<=int(k[0].split('x')[0])]
         equal=sum(float(v['OS']['cycles'])==float(v['WS']['cycles']) and all(v['OS'][x]==v['WS'][x] for x in ('w_sram_bytes','x_sram_bytes','acc_sram_bytes')) for v in relevant)
         summary+=f'\nMe≤PM在{mode}下OS与WS的时间和全部流量均相同：{equal}/{len(relevant)}；不得把一次M发射等同于全部数据流相同。\n'
+        for typ in ('routed','Shared'):
+            ss=[r for r in comparisons if r['onchip_mode']==mode and r['expert_type']==typ and r['multi_M_wave']]
+            ratios=[r['WS_over_OS'] for r in ss]
+            summary+=f"\n{mode}/{typ}多M波次微实验：WS严格快于OS {sum(x<1-1e-12 for x in ratios)}/{len(ratios)} 点；配对几何平均WS/OS={gmean(ratios):.6f}。逐Me与形状差异见micro_WS_vs_OS.csv，不能把此均值等同整层加速。\n"
+        for name in ('fixed_4+2','previous_asym','best_hetero'):
+            ss=[r for r in rows if r['onchip_mode']==mode and r['batch']=='all' and r['design']==name]
+            best=min(ss,key=lambda r:r['geomean_ms']);os=next(r for r in ss if r['df_big']=='OS' and r['df_small']=='OS')
+            ratio=os['geomean_ms']/best['geomean_ms']
+            summary+=f"\n{mode}/{name}: OS/OS与最快流的延迟比={ratio:.6f}，{'在' if ratio<=1.01 else '不在'}最快值1%以内。\n"
     finalize(out,COMMAND+' --stage E2 --jobs '+str(args.jobs),summary,
         '微实验每核使用完整声明私有预算，仅用于流量/周期比较，不是等乘法器整层结论。整层只换循环顺序，其余硬件/资源/策略冻结。')
 

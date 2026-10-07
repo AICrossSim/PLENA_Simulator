@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse,itertools,json,math,random,time
 from dataclasses import asdict,replace
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor,as_completed
 from .common import *
 from .optimizer import evaluate_design,region_bound,search_workloads
 from .search import _workload_hash,_engine_hash
@@ -11,19 +11,38 @@ from research.moe_dispatch.geometry3d.compute import enumerate_geometries,enumer
 
 def _point(job):
     d,dev,p=job
+    meta={'design':encode_design(d),'geometry':d.geometry,'flows':d.flows,'family':d.family,
+        'parameters':asdict(p),'workload_sha256':_workload_hash(dev),'engine_sha256':_engine_hash()}
+    import os
+    progress_file=ROOT/'results/logs/seed_workers'/f'{p.onchip_mode}_{os.getpid()}.json'
+    def repeat_pass(pass_index):
+        rows=[]
+        for w in dev:
+            started=time.monotonic()
+            write_json(progress_file,{'geometry':d.geometry,'flows':d.flows,'window_id':w['id'],
+                'repeat_index':pass_index,'started_monotonic':started,'state':'evaluating',
+                'engine_sha256':meta['engine_sha256']})
+            row=evaluate_design(w,d,p);rows.append(row)
+            write_json(progress_file,{'geometry':d.geometry,'flows':d.flows,'window_id':w['id'],
+                'repeat_index':pass_index,'elapsed_seconds':time.monotonic()-started,
+                'state':'complete','solver_status':row['assignment']['status'],
+                'engine_sha256':meta['engine_sha256']})
+        return rows
     try:
-        first=[evaluate_design(w,d,p) for w in dev]
-        if any(not r.get('legal',True) for r in first):return {'design':encode_design(d),'geometry':d.geometry,'family':d.family,'invalid':'an expert has no physical core'}
-        second=[evaluate_design(w,d,p) for w in dev]
-        assert canonical(first)==canonical(second),'allocation/replay repeat mismatch'
-        return {'design':encode_design(d),'geometry':d.geometry,'flows':d.flows,'family':d.family,
+        first=repeat_pass(1)
+        if any(not r.get('legal',True) for r in first):return {**meta,'invalid':'an expert has no physical core'}
+        second=repeat_pass(2)
+        bad=[w['id'] for w,a,b in zip(dev,first,second) if canonical(a)!=canonical(b)]
+        assert not bad,canonical({'error':'allocation/replay repeat mismatch','geometry':d.geometry,'flows':d.flows,'windows':bad})
+        return {**meta,
             'geomean_ms':gmean(r['milp_sched']['latency_ms'] for r in first),
             'latencies_ms':[r['milp_sched']['latency_ms'] for r in first],
             'runtime_latencies_ms':[r['runtime']['latency_ms'] for r in first],
             'allocations_optimal':all(r['assignment']['optimal'] for r in first),
+            'allocation_statuses':[r['assignment']['status'] for r in first],
             'lb_ms':[r['lb_cycles']/1e6 for r in first],'repeat_identical':True,
             'parameters':asdict(p),'workload_sha256':_workload_hash(dev),'engine_sha256':_engine_hash()}
-    except (ValueError,RuntimeError) as error:return {'design':encode_design(d),'geometry':d.geometry,'family':d.family,'invalid':str(error)}
+    except (ValueError,RuntimeError) as error:return {**meta,'invalid':str(error)}
 
 
 def _validity(job):
@@ -74,7 +93,7 @@ def validity(args):
         'repeats':2,'seed':20261007,'warning':'Random checks support implementation confidence, not a mathematical proof'})
 
 
-def seed_candidates(dev,p,jobs):
+def seed_candidates(dev,p,jobs,checkpoint=None):
     geoms=enumerate_geometries();candidates=[]
     # Exhaust the finite single geometry×dataflow family; single capacities/ports are uniquely fixed.
     for cs in geoms:
@@ -100,12 +119,34 @@ def seed_candidates(dev,p,jobs):
                 acc_banks=roles(4,8),x_bytes=roles(2*1024,10*1024),z_bytes=roles(32*1024,352*1024),
                 acc_bytes=roles(16*1024,80*1024),vector_lanes=roles(8,56))
         candidates.append(d)
-    dedup={canonical(encode_design(d)):d for d in candidates};points=[]
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
-      for i,row in enumerate(pool.map(_point,[(d,dev,p) for d in dedup.values()],chunksize=1)):
-        points.append(row)
-        if i%32==0:print('seed',p.onchip_mode,i,'/',len(dedup),flush=True)
-    return points
+    dedup={canonical(encode_design(d)):d for d in candidates};completed={}
+    expected={'parameters':asdict(p),'workload_sha256':_workload_hash(dev),'engine_sha256':_engine_hash()}
+    checkpoint=Path(checkpoint) if checkpoint is not None else None
+    if checkpoint is not None and checkpoint.exists():
+        for line in checkpoint.read_text().splitlines():
+            try:row=json.loads(line)
+            except json.JSONDecodeError:continue
+            key=canonical(row['design'])
+            if key in dedup and all(row.get(k)==v for k,v in expected.items()):completed[key]=row
+    pool=ProcessPoolExecutor(max_workers=jobs)
+    futures={pool.submit(_point,(d,dev,p)):key for key,d in dedup.items() if key not in completed}
+    try:
+      for future in as_completed(futures):
+        row=future.result();completed[futures[future]]=row
+        if checkpoint is not None:
+            checkpoint.parent.mkdir(parents=True,exist_ok=True)
+            with checkpoint.open('a') as f:f.write(canonical(row)+'\n');f.flush()
+        if len(completed)%32==0 or len(completed)==len(dedup):
+            print('seed',p.onchip_mode,len(completed),'/',len(dedup),flush=True)
+    except BaseException:
+        for future in futures:future.cancel()
+        # Cancel our own active workers rather than draining a large stale
+        # queue after a correctness failure. No result is silently skipped.
+        for worker in list((getattr(pool,'_processes',None) or {}).values()):worker.terminate()
+        pool.shutdown(wait=True,cancel_futures=True)
+        raise
+    else:pool.shutdown(wait=True)
+    return [completed[key] for key in dedup]
 
 
 def main_search(args):
@@ -116,7 +157,7 @@ def main_search(args):
       p=Parameters(onchip_mode=mode);cache=out/f'seed_points_{mode}.json'
       points=json.loads(cache.read_text()) if cache.exists() else []
       if not points or any('invalid' not in r and (r.get('parameters')!=asdict(p) or r.get('workload_sha256')!=_workload_hash(dev) or r.get('engine_sha256')!=_engine_hash()) for r in points):
-          points=seed_candidates(dev,p,args.jobs)
+          points=seed_candidates(dev,p,args.jobs,checkpoint=out/f'seed_points_{mode}_partial.jsonl')
       write_json(cache,points)
       legal=[r for r in points if 'invalid' not in r];initial=[];m={}
       for family in ('single','homogeneous','heterogeneous'):

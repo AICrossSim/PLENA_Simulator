@@ -44,15 +44,33 @@ def _candidate_key(x):
     return canonical(encode_design(replace(decode_design(x),label="")))
 
 
+def _winner_summary(candidates,winners):
+    keys={name:_candidate_key(candidates[i]["design"]) for name,i in winners.items()}
+    return {"winners":{name:candidates[i]["geometry"]+"/"+"+".join(candidates[i]["flows"])
+                       for name,i in winners.items()},
+            "winning_designs":{name:json.loads(key) for name,key in keys.items()},
+            "objectives_agree":len(set(keys.values()))==1}
+
+
 def _candidate_rows(out,mode,frozen,near=.01):
-    from .common import decode_design,encode_design,canonical
+    from .common import decode_design
     seeds=json.loads((out/f"seed_points_{mode}.json").read_text())
     rows=[r for r in seeds if "invalid" not in r]
-    bnb=out/f"bnb_{mode}_B.json"
-    if bnb.exists():
+    for proof in ("A","B"):
+        bnb=out/f"bnb_{mode}_{proof}.json"
+        if not bnb.exists():continue
         data=json.loads(bnb.read_text())
         for row in data.get("families",{}).values():
             if row and row.get("design") and row.get("geomean_ms") is not None:rows.append(row)
+        for leaf in data.get("leaves",[]):
+            if (leaf.get("status")!="evaluated" or not leaf.get("repeat_identical") or
+                    not leaf.get("design") or leaf.get("geomean_ms") is None):continue
+            score=float(leaf["geomean_ms"])
+            if not math.isfinite(score) or score<=0:continue
+            # Leaves store the full design as JSON, and may name a MAC-ratio
+            # subfamily. Family membership below follows the decoded design.
+            design=json.loads(leaf["design"]) if isinstance(leaf["design"],str) else leaf["design"]
+            rows.append(dict(leaf,design=design,geomean_ms=score))
     for name in ("single","homogeneous","heterogeneous"):
         row=frozen[name]
         if row.get("design") and row.get("geomean_ms") is not None:rows.append(row)
@@ -103,14 +121,17 @@ def run(args):
             baseline=_evaluation((mode,selection["modes"][mode]["single"],dev,held))
         devbase=np.asarray(baseline["development_ms"]);heldbase=np.asarray(baseline["heldout_ms"])
         proof=selection["modes"][mode].get("all_family_optima_certified",False)
-        family_winners={}
+        family_winners={};family_winner_designs={};objective_agreement={}
         for family in ("single","homogeneous","heterogeneous","all"):
             pool=[r for r in rows if family=="all" or r["family"]==family]
             pool=sorted(pool,key=lambda r:_candidate_key(r["design"]))
             ratios=[np.asarray(r["heldout_ms"])/heldbase for r in pool]
             metrics=[objectives(x,[w["batch"] for w in held]) for x in ratios]
             winners={name:min(range(len(pool)),key=lambda i:(metrics[i][name],i)) for name in ("geomean","cvar10","minimax")}
-            family_winners[family]={name:pool[i]["geometry"]+"/"+"+".join(pool[i]["flows"]) for name,i in winners.items()}
+            winner_summary=_winner_summary(pool,winners)
+            family_winners[family]=winner_summary["winners"]
+            family_winner_designs[family]=winner_summary["winning_designs"]
+            objective_agreement[family]=winner_summary["objectives_agree"]
             for i,(r,met) in enumerate(zip(pool,metrics)):
                 for name in ("geomean","cvar10","minimax"):
                     objective_rows.append({"onchip_mode":mode,"selection_family":family,"design_family":r["family"],
@@ -129,7 +150,7 @@ def run(args):
                         "bootstrap_draws":200,"selected_count":counts[i],"selection_share":counts[i]/200,
                         "most_selected":counts[i]==max(counts),"development_windows":len(dev),"seed":20261007,
                         "candidate_count":len(pool),"all_family_optima_certified":proof})
-        summary[mode]={"winners":family_winners,"objectives_agree":{f:len(set(v.values()))==1 for f,v in family_winners.items()},
+        summary[mode]={"winners":family_winners,"winning_designs":family_winner_designs,"objectives_agree":objective_agreement,
             "heldout_note":"objective selection diagnostics; headline hardware remains frozen from development",
             "near_best_candidate_scope":"certified" if proof else "best evaluated development set, not full-domain certified near-optima"}
     write_csv(out/"robust_objectives.csv",objective_rows);write_csv(out/"selection_stability.csv",stability)
