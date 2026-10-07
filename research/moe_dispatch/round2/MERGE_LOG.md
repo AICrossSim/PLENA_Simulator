@@ -972,3 +972,25 @@
 ## origin/feat/window1-p3-representative-runner (b610e1399b42)
 
 - 使用 `git merge --no-ff --no-commit`；0 个冲突，双方版本已归档。
+
+- `feat/routed-moe-emulator-substrate` gitlink `PLENA_Compiler`：双方指针归档，暂保留当前指针；独立Compiler整合结束后统一更新。
+
+## feat/routed-moe-emulator-substrate (c05d4d8b2194)
+
+- 使用 `git merge --no-ff --no-commit`；17 个冲突，双方版本已归档。
+- `justfile`：旧快照c05d4d8b2194（176行）与当前558行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/memory/src/chunked.rs`：旧快照c05d4d8b2194（343行）与当前541行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/ramulator/src/model.rs`：旧快照c05d4d8b2194（179行）与当前921行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：tick, try_read, try_write_transfer；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/runtime/src/time.rs`：旧快照c05d4d8b2194（225行）与当前235行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/dispatch.rs`：旧快照c05d4d8b2194（813行）与当前2338行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：timing_access_for_opcode；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/cli.rs`：旧快照c05d4d8b2194（182行）与当前237行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/main.rs`：旧快照c05d4d8b2194（75行）与当前48行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：timing_golden_fixture_pins_required_workloads；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/op.rs`：旧快照c05d4d8b2194（855行）与当前1776行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：test_decode_funct1_does_not_bleed_into_rmask, vector_precision_from；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/runner.rs`：旧快照c05d4d8b2194（303行）与当前466行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/stage_profile.rs`：旧快照c05d4d8b2194（538行）与当前2391行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：duration_to_cycles, duration_to_cycles_rounds_up_to_period, resource_json；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/aten/compare/isa_analysis.py`：旧快照c05d4d8b2194（387行）与当前395行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/emulator_runner.py`：旧快照c05d4d8b2194（638行）与当前748行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/timing_goldens/run_timing_smoke.sh`：旧快照c05d4d8b2194（11行）与当前21行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/window1_p2/generate_true_routing_with_weights.py`：旧快照c05d4d8b2194（394行）与当前655行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/window1_p2/qwen3_trace_replay_test.py`：旧快照c05d4d8b2194（403行）与当前767行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/window1_p2/run_trace_batch.py`：旧快照c05d4d8b2194（122行）与当前145行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
