@@ -2,6 +2,8 @@
 
 目标：research/moe-supply-first-v3；逐次 no-ff，源分支与工作树全部保留。冲突双方先归档，再选择功能较新版本。
 
+Compiler也已在同名分支完成33个作者分支的历史整合，详细冲突处理见 [Compiler合并日志](../../../PLENA_Compiler/research/moe_dispatch/round2/MERGE_LOG.md)，合并后清单见 [Compiler分支清单](../../../PLENA_Compiler/research/moe_dispatch/round2/BRANCHES_AFTER.md)。最终固定的Compiler提交为 `80ac775c91e1b9384ec40382090e525dd24e732a`；下面早期gitlink处理记录保留当时的状态，不代表当前子模块版本。
+
 ## research/projection-pipeline-20260928 (57d2b051aee4)
 
 - no-ff 导入 projection/L-TILE/Mamba 最新代码与结果。

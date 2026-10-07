@@ -68,6 +68,10 @@ if ps:
  fail(all(abs(float(r['e2e_ratio_vs_ours'])-1)<=1e-9 for r in ps if r['predictor']=='oracle'),'E5 conditional oracle replay preserves frozen ours E2E')
  replay=read('E5/oracle_replay_validation.csv')
  fail(len(replay)==810 and all(r['physically_replayed']=='True' and int(r['repeats'])==2 for r in replay),'E5 full810window conditional physical replay receipts repeated twice')
+ fail(len({(r['design'],r['onchip_mode'],r['window_id']) for r in replay})==810,'E5 replay receipts have810distinct physical cases')
+ helper=hashlib.sha256((R.parent/'oracle_replay.py').read_bytes()).hexdigest()
+ fail(all(r['source_sha256']==helper and len(r['plan_sha256'])==64 and r['fresh_ours_sequences_identical']=='True' for r in replay),'E5 helper and frozen-plan hashes plus identical fresh sequence receipts')
+ fail(all(float(r['max_timing_difference_cycles'])<1e-4 and float(r['max_hbm_difference_bytes'])<=1 for r in replay),'E5 physical replay timing and HBM conservation residuals')
 whole=read('E6/model_token_e2e.csv')
 if whole:
  fail(all(not r['token_ms'] and not r['non_moe_ms_per_layer'] and r['status']=='missing_matching_DeepSeek_non_MoE_layer_timing' for r in whole),'E6 matching nonMoE unavailable; whole-model fields must remain missing')

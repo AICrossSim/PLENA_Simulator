@@ -2,6 +2,8 @@
 
 目标：research/moe-supply-first-v3。分支与worktree未删除。下面“历史已合并”仅表示Git祖先关系，不表示旧互斥ISA会同时激活。活动ISA保留较新Matrix/L-TILE及v3；旧原型编码/源码/结果原样归档。
 
+本表记录Simulator；Compiler的33个作者分支、合并后祖先检查及保留状态见 [Compiler合并后清单](../../../PLENA_Compiler/research/moe_dispatch/round2/BRANCHES_AFTER.md)。Simulator子模块固定到Compiler提交 `80ac775c91e1b9384ec40382090e525dd24e732a`，两个仓库均使用 `research/moe-supply-first-v3`。
+
 | 源Ref | SHA | 历史已合并 | 可删除（由作者手动决定） |
 |---|---|---|---|
 | `refs/heads/research/projection-pipeline-20260928` | `57d2b051aee4` | True | 是，先确认未提交工作已归档 |
