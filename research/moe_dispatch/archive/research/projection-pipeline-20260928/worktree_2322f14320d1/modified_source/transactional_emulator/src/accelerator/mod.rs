@@ -1,0 +1,135 @@
+//! `Accelerator` — the top-level ISA dispatcher.
+//!
+//! Holds the register file, the matrix/vector machines, the scalar SRAMs, the
+//! HBM handle, and the loop stack; [`Accelerator::do_ops`] decodes and executes
+//! an opcode stream one instruction at a time. The runner-facing state API
+//! lives here; opcode execution lives in `dispatch.rs`.
+
+use std::sync::Arc;
+
+use memory::ErasedMemoryModel;
+use sram::matrix::MatrixPacketCounterSnapshot;
+
+use crate::matrix_machine::MatrixMachine;
+use crate::vector_machine::{PacketCounterSnapshot, VectorMachine};
+
+mod access;
+mod dispatch;
+mod loop_state;
+mod lstream;
+mod mview;
+#[cfg(test)]
+mod mview_recurrence_tests;
+mod native_coeff;
+#[cfg(test)]
+mod pipeline_tests;
+mod registers;
+mod scalar_sram;
+mod scoreboard;
+mod v2;
+mod vector_recurrence;
+
+pub(crate) use access::Unit;
+pub(crate) use dispatch::TimingDriver;
+#[cfg(test)]
+pub(crate) use lstream::PacketTestView;
+pub(crate) use lstream::{AffineView, PacketService, PhysicalCoord, packet_service};
+pub(crate) use mview::MatrixViewDescriptor;
+pub(crate) use scoreboard::Scoreboard;
+
+use loop_state::LoopState;
+use registers::AcceleratorRegFile;
+use scalar_sram::ScalarSram;
+
+pub(crate) struct Accelerator {
+    m_machine: MatrixMachine,
+    v_machine: VectorMachine,
+    hbm: Arc<dyn ErasedMemoryModel>,
+    reg_file: AcceleratorRegFile,
+    scalar_sram: ScalarSram,
+    loop_state: LoopState,
+    v2: v2::ReductionState,
+    native_coeff: [Option<native_coeff::CoefficientView>; 3],
+    vector_recurrence: vector_recurrence::State,
+}
+
+impl Accelerator {
+    pub(crate) fn new(
+        m_machine: MatrixMachine,
+        v_machine: VectorMachine,
+        hbm: Arc<dyn ErasedMemoryModel>,
+    ) -> Self {
+        let lstream_banks = v_machine.vram.banks();
+        let mview_banks = m_machine.mram.banks();
+        let mview_bank_width = m_machine.mram.bank_width();
+        Self {
+            m_machine,
+            v_machine,
+            hbm,
+            reg_file: AcceleratorRegFile::new_with_matrix(
+                lstream_banks,
+                mview_banks,
+                mview_bank_width,
+            ),
+            scalar_sram: ScalarSram::new(),
+            loop_state: LoopState::new(),
+            v2: v2::ReductionState::default(),
+            native_coeff: [None; 3],
+            vector_recurrence: vector_recurrence::State::default(),
+        }
+    }
+
+    pub(crate) fn load_fpsram_from_bf16_bytes(&mut self, bytes: &[u8]) {
+        self.scalar_sram.load_fpsram_from_bf16_bytes(bytes);
+    }
+
+    pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {
+        self.scalar_sram.load_fpsram_from_f16_bytes(bytes);
+    }
+
+    pub(crate) fn load_intsram_from_u32_bytes(&mut self, bytes: &[u8]) {
+        self.scalar_sram.load_intsram_from_u32_bytes(bytes);
+    }
+
+    pub(crate) async fn load_vram_from_bytes(&mut self, bytes: &[u8]) {
+        self.v_machine.vram.load_from_bytes(bytes).await;
+    }
+
+    pub(crate) async fn log_debug_state(&mut self) {
+        tracing::debug!("gp1 = {:x}", self.reg_file.read_gp(1));
+        tracing::debug!("scale = {}", self.reg_file.scale());
+        tracing::debug!(
+            "Vector SRAM Contents: \n {}",
+            self.v_machine.vram.read(0x0000).await.as_tensor()
+        );
+        tracing::debug!(
+            "Matrix SRAM Contents: \n {}",
+            self.m_machine.mram.read(0x0000).await.as_tensor()
+        );
+        self.scalar_sram.log_debug_contents();
+    }
+
+    pub(crate) async fn mram_dump_bytes(&mut self) -> Vec<u8> {
+        self.m_machine.mram.as_bytes().await
+    }
+
+    pub(crate) async fn vram_dump_bytes(&mut self) -> Vec<u8> {
+        self.v_machine.vram.as_bytes().await
+    }
+
+    pub(crate) fn fpsram_dump_bytes(&self) -> Vec<u8> {
+        self.scalar_sram.fpsram_to_le_bytes()
+    }
+
+    pub(crate) fn intsram_dump_bytes(&self) -> Vec<u8> {
+        self.scalar_sram.intsram_to_le_bytes()
+    }
+
+    pub(crate) fn lstream_packet_counters(&self) -> PacketCounterSnapshot {
+        self.v_machine.packet_counter_snapshot()
+    }
+
+    pub(crate) fn matrix_view_packet_counters(&self) -> MatrixPacketCounterSnapshot {
+        self.m_machine.mram.packet_counter_snapshot()
+    }
+}

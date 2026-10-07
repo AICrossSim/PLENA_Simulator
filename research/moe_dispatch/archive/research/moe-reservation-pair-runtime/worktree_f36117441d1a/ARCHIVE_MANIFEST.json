@@ -1,0 +1,88 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/tracked_worktree_vs_HEAD.patch",
+      "bytes": 11055,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "599d6d079b732b76dbe88bc743e784297c52b9a8053e10f0ce12752314c4e844",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/modified_source/research/moe_dispatch/rust/src/main.rs",
+      "bytes": 75228,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/rust/src/main.rs",
+      "sha256": "dd944be332c43fda25858671e1fd3f16197694ecd7ce80b1934d42ac4688b0c8",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/modified_source/research/moe_dispatch/rust/src/runtime.rs",
+      "bytes": 38372,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/rust/src/runtime.rs",
+      "sha256": "1a971d231ede709e559c7da40d4b7b6a31e6bbad08c2260dd3703ad4c7570731",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/untracked/research/moe_dispatch/JOINT_RUNTIME_DESIGN.md",
+      "bytes": 9278,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/JOINT_RUNTIME_DESIGN.md",
+      "sha256": "92e02be26f95dd251a5b30a61b731db114a60ffbebc7bb010a1bc9bf1105adaa",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/untracked/research/moe_dispatch/joint_analysis.py",
+      "bytes": 21996,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/joint_analysis.py",
+      "sha256": "0118c3f3493f20423005784a4ca148ad4640dbeaef63d239ac9c2d8708e1f799",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/untracked/research/moe_dispatch/joint_study.py",
+      "bytes": 19248,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/joint_study.py",
+      "sha256": "dc65d206b24f1731763d16b1a573f0147122bdb086dea37b04d355996d552c64",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/untracked/research/moe_dispatch/rust/src/joint.rs",
+      "bytes": 24514,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/rust/src/joint.rs",
+      "sha256": "bb3cb62138ef6b64f5312086c33c626f4fbd89dc0c760db7dbd422e4b68a7893",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    },
+    {
+      "archive": "research/moe-reservation-pair-runtime/worktree_f36117441d1a/untracked/research/moe_dispatch/test_joint.py",
+      "bytes": 5717,
+      "reason": "selected_source_result_or_document",
+      "relative": "research/moe_dispatch/test_joint.py",
+      "sha256": "6114bdcb8365c5d5412215ef6f8d1a196921b696a11c0303b3878adb81af3f7f",
+      "status": "copied",
+      "worktree": "/tmp/plena-joint-simulator"
+    }
+  ],
+  "origin": {
+    "HEAD": "af3c28cb8d041e14b95af61db2a5c6acd51662a9",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": null,
+    "original_branch_for_archive": "research/moe-reservation-pair-runtime",
+    "stable_id": "f36117441d1a",
+    "worktree": "/tmp/plena-joint-simulator"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

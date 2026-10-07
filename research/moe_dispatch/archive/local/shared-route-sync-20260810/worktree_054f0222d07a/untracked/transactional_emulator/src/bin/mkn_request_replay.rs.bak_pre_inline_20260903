@@ -1,0 +1,52 @@
+#[allow(dead_code)]
+#[path = "../load_config.rs"]
+mod load_config;
+#[path = "../mkn_request_replay.rs"]
+mod mkn_request_replay;
+#[allow(dead_code)]
+#[path = "../runtime_config.rs"]
+mod runtime_config;
+
+use std::path::PathBuf;
+
+use clap::Parser;
+
+#[derive(Debug, Parser)]
+#[command(about = "Replay an arbitrary PLENA-MoE (M,K,N) shortlist against 4x1024")]
+struct Opts {
+    #[arg(long)]
+    architecture_manifest: PathBuf,
+
+    #[arg(long)]
+    workload_manifest: PathBuf,
+
+    #[arg(long)]
+    output: PathBuf,
+
+    #[arg(long, default_value_t = 3)]
+    repeats: usize,
+
+    #[arg(long)]
+    baseline_report: Option<PathBuf>,
+
+    #[arg(long)]
+    settings: Option<PathBuf>,
+}
+
+#[tokio::main]
+async fn main() {
+    let opts = Opts::parse();
+    if let Some(settings) = opts.settings {
+        unsafe {
+            std::env::set_var("PLENA_SETTINGS_TOML", settings);
+        }
+    }
+    mkn_request_replay::evaluate(
+        &opts.architecture_manifest,
+        &opts.workload_manifest,
+        &opts.output,
+        opts.repeats,
+        opts.baseline_report.as_deref(),
+    )
+    .await;
+}

@@ -1,0 +1,54 @@
+{
+  "branch": "research/moe-supply-first-v3",
+  "checked_metrics": [
+    "cycles",
+    "hbm_bytes",
+    "native_unique_bytes",
+    "useful_macs",
+    "issued_macs",
+    "X_sram_bytes",
+    "core_finish_cycles"
+  ],
+  "cohorts": [
+    {
+      "all_exact": true,
+      "cohort": "historical945",
+      "repeats": 2,
+      "rows": 945,
+      "sha256": "bcd3897ed29b5a68d891c2822a521caf0cd56ff26719ff79b926165d37f945eb"
+    },
+    {
+      "all_exact": true,
+      "cohort": "previous_BF16_c256_three",
+      "repeats": 2,
+      "rows": 405,
+      "sha256": "476e8fbf849678e108e9d739ebeb3f0c627c9a52966040c570cbba9ccfd9f93a"
+    }
+  ],
+  "commit": "e061ea68e98f9c3341e1fea11e0eb341bef293d6",
+  "compatibility_source_sha256": {
+    "regime_FROZEN_SELECTION": "d3d1a223f43bcf1c9772559da24f6256d7bf045ff7a28cdd96169dce9e039e7a",
+    "v6_FROZEN_SELECTION": "438e8a46b33db89da99134ccd1662ac804e3c1dd8169d724ab2984778bf6adcc",
+    "v6_heldout_details": "fb03adb77f99479767e4a5b38c6bb54b5ff9fe987f21e5199a65eb8e0b7642ee"
+  },
+  "exact_records": 1350,
+  "input_sha256": {
+    "development.json": "168522072cb2fd80e2689af9ad370b25fbad022072f4abc94e4aa512223c95e0",
+    "heldout.json": "0628f6e1e34bb936b0bac9be6682263ce53c5f313e3c776b26d5856f9e96191a",
+    "mixed_development.json": "c2c4feb51d83abf6b8d224be6bafb9cc9432797f2740eac40ce76503cc8f3f55",
+    "mixed_heldout.json": "2910033d86a3346a55ddfdf8781b86039a3726e07515581820bf92f03d233b8f"
+  },
+  "scope": "BF16 exact compatibility only; not round2 new-design evidence",
+  "script_sha256": "5980bb5cf11a92c3cb3e74572b43b30cf09f49fdcdc5e228b5dfb14bc9045ce2",
+  "source_sha256": {
+    "geometry3d/compute.py": "c343b5cef8f276d984a5ba6c90d59f9ceca0e6aedc7653009dc64e5d243ace2e",
+    "geometry3d/memory.py": "e447460e7f022e9177744cf7aaa26ac050d7cfa0fba909034d852ff09715e279",
+    "geometry3d/model.py": "16818817148a0d4dc601229983c36751898d05576a402d7273ef557775d2f725",
+    "geometry3d/study.py": "6f3813ad2e4c06d5afabd91df14f9d94d1b530fe899b27ca417a8527bcdaf157",
+    "regime/campaign.py": "987656579c61d0c75b8e2e13a10e4d34d352558ce0984b5b51f885f4d298f089",
+    "regime/metrics.py": "a72beb21ecf8ed59c28ff08b095d5c66f7702fee938b2eb367b9998b086567d6",
+    "regime/model.py": "9b54dc767cb13f0a7b7aebacc0682f93e158b61965136fc49cefc4241c0b5ab9",
+    "regime/resources.py": "677699d1ecda761f5ac6607fca5aab882b7349c421fe361783c8f0354ee116e0",
+    "regime/search.py": "8bc9724ed08873ddadcb4cd3fb10e0f61950a0a430dc4f252025c28f2bd2a182"
+  }
+}

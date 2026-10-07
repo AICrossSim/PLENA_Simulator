@@ -1,0 +1,214 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/tracked_worktree_vs_HEAD.patch",
+      "bytes": 48593,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "193d9845ec4bbd696b935501cd1a5e905c3e0a3742d6c6cbe958ac00eb7f4438",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/analytic_models/performance/ltile_cost.py",
+      "bytes": 36675,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_cost.py",
+      "sha256": "bddfaef27adb3ac498fc5d0cb7068583aeacc442c1a32e24d800cc9c88d1861e",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/analytic_models/performance/ltile_layers.py",
+      "bytes": 23087,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_layers.py",
+      "sha256": "a896496f01633cd246f88db0ff654d42fca7ee1b95ae37da3bf79858492d3fa1",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/analytic_models/performance/ltile_platform.py",
+      "bytes": 13371,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_platform.py",
+      "sha256": "59ef3e1aebead501348072ac4621e50371b5d2d178d26a679060714d13c7d2ae",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/analytic_models/performance/ltile_services.py",
+      "bytes": 22655,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_services.py",
+      "sha256": "58a5f61a3d1bc8fceb2d95d853cdfb3f39f0326097a64ee0aee31229cf9581a7",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/transactional_emulator/src/accelerator/access.rs",
+      "bytes": 39382,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/access.rs",
+      "sha256": "f17e724c241fdcc0201f54613973ce34d7ba0b602e8b3ca95fb078cf5a98446e",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/transactional_emulator/src/accelerator/dispatch.rs",
+      "bytes": 101611,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/dispatch.rs",
+      "sha256": "8c46f61a5f2b882e7688061ce8f4e4088d9201e8e8e70d83ea60b377dc4da057",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/transactional_emulator/src/accelerator/mod.rs",
+      "bytes": 4178,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/mod.rs",
+      "sha256": "6ef79cbf0ba874b6171fbe298bde67f9645bea84a1869f818e3a4d0f52ddcbd6",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/transactional_emulator/src/matrix_machine.rs",
+      "bytes": 62619,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/matrix_machine.rs",
+      "sha256": "986526ff2758bff98f28eac35a3f0205b7a45193d7cc247abec6e3a1577881e2",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/transactional_emulator/src/op.rs",
+      "bytes": 57831,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/op.rs",
+      "sha256": "2e9b356f151609007cec4972ab6c21a5381abe77a61e01bd030e316937d47325",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/modified_source/transactional_emulator/src/v2_timing.rs",
+      "bytes": 5288,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/v2_timing.rs",
+      "sha256": "9c62d3be6707452a4910241de68e698aebb621dba2151454253d32de9eca145f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/analytic_models/performance/projection_original_isa.py",
+      "bytes": 6999,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/projection_original_isa.py",
+      "sha256": "444b5f96c6a2be22ada5e3a054ff00b9054d01a1e35699db69592e11f02b4533",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/analytic_models/performance/test_vector_recurrence.py",
+      "bytes": 3029,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/test_vector_recurrence.py",
+      "sha256": "fdf96946e7981b5bbbfc99a9ce0e85b6ce523195fb14f9bbde6fce7307d86ab0",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/analytic_models/performance/vector_recurrence.py",
+      "bytes": 7925,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/vector_recurrence.py",
+      "sha256": "1d557c33d6b83bfaa0c52200fcc7629badf735e9c32adee5a879ad6360a6469b",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/analytic_models/performance/vector_recurrence_campaign.py",
+      "bytes": 4959,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/vector_recurrence_campaign.py",
+      "sha256": "b5135d735b3c721cf5e5eee6e8e39e8aa453b3d03123b8db16abea75e9251bd1",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/src/accelerator/vector_recurrence.rs",
+      "bytes": 16141,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/vector_recurrence.rs",
+      "sha256": "35d8859406a5445727a667a47bfa59ec3ee76087f604a3ae1de6e2eab85bcd61",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/testbench/models/current_native_long_chain.py",
+      "bytes": 24951,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/current_native_long_chain.py",
+      "sha256": "f1145f01e7176444681868409855d4658ad7ac74d6fce11caa126806b3f53368",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/testbench/models/original_matrix_projection_test.py",
+      "bytes": 3230,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/original_matrix_projection_test.py",
+      "sha256": "93b1af1987a121433f1b923f375c9771cc370586b1585d519c41489c7550fe41",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/testbench/models/test_current_native_long_chain.py",
+      "bytes": 2363,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/test_current_native_long_chain.py",
+      "sha256": "48050e41d07d64fd58d254598a0a3f6669ed9210d0a0bdce1ee2a80d9fd34856",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/testbench/models/vector_recurrence_batch_test.py",
+      "bytes": 3598,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/vector_recurrence_batch_test.py",
+      "sha256": "234f5e397a4fa42734bd92655d4444dd03b9330b31a6c2a85b6858a9f62d1f3d",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/testbench/models/vector_recurrence_bounds_test.py",
+      "bytes": 2524,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/vector_recurrence_bounds_test.py",
+      "sha256": "915b95eb53e896f4ad7001fa919f2dd6440afb46ac03ada7856c67a7f35e2ac4",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    },
+    {
+      "archive": "research/projection-pipeline-20260928/worktree_2322f14320d1/untracked/transactional_emulator/testbench/models/vector_recurrence_candidate_test.py",
+      "bytes": 7317,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/vector_recurrence_candidate_test.py",
+      "sha256": "c70dbf00a9f5fe797327d2488b12ba2009d1c0472e8cabc7b5bb208903484a27",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+    }
+  ],
+  "origin": {
+    "HEAD": "57d2b051aee46a45612aa694405248f6319fff31",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": "refs/heads/research/projection-pipeline-20260928",
+    "original_branch_for_archive": "research/projection-pipeline-20260928",
+    "stable_id": "2322f14320d1",
+    "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

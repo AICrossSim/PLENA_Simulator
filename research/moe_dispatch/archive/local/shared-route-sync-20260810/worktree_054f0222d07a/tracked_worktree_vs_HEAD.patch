@@ -1,0 +1,447 @@
+diff --git a/transactional_emulator/Cargo.lock b/transactional_emulator/Cargo.lock
+index 5f946561..4cdb656d 100644
+--- a/transactional_emulator/Cargo.lock
++++ b/transactional_emulator/Cargo.lock
+@@ -1734,6 +1734,7 @@ version = "0.1.0"
+ dependencies = [
+  "buddy",
+  "clap",
++ "futures-util",
+  "half",
+  "memory",
+  "mimalloc",
+@@ -1742,6 +1743,7 @@ dependencies = [
+  "runtime",
+  "serde",
+  "serde_json",
++ "sha2",
+  "sram",
+  "tch",
+  "tokio",
+diff --git a/transactional_emulator/Cargo.toml b/transactional_emulator/Cargo.toml
+index 17543043..ece7448c 100644
+--- a/transactional_emulator/Cargo.toml
++++ b/transactional_emulator/Cargo.toml
+@@ -21,6 +21,8 @@ tracing = "0.1"
+ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ tracing-appender = "0.2"
+ mimalloc = "0.1.52"
++futures-util = "0.3"
++sha2 = "0.10"
+ 
+ [workspace]
+ members = [
+diff --git a/transactional_emulator/lib/ramulator/src/model.rs b/transactional_emulator/lib/ramulator/src/model.rs
+index 178e6649..d6f2c4cc 100644
+--- a/transactional_emulator/lib/ramulator/src/model.rs
++++ b/transactional_emulator/lib/ramulator/src/model.rs
+@@ -32,6 +32,7 @@ struct Inner {
+ }
+ 
+ /// A wrapped ramulator that works with the event-based simulation.
++#[derive(Clone)]
+ pub struct Ramulator(Arc<Inner>);
+ 
+ impl Ramulator {
+@@ -63,6 +64,14 @@ impl Ramulator {
+         self.0.transfer_size
+     }
+ 
++    /// Snapshot native per-channel controller counters.
++    ///
++    /// Call this only after all requests have completed so the snapshot is a
++    /// stable end-of-replay attribution record.
++    pub fn channel_telemetry(&self) -> Result<Vec<crate::raw::ChannelTelemetry>> {
++        self.0.mutable.lock().unwrap().ramulator.channel_telemetry()
++    }
++
+     /// Drive the model one cycle per period for as long as accesses are outstanding.
+     ///
+     /// This is a single task that awaits a fresh timer each cycle rather than a
+diff --git a/transactional_emulator/lib/ramulator/src/raw.rs b/transactional_emulator/lib/ramulator/src/raw.rs
+index 32ef2357..04aebb3f 100644
+--- a/transactional_emulator/lib/ramulator/src/raw.rs
++++ b/transactional_emulator/lib/ramulator/src/raw.rs
+@@ -13,6 +13,19 @@ mod bindings {
+     #[repr(transparent)]
+     pub struct ramulator(c_void);
+ 
++    #[derive(Clone, Copy, Debug, Default)]
++    #[repr(C)]
++    pub struct ramulator_channel_telemetry {
++        pub cycles: u64,
++        pub read_requests: u64,
++        pub read_requests_served: u64,
++        pub write_requests: u64,
++        pub write_requests_served: u64,
++        pub row_hits: u64,
++        pub row_misses: u64,
++        pub row_conflicts: u64,
++    }
++
+     #[link(name = "ramulator")]
+     unsafe extern "C-unwind" {
+         pub fn ramulator_new(config: *const c_char) -> *mut ramulator;
+@@ -27,9 +40,27 @@ mod bindings {
+         ) -> bool;
+         pub fn ramulator_period(val: *mut ramulator) -> f32;
+         pub fn ramulator_tick(val: *mut ramulator);
++        pub fn ramulator_get_channel_telemetry(
++            val: *mut ramulator,
++            channel: u32,
++            out: *mut ramulator_channel_telemetry,
++        ) -> bool;
+     }
+ }
+ 
++#[derive(Clone, Copy, Debug, Default, serde::Serialize)]
++pub struct ChannelTelemetry {
++    pub channel: u32,
++    pub cycles: u64,
++    pub read_requests: u64,
++    pub read_requests_served: u64,
++    pub write_requests: u64,
++    pub write_requests_served: u64,
++    pub row_hits: u64,
++    pub row_misses: u64,
++    pub row_conflicts: u64,
++}
++
+ mod config {
+     use serde::Serialize;
+ 
+@@ -162,6 +193,31 @@ impl Ramulator {
+         unsafe { bindings::ramulator_tick(self.raw) }
+     }
+ 
++    pub fn channel_telemetry(&self) -> Result<Vec<ChannelTelemetry>> {
++        (0..self.num_channels)
++            .map(|channel| {
++                let mut raw = bindings::ramulator_channel_telemetry::default();
++                let ok = unsafe {
++                    bindings::ramulator_get_channel_telemetry(self.raw, channel, &mut raw)
++                };
++                if !ok {
++                    anyhow::bail!("Ramulator did not expose telemetry for channel {channel}");
++                }
++                Ok(ChannelTelemetry {
++                    channel,
++                    cycles: raw.cycles,
++                    read_requests: raw.read_requests,
++                    read_requests_served: raw.read_requests_served,
++                    write_requests: raw.write_requests,
++                    write_requests_served: raw.write_requests_served,
++                    row_hits: raw.row_hits,
++                    row_misses: raw.row_misses,
++                    row_conflicts: raw.row_conflicts,
++                })
++            })
++            .collect()
++    }
++
+     fn access_thin<F: FnOnce()>(&mut self, addr: u64, write: bool, callback: F) -> bool {
+         extern "C" fn bridge<F: FnOnce()>(data: *mut c_void) {
+             unsafe { core::mem::transmute_copy::<_, F>(&data)() }
+diff --git a/transactional_emulator/pkgs/ramulator2/ramulator_capi.cc b/transactional_emulator/pkgs/ramulator2/ramulator_capi.cc
+index f1bdc3bf..82e9d941 100644
+--- a/transactional_emulator/pkgs/ramulator2/ramulator_capi.cc
++++ b/transactional_emulator/pkgs/ramulator2/ramulator_capi.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <exception>
+ #include <iostream>
++#include <string>
+ 
+ #include "ramulator_capi.h"
+ 
+@@ -14,6 +15,38 @@ struct ramulator {
+     Ramulator::IMemorySystem *memory_system;
+ };
+ 
++namespace {
++
++const Ramulator::ConfigNode* find_node_with_id(
++    const Ramulator::ConfigNode& node,
++    const std::string& id
++) {
++    if (node.is_map()) {
++        auto id_node = node["id"];
++        if (id_node && id_node.is_scalar() && id_node.as<std::string>() == id) {
++            return &node;
++        }
++        for (const auto& [_, child] : node.map()) {
++            if (const auto* match = find_node_with_id(child, id)) {
++                return match;
++            }
++        }
++    } else if (node.is_sequence()) {
++        for (const auto& child : node.seq()) {
++            if (const auto* match = find_node_with_id(child, id)) {
++                return match;
++            }
++        }
++    }
++    return nullptr;
++}
++
++uint64_t counter(const Ramulator::ConfigNode& node, const char* name) {
++    return node[name].as<unsigned long long>(0);
++}
++
++}  // namespace
++
+ ramulator* ramulator_new(const char *config) {
+     try {
+         auto val = new ramulator;
+@@ -51,3 +84,37 @@ float ramulator_period(ramulator *val) {
+ void ramulator_tick(ramulator *val) {
+     val->memory_system->tick();
+ }
++
++bool ramulator_get_channel_telemetry(
++    ramulator *val,
++    uint32_t channel,
++    ramulator_channel_telemetry *out
++) {
++    if (val == nullptr || out == nullptr) {
++        return false;
++    }
++    try {
++        const auto tree = val->memory_system->collect_stats();
++        const auto* controller = find_node_with_id(
++            tree,
++            "Channel " + std::to_string(channel)
++        );
++        if (controller == nullptr) {
++            return false;
++        }
++        *out = ramulator_channel_telemetry{
++            counter(*controller, "cycles"),
++            counter(*controller, "num_read_reqs"),
++            counter(*controller, "num_read_reqs_served"),
++            counter(*controller, "num_write_reqs"),
++            counter(*controller, "num_write_reqs_served"),
++            counter(*controller, "row_hits"),
++            counter(*controller, "row_misses"),
++            counter(*controller, "row_conflicts"),
++        };
++        return true;
++    } catch (const std::exception& ex) {
++        std::cerr << "Ramulator telemetry error: " << ex.what() << std::endl;
++        return false;
++    }
++}
+diff --git a/transactional_emulator/pkgs/ramulator2/ramulator_capi.h b/transactional_emulator/pkgs/ramulator2/ramulator_capi.h
+index 6ec7e99f..54c25e96 100644
+--- a/transactional_emulator/pkgs/ramulator2/ramulator_capi.h
++++ b/transactional_emulator/pkgs/ramulator2/ramulator_capi.h
+@@ -7,6 +7,17 @@ extern "C" {
+ 
+ struct ramulator;
+ 
++typedef struct ramulator_channel_telemetry {
++    uint64_t cycles;
++    uint64_t read_requests;
++    uint64_t read_requests_served;
++    uint64_t write_requests;
++    uint64_t write_requests_served;
++    uint64_t row_hits;
++    uint64_t row_misses;
++    uint64_t row_conflicts;
++} ramulator_channel_telemetry;
++
+ ramulator* ramulator_new(const char *config);
+ 
+ void ramulator_finalize(ramulator*);
+@@ -17,6 +28,13 @@ float ramulator_period(ramulator *val);
+ 
+ void ramulator_tick(ramulator *val);
+ 
++/** Snapshot native controller counters for one zero-based DRAM channel. */
++bool ramulator_get_channel_telemetry(
++    ramulator *val,
++    uint32_t channel,
++    ramulator_channel_telemetry *out
++);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/transactional_emulator/src/cli.rs b/transactional_emulator/src/cli.rs
+index 44b244f6..0b4e85b1 100644
+--- a/transactional_emulator/src/cli.rs
++++ b/transactional_emulator/src/cli.rs
+@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
+ pub(crate) use clap::Parser;
+ use clap::ValueEnum;
+ 
++use crate::matrix_arch_overlay::ExperimentalMatrixArchitecture;
++
+ /// Log level filter for the tracing subscriber.
+ ///
+ /// When passed via `--log-level`, this fully overrides the `RUST_LOG`
+@@ -179,4 +181,40 @@ pub(crate) struct Opts {
+     /// prefetch cycles behind later matrix/vector compute. This changes only
+     /// reported simulation cycles, not functional execution or HBM traffic.
+     pub(crate) experimental_overlap_prefetch_compute: bool,
++
++    #[arg(long, value_enum, help_heading = "Experimental Timing")]
++    /// Off-by-default equal-area matrix-architecture experiment.
++    ///
++    /// Legacy values replace measured matrix proxy time after the normal
++    /// functional run. Physical split values run isolated request-level
++    /// baseline/candidate replays with fresh Ramulator instances. The
++    /// `*-online-*` values additionally model completion-driven dispatch,
++    /// SRAM-bank arbitration, work stealing, and tagged reduction. None of
++    /// these values replaces the functional run's final cycle count.
++    pub(crate) experimental_matrix_architecture: Option<ExperimentalMatrixArchitecture>,
++
++    #[arg(long, help_heading = "Experimental Timing")]
++    /// Grouped Shared-MoE manifest containing dimensions, true expert IDs,
++    /// batch/top-k, and group_sizes.
++    pub(crate) experimental_matrix_manifest: Option<PathBuf>,
++
++    #[arg(long, help_heading = "Experimental Timing")]
++    /// JSON destination for the matrix-architecture overlay report.
++    pub(crate) experimental_matrix_profile_out: Option<PathBuf>,
++
++    #[arg(long, default_value_t = 768, help_heading = "Experimental Timing")]
++    /// Fixed-big-tail big-core columns; big core always has four rows.
++    pub(crate) experimental_matrix_big_cols: u64,
++
++    #[arg(long, default_value_t = 1, help_heading = "Experimental Timing")]
++    /// Fixed-big-tail tail-core rows.
++    pub(crate) experimental_matrix_tail_rows: u64,
++
++    #[arg(long, default_value_t = 1024, help_heading = "Experimental Timing")]
++    /// Fixed-big-tail tail-core columns.
++    pub(crate) experimental_matrix_tail_cols: u64,
++
++    #[arg(long, default_value_t = 1, help_heading = "Experimental Timing")]
++    /// Send routed expert groups at or below this token count to the tail core.
++    pub(crate) experimental_matrix_tail_threshold: u64,
+ }
+diff --git a/transactional_emulator/src/main.rs b/transactional_emulator/src/main.rs
+index 2e2e218f..3162ff8c 100644
+--- a/transactional_emulator/src/main.rs
++++ b/transactional_emulator/src/main.rs
+@@ -2,6 +2,7 @@ mod accelerator;
+ mod cli;
+ mod dma;
+ mod load_config;
++mod matrix_arch_overlay;
+ mod matrix_core;
+ mod matrix_machine;
+ mod op;
+@@ -54,6 +55,21 @@ async fn main() {
+         );
+         return;
+     }
++    if let Some(adjusted_cycles) = matrix_arch_overlay::report_cycles() {
++        let adjusted_latency =
++            Duration::from_picos(runtime_config::PERIOD.as_picos() * adjusted_cycles);
++        tracing::info!(
++            "Experimental matrix architecture: serial latency {:?} cycles {}",
++            latency,
++            cycles
++        );
++        tracing::info!(
++            "Simulation completed. Latency {:?} cycles {}",
++            adjusted_latency,
++            adjusted_cycles
++        );
++        return;
++    }
+     tracing::info!(
+         "Simulation completed. Latency {:?} cycles {}",
+         executor.now(),
+diff --git a/transactional_emulator/src/runner.rs b/transactional_emulator/src/runner.rs
+index 2aec5895..c8ade113 100644
+--- a/transactional_emulator/src/runner.rs
++++ b/transactional_emulator/src/runner.rs
+@@ -8,6 +8,7 @@ use tracing_subscriber::prelude::*;
+ 
+ use crate::accelerator::Accelerator;
+ use crate::cli::{Opts, Parser};
++use crate::matrix_arch_overlay::{self, FixedBigTailConfig};
+ use crate::matrix_core::MatrixCoreProfile;
+ use crate::matrix_machine::MatrixMachine;
+ use crate::runtime_config::{
+@@ -35,6 +36,14 @@ fn dump_to_file(path: &str, bytes: &[u8]) {
+ pub(crate) async fn run_from_cli() {
+     let opts = Opts::parse();
+     timing_overlay_state::clear_experimental_report_cycles();
++    matrix_arch_overlay::clear_report_cycles();
++    if opts.experimental_overlap_prefetch_compute && opts.experimental_matrix_architecture.is_some()
++    {
++        panic!(
++            "--experimental-overlap-prefetch-compute and --experimental-matrix-architecture \
++             cannot be combined; run them separately so each adjustment has one baseline"
++        );
++    }
+ 
+     // If --settings is given, set PLENA_SETTINGS_TOML env var BEFORE any
+     // LazyLock access (which triggers load_config()). This ensures the
+@@ -256,6 +265,47 @@ pub(crate) async fn run_from_cli() {
+         profile.set_total_simulation_duration(serial_duration);
+     }
+ 
++    if let Some(architecture) = opts.experimental_matrix_architecture {
++        let manifest = opts
++            .experimental_matrix_manifest
++            .as_deref()
++            .unwrap_or_else(|| {
++                panic!("--experimental-matrix-architecture requires --experimental-matrix-manifest")
++            });
++        let profile = stage_profiler.as_ref().unwrap_or_else(|| {
++            panic!(
++                "--experimental-matrix-architecture requires --stage-profile-asm so measured \
++                 matrix proxy cycles can be validated before replacement"
++            )
++        });
++        let out_path = opts
++            .experimental_matrix_profile_out
++            .as_deref()
++            .unwrap_or_else(|| std::path::Path::new("matrix_architecture_profile.json"));
++        let report = matrix_arch_overlay::evaluate(
++            architecture,
++            manifest,
++            out_path,
++            FixedBigTailConfig {
++                big_cols: opts.experimental_matrix_big_cols,
++                tail_rows: opts.experimental_matrix_tail_rows,
++                tail_cols: opts.experimental_matrix_tail_cols,
++                tail_threshold: opts.experimental_matrix_tail_threshold,
++            },
++            serial_duration.as_picos(),
++            profile.total_matrix_proxy_picos(),
++        )
++        .await;
++        tracing::info!(
++            architecture = %report.architecture,
++            serial_cycles = report.serial_total_cycles,
++            adjusted_cycles = ?report.adjusted_total_cycles,
++            speedup = ?report.speedup_vs_measured_baseline,
++            path = %out_path.display(),
++            "Experimental equal-area matrix architecture evaluation"
++        );
++    }
++
+     if let Some(profile) = stage_profiler.as_ref() {
+         let out_path = opts
+             .stage_profile_out
+diff --git a/transactional_emulator/src/stage_profile.rs b/transactional_emulator/src/stage_profile.rs
+index 7212125d..f49b7b15 100644
+--- a/transactional_emulator/src/stage_profile.rs
++++ b/transactional_emulator/src/stage_profile.rs
+@@ -771,6 +771,10 @@ impl StageProfiler {
+         self.total_simulation_picos = Some(duration.as_picos());
+     }
+ 
++    pub(crate) fn total_matrix_proxy_picos(&self) -> u64 {
++        self.total_resource_proxy.matrix_picos
++    }
++
+     pub(crate) fn record(
+         &mut self,
+         pc: usize,

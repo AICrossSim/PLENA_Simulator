@@ -1,0 +1,130 @@
+{
+  "AGENTS": "No AGENTS.md at repo, research/moe_dispatch, or workspace ancestors inspected",
+  "exact_reproduction": {
+    "all_exact": true,
+    "helper": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/reproduce_e0.py",
+    "historical945": 945,
+    "note": "Do not confuse regime previous heterogeneous with v6 heterogeneous 2x23x32+13x13x64. Both cohorts reproduced with own exact settings.",
+    "old_regime": "/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/search/BF16_c256",
+    "old_v6": "/scratch/shared/mcl123/plena/final_artifacts/moe_geometry3d_20261004_v6/payload/system",
+    "previous_BF16_three": 405,
+    "previous_designs": [
+      "6x16x128",
+      "6x16x64+6x16x64",
+      "1x2x64+5x19x128"
+    ],
+    "repeats": 2,
+    "rows": 1350,
+    "validated_output": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/helper_validation"
+  },
+  "inputs": {
+    "capture_scope": "DeepSeek-V2-Lite BFCL, GPQA, SWE; captured expert routes/token populations. Decode and true prefill-prefix mixed windows. No new whole-model inference.",
+    "development_batch_counts": {
+      "128": 2,
+      "16": 3,
+      "2": 3,
+      "4": 3,
+      "64": 2,
+      "8": 3,
+      "96": 2
+    },
+    "development_windows": 18,
+    "hash_manifest": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/helper_validation/frozen_inputs.json",
+    "heldout_batch_counts": {
+      "128": 9,
+      "16": 27,
+      "2": 27,
+      "4": 27,
+      "64": 9,
+      "8": 27,
+      "96": 9
+    },
+    "heldout_windows": 135,
+    "path": "/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs",
+    "warnings": [
+      "Historical heldout was accessed previously; not blind",
+      "Routing available before timing; Router and attention not included",
+      "Some development ids contain joint_test because reused captures; split remains frozen"
+    ]
+  },
+  "must_implement_round2": [
+    "New explicit OS/WS/IS accounting; bounded_os/ws in current model are not the requested clean three-loop suite",
+    "All onchip modes including continuous per-tile service and physical total port cap scaling",
+    "CP-SAT/MILP assignments with shared-resource demand separated from exclusive core service",
+    "BnB covering full declared geometry/resource/flow domain with honest open-region lower bounds/time limits",
+    "Synthetic routing concentration fit and synthetic workload region grid; only that section allows synthetic input",
+    "Sobol256 basic Saltelli samples with per-point re-optimization; current sensitivities only fixed selected designs",
+    "Genuinely causal runtime estimator/prebinding/prefetch event mechanism and dev-warmup/heldout evaluation",
+    "Complete predictor state bit accounting without free task-size/window lookup",
+    "U1 and U2 scoped oracles, no additive gains",
+    "10figures and each E0-E6 reproducibility/provenance envelopes"
+  ],
+  "non_moe": {
+    "known_other_model_traces": [
+      "outputs/window1_p2/functional_smoke/qwen/true_decoder_block/summary.json",
+      "outputs/window1_p2/functional_smoke/gpt_oss/true_decoder_block/summary.json"
+    ],
+    "matching_available": false,
+    "searched": "Existing regime/native reports, source APIs and timing/profile artifact filenames",
+    "warning": "Other model scalar/decoder timings cannot substitute matching DeepSeek-V2-Lite attention/router/norm per-layer timings. E6 must NA missing fields unless qualified same-model source found."
+  },
+  "old_sources": {
+    "Rust720": "Exact table not identified by prior audit nor current targeted source audit. report table provenance unknown; cannot infer its input/config or do cross-source ratios.",
+    "meeting_screenshot": "Screenshot expectation is not a measured table and lacks frozen source/config/input hashes; cannot use as quantitative baseline.",
+    "provenance_csv": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/validation_regime/20261005/audit/TABLE_PROVENANCE.csv",
+    "v6": "frozen phase-fluid estimates; old selection used aggregate totals; use exact historical compatibility and bounded-model diagnosis only.",
+    "validation_regime": "phase-fluid valid-span transfer correction; independent quota refinement, paired ratios; still no model-global exhaustive proof or native calibrated area."
+  },
+  "proof_safety": [
+    "Reload LB cannot derive from minimum region buffer because larger buffer removes reload; use maximum possible region capacity or weaker compulsory traffic.",
+    "Task is mandatory on one core only when all other feasible cores cannot execute it. Slower is not infeasible.",
+    "MILP d_ic with solo full shared HBM/vector time summed per core may exceed a feasible coupled completion: do not call it lower bound; use private demand plus shared limits.",
+    "Top-2000 sampled LB checks are required diagnostic, not mathematical proof of validity across entire space.",
+    "Task floor must use architecture-region fastest feasible core plus only necessary service; no actual-owner conditional floor for global geometry pruning.",
+    "Unknown vector width upper bound in task; preserve current fixed aggregate64ops/cycle or openly document underspecified dimension.",
+    "False fullcoverage shortcut: pruning by unproven optimal runtime or by prior handpicked geometry cannot certify global optimum.",
+    "fixed_issue gives each engine own30.4cycle pipeline and is explicitly non-iso-resource reference only.",
+    "Runtime cold/warm oracle changes placement if predictions influence decisions; oracle trace must use same schedule/task order for duration MAE."
+  ],
+  "repo": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator",
+  "resource_ledger": {
+    "accumulator_total": 98304,
+    "activation_bytes_cycle": 384,
+    "area": "regime/area.py only technology-independent feature bill; synthesis-qualified area missing and inactive by request",
+    "bank_bytes_cycle": 16,
+    "banks": {
+      "W": 64,
+      "X": 24,
+      "accumulator": 12
+    },
+    "combined_output_FP32": 1048576,
+    "control": 16384,
+    "hbm_latency": 64,
+    "hbm_nominal_B_cycle": 256,
+    "ingress": 8192,
+    "landing_cycles": 1,
+    "local_X_total": 12288,
+    "main_credits": 256,
+    "modeled_cap_GBps": 126.03076923076924,
+    "multipliers": 12288,
+    "private_W_total": 40960,
+    "private_Z_total": 393216,
+    "routing": 16384,
+    "shared_X": 524288,
+    "storage_bytes": 2158592,
+    "transaction": 32,
+    "vector_ops_cycle": 64
+  },
+  "reusable_api": {
+    "Native": "native_profile.py, native_support/README.md; actual Ramulator2 CAPI and128-bit banks present; isolated projections/captured FFN boundary limitations must remain explicit.",
+    "Rust": "research/moe_dispatch/rust/src/main.rs retains current/next runtime and detailed predictors but primary engine PN4/PK512. Cannot claim independent geometry complete FFN native from current Rust.",
+    "geometry3d.compute": "Core(pm,pn,pk), enumerate_geometries(), family(), geometry_id(), TimingProfile(), group_cost(). Existing capped domain 16763 geometries:44single/41identical/16678different.",
+    "geometry3d.memory": "NativeWeightLayout.tile(), SharedHBM finite micro-request service, FabricProfile, CoreMemory, memory_budget. Existing 2158592 B ledger and native row32 payload addressing.",
+    "regime.campaign": "load_inputs(root), evaluate(workloads,cores,settings,policy,repeats=2,owners,detail)",
+    "regime.metrics": "geomean(), paired_score(), paired_bootstrap(), bounds(), core_rows(). Conditional vs architecture-independent bounds distinguished.",
+    "regime.model": "Settings BF16; expert_phases(m,h,f,core,mem,settings); projection_phase; private_estimate; simulate_layer(workload,cores,settings,policy,detail,fixed_owners). Existing whole-expert fixed ownership.",
+    "regime.resources": "Partition(w,x,acc,z,wb,xb,ab) seven independent dual fractions; memory_budget; splits capacity with32 B quantum and banks integer.",
+    "regime.search": "settings_for(256,BF16,point) reconstructs previous3 settings exactly."
+  },
+  "status": "read-only source audit; exact historical checks completed before branch merges"
+}

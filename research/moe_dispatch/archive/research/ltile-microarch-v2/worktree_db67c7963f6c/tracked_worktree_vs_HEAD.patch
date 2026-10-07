@@ -1,0 +1,1464 @@
+diff --git a/transactional_emulator/lib/memory/src/chunked.rs b/transactional_emulator/lib/memory/src/chunked.rs
+index 0d14a6c1..fbcdd6a6 100644
+--- a/transactional_emulator/lib/memory/src/chunked.rs
++++ b/transactional_emulator/lib/memory/src/chunked.rs
+@@ -121,6 +121,44 @@ pub async fn write_unaligned(
+     written
+ }
+ 
++/// Bounded burst write for the shared DMA experiment. Full blocks require no
++/// read. Partial first/last blocks retain RMW and untouched neighbour bytes.
++/// Requests are issued deterministically; the memory model supplies queue
++/// backpressure. `window` is an explicit model assumption, not extra SRAM.
++pub async fn write_bursted(
++    hbm: &Arc<dyn ErasedMemoryModel>,
++    addr: u64,
++    total_len: usize,
++    src: &[u8],
++    window: usize,
++) -> usize {
++    assert!((1..=64).contains(&window));
++    let count = total_len.min(src.len());
++    if count == 0 {
++        return 0;
++    }
++    let start = addr / 64 * 64;
++    let end = addr + count as u64;
++    let blocks = ((end - start) as usize).div_ceil(64);
++    for first in (0..blocks).step_by(window) {
++        let requests = (first..(first + window).min(blocks)).map(|i| async move {
++            let base = start + (i * 64) as u64;
++            let lo = base.max(addr);
++            let hi = (base + 64).min(end);
++            let mut block = if lo == base && hi == base + 64 {
++                [0; 64]
++            } else {
++                hbm.read(base).await
++            };
++            block[(lo - base) as usize..(hi - base) as usize]
++                .copy_from_slice(&src[(lo - addr) as usize..(hi - addr) as usize]);
++            hbm.write(base, block).await;
++        });
++        join_all(requests).await;
++    }
++    count
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -128,6 +166,24 @@ mod tests {
+     use proptest::prelude::*;
+     use std::sync::{Arc, Mutex};
+ 
++    #[tokio::test]
++    async fn burst_write_preserves_edges_without_reading_full_blocks() {
++        for (addr, count, reads) in [(0, 256, 0), (3, 190, 128), (64, 64, 0), (65, 2, 64)] {
++            let backing = MemoryBacked::with_capacity(512);
++            backing.with_data(|b| b.fill(0xa5));
++            let stats = Arc::new(crate::WithStats::new(backing));
++            let hbm: Arc<dyn ErasedMemoryModel> = stats.clone();
++            let source = vec![0x37; count];
++            assert_eq!(write_bursted(&hbm, addr, count, &source, 16).await, count);
++            assert_eq!(stats.statistics().total_bytes_read, reads);
++            stats.model().with_data(|b| {
++                assert!(b[..addr as usize].iter().all(|&v| v == 0xa5));
++                assert_eq!(&b[addr as usize..addr as usize + count], &source);
++                assert!(b[addr as usize + count..].iter().all(|&v| v == 0xa5));
++            });
++        }
++    }
++
+     /// A `MemoryBacked` HBM seeded by `init`, returned both as a typed handle
+     /// (for inspection) and as the erased `Arc` the primitives consume.
+     fn seeded(
+diff --git a/transactional_emulator/lib/sram/src/matrix.rs b/transactional_emulator/lib/sram/src/matrix.rs
+index ab3e48c7..948fff9d 100644
+--- a/transactional_emulator/lib/sram/src/matrix.rs
++++ b/transactional_emulator/lib/sram/src/matrix.rs
+@@ -1,5 +1,5 @@
+ use quantize::{tensor_from_f32_slice, tensor_to_f32_vec, DataType, MxDataType, QuantTensor};
+-use std::collections::{hash_map::Entry, HashMap};
++use std::collections::{hash_map::Entry, HashMap, HashSet};
+ use std::sync::atomic::{AtomicU64, Ordering};
+ use tokio::sync::oneshot::{Receiver, Sender};
+ use tokio::sync::Mutex;
+@@ -11,7 +11,7 @@ use crate::{addr_to_cell, Cell};
+ /// `tile_pitch_rows` is measured in physical rows inside each bank.  The
+ /// arithmetic operation is deliberately absent: this structure describes
+ /// placement only.
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+ pub struct MatrixLayout {
+     pub rows: u32,
+     pub cols: u32,
+@@ -100,6 +100,9 @@ pub struct MatrixSram {
+     rows_per_tile: u32,
+     bank_rows: Vec<Vec<Mutex<Cell<Vec<u8>>>>>,
+     packet_counters: MatrixPacketCounters,
++    // Host-only memoization of immutable layout proofs. No simulated cache,
++    // timing credit, data/tag storage, or skipped physical SRAM access.
++    validated_layouts: std::sync::Mutex<HashSet<(u32, MatrixLayout)>>,
+ }
+ 
+ impl MatrixSram {
+@@ -185,6 +188,7 @@ impl MatrixSram {
+             rows_per_tile,
+             bank_rows,
+             packet_counters: MatrixPacketCounters::default(),
++            validated_layouts: std::sync::Mutex::new(HashSet::new()),
+         }
+     }
+ 
+@@ -1125,6 +1129,14 @@ impl MatrixSram {
+     }
+ 
+     fn validate_layout(&self, addr: u32, layout: MatrixLayout) {
++        if self
++            .validated_layouts
++            .lock()
++            .unwrap()
++            .contains(&(addr, layout))
++        {
++            return;
++        }
+         assert!(layout.rows > 0 && layout.cols > 0 && layout.tile_count > 0);
+         assert!(layout.cols.is_multiple_of(self.bank_width));
+         assert!(layout.alpha < self.banks);
+@@ -1164,6 +1176,10 @@ impl MatrixSram {
+             final_row <= self.bank_rows[0].len() as u32,
+             "Matrix view exceeds SRAM capacity"
+         );
++        self.validated_layouts
++            .lock()
++            .unwrap()
++            .insert((addr, layout));
+     }
+ 
+     /// Check that several compiler-managed views can coexist in this SRAM.
+@@ -1322,6 +1338,39 @@ mod tests {
+         MxDataType::Plain(DataType::Fp(FpType::BF16))
+     }
+ 
++    #[test]
++    fn phased_descriptor_equals_ordinary_bases_on_fixed_diagonal_wiring() {
++        let sram = MatrixSram::with_banks(2048, 256, 32, bf16_plain());
++        let mut words = 0;
++        for width in [64, 128] {
++            let packed = MatrixLayout {
++                rows: 128,
++                cols: width,
++                tile_count: 2048 / width,
++                tile_pitch_rows: 0,
++                alpha: 1,
++                tile_skew: width / 32,
++            };
++            let ordinary = MatrixLayout {
++                tile_count: 1,
++                tile_skew: 0,
++                ..packed
++            };
++            for head in 0..packed.tile_count {
++                for row in 0..128 {
++                    for col in (0..width).step_by(32) {
++                        assert_eq!(
++                            sram.physical_coord(0, packed, head, row, col),
++                            sram.physical_coord(head * width, ordinary, 0, row, col)
++                        );
++                        words += 1;
++                    }
++                }
++            }
++        }
++        assert_eq!(words, 16384); // 524,288 scalar positions including lanes.
++    }
++
+     fn tile(ty: MxDataType, vals: &[f32]) -> QuantTensor {
+         QuantTensor::new_assuming_quantized(Tensor::from_slice(vals), ty).unwrap()
+     }
+diff --git a/transactional_emulator/lib/sram/src/vector.rs b/transactional_emulator/lib/sram/src/vector.rs
+index a33ba86a..4fb425c7 100644
+--- a/transactional_emulator/lib/sram/src/vector.rs
++++ b/transactional_emulator/lib/sram/src/vector.rs
+@@ -219,6 +219,26 @@ impl VectorSram {
+         *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
+     }
+ 
++    /// V2 bank-word write enable on the existing SRAM. No extra port or
++    /// capacity. The caller accounts for the selected bank words and port
++    /// occupancy; resolving this host byte array is not a modeled SRAM read.
++    pub async fn write_bank_words(&self, addr: u32, first: u32, tensor: QuantTensor) {
++        assert!(first.is_multiple_of(self.bank_width()));
++        let data = self.quant_tensor_to_bytes(&tensor);
++        let bytes_per_element = usize::from(self.fp_type.size_in_bits()) / 8;
++        assert!(data
++            .len()
++            .is_multiple_of(self.bank_width() as usize * bytes_per_element));
++        let start = first as usize * bytes_per_element;
++        assert!(start + data.len() <= self.vlen as usize * bytes_per_element);
++        let row = addr_to_cell(addr, self.vlen, self.depth);
++        let mut guard = self.rows[row].lock().await;
++        let old = guard.resolve_with(|t| self.quant_tensor_to_bytes(&t)).await;
++        let mut bytes = old.clone();
++        bytes[start..start + data.len()].copy_from_slice(&data);
++        *guard = Cell::Ready(bytes);
++    }
++
+     /// Write a vector to the SRAM at the given address as integers.
+     ///
+     /// The address must be a multiple of vlen (in element units).
+diff --git a/transactional_emulator/src/accelerator/dispatch.rs b/transactional_emulator/src/accelerator/dispatch.rs
+index 3256262c..36dab27a 100644
+--- a/transactional_emulator/src/accelerator/dispatch.rs
++++ b/transactional_emulator/src/accelerator/dispatch.rs
+@@ -8,7 +8,7 @@ use quantize::{MxDataType, QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec
+ 
+ use crate::runtime_config::PERIOD;
+ use crate::runtime_config::{
+-    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
++    MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
+     SCALAR_INT_BASIC_CYCLES, STATE_TYPE, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE,
+     VLEN,
+@@ -50,30 +50,34 @@ struct MatrixViewBinaryArgs {
+     pc: usize,
+ }
+ 
+-struct LTileExecArgs {
+-    destination_register: u8,
+-    source_register: u8,
+-    scale_register: u8,
+-    primitive: op::LTilePrimitive,
+-    source_axis: op::LTileAxis,
+-    scale_axis: op::LTileAxis,
++pub(super) struct LTileExecArgs {
++    pub destination_register: u8,
++    pub source_register: u8,
++    pub scale_register: u8,
++    pub primitive: op::LTilePrimitive,
++    pub source_axis: op::LTileAxis,
++    pub scale_axis: op::LTileAxis,
+ }
+ 
+ impl Accelerator {
+     /// Resolve the V_* opcode mask.
+     ///
+-    /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
+-    /// vector (mask = all-ones over `*HLEN` bits). Otherwise the per-head mask
++    /// When `rmask == 0`, the opcode operates on the entire VLEN vector.
++    /// HLEN is elements per mask group, not a bit count. Otherwise the mask
+     /// stored in `reg_file.v_mask` is used directly.
+     fn resolve_v_mask(&self, rmask: u8) -> u32 {
+         if rmask == 0 {
+-            (1 << *HLEN) - 1
++            u32::MAX
+         } else {
+             self.reg_file.v_mask()
+         }
+     }
+ 
+-    fn resolve_matrix_view(&self, slot: Option<u8>, pc: usize) -> Option<MatrixViewDescriptor> {
++    pub(super) fn resolve_matrix_view(
++        &self,
++        slot: Option<u8>,
++        pc: usize,
++    ) -> Option<MatrixViewDescriptor> {
+         slot.map(|slot| {
+             self.reg_file.matrix_view(slot).unwrap_or_else(|error| {
+                 tracing::error!(pc, slot, %error, "invalid Matrix-view consumer");
+@@ -202,6 +206,19 @@ impl Accelerator {
+     /// deterministic row/column walk; all bases, shapes and layouts remain
+     /// compiler-visible architectural state. Matrix-view storage is BF16.
+     async fn execute_l_tile(&mut self, args: LTileExecArgs, pc: usize) {
++        if matches!(
++            args.primitive,
++            op::LTilePrimitive::ReduceBegin
++                | op::LTilePrimitive::ReduceAcc
++                | op::LTilePrimitive::DecayReduceAcc
++                | op::LTilePrimitive::ReduceWrite
++                | op::LTilePrimitive::ResidualWrite
++        ) || (args.primitive == op::LTilePrimitive::DeltaUpdate
++            && std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1"))
++        {
++            self.execute_v2(args, pc).await;
++            return;
++        }
+         let LTileExecArgs {
+             destination_register,
+             source_register,
+@@ -246,7 +263,9 @@ impl Accelerator {
+         };
+ 
+         match primitive {
+-            op::LTilePrimitive::ScaleAccum | op::LTilePrimitive::OuterUpdate => {
++            op::LTilePrimitive::ScaleAccum
++            | op::LTilePrimitive::OuterUpdate
++            | op::LTilePrimitive::DeltaUpdate => {
+                 if source_line_width != destination.shape.cols {
+                     panic!("row-wise L_TILE source/destination widths differ");
+                 }
+@@ -256,7 +275,20 @@ impl Accelerator {
+                 if scale_line_count < destination.shape.rows {
+                     panic!("L_TILE scale view has fewer logical lines than destination");
+                 }
+-                let tiles_per_packet = (self.v_machine.tile_size() / destination.shape.cols).max(1);
++                let bounded_v2_affine = primitive == op::LTilePrimitive::ScaleAccum
++                    && std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1");
++                let supply_width =
++                    if primitive == op::LTilePrimitive::DeltaUpdate || bounded_v2_affine {
++                        let lanes = self.v_machine.update_lane.config.lanes;
++                        assert!(
++                            destination.shape.cols <= lanes
++                                && lanes.is_multiple_of(destination.shape.cols)
++                        );
++                        lanes.min(self.v_machine.tile_size())
++                    } else {
++                        self.v_machine.tile_size()
++                    };
++                let tiles_per_packet = (supply_width / destination.shape.cols).max(1);
+                 for row in 0..destination.shape.rows {
+                     for first_tile in
+                         (0..destination.shape.tile_count).step_by(tiles_per_packet as usize)
+@@ -341,7 +373,19 @@ impl Accelerator {
+                                     )
+                                     .await
+                             }
+-                            op::LTilePrimitive::DotReduce => unreachable!(),
++                            op::LTilePrimitive::DeltaUpdate => {
++                                self.v_machine
++                                    .tile_delta_update(
++                                        dst_packet,
++                                        src_packet,
++                                        scale_packet,
++                                        destination.shape.cols,
++                                        scale_line_width,
++                                        scale_layout,
++                                    )
++                                    .await
++                            }
++                            _ => unreachable!(),
+                         };
+                         let service = self
+                             .m_machine
+@@ -429,6 +473,7 @@ impl Accelerator {
+                     timing::charge_bank_cycles(service.service_cycles.max(1)).await;
+                 }
+             }
++            _ => unreachable!("v2 primitives dispatch before the legacy walker"),
+         }
+     }
+ 
+@@ -468,6 +513,8 @@ impl Accelerator {
+                         op,
+                         op::Opcode::S_LUI_INT { .. }
+                             | op::Opcode::S_ADDI_INT { .. }
++                            | op::Opcode::C_LOOP_START { .. }
++                            | op::Opcode::C_LOOP_END { .. }
+                             | op::Opcode::V_DOT_RESET
+                             | op::Opcode::V_DOT_ACC { .. }
+                             | op::Opcode::V_DOT_WRITE { .. }
+@@ -1323,12 +1370,13 @@ impl Accelerator {
+                         self.reg_file.read_gp(*rs1),
+                         *rstride,
+                     );
++                    let exact = std::env::var("PLENA_EXACT_VIEW_DMA").as_deref() == Ok("1");
+                     let xfer = dma::transfer_mx_from_hbm(
+                         &self.hbm,
+                         region,
+                         self.m_machine.mram.ty(),
+-                        *VLEN,
+-                        values.div_ceil(*VLEN),
++                        if exact { values } else { *VLEN },
++                        if exact { 1 } else { values.div_ceil(*VLEN) },
+                         1,
+                     );
+                     let tensor = xfer.await.unwrap_or_else(|error| {
+diff --git a/transactional_emulator/src/accelerator/mod.rs b/transactional_emulator/src/accelerator/mod.rs
+index 19848cf9..b48095ab 100644
+--- a/transactional_emulator/src/accelerator/mod.rs
++++ b/transactional_emulator/src/accelerator/mod.rs
+@@ -25,6 +25,7 @@ mod pipeline_tests;
+ mod registers;
+ mod scalar_sram;
+ mod scoreboard;
++mod v2;
+ 
+ pub(crate) use access::Unit;
+ pub(crate) use dispatch::TimingDriver;
+@@ -45,6 +46,7 @@ pub(crate) struct Accelerator {
+     reg_file: AcceleratorRegFile,
+     scalar_sram: ScalarSram,
+     loop_state: LoopState,
++    v2: v2::ReductionState,
+ }
+ 
+ impl Accelerator {
+@@ -67,6 +69,7 @@ impl Accelerator {
+             ),
+             scalar_sram: ScalarSram::new(),
+             loop_state: LoopState::new(),
++            v2: v2::ReductionState::default(),
+         }
+     }
+ 
+diff --git a/transactional_emulator/src/accelerator/mview_recurrence_tests.rs b/transactional_emulator/src/accelerator/mview_recurrence_tests.rs
+index 50315826..43e525b3 100644
+--- a/transactional_emulator/src/accelerator/mview_recurrence_tests.rs
++++ b/transactional_emulator/src/accelerator/mview_recurrence_tests.rs
+@@ -671,7 +671,10 @@ async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
+                         // DOT_REDUCE requires one source tile per output tile.
+                         continue;
+                     }
+-                    let is_scale = matches!(primitive, op::LTilePrimitive::ScaleAccum);
++                    let is_scale = matches!(
++                        primitive,
++                        op::LTilePrimitive::ScaleAccum | op::LTilePrimitive::DeltaUpdate
++                    );
+                     let dst_rows = if is_dot { 1 } else { 2 };
+                     let src_rows = if is_dot { 2 } else { 1 };
+                     let src_tiles = if shared_source { 1 } else { tiles };
+@@ -770,7 +773,8 @@ async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
+                         for row in 0..dst_rows {
+                             for col in 0..cols {
+                                 let value = match primitive {
+-                                    op::LTilePrimitive::ScaleAccum => {
++                                    op::LTilePrimitive::ScaleAccum
++                                    | op::LTilePrimitive::DeltaUpdate => {
+                                         0.5 + (tile + row + 1) as f32 * source_value(tile, 0, col)
+                                     }
+                                     op::LTilePrimitive::OuterUpdate => {
+@@ -783,6 +787,7 @@ async fn check_ltile_coefficient_packets(primitive: op::LTilePrimitive) {
+                                             })
+                                             .sum::<f32>()
+                                     }
++                                    _ => unreachable!("legacy coefficient fixture"),
+                                 };
+                                 expected.push(value);
+                             }
+@@ -829,6 +834,11 @@ async fn l_tile_outer_update_preserves_coefficient_layout_across_packets() {
+     check_ltile_coefficient_packets(op::LTilePrimitive::OuterUpdate).await;
+ }
+ 
++#[tokio::test]
++async fn l_tile_delta_update_preserves_coefficient_layout_across_packets() {
++    check_ltile_coefficient_packets(op::LTilePrimitive::DeltaUpdate).await;
++}
++
+ async fn run_ltile_primitives(tile_skew: Option<u32>) -> LTileResult {
+     const ROWS: u32 = 2;
+     const TILES: u32 = 8;
+diff --git a/transactional_emulator/src/accelerator/v2.rs b/transactional_emulator/src/accelerator/v2.rs
+new file mode 100644
+index 00000000..90ecc3ed
+--- /dev/null
++++ b/transactional_emulator/src/accelerator/v2.rs
+@@ -0,0 +1,446 @@
++//! V2 reduction/update execution. Persistent state is always the banked
++//! Matrix SRAM. A tree uses Vector SRAM rows 0..6 and leaf/output row 7;
++//! only the optional FP32 implementation allocates a P-element context.
++use super::{Accelerator, dispatch::LTileExecArgs, mview::MatrixViewDescriptor};
++use crate::{
++    ltile_v2::round_bf16,
++    op::{LTileAxis, LTilePrimitive as Op},
++    v2_timing::Calendar,
++};
++use quantize::{QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
++
++#[derive(Default)]
++pub(super) struct ReductionState {
++    active: bool,
++    values: usize,
++    rows: u32,
++    sums: Vec<f32>,
++}
++fn number(name: &str, fallback: u32) -> u32 {
++    let n = std::env::var(name).map_or(fallback, |s| s.parse().expect("invalid v2 parameter"));
++    assert!(n > 0);
++    n
++}
++fn tree() -> bool {
++    match std::env::var("PLENA_V2_DOT").as_deref() {
++        Ok("tree") => true,
++        Ok("fp32") | Err(_) => false,
++        _ => panic!("PLENA_V2_DOT must be tree or fp32"),
++    }
++}
++fn rn(value: f32) -> f32 {
++    f32::from_bits(u32::from(round_bf16(value, None)) << 16)
++}
++
++impl Accelerator {
++    pub(crate) fn v2_config_report(&self) -> serde_json::Value {
++        let c = self.v_machine.update_lane.config;
++        serde_json::json!({
++            "L": c.lanes, "update_latency": c.latency, "update_II": c.interval,
++            "dot": if tree() { "BF16_SRAM_tree" } else { "FP32_context" },
++            "P": 2048, "allocated_context_bytes": if tree() { 0 } else { 8192 },
++            "tree_rows": if tree() { 8 } else { 0 },
++            "feedback_core_latency": number("PLENA_V2_DOT_LATENCY", 6),
++            "dot_II": number("PLENA_V2_DOT_II", 2),
++            "context_read_write_cycles_each": number("PLENA_V2_CONTEXT_PORT", 1),
++            "sram_port_multiplier": number("PLENA_V2_SRAM_PORT", 1),
++            "state_rounding": if c.stochastic { "per_lane_LFSR_SR" } else { "BF16_RNE" },
++            "seed": c.seed,
++            "unvalidated_RTL": "FP32 decayed-state-to-product forwarding, dot/residual path, context storage/ports and vector bank-write enables; only update 6-cycle II2 lane has a D probe",
++            "ports": "one Matrix view packet at a time; independent one-port Vector SRAM; FP32 context one L-wide read and write per cycle, fixed banks",
++            "active_context_feedback": "actual slot ready times, not allocated P/L",
++        })
++    }
++
++    async fn v2_read(
++        &mut self,
++        base: u32,
++        view: MatrixViewDescriptor,
++        lines: &[(u32, u32)],
++        ready: u64,
++        clock: &mut Calendar,
++    ) -> (Vec<f32>, u64) {
++        let (q, s) = self
++            .m_machine
++            .mram
++            .read_layout_indexed_rows(base, view.layout(), lines)
++            .await;
++        let end = clock.matrix(
++            ready,
++            s.service_cycles * u64::from(number("PLENA_V2_SRAM_PORT", 1)),
++            s.bank_words,
++            false,
++        );
++        (tensor_to_f32_vec(q.as_tensor()), end)
++    }
++
++    async fn v2_write(
++        &mut self,
++        base: u32,
++        view: MatrixViewDescriptor,
++        lines: &[(u32, u32)],
++        values: &[f32],
++        ready: u64,
++        clock: &mut Calendar,
++    ) -> u64 {
++        let q = QuantTensor::quantize(tensor_from_f32_slice(values), self.m_machine.mram.ty());
++        let s = self
++            .m_machine
++            .mram
++            .write_layout_indexed_rows(base, view.layout(), lines, q)
++            .await;
++        clock.matrix(
++            ready,
++            s.service_cycles * u64::from(number("PLENA_V2_SRAM_PORT", 1)),
++            s.bank_words,
++            true,
++        )
++    }
++
++    async fn tree_values(&mut self, row: u32) -> Vec<f32> {
++        let q = self
++            .v_machine
++            .vram
++            .read(row * self.v_machine.tile_size())
++            .await;
++        tensor_to_f32_vec(q.as_tensor())
++    }
++
++    async fn tree_write(&mut self, row: u32, first: u32, values: &[f32]) {
++        let q = QuantTensor::quantize(tensor_from_f32_slice(values), self.v_machine.vram.ty());
++        self.v_machine
++            .vram
++            .write_bank_words(row * self.v_machine.tile_size(), first, q)
++            .await;
++    }
++
++    /// Fold one complete leaf row with the existing full-width BF16 Vector
++    /// adder. Do not serialize this operation into L-wide FP32 lane work.
++    async fn tree_fold(&mut self, count: u32, ready: u64, clock: &mut Calendar) -> u64 {
++        let mut ready = ready;
++        let port = u64::from(number("PLENA_V2_SRAM_PORT", 1));
++        let level = count.trailing_ones();
++        assert!(level <= 7, "bounded tree accepts at most 128 terms");
++        // Even leaves were written directly to level zero. Each odd merge
++        // reads BOTH operands from existing SRAM and stores its result there.
++        // No host-held partial is permitted to bypass a modeled SRAM edge.
++        for depth in 0..level {
++            let mut leaf = self.tree_values(7).await;
++            ready = clock.vector(ready, false, port);
++            let partial = self.tree_values(depth).await;
++            ready = clock.vector(ready, false, port);
++            for (x, y) in leaf.iter_mut().zip(partial) {
++                *x = rn(*x + y);
++            }
++            // Independent existing Vector adder. Conservative: fold stages
++            // are dependent and do not overlap their SRAM operands.
++            ready = clock.existing_arithmetic(ready, *crate::runtime_config::VECTOR_ADD_CYCLES);
++            let target = if depth + 1 == level { level } else { 7 };
++            self.tree_write(target, 0, &leaf).await;
++            ready = clock.vector(ready, true, port);
++        }
++        ready
++    }
++
++    pub(super) async fn execute_v2(&mut self, args: LTileExecArgs, pc: usize) {
++        assert_eq!(
++            crate::timing::timing_mode(),
++            crate::timing::TimingMode::Serial,
++            "v2 resource calendar requires serial instruction retirement"
++        );
++        assert_eq!(args.source_axis, LTileAxis::Row);
++        assert_eq!(args.scale_axis, LTileAxis::Row);
++        let dst = self.resolve_matrix_view(Some(0), pc).unwrap();
++        let src = self.resolve_matrix_view(Some(1), pc).unwrap();
++        let coeff = self.resolve_matrix_view(Some(2), pc).unwrap();
++        let db = self.reg_file.read_gp(args.destination_register);
++        let sb = self.reg_file.read_gp(args.source_register);
++        let cb = self.reg_file.read_gp(args.scale_register);
++        let op = args.primitive;
++        let config = self.v_machine.update_lane.config;
++        let lanes = config.lanes as usize;
++        let width = dst.shape.cols as usize;
++        let heads = dst.shape.tile_count as usize;
++        let active = width * heads;
++        assert!(active <= 2048 && width <= lanes && lanes.is_multiple_of(width));
++        let group = lanes / width;
++        let is_tree = tree();
++        let mut clock = Calendar::default();
++        let port = u64::from(number("PLENA_V2_SRAM_PORT", 1));
++        let ctx_port = u64::from(number("PLENA_V2_CONTEXT_PORT", 1));
++        let dot_latency = number("PLENA_V2_DOT_LATENCY", 6);
++        let dot_ii = number("PLENA_V2_DOT_II", 2);
++
++        if op == Op::ReduceBegin {
++            assert!(!self.v2.active, "context must be consumed before reset");
++            assert_eq!(dst.shape.rows, 1);
++            self.v2 = ReductionState {
++                active: true,
++                values: active,
++                rows: 0,
++                sums: if is_tree { Vec::new() } else { vec![0.0; 2048] },
++            };
++            // Tree occupancy is reset as control bits; stale leaves are never
++            // read. Context clearing uses the actual L-wide write interface.
++            if !is_tree {
++                for _ in 0..active.div_ceil(lanes) {
++                    clock.context(0, ctx_port, true);
++                }
++            }
++            clock.retire().await;
++            return;
++        }
++
++        let reducing = matches!(op, Op::ReduceAcc | Op::DecayReduceAcc);
++        let finishing = matches!(op, Op::ReduceWrite | Op::ResidualWrite);
++        if reducing || finishing {
++            assert!(
++                self.v2.active && self.v2.values == active,
++                "reduction shape/lifetime mismatch"
++            );
++        }
++        if finishing {
++            assert_eq!(dst.shape.rows, 1);
++            assert!(self.v2.rows.is_power_of_two() && self.v2.rows <= 128);
++            let tree_row = self.v2.rows.trailing_zeros();
++            let (scalars, scalar_ready) = if op == Op::ResidualWrite {
++                self.v2_read(cb, coeff, &[(0, 0)], 0, &mut clock).await
++            } else {
++                (Vec::new(), 0)
++            };
++            for first in (0..heads).step_by(group) {
++                let last = (first + group).min(heads);
++                let lines = (first..last).map(|h| (h as u32, 0)).collect::<Vec<_>>();
++                let mut ready = scalar_ready;
++                let prediction = if is_tree {
++                    // SRAM is read for each supply subchunk. A full-row host
++                    // decode is sliced immediately; no P-wide holding buffer
++                    // or FP32 context is credited to the tree configuration.
++                    let row = self.tree_values(tree_row).await;
++                    ready = clock.vector(ready, false, port);
++                    row[first * width..last * width].to_vec()
++                } else {
++                    Vec::new()
++                };
++                let input = if op == Op::ResidualWrite {
++                    let (v, t) = self.v2_read(sb, src, &lines, ready, &mut clock).await;
++                    ready = t;
++                    v
++                } else {
++                    Vec::new()
++                };
++                if !is_tree {
++                    ready = clock.context(ready, ctx_port, false);
++                }
++                let mut result = Vec::with_capacity((last - first) * width);
++                for i in first * width..last * width {
++                    let pred = if is_tree {
++                        prediction[i - first * width]
++                    } else {
++                        self.v2.sums[i]
++                    };
++                    let value = if op == Op::ResidualWrite {
++                        let beta = scalars[2 * (i / width)];
++                        let difference = input[i - first * width] - pred;
++                        rn(beta * difference)
++                    } else {
++                        rn(pred)
++                    };
++                    result.push(value);
++                }
++                let done = clock.compute(
++                    ready,
++                    0,
++                    if op == Op::ResidualWrite { 4 } else { 1 },
++                    dot_ii,
++                );
++                self.v2_write(db, dst, &lines, &result, done, &mut clock)
++                    .await;
++            }
++            self.v2.active = false;
++            clock.retire().await;
++            return;
++        }
++
++        assert!(reducing || op == Op::DeltaUpdate);
++        let rows = if reducing {
++            src.shape.rows
++        } else {
++            dst.shape.rows
++        };
++        assert_eq!(src.shape.cols as usize, width);
++        assert_eq!(src.shape.tile_count as usize, heads);
++        assert!(coeff.shape.rows == rows || coeff.shape.rows == 1);
++        if reducing {
++            assert!(self.v2.rows + rows <= 128);
++        }
++        let mut feedback = vec![0u64; active.div_ceil(lanes)];
++        let mut row_ready = 0;
++        let latency = if op == Op::DeltaUpdate {
++            config.latency
++        } else if is_tree {
++            if op == Op::DecayReduceAcc {
++                config.latency + 3
++            } else {
++                3
++            }
++        } else {
++            dot_latency
++                + if op == Op::DecayReduceAcc {
++                    config.latency
++                } else {
++                    0
++                }
++        };
++        let interval = if op == Op::DeltaUpdate {
++            config.interval
++        } else {
++            dot_ii
++        };
++        // A fixed ring represents pipeline register credits, not a runtime
++        // scheduling queue. Backpressure holds the input and does not advance
++        // RNG. At most ceil(latency/II) subchunks can be in flight.
++        let mut credits = vec![0u64; latency.div_ceil(interval) as usize];
++        let mut launched = 0usize;
++        let mut supply_ready = 0;
++        for row in 0..rows {
++            // Compact scalars occupy <=128 B, held for this logical row only.
++            let (compact, compact_ready) = if coeff.broadcast_minor() {
++                self.v2_read(
++                    cb,
++                    coeff,
++                    &[(0, if coeff.shape.rows == 1 { 0 } else { row })],
++                    row_ready.max(supply_ready),
++                    &mut clock,
++                )
++                .await
++            } else {
++                (Vec::new(), row_ready)
++            };
++            let mut leaves_ready = row_ready;
++            for first in (0..heads).step_by(group) {
++                let last = (first + group).min(heads);
++                let chunk = first * width / lanes;
++                let slot = launched % credits.len();
++                let operands_at = row_ready.max(supply_ready).max(credits[slot]);
++                let state_lines = (first..last).map(|h| (h as u32, row)).collect::<Vec<_>>();
++                let source_lines = (first..last)
++                    .map(|h| (h as u32, if src.shape.rows == 1 { 0 } else { row }))
++                    .collect::<Vec<_>>();
++                let (state, mut ready) = self
++                    .v2_read(
++                        if reducing { sb } else { db },
++                        if reducing { src } else { dst },
++                        &state_lines,
++                        operands_at,
++                        &mut clock,
++                    )
++                    .await;
++                let (scalars, scalar_ready) = if compact.is_empty() {
++                    let mut slice = coeff;
++                    slice.shape.rows = 1;
++                    slice.shape.cols = (2 * (last - first) * width) as u32;
++                    slice.shape.tile_count = 1;
++                    let stride = coeff.shape.cols.div_ceil(self.m_machine.mram.tile_size());
++                    let offset =
++                        row * stride * self.m_machine.mram.tile_size() + (2 * first * width) as u32;
++                    self.v2_read(cb + offset, slice, &[(0, 0)], operands_at, &mut clock)
++                        .await
++                } else {
++                    (Vec::new(), compact_ready)
++                };
++                ready = ready.max(scalar_ready);
++                let (outer, source_ready) = if op == Op::DeltaUpdate {
++                    self.v2_read(sb, src, &source_lines, operands_at, &mut clock)
++                        .await
++                } else {
++                    (Vec::new(), 0)
++                };
++                ready = ready.max(source_ready);
++                let mut values = Vec::with_capacity(state.len());
++                for (i, &s) in state.iter().enumerate() {
++                    let h = first + i / width;
++                    let (a, b) = if compact.is_empty() {
++                        let local = i / width * 2 * width + i % width;
++                        (scalars[local], scalars[local + width])
++                    } else {
++                        (compact[2 * h], compact[2 * h + 1])
++                    };
++                    let result = match op {
++                        Op::DeltaUpdate => self.v_machine.update_lane.update(i, s, a, b, outer[i]),
++                        Op::ReduceAcc => s * a,
++                        Op::DecayReduceAcc => {
++                            let p = s * a;
++                            let decayed = s - p;
++                            decayed * b
++                        }
++                        _ => unreachable!(),
++                    };
++                    values.push(result);
++                }
++                if op == Op::DeltaUpdate {
++                    let done = clock.compute(ready, 0, config.latency, config.interval);
++                    credits[slot] = self
++                        .v2_write(db, dst, &state_lines, &values, done, &mut clock)
++                        .await;
++                    supply_ready = done - u64::from(latency);
++                } else if is_tree {
++                    for value in &mut values {
++                        *value = rn(*value);
++                    }
++                    let done = clock.compute(
++                        ready,
++                        0,
++                        if op == Op::DecayReduceAcc {
++                            config.latency + 3
++                        } else {
++                            3
++                        },
++                        dot_ii,
++                    );
++                    self.tree_write(
++                        if self.v2.rows & 1 == 0 { 0 } else { 7 },
++                        (first * width) as u32,
++                        &values,
++                    )
++                    .await;
++                    credits[slot] = clock.vector(done, true, port);
++                    leaves_ready = leaves_ready.max(credits[slot]);
++                    supply_ready = done - u64::from(latency);
++                } else {
++                    // Actual context slot readiness includes both read/write
++                    // ports; inactive allocated slots never hide feedback.
++                    clock.feedback_wait += feedback[chunk].saturating_sub(ready);
++                    let read_done = clock.context(ready.max(feedback[chunk]), ctx_port, false);
++                    let done = clock.compute(
++                        read_done,
++                        feedback[chunk],
++                        dot_latency
++                            + if op == Op::DecayReduceAcc {
++                                config.latency
++                            } else {
++                                0
++                            },
++                        dot_ii,
++                    );
++                    for (i, value) in values.into_iter().enumerate() {
++                        self.v2.sums[first * width + i] += value;
++                    }
++                    let visible = clock.context(done, ctx_port, true);
++                    feedback[chunk] = visible;
++                    credits[slot] = visible;
++                    supply_ready = done - u64::from(latency);
++                    clock.end = clock.end.max(visible);
++                }
++                launched += 1;
++            }
++            if reducing {
++                if is_tree {
++                    row_ready = self.tree_fold(self.v2.rows, leaves_ready, &mut clock).await;
++                }
++                self.v2.rows += 1;
++            }
++        }
++        clock.retire().await;
++    }
++}
+diff --git a/transactional_emulator/src/dma.rs b/transactional_emulator/src/dma.rs
+index f042efc5..bb77534c 100644
+--- a/transactional_emulator/src/dma.rs
++++ b/transactional_emulator/src/dma.rs
+@@ -446,13 +446,27 @@ pub(crate) async fn store_rows_to_hbm(
+         // not be 64-aligned (sub-64 MLEN), and write_unaligned avoids
+         // clobbering neighbouring bytes. For MLEN >= 64 (element_addr
+         // 64-aligned, len a 64-multiple) this is equivalent to write_aligned.
+-        let _ = memory::chunked::write_unaligned(
+-            hbm,
+-            element_addr,
+-            len_in_bytes_per_store as usize,
+-            &element_bytes,
+-        )
+-        .await;
++        let write_window = std::env::var("PLENA_DMA_WRITE_WINDOW")
++            .ok()
++            .map(|s| s.parse::<usize>().expect("invalid DMA window"));
++        if let Some(window) = write_window {
++            memory::chunked::write_bursted(
++                hbm,
++                element_addr,
++                len_in_bytes_per_store as usize,
++                &element_bytes,
++                window,
++            )
++            .await;
++        } else {
++            let _ = memory::chunked::write_unaligned(
++                hbm,
++                element_addr,
++                len_in_bytes_per_store as usize,
++                &element_bytes,
++            )
++            .await;
++        }
+ 
+         // Write scale bytes to HBM (if Mx type). Handles unaligned addresses
+         // and scales that span multiple 64-byte chunks via read-modify-write.
+diff --git a/transactional_emulator/src/ltile_v2.rs b/transactional_emulator/src/ltile_v2.rs
+new file mode 100644
+index 00000000..22e60661
+--- /dev/null
++++ b/transactional_emulator/src/ltile_v2.rs
+@@ -0,0 +1,155 @@
++//! Fused delta-update lane. This module does not implement the KDA prediction
++//! context or a complete v2 recurrence schedule. Its timing is a conservative
++//! subpacket latency, with no assumed overlap across dependent SRAM packets.
++use std::sync::Mutex;
++
++#[derive(Debug, Clone, Copy)]
++pub(crate) struct UpdateConfig {
++    pub lanes: u32,
++    pub latency: u32,
++    pub interval: u32,
++    pub stochastic: bool,
++    pub seed: u32,
++}
++impl UpdateConfig {
++    pub fn from_env() -> Self {
++        fn number(name: &str, default: u32) -> u32 {
++            std::env::var(name).map_or(default, |s| s.parse().expect("invalid v2 lane parameter"))
++        }
++        let c = Self {
++            lanes: number("PLENA_V2_UPDATE_LANES", 256),
++            latency: number("PLENA_V2_UPDATE_LATENCY", 6),
++            interval: number("PLENA_V2_UPDATE_INTERVAL", 2),
++            stochastic: match std::env::var("PLENA_V2_STATE_ROUNDING").as_deref() {
++                Ok("sr") => true,
++                Ok("rn") | Err(_) => false,
++                _ => panic!("v2 state rounding must be rn or sr"),
++            },
++            seed: number("PLENA_V2_SR_SEED", 0x13579bdf),
++        };
++        c.validate();
++        c
++    }
++    pub fn validate(&self) {
++        assert!([128, 256, 512].contains(&self.lanes));
++        assert!(self.latency > 0 && self.interval > 0 && self.seed != 0);
++    }
++    pub fn packet_cycles(&self, values: usize) -> u32 {
++        assert!(values > 0);
++        self.latency + ((values as u32).div_ceil(self.lanes) - 1) * self.interval
++    }
++}
++
++pub(crate) struct UpdateLane {
++    pub config: UpdateConfig,
++    rng: Mutex<Vec<u32>>,
++}
++impl UpdateLane {
++    pub fn new(config: UpdateConfig) -> Self {
++        config.validate();
++        // Distinct deterministic per-physical-lane seeds. The GPU A2 experiment
++        // uses Philox instead; its trajectory must not be called RTL-exact.
++        let rng = (0..config.lanes)
++            .map(|i| {
++                if i == 0 {
++                    config.seed
++                } else {
++                    config.seed.wrapping_add(i.wrapping_mul(0x9e3779b9)) | 1
++                }
++            })
++            .collect();
++        Self {
++            config,
++            rng: Mutex::new(rng),
++        }
++    }
++    pub fn update(&self, lane: usize, s: f32, delta: f32, b: f32, x: f32) -> f32 {
++        assert!(lane < self.config.lanes as usize);
++        for value in [s, delta, b, x] {
++            assert_eq!(
++                value.to_bits() & 0xffff,
++                0,
++                "fused update inputs must be BF16"
++            );
++            assert!(value.is_finite(), "v2 finite-input contract");
++        }
++        // Deliberately separate FP32 operations: no mul_add and no BF16
++        // boundary until the final store. Matches the MODE3 host reference.
++        let product = delta * s;
++        let decayed = s - product;
++        let outer = b * x;
++        let result = decayed + outer;
++        let random = if self.config.stochastic {
++            let mut rng = self.rng.lock().expect("v2 RNG lock poisoned");
++            let random = (rng[lane] & 0xffff) as u16;
++            rng[lane] = (rng[lane] >> 1) ^ if rng[lane] & 1 != 0 { 0x80200003 } else { 0 };
++            Some(random)
++        } else {
++            None
++        };
++        f32::from_bits(u32::from(round_bf16(result, random)) << 16)
++    }
++}
++
++pub(crate) fn round_bf16(value: f32, random: Option<u16>) -> u16 {
++    let bits = value.to_bits();
++    if bits & 0x7f800000 == 0x7f800000 {
++        return ((bits >> 16) as u16) | if bits & 0x7fffff != 0 { 0x40 } else { 0 };
++    }
++    let upper = (bits >> 16) as u16;
++    match random {
++        Some(r) => upper.wrapping_add(u16::from(r < (bits & 0xffff) as u16)),
++        None => (bits.wrapping_add(0x7fff + u32::from(upper & 1)) >> 16) as u16,
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn preserves_small_decay_until_final_store() {
++        let lane = UpdateLane::new(UpdateConfig {
++            lanes: 128,
++            latency: 6,
++            interval: 2,
++            stochastic: false,
++            seed: 1,
++        });
++        // Fused update cancels the tiny decay using the outer term exactly;
++        // rounding an intermediate would lose that contribution.
++        assert_eq!(lane.update(0, 1.0, 1.0 / 512.0, 1.0, 1.0 / 512.0), 1.0);
++        assert_eq!(lane.config.packet_cycles(2048), 36);
++    }
++    #[test]
++    fn sr_is_unbiased_over_every_threshold_for_both_signs() {
++        for value in [1.003_f32, -1.003_f32, 0.000123_f32, -0.000123_f32] {
++            let bits = value.to_bits();
++            let top = (bits >> 16) as u16;
++            let increments = (0..=u16::MAX)
++                .filter(|&r| round_bf16(value, Some(r)) != top)
++                .count();
++            assert_eq!(increments, (bits & 0xffff) as usize);
++        }
++    }
++    #[test]
++    fn lane_zero_matches_mode3_lfsr_stream() {
++        let c = UpdateConfig {
++            lanes: 256,
++            latency: 6,
++            interval: 2,
++            stochastic: true,
++            seed: 0x13579bdf,
++        };
++        let lane = UpdateLane::new(c);
++        let mut rng = c.seed;
++        for _ in 0..8192 {
++            let value = 1.0_f32 - 1.0 / 512.0 + 1.0 / 1024.0;
++            assert_eq!(
++                lane.update(0, 1.0, 1.0 / 512.0, 1.0, 1.0 / 1024.0)
++                    .to_bits(),
++                u32::from(round_bf16(value, Some(rng as u16))) << 16
++            );
++            rng = (rng >> 1) ^ if rng & 1 != 0 { 0x80200003 } else { 0 };
++        }
++    }
++}
+diff --git a/transactional_emulator/src/main.rs b/transactional_emulator/src/main.rs
+index b14c4221..bc5fd9da 100644
+--- a/transactional_emulator/src/main.rs
++++ b/transactional_emulator/src/main.rs
+@@ -2,6 +2,7 @@ mod accelerator;
+ mod cli;
+ mod dma;
+ mod load_config;
++mod ltile_v2;
+ mod matrix_core;
+ mod matrix_machine;
+ mod op;
+@@ -9,6 +10,7 @@ mod runner;
+ mod runtime_config;
+ mod stage_profile;
+ mod timing;
++mod v2_timing;
+ mod vector_machine;
+ 
+ use runtime::{Executor, Instant};
+diff --git a/transactional_emulator/src/op.rs b/transactional_emulator/src/op.rs
+index 9949be58..4f4c75f9 100644
+--- a/transactional_emulator/src/op.rs
++++ b/transactional_emulator/src/op.rs
+@@ -24,6 +24,12 @@ pub enum LTilePrimitive {
+     ScaleAccum,
+     DotReduce,
+     OuterUpdate,
++    DeltaUpdate,
++    ReduceBegin,
++    ReduceAcc,
++    DecayReduceAcc,
++    ReduceWrite,
++    ResidualWrite,
+ }
+ 
+ impl TryFrom<u8> for LTilePrimitive {
+@@ -34,6 +40,12 @@ impl TryFrom<u8> for LTilePrimitive {
+             0 => Ok(Self::ScaleAccum),
+             1 => Ok(Self::DotReduce),
+             2 => Ok(Self::OuterUpdate),
++            3 => Ok(Self::DeltaUpdate),
++            4 => Ok(Self::ReduceBegin),
++            5 => Ok(Self::ReduceAcc),
++            6 => Ok(Self::DecayReduceAcc),
++            7 => Ok(Self::ReduceWrite),
++            8 => Ok(Self::ResidualWrite),
+             _ => Err(()),
+         }
+     }
+@@ -1450,6 +1462,17 @@ mod tests {
+ 
+     #[test]
+     fn l_tile_forms_and_explicit_matrix_consumer_match_compiler_words() {
++        // Compiler encode_l_tile_exec(1,2,3,DELTA_UPDATE) => 0x00ccc87f.
++        assert!(matches!(
++            Opcode::decode(0x00cc_c87f),
++            Opcode::L_TILE_EXEC {
++                rd: 1,
++                rs1: 2,
++                rs2: 3,
++                primitive: LTilePrimitive::DeltaUpdate,
++                ..
++            }
++        ));
+         match Opcode::decode(rform(0x3F, 7, 9, 2, 0, 1)) {
+             Opcode::L_TILE_CFG {
+                 shape,
+diff --git a/transactional_emulator/src/runner.rs b/transactional_emulator/src/runner.rs
+index f6ec791e..f7afb3ac 100644
+--- a/transactional_emulator/src/runner.rs
++++ b/transactional_emulator/src/runner.rs
+@@ -264,11 +264,21 @@ pub(crate) async fn run_from_cli() {
+             "additional_dot_accumulator_bytes": if std::env::var("PLENA_EXPERIMENTAL_FP32_DOT").as_deref() == Ok("1") { 4 * *VLEN } else { 0 },
+             "experimental_dot_latency_assumption": "configured vector FP32 mul+add; reset and BF16 conversion one cycle each",
+             "counters": counters,
++            "hbm_read_bytes": hbm.statistics().total_bytes_read,
++            "hbm_write_bytes": hbm.statistics().total_bytes_written,
++            "dma_write_window": std::env::var("PLENA_DMA_WRITE_WINDOW").ok(),
++            "exact_view_dma": std::env::var("PLENA_EXACT_VIEW_DMA").as_deref() == Ok("1"),
+             "period_picos": period,
+             "total_picos": elapsed.as_picos(),
+             "dma_and_memory_wait_picos": elapsed.as_picos() - charged_picos,
+             "scalar_and_control_cycles": counters.charged_cycles - counters.issue_cycles
+-                - counters.bank_service_cycles - counters.arithmetic_cycles,
++                - counters.bank_service_cycles - counters.arithmetic_cycles - counters.dependency_cycles,
++            "v2": {
++                "lanes": accelerator.v2_config_report(),
++                "retirement": "serial instructions/DMA; resource reservations overlap micro-operations inside each v2 instruction",
++                "attribution": "exclusive elapsed cycles: bank union first, uncovered arithmetic pipeline occupancy second, remaining dependency/drain gaps third; not causal bottleneck fractions",
++                "feedback_wait": "sum of blocked launch delays; overlaps other resource activity, not an additive total component"
++            },
+             "ordinary_bank_policy": "one single-ported all-bank VLEN row per cycle; binary two reads plus one write",
+             "scope": "serial issue + bank + arithmetic + scalar/control + DMA/memory waits; no overlap credit",
+         });
+diff --git a/transactional_emulator/src/timing.rs b/transactional_emulator/src/timing.rs
+index 394a14af..2ef00192 100644
+--- a/transactional_emulator/src/timing.rs
++++ b/transactional_emulator/src/timing.rs
+@@ -91,6 +91,17 @@ pub(crate) struct ExecutionCounters {
+     pub issue_cycles: u64,
+     pub bank_service_cycles: u64,
+     pub arithmetic_cycles: u64,
++    pub dependency_cycles: u64,
++    pub v2_instructions: u64,
++    pub v2_matrix_reads: u64,
++    pub v2_matrix_writes: u64,
++    pub v2_matrix_words: u64,
++    pub v2_vector_reads: u64,
++    pub v2_vector_writes: u64,
++    pub v2_context_reads: u64,
++    pub v2_context_writes: u64,
++    pub v2_subchunk_launches: u64,
++    pub v2_feedback_wait: u64,
+     pub charged_cycles: u64,
+ }
+ thread_local! {
+@@ -142,6 +153,31 @@ pub(crate) async fn charge_arithmetic_cycles(cycles: u32) {
+     charge_cycles(cycles).await;
+ }
+ 
++pub(crate) fn record_v2(
++    calendar: &crate::v2_timing::Calendar,
++    _bank: u64,
++    _arithmetic: u64,
++    _idle: u64,
++) {
++    update_execution(|c| {
++        c.v2_instructions += 1;
++        c.v2_matrix_reads += calendar.matrix_reads;
++        c.v2_matrix_writes += calendar.matrix_writes;
++        c.v2_matrix_words += calendar.matrix_words;
++        c.v2_vector_reads += calendar.vector_reads;
++        c.v2_vector_writes += calendar.vector_writes;
++        c.v2_context_reads += calendar.context_reads;
++        c.v2_context_writes += calendar.context_writes;
++        c.v2_subchunk_launches += calendar.launches;
++        c.v2_feedback_wait += calendar.feedback_wait;
++    });
++}
++
++pub(crate) async fn charge_dependency_cycles(cycles: u32) {
++    update_execution(|c| c.dependency_cycles += u64::from(cycles));
++    charge_cycles(cycles).await;
++}
++
+ #[cfg(test)]
+ mod tests {
+     use runtime::{Duration, Executor, Instant};
+diff --git a/transactional_emulator/src/v2_timing.rs b/transactional_emulator/src/v2_timing.rs
+new file mode 100644
+index 00000000..547c22a4
+--- /dev/null
++++ b/transactional_emulator/src/v2_timing.rs
+@@ -0,0 +1,126 @@
++//! Resource reservations made by executed v2 micro-operations, not an opcode
++//! census. Instructions retire after all reservations complete. Functional
++//! reads/writes stay ordered; timestamps capture overlap inside the bounded
++//! walker. No inter-instruction or DMA overlap is credited.
++use std::collections::BTreeSet;
++
++#[derive(Default)]
++pub(crate) struct Calendar {
++    matrix: BTreeSet<u64>,
++    vector: BTreeSet<u64>,
++    arithmetic: BTreeSet<u64>,
++    context_read_port: BTreeSet<u64>,
++    context_write_port: BTreeSet<u64>,
++    next_issue: u64,
++    pub end: u64,
++    pub feedback_wait: u64,
++    pub matrix_reads: u64,
++    pub matrix_writes: u64,
++    pub matrix_words: u64,
++    pub vector_reads: u64,
++    pub vector_writes: u64,
++    pub context_reads: u64,
++    pub context_writes: u64,
++    pub launches: u64,
++}
++
++impl Calendar {
++    fn reserve(port: &mut BTreeSet<u64>, earliest: u64, cycles: u64) -> u64 {
++        assert!(cycles > 0);
++        let mut t = earliest;
++        loop {
++            if let Some(&busy) = port.range(t..t + cycles).next() {
++                t = busy + 1;
++            } else {
++                port.extend(t..t + cycles);
++                return t + cycles;
++            }
++        }
++    }
++    pub fn matrix(&mut self, earliest: u64, cycles: u64, words: u64, write: bool) -> u64 {
++        self.matrix_reads += u64::from(!write);
++        self.matrix_writes += u64::from(write);
++        self.matrix_words += words;
++        let end = Self::reserve(&mut self.matrix, earliest, cycles.max(1));
++        self.end = self.end.max(end);
++        end
++    }
++    pub fn vector(&mut self, earliest: u64, write: bool, cycles: u64) -> u64 {
++        self.vector_reads += u64::from(!write);
++        self.vector_writes += u64::from(write);
++        let end = Self::reserve(&mut self.vector, earliest, cycles);
++        self.end = self.end.max(end);
++        end
++    }
++    pub fn compute(
++        &mut self,
++        operands_ready: u64,
++        feedback_ready: u64,
++        latency: u32,
++        ii: u32,
++    ) -> u64 {
++        let possible = operands_ready.max(self.next_issue);
++        let start = possible.max(feedback_ready);
++        self.feedback_wait += start - possible;
++        self.next_issue = start + u64::from(ii);
++        let end = start + u64::from(latency);
++        self.arithmetic.extend(start..end);
++        self.end = self.end.max(end);
++        self.launches += 1;
++        end
++    }
++    pub fn existing_arithmetic(&mut self, ready: u64, latency: u32) -> u64 {
++        let end = ready + u64::from(latency);
++        self.arithmetic.extend(ready..end);
++        self.end = self.end.max(end);
++        end
++    }
++    pub fn context(&mut self, ready: u64, cycles: u64, write: bool) -> u64 {
++        let port = if write {
++            self.context_writes += 1;
++            &mut self.context_write_port
++        } else {
++            self.context_reads += 1;
++            &mut self.context_read_port
++        };
++        let end = Self::reserve(port, ready, cycles);
++        self.end = self.end.max(end);
++        end
++    }
++    pub async fn retire(self) {
++        let mut bank: BTreeSet<_> = self.matrix.union(&self.vector).copied().collect();
++        bank.extend(&self.context_read_port);
++        bank.extend(&self.context_write_port);
++        let exposed_arithmetic = self.arithmetic.difference(&bank).count() as u64;
++        let idle = self.end - bank.len() as u64 - exposed_arithmetic;
++        crate::timing::record_v2(&self, bank.len() as u64, exposed_arithmetic, idle);
++        crate::timing::charge_bank_cycles(bank.len() as u64).await;
++        crate::timing::charge_arithmetic_cycles(exposed_arithmetic.try_into().unwrap()).await;
++        crate::timing::charge_dependency_cycles(idle.try_into().unwrap()).await;
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn six_cycle_pipeline_accepts_every_two_cycles() {
++        let mut c = Calendar::default();
++        for _ in 0..8 {
++            c.compute(0, 0, 6, 2);
++        }
++        assert_eq!(c.end, 20);
++        assert_eq!(c.launches, 8);
++    }
++    #[test]
++    fn feedback_uses_active_slots_and_ports_cannot_double_book() {
++        let mut c = Calendar::default();
++        let first = c.compute(0, 0, 6, 2);
++        assert_eq!(c.compute(0, first, 6, 2), 12);
++        assert_eq!(c.feedback_wait, 4);
++        assert_eq!(c.matrix(0, 2, 2, false), 2);
++        assert_eq!(c.matrix(0, 2, 2, true), 4);
++        assert_eq!(c.matrix(8, 1, 1, false), 9);
++        assert_eq!(c.matrix(0, 2, 2, false), 6);
++    }
++}
+diff --git a/transactional_emulator/src/vector_machine.rs b/transactional_emulator/src/vector_machine.rs
+index 812d0ea5..ed2da131 100644
+--- a/transactional_emulator/src/vector_machine.rs
++++ b/transactional_emulator/src/vector_machine.rs
+@@ -33,6 +33,7 @@ pub(crate) struct VectorMachine {
+     mask_unit: u32,
+     packet_counters: PacketCounters,
+     dot_accumulator: Option<Vec<f32>>,
++    pub(crate) update_lane: crate::ltile_v2::UpdateLane,
+ }
+ 
+ #[derive(Debug, Default)]
+@@ -154,6 +155,7 @@ impl VectorMachine {
+             mask_unit,
+             packet_counters: PacketCounters::default(),
+             dot_accumulator: None,
++            update_lane: crate::ltile_v2::UpdateLane::new(crate::ltile_v2::UpdateConfig::from_env()),
+         }
+     }
+ 
+@@ -711,7 +713,60 @@ impl VectorMachine {
+                 result[index] = a * dst[index] + b * src[source_index];
+             }
+         }
+-        crate::timing::charge_arithmetic_cycles(2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
++        // The v2 profile cannot obtain a hidden full-width FP32 affine unit
++        // for Mamba's dt*x / output skip. Share the bounded update lane bank.
++        // Legacy opcode 0 retains its arithmetic and RNE store (no SR draw).
++        // This old packet interface conservatively drains each L-sized chunk.
++        let cycles = if std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1") {
++            assert!(dst.len() <= self.update_lane.config.lanes as usize);
++            self.update_lane.config.packet_cycles(dst.len())
++        } else {
++            2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES
++        };
++        crate::timing::charge_arithmetic_cycles(cycles).await;
++        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
++    }
++
++    /// v2 fused delta update; separate from the legacy affine primitive.
++    pub(crate) async fn tile_delta_update(
++        &self,
++        destination: QuantTensor,
++        source: QuantTensor,
++        scales: QuantTensor,
++        row_width: u32,
++        scale_width: u32,
++        scale_layout: TileScaleLayout,
++    ) -> QuantTensor {
++        let dst = tensor_to_f32_vec(destination.as_tensor());
++        let src = tensor_to_f32_vec(source.as_tensor());
++        let coeff = tensor_to_f32_vec(scales.as_tensor());
++        assert!(row_width > 0 && dst.len().is_multiple_of(row_width as usize));
++        let rows = dst.len() / row_width as usize;
++        assert!(src.len() == row_width as usize || src.len() == dst.len());
++        assert!(dst.len() <= self.update_lane.config.lanes as usize);
++        scale_layout.validate(coeff.len(), rows, scale_width, 2);
++        let result = dst
++            .iter()
++            .enumerate()
++            .map(|(index, &s)| {
++                let row = index / row_width as usize;
++                let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
++                let source_index = if src.len() == row_width as usize {
++                    index % row_width as usize
++                } else {
++                    index
++                };
++                self.update_lane.update(
++                    index,
++                    s,
++                    coeff[coefficient],
++                    coeff[coefficient + 1],
++                    src[source_index],
++                )
++            })
++            .collect::<Vec<_>>();
++        crate::timing::charge_arithmetic_cycles(self.update_lane.config.packet_cycles(dst.len()))
++            .await;
+         QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
+     }
+ 

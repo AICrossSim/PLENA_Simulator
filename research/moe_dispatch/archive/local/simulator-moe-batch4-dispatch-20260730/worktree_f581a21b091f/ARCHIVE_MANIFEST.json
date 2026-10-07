@@ -1,0 +1,79 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/tracked_worktree_vs_HEAD.patch",
+      "bytes": 13430,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "d903022db4728f8e1e99fc1f5eb63e3c1dfa3264e93a211b827eaa7f5b4ba7ed",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    },
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/modified_source/transactional_emulator/src/accelerator/dispatch.rs",
+      "bytes": 32134,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/dispatch.rs",
+      "sha256": "0e41da5fa91b6468d46d559547461e01ad1ba3b694aab393bdebe9c2a7eaa920",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    },
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/modified_source/transactional_emulator/src/accelerator/mod.rs",
+      "bytes": 2847,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/mod.rs",
+      "sha256": "9f942ef11a57f4290da56902f04732ba9f3c2a9349ce5b126c6e399bc9169ec3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    },
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/modified_source/transactional_emulator/src/accelerator/registers.rs",
+      "bytes": 5259,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/registers.rs",
+      "sha256": "44f75e41f121c1274ce30bed2e16cb495269ef38b9ceefc01b269ef06f48dbe2",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    },
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/modified_source/transactional_emulator/src/op.rs",
+      "bytes": 26612,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/op.rs",
+      "sha256": "e399c3281ef56c189b44c7454878e4b6a86390c651552cd168f67a0d1216f5b5",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    },
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/modified_source/transactional_emulator/src/vector_machine.rs",
+      "bytes": 28579,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/vector_machine.rs",
+      "sha256": "91f6af4b192c2d2d33fab73dee9f06acbc7576651cec7c29dafc63ef1bf3b568",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    },
+    {
+      "archive": "local/simulator-moe-batch4-dispatch-20260730/worktree_f581a21b091f/untracked/transactional_emulator/src/accelerator/route_state.rs",
+      "bytes": 10233,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/route_state.rs",
+      "sha256": "31e8ab85bac36a50958dbbe3a8115bcd99f504386b50aaec6465910591025e47",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+    }
+  ],
+  "origin": {
+    "HEAD": "0e327b871f26256e1f60b2a41ce651977902a90b",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": "refs/heads/local/simulator-moe-batch4-dispatch-20260730",
+    "original_branch_for_archive": "local/simulator-moe-batch4-dispatch-20260730",
+    "stable_id": "f581a21b091f",
+    "worktree": "/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

@@ -1,0 +1,2143 @@
+diff --git a/transactional_emulator/src/bin/moe_dual_normal.rs b/transactional_emulator/src/bin/moe_dual_normal.rs
+index a1015093..1f7aeb0b 100644
+--- a/transactional_emulator/src/bin/moe_dual_normal.rs
++++ b/transactional_emulator/src/bin/moe_dual_normal.rs
+@@ -10,7 +10,7 @@ mod moe_normal;
+ use std::io::{Read, Write};
+ use std::mem::ManuallyDrop;
+ use std::path::{Path, PathBuf};
+-use std::sync::Arc;
++use std::sync::{Arc, Mutex};
+ 
+ use clap::Parser;
+ use serde_json::json;
+@@ -35,10 +35,51 @@ struct Opts {
+ 
+ // Oracle removes DRAM and its native ingress only. Upstream DMA, decode,
+ // SRAM, scheduling and numerical memory contents are still exercised.
+-struct IdealTiming;
++#[derive(Default, serde::Serialize)]
++struct IdealCounters {
++    accepted: u64,
++    completed: u64,
++    pending: u64,
++    read_bytes: u64,
++    write_bytes: u64,
++}
++
++#[derive(Clone, Default)]
++struct IdealTiming(Arc<Mutex<IdealCounters>>);
++impl IdealTiming {
++    fn complete(&self, bytes: u64, write: bool) {
++        // Observer state, not hardware storage. Service completes immediately,
++        // but still counts the exact 32 B sectors requested by the finite DMA.
++        let mut counters = self.0.lock().unwrap();
++        counters.accepted += bytes / 32;
++        counters.pending += bytes / 32;
++        if write {
++            counters.write_bytes += bytes;
++        } else {
++            counters.read_bytes += bytes;
++        }
++        counters.completed += bytes / 32;
++        counters.pending -= bytes / 32;
++    }
++
++    fn telemetry(&self) -> serde_json::Value {
++        let mut value = serde_json::to_value(&*self.0.lock().unwrap()).unwrap();
++        value["request_bytes"] = json!(32);
++        value["backend"] = json!("native_timing_bypassed_zero_latency_oracle");
++        value
++    }
++}
+ impl memory::MemoryTimingModel for IdealTiming {
+-    async fn read(&self, _: u64) {}
+-    async fn write(&self, _: u64) {}
++    async fn read(&self, _: u64) {
++        self.complete(64, false);
++    }
++    async fn read_mask(&self, addr: u64, mask: u8) {
++        assert!(addr.is_multiple_of(64) && (1..=3).contains(&mask));
++        self.complete(32 * u64::from(mask.count_ones()), false);
++    }
++    async fn write(&self, _: u64) {
++        self.complete(64, true);
++    }
+     fn supports_sector_reads(&self) -> bool {
+         true
+     }
+@@ -150,10 +191,11 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
+     let diagnostic = architecture.diagnostic.clone();
+     let library_path = PathBuf::from(ramulator::raw::Ramulator::library_path()).canonicalize()?;
+     let library_sha256 = sha256_file(&library_path)?;
++    let ideal_observer = diagnostic.ideal_hbm.then(IdealTiming::default);
+     let (hbm, native_observer): (Arc<dyn memory::ErasedMemoryModel>, _) = if diagnostic.ideal_hbm {
+         (
+             Arc::new(memory::WithStats::new(memory::WithTiming::new(
+-                IdealTiming,
++                ideal_observer.as_ref().unwrap().clone(),
+                 backing,
+             ))),
+             None,
+@@ -188,6 +230,15 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
+         .await
+         .map_err(std::io::Error::other)?;
+     let native_telemetry = native_observer.as_ref().map(|n| n.telemetry());
++    let ideal_telemetry = ideal_observer.as_ref().map(IdealTiming::telemetry);
++    if let Some(ref observed) = ideal_telemetry
++        && (observed["pending"] != 0
++            || observed["accepted"] != observed["completed"]
++            || observed["read_bytes"] != report.hbm_read_bytes
++            || observed["write_bytes"] != report.hbm_write_bytes)
++    {
++        return Err("oracle requests not drained or sector byte accounting differs".into());
++    }
+     if native_telemetry
+         .as_ref()
+         .is_some_and(|t| t["native_pending"] != 0)
+@@ -217,7 +268,7 @@ async fn execute(opts: Opts) -> Result<(), Box<dyn std::error::Error>> {
+             "native_library_sha256": library_sha256,
+             "executable_sha256": sha256_file(&std::env::current_exe()?)?,
+         },
+-        "memory_model": {"name": if diagnostic.ideal_hbm { "ideal_memory_timing_oracle" } else { "Ramulator HBM2 with explicit timing profile" }, "channels": opts.hbm_channels, "upper_burst_bytes": 64, "calibration": native_telemetry},
++        "memory_model": {"name": if diagnostic.ideal_hbm { "ideal_memory_timing_oracle" } else { "Ramulator HBM2 with explicit timing profile" }, "channels": opts.hbm_channels, "upper_burst_bytes": 64, "calibration": native_telemetry, "oracle": ideal_telemetry},
+         "workload_manifest": workload_json,
+         "architecture_manifest": architecture_json,
+         "result": report,
+@@ -253,3 +304,34 @@ async fn main() {
+         std::process::exit(1);
+     }
+ }
++
++#[cfg(test)]
++mod oracle_tests {
++    use super::*;
++    use memory::{MemoryModel, MemoryTimingModel};
++
++    #[tokio::test]
++    async fn ideal_supply_counts_sectors_and_preserves_backing_bytes() {
++        let timing = IdealTiming::default();
++        let backing = memory::MemoryBacked::with_capacity(64);
++        backing.with_data(|bytes| {
++            for (i, b) in bytes.iter_mut().enumerate() {
++                *b = i as u8;
++            }
++        });
++        let model = memory::WithStats::new(memory::WithTiming::new(timing.clone(), backing));
++        for mask in [1, 2, 3] {
++            let got = model.read_mask(0, mask).await;
++            assert_eq!(got, std::array::from_fn(|i| i as u8));
++        }
++        timing.read(0).await;
++        timing.write(0).await;
++        let observed = timing.telemetry();
++        assert_eq!(model.statistics().total_bytes_read, 128);
++        assert_eq!(observed["read_bytes"], 192);
++        assert_eq!(observed["write_bytes"], 64);
++        assert_eq!(observed["accepted"], 8);
++        assert_eq!(observed["completed"], 8);
++        assert_eq!(observed["pending"], 0);
++    }
++}
+diff --git a/transactional_emulator/src/moe_normal/engine.rs b/transactional_emulator/src/moe_normal/engine.rs
+index 50701554..11761571 100644
+--- a/transactional_emulator/src/moe_normal/engine.rs
++++ b/transactional_emulator/src/moe_normal/engine.rs
+@@ -16,8 +16,17 @@ use super::dma_credits::CreditPool;
+ use super::read_cache::{ENTRY_BYTES, ReadCache};
+ use super::types::*;
+ 
++#[path = "control_port.rs"]
++mod control_port;
+ #[path = "output_pool.rs"]
+ mod output_pool;
++use control_port::{ControlLease, ControlPort};
++#[path = "reserved_credits.rs"]
++mod reserved_credits;
++#[path = "split_data.rs"]
++mod split_data;
++use reserved_credits::ReservedCreditPool;
++use split_data::{PackedTile, spawn_packed_load};
+ 
+ const BLOCK: usize = 8;
+ const OUTPUT_CONTEXT_BYTES: usize = 32;
+@@ -35,9 +44,10 @@ fn refined_context_bytes(rows: usize, c: &CoreConfig) -> Result<usize, String> {
+             // allocations are representations of these charged records.
+             return checked(&[pool.output_contexts, 128], "pool context/band metadata")?
+                 .checked_add(checked(
+-                    &[c.weight_slots + pool.operand_stages, 64],
++                    &[c.resident_slots() + pool.operand_stages, 64],
+                     "pool slot/stage metadata",
+                 )?)
++                .and_then(|bytes| bytes.checked_add(c.stream_control_bytes().ok()?))
+                 .ok_or_else(|| "pool metadata overflow".into());
+         }
+         checked(
+@@ -110,7 +120,14 @@ fn pipeline_bytes(a: &Architecture, c: &CoreConfig) -> Result<usize, String> {
+ 
+ fn weight_slot_bytes(c: &CoreConfig) -> Result<usize, String> {
+     // BF16 decoded tile, packed E4M3 elements and packed E8M0 scales.
+-    checked(&[c.blen, c.mlen / BLOCK, 25], "weight slot")
++    checked(
++        &[
++            c.blen,
++            c.mlen / BLOCK,
++            if c.split_window().is_some() { 9 } else { 25 },
++        ],
++        "weight slot",
++    )
+ }
+ 
+ fn vector_bytes(w: &Workload, rows: usize) -> Result<usize, String> {
+@@ -133,6 +150,7 @@ fn accumulator_bytes(
+     .checked_add(pipeline_bytes(a, c)?)
+     .and_then(|v| v.checked_add(refined_context_bytes(rows, c).ok()?))
+     .and_then(|v| v.checked_add(refined_result_bytes(rows, c).ok()?))
++    .and_then(|v| v.checked_add(a.diagnostic.additional_control_port_bytes()))
+     .ok_or_else(|| "accumulator plus pipeline storage overflow".into())
+ }
+ 
+@@ -197,6 +215,9 @@ fn job_fits(w: &Workload, a: &Architecture, c: &CoreConfig, job: &Job) -> bool {
+ }
+ 
+ fn pool_cohort_fits(rows: usize, c: &CoreConfig) -> bool {
++    if c.cohort_control() && rows.div_ceil(m_rows(c)) > 32 {
++        return false; // The paid 16 B event contains a 32-bit relative M mask.
++    }
+     c.refinement.as_ref().is_none_or(|r| {
+         r.output_pool
+             .as_ref()
+@@ -364,6 +385,17 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
+         let per_tile_macs = checked(&[m_rows(c), c.blen, c.mlen], "tile MACs")? as u128;
+         let mut tile_latency = service_cycles(a, c) as u128 + extra_cycles(a, c) as u128;
+         if let Some(r) = &c.refinement {
++            if c.event_ready()
++                && (r.output_pool.is_none()
++                    || r.output_pool
++                        .as_ref()
++                        .is_some_and(|p| p.scheduler_cycles != 1))
++            {
++                return Err(
++                    "event-ready control requires an output pool with one-cycle scheduler service"
++                        .into(),
++                );
++            }
+             // Conservative serialization bound includes decoded writes, latch
+             // preload and both accumulator directions (overlap can only help).
+             tile_latency += 2 * checked(&[c.blen, c.mlen], "operand service")?
+@@ -376,7 +408,7 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
+                 // one additional scan each (load, writeback, retirement).
+                 // Bound those scans per issued macro tile, including admission.
+                 let visits = (pool.output_contexts as u128 * 64
+-                    + c.weight_slots as u128 * 32
++                    + c.resident_slots() as u128 * 32
+                     + pool.operand_stages as u128 * 32
+                     + 128)
+                     .checked_mul(pool.scheduler_cycles as u128)
+@@ -471,6 +503,21 @@ fn validate_model_bounds(w: &Workload, a: &Architecture, p: &Plan) -> Result<(),
+ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), String> {
+     super::weight_bank::validate_contract(w)?;
+     let d = &a.diagnostic;
++    if !(1..=2).contains(&d.control_ports) {
++        return Err("control_ports must be one or two".into());
++    }
++    if d.charge_legacy_control
++        && a.cores.iter().any(|c| {
++            c.refinement
++                .as_ref()
++                .is_none_or(|r| r.output_pool.is_some() || r.active_n_tiles != 3)
++        })
++    {
++        return Err("charge_legacy_control requires N3 on every core".into());
++    }
++    if d.control_ports > 1 && !d.charge_legacy_control && a.cores.iter().any(|c| !c.event_ready()) {
++        return Err("two control ports require an event or charged N3 controller".into());
++    }
+     let factors = [
+         d.mac_speedup,
+         d.activation_speedup,
+@@ -480,6 +527,19 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+         d.dma_speedup,
+         d.vector_speedup,
+     ];
++    if d.oracle_control != OracleControl::Charged
++        && (a
++            .cores
++            .iter()
++            .any(|c| !c.cohort_control() || c.split_window().is_none())
++            || factors.iter().any(|&factor| factor != 1)
++            || d.event_updates_zero_cost
++            || d.charge_legacy_control
++            || d.control_ports != 1
++            || d.hbm_profile != ramulator::config::hbm2::HbmDiagnostic::Native)
++    {
++        return Err("oracle control timing requires Step2 split/cohort cores, one control port and otherwise unchanged service timing".into());
++    }
+     if factors.iter().any(|x| !(1..=64).contains(x)) {
+         return Err("diagnostic speedups must be integers in 1..=64".into());
+     }
+@@ -491,6 +551,11 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+     if d.ideal_hbm && d.hbm_profile != ramulator::config::hbm2::HbmDiagnostic::Native {
+         return Err("ideal_hbm cannot be combined with a native HBM timing profile".into());
+     }
++    if (d.allow_three_operand_stages || d.event_updates_zero_cost)
++        && a.cores.iter().any(|c| !c.event_ready())
++    {
++        return Err("step1 event diagnostics require event_ready on every core".into());
++    }
+     if !(1..=2).contains(&a.schema_version)
+         || a.cores
+             .iter()
+@@ -535,6 +600,11 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+         if !(1..=2).contains(&dma.lookup_ii_cycles) {
+             return Err("lookup_ii_cycles must be 1 or 2".into());
+         }
++        if dma.reserved_byte_credits
++            && (dma.fair_credits || a.cores.iter().any(|c| c.split_window().is_none()))
++        {
++            return Err("reserved-byte credits require split windows on all cores and exclude fixed minimum credits".into());
++        }
+         if dma.fair_credits && a.global_dma_credits < 8 {
+             return Err("fair DMA credits require at least 8 credits".into());
+         }
+@@ -550,6 +620,37 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+     }
+     let mut ids = BTreeSet::new();
+     for c in &a.cores {
++        if let Some(control) = c.refinement.as_ref().and_then(|r| r.stream_ctrl.as_ref()) {
++            if control.split_slot_lifetime {
++                let window = control
++                    .split_window
++                    .as_ref()
++                    .ok_or("split_slot_lifetime needs a split_window configuration")?;
++                if !c.cohort_control()
++                    || ![3, 6].contains(&window.window_tiles)
++                    || !matches!(window.aging_multiplier, None | Some(2 | 4 | 8))
++                    || window.load_latency_sum_ps == 0
++                    || window.load_latency_samples == 0
++                    || w.input_dim > u32::MAX as usize
++                    || w.expert_hidden_dim > u32::MAX as usize
++                    || a.dma.as_ref().is_some_and(|d| {
++                        d.issue_policy != ramulator::model::IssuePolicy::PerChannel
++                    })
++                {
++                    return Err("split windows require cohort control, W=3/6, measured L, aging 2/4/8/off, bounded dimensions and native per_channel".into());
++                }
++                window.threshold_ps()?;
++                if c.refinement
++                    .as_ref()
++                    .and_then(|r| r.output_pool.as_ref())
++                    .is_none_or(|p| p.operand_stages != 2)
++                {
++                    return Err("split windows have exactly two paid operand stages".into());
++                }
++            } else if control.split_window.is_some() {
++                return Err("split window parameters supplied while mechanism is disabled".into());
++            }
++        }
+         if c.activation_elements_per_cycle == Some(0) {
+             return Err("activation supply must be positive".into());
+         }
+@@ -581,7 +682,7 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+         if let Some(r) = &c.refinement {
+             if r.m_rows == 0
+                 || !(1..=3).contains(&r.active_n_tiles)
+-                || (r.output_pool.is_none() && r.active_n_tiles > c.weight_slots)
++                || (r.output_pool.is_none() && r.active_n_tiles > c.resident_slots())
+                 || r.weight_read_elements_per_cycle == 0
+                 || r.accumulator_elements_per_cycle == 0
+                 || a.matrix_timing != MatrixTiming::Pipelined
+@@ -591,11 +692,13 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+             let stages = if let Some(pool) = &r.output_pool {
+                 if r.active_n_tiles != 2
+                     || !(1..=256).contains(&pool.output_contexts)
+-                    || !(1..=2).contains(&pool.operand_stages)
+-                    || pool.operand_stages > c.weight_slots
++                    || !(1..=if d.allow_three_operand_stages { 3 } else { 2 })
++                        .contains(&pool.operand_stages)
++                    || pool.operand_stages > c.resident_slots()
+                     || pool.scheduler_cycles == 0
++                    || (c.event_ready() && pool.scheduler_cycles != 1)
+                 {
+-                    return Err("output pool requires active_n_tiles=2, 1..256 output contexts, 1..2 operand stages and positive scheduler_cycles".into());
++                    return Err("output pool requires active_n_tiles=2, 1..256 contexts, 1..2 operand stages (3 only with the explicit diagnostic opt-in), and positive scheduler_cycles".into());
+                 }
+                 pool.scheduler_cycles
+                     .checked_mul(a.clock_period_ps)
+@@ -627,7 +730,7 @@ pub fn validate(w: &Workload, a: &Architecture, hbm_len: u64) -> Result<(), Stri
+             );
+         }
+         let need = weight_slot_bytes(c)?
+-            .checked_mul(c.weight_slots)
++            .checked_mul(c.resident_slots())
+             .and_then(|v| v.checked_add(c.refinement.as_ref().map_or(0, |r| r.operand_latch_bytes)))
+             .ok_or("weight SRAM overflow")?;
+         if need > c.weight_sram_bytes {
+@@ -740,6 +843,33 @@ impl CoreState {
+                         pending_result_reserved_bytes: refined_result_bytes(1, c).unwrap(),
+                         ..Default::default()
+                     }),
++                    stream_ctrl: c.event_ready().then(|| StreamControlReport {
++                        selection: r.stream_ctrl.as_ref().unwrap().selection,
++                        budget: "accumulator".into(),
++                        additional_control_bytes: c.stream_control_bytes().unwrap(),
++                        event_capacity: c.resident_slots(),
++                        cohort_control: c.cohort_control(),
++                        control_ports: a.diagnostic.control_ports,
++                        additional_port_bytes: a.diagnostic.additional_control_port_bytes(),
++                        ..Default::default()
++                    }),
++                    split_window: c.split_window().map(|w| SplitWindowReport {
++                        packed_slots: c.resident_slots(),
++                        window_header_bytes: 16 * w.window_tiles,
++                        packed_slot_bytes: weight_slot_bytes(c).unwrap(),
++                        operand_stage_bytes: c.blen * c.mlen * 2,
++                        weight_reserved_bytes: c.resident_slots() * weight_slot_bytes(c).unwrap()
++                            + r.operand_latch_bytes,
++                        aging_threshold_ps: w.threshold_ps().unwrap(),
++                        ..Default::default()
++                    }),
++                    legacy_control: a.diagnostic.charge_legacy_control.then(|| {
++                        LegacyControlReport {
++                            control_ports: a.diagnostic.control_ports,
++                            additional_port_bytes: a.diagnostic.additional_control_port_bytes(),
++                            ..Default::default()
++                        }
++                    }),
+                     ..Default::default()
+                 }),
+                 tile_loads: TileLoadStats::default(),
+@@ -771,7 +901,7 @@ impl SlotReservation {
+         let slots = core.slots.fetch_add(1, Ordering::SeqCst) + 1;
+         let occupied = core.weight_bytes.fetch_add(bytes, Ordering::SeqCst) + bytes;
+         assert!(
+-            slots <= core.config.weight_slots && occupied <= core.config.weight_sram_bytes,
++            slots <= core.config.resident_slots() && occupied <= core.config.weight_sram_bytes,
+             "weight slot ownership violated"
+         );
+         core.slots_peak.fetch_max(slots, Ordering::SeqCst);
+@@ -779,12 +909,14 @@ impl SlotReservation {
+         let mut observed = core.projection_observed.lock().unwrap();
+         observed.weight_slots_peak = observed.weight_slots_peak.max(slots);
+         drop(observed);
++        core.change_lifetime(bytes as i64, 0, 0);
+         Self { core, bytes }
+     }
+ }
+ 
+ impl Drop for SlotReservation {
+     fn drop(&mut self) {
++        self.core.change_lifetime(-(self.bytes as i64), 0, 0);
+         self.core.slots.fetch_sub(1, Ordering::SeqCst);
+         self.core
+             .weight_bytes
+@@ -796,6 +928,7 @@ struct Dma {
+     hbm: Arc<dyn ErasedMemoryModel>,
+     credits: Semaphore,
+     fair_pool: Option<Arc<CreditPool>>,
++    reserved_pool: Option<Arc<ReservedCreditPool>>,
+     core_indices: BTreeMap<String, usize>,
+     inflight: AtomicUsize,
+     peak: AtomicUsize,
+@@ -820,6 +953,11 @@ fn frontend_bytes(a: &Architecture) -> Result<usize, String> {
+     let mut bytes = checked(&[a.global_dma_credits, 120], "DMA line metadata")?
+         .checked_add(8192)
+         .ok_or("DMA control storage overflow")?;
++    if a.dma.as_ref().is_some_and(|d| d.reserved_byte_credits) {
++        bytes = bytes
++            .checked_add(64 + 32 * a.cores.len())
++            .ok_or("credit state overflow")?;
++    }
+     if demand {
+         // Native priority/age/order: 16B * 256 trackers. Reserve 32 channel
+         // heads (the runner's maximum), and two 4B priority IDs per line.
+@@ -843,7 +981,7 @@ fn frontend_bytes(a: &Architecture) -> Result<usize, String> {
+         .ok_or("DMA tile state overflow")?;
+         bytes = bytes
+             .checked_add(checked(
+-                &[c.weight_slots, tile],
++                &[c.resident_slots(), tile],
+                 "DMA resident descriptors",
+             )?)
+             .ok_or("DMA frontend storage overflow")?;
+@@ -933,10 +1071,12 @@ impl Dma {
+         {
+             // Four banks, conservative 2-cycle occupied lookup, common to all
+             // DMA V1 policies including global-FIFO and coalescing-off controls.
++            let wait_start = ex.now().as_picos();
+             let _port = self.lookup[(address as usize / 64) % 4]
+                 .acquire()
+                 .await
+                 .unwrap();
++            core.split_observe(|r| r.dma_lookup_wait_ps += ex.now().as_picos() - wait_start);
+             // Two-cycle latency with an independently pipelined lookup port.
+             ex.resolve_at(Duration::from_picos(
+                 config.lookup_ii_cycles as u64 * self.clock,
+@@ -998,12 +1138,14 @@ impl Dma {
+                 })
+                 .collect()
+         };
++        let native_start = ex.now().as_picos();
+         let responses = futures::future::join_all(
+             sectors
+                 .into_iter()
+                 .map(|(index, future)| async move { (index, future.await) }),
+         )
+         .await;
++        core.split_observe(|r| r.dma_native_response_wait_ps += ex.now().as_picos() - native_start);
+         let mut bytes = [0; 64];
+         for (index, data) in responses {
+             bytes[index * 32..index * 32 + 32].copy_from_slice(&data);
+@@ -1011,10 +1153,12 @@ impl Dma {
+         {
+             // Eight return/copy banks, 32 B per cycle each. Duplicate consumers
+             // each pay copy service; multicast and SRAM writes are not free.
++            let wait_start = ex.now().as_picos();
+             let _port = self.copy[(address as usize / 64) % 8]
+                 .acquire()
+                 .await
+                 .unwrap();
++            core.split_observe(|r| r.dma_copy_wait_ps += ex.now().as_picos() - wait_start);
+             let duration = useful.div_ceil(32) as u64 * self.clock;
+             ex.resolve_at(Duration::from_picos(duration)).await;
+             self.report.lock().unwrap().copy_busy_ps += duration;
+@@ -1214,6 +1358,13 @@ async fn load_tile(
+     for rx in pending {
+         rx.await.map_err(|_| "DMA request task failed")?;
+     }
++    if c.event_ready() {
++        core.projection_observed
++            .lock()
++            .unwrap()
++            .first_tile_arrival_ps
++            .get_or_insert(Executor::current().now().as_picos());
++    }
+     // MX decode and BF16 placement use the same finite shared vector actor;
+     // decoded data cannot become available for free at the final HBM response.
+     let wait = shared.vector.work(nr * kr).await;
+@@ -1381,6 +1532,31 @@ impl RefinedOutput {
+     }
+ }
+ 
++async fn legacy_control_access<'a>(
++    port: &'a ControlPort,
++    core: &CoreState,
++    band: usize,
++    kind: usize,
++) -> ControlLease<'a> {
++    let cycles = [2, 3, 2][kind];
++    let duration = (cycles * core.clock).div_ceil(core.diagnostic.scheduler_speedup);
++    let lease = port.access(duration, band).await;
++    let mut report = core.report.lock().unwrap();
++    let r = report
++        .refinement
++        .as_mut()
++        .unwrap()
++        .legacy_control
++        .as_mut()
++        .unwrap();
++    r.operations_by_kind[kind] += 1;
++    r.service_cycles_by_kind[kind] += cycles;
++    r.service_ps_by_kind[kind] += lease.duration;
++    r.wait_ps_by_kind[kind] += lease.wait;
++    r.control_conflict_wait_ps += lease.conflict_wait;
++    lease
++}
++
+ /// Normal V2: fixed physical P×R operands, independent temporal token extent,
+ /// finite ports and up to three independent output-column groups. Numerical
+ /// updates retain ascending global K; the feedback latency remains analytical.
+@@ -1403,6 +1579,10 @@ async fn refined_gemm(
+     // injects zero instead of reading/clearing old accumulator SRAM contents.
+     acc.fill(0.0);
+     let active = r.active_n_tiles.min(n.div_ceil(c.blen));
++    let control = a
++        .diagnostic
++        .charge_legacy_control
++        .then(|| Arc::new(ControlPort::new(a.diagnostic.control_ports, active)));
+     let wake = Arc::new(Notify::new());
+     let mut groups: Vec<_> = (0..active)
+         .map(|i| {
+@@ -1410,7 +1590,7 @@ async fn refined_gemm(
+                 i * c.blen,
+                 m,
+                 c,
+-                c.weight_slots / active + usize::from(i < c.weight_slots % active),
++                c.resident_slots() / active + usize::from(i < c.resident_slots() % active),
+             )
+         })
+         .collect();
+@@ -1493,9 +1673,17 @@ async fn refined_gemm(
+         let g = &mut groups[group_index];
+         if !g.latched {
+             refined_port_work(core, true, c.blen * c.mlen, a.clock_period_ps).await;
++            let _control = if let Some(port) = &control {
++                Some(legacy_control_access(port, core, group_index, 1).await)
++            } else {
++                None
++            };
+             g.operands.copy_from_slice(&g.tile.as_ref().unwrap().values);
+             g.latched = true;
+         }
++        if let Some(port) = &control {
++            let _control = legacy_control_access(port, core, group_index, 0).await;
++        }
+         let m0 = mb * r.m_rows;
+         let mr = r.m_rows.min(m - m0);
+         let nr = c.blen.min(n - g.n);
+@@ -1524,9 +1712,15 @@ async fn refined_gemm(
+         let completion_core = core.clone();
+         let completion_wake = wake.clone();
+         let clock = a.clock_period_ps;
++        let completion_control = control.clone();
+         ex.spawn(async move {
+             Executor::current().resolve_at(result_time).await;
+             refined_port_work(&completion_core, false, mr * nr, clock).await;
++            let _control = if let Some(port) = &completion_control {
++                Some(legacy_control_access(port, &completion_core, group_index, 2).await)
++            } else {
++                None
++            };
+             done.store(true, Ordering::SeqCst);
+             completion_wake.notify_one();
+         });
+@@ -1555,6 +1749,19 @@ async fn refined_gemm(
+             g.issued.fill(false);
+         }
+     }
++    if let Some(control) = &control {
++        let (busy, peak) = control.occupancy();
++        let mut report = core.report.lock().unwrap();
++        let r = report
++            .refinement
++            .as_mut()
++            .unwrap()
++            .legacy_control
++            .as_mut()
++            .unwrap();
++        r.control_occupancy_ps += busy;
++        r.control_ports_peak = r.control_ports_peak.max(peak);
++    }
+     // All FP32 writebacks have completed. Materializing a BF16 projection in
+     // vector SRAM costs an accumulator read plus shared vector conversion/copy.
+     // It cannot be consumed by SwiGLU/down until both services complete.
+@@ -1620,7 +1827,7 @@ async fn gemm(
+     let mut issued = 0;
+     // Initial window reserves every slot before DMA. At each retirement exactly
+     // one slot becomes reusable; READY tiles keep their ownership meanwhile.
+-    for spec in specs.iter().take(c.weight_slots) {
++    for spec in specs.iter().take(c.resident_slots()) {
+         pending.push_back(spawn_load(
+             core.clone(),
+             shared.clone(),
+@@ -1719,6 +1926,13 @@ fn projection_counters(report: &CoreReport) -> ProjectionMetrics {
+             metrics.tile_admissions = pool.tile_admissions;
+             metrics.context_updates = pool.context_updates;
+         }
++        if let Some(s) = &r.stream_ctrl
++            && s.cohort_control
++        {
++            metrics.burst_starts = Some(s.burst_starts);
++            metrics.completion_mask_cycles = Some(s.completion_mask_cycles);
++            metrics.sequencer_cycles = Some(s.sequencer_cycles);
++        }
+     }
+     metrics
+ }
+@@ -1771,6 +1985,18 @@ async fn projection_gemm(
+         tile_admissions,
+         context_updates
+     );
++    metrics.burst_starts = after
++        .burst_starts
++        .zip(before.burst_starts)
++        .map(|(a, b)| a - b);
++    metrics.completion_mask_cycles = after
++        .completion_mask_cycles
++        .zip(before.completion_mask_cycles)
++        .map(|(a, b)| a - b);
++    metrics.sequencer_cycles = after
++        .sequencer_cycles
++        .zip(before.sequencer_cycles)
++        .map(|(a, b)| a - b);
+     report.projections.push(ProjectionReport {
+         job: job.id,
+         expert: job.expert,
+@@ -1976,6 +2202,11 @@ pub async fn execute(
+                 .as_ref()
+                 .filter(|d| d.fair_credits)
+                 .map(|_| Arc::new(CreditPool::new(a.global_dma_credits, a.cores.len()))),
++            reserved_pool: a
++                .dma
++                .as_ref()
++                .filter(|d| d.reserved_byte_credits)
++                .map(|_| Arc::new(ReservedCreditPool::new(a.global_dma_credits, a.cores.len()))),
+             core_indices: a
+                 .cores
+                 .iter()
+@@ -2098,6 +2329,19 @@ pub async fn execute(
+             r
+         })
+         .collect();
++    if let Some(pool) = &shared.dma.reserved_pool {
++        pool.assert_drained();
++    }
++    // Completion must mean all finite frontend ownership is returned, even
++    // when an oracle replaces native timing with immediate sector responses.
++    if shared.dma.inflight.load(Ordering::SeqCst) != 0
++        || shared.dma.credits.available_permits() != a.global_dma_credits
++        || !shared.dma.lines.lock().unwrap().is_empty()
++        || shared.dma.lookup.iter().any(|p| p.available_permits() != 1)
++        || shared.dma.copy.iter().any(|p| p.available_permits() != 1)
++    {
++        return Err("DMA frontend ownership not drained".into());
++    }
+     let inflight_peak = shared.dma.peak.load(Ordering::SeqCst);
+     let mut completions = shared.completions.lock().unwrap().clone();
+     for j in &mut completions {
+@@ -2157,6 +2401,7 @@ mod dma_lifetime_tests {
+             sector_reads: true,
+             coalesce: true,
+             fair_credits: false,
++            reserved_byte_credits: false,
+             lookup_ii_cycles: 2,
+             frontend_sram_bytes: 45056,
+         });
+@@ -2174,6 +2419,7 @@ mod dma_lifetime_tests {
+             hbm: hbm.clone(),
+             credits: Semaphore::new(2),
+             fair_pool: None,
++            reserved_pool: None,
+             core_indices: BTreeMap::new(),
+             inflight: AtomicUsize::new(0),
+             peak: AtomicUsize::new(0),
+diff --git a/transactional_emulator/src/moe_normal/mod.rs b/transactional_emulator/src/moe_normal/mod.rs
+index 7ca676b1..f3ff2ef9 100644
+--- a/transactional_emulator/src/moe_normal/mod.rs
++++ b/transactional_emulator/src/moe_normal/mod.rs
+@@ -19,3 +19,6 @@ pub use types::*;
+ mod output_pool_tests;
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++mod split_window_tests;
+diff --git a/transactional_emulator/src/moe_normal/output_pool.rs b/transactional_emulator/src/moe_normal/output_pool.rs
+index d85bd899..fce29e8b 100644
+--- a/transactional_emulator/src/moe_normal/output_pool.rs
++++ b/transactional_emulator/src/moe_normal/output_pool.rs
+@@ -3,6 +3,9 @@
+ //! cohort before its slot can be reused. No local accumulation or K reordering.
+ use super::*;
+ 
++#[path = "event_ready.rs"]
++mod event_ready;
++
+ struct Context {
+     ready: Arc<AtomicBool>,
+     next_k: usize,
+@@ -83,6 +86,9 @@ pub(super) async fn gemm(
+     a: &Architecture,
+     shared: &Arc<Shared>,
+ ) -> Result<(), String> {
++    if core.config.event_ready() {
++        return event_ready::gemm(input, output, accumulator, m, region, core, a, shared).await;
++    }
+     let c = &core.config;
+     let r = c.refinement.as_ref().unwrap();
+     let pool = r.output_pool.as_ref().unwrap();
+diff --git a/transactional_emulator/src/moe_normal/output_pool_tests.rs b/transactional_emulator/src/moe_normal/output_pool_tests.rs
+index 4f6d9bcf..da6a20d3 100644
+--- a/transactional_emulator/src/moe_normal/output_pool_tests.rs
++++ b/transactional_emulator/src/moe_normal/output_pool_tests.rs
+@@ -18,6 +18,371 @@ fn pool_architecture(contexts: usize, stages: usize) -> Architecture {
+     a
+ }
+ 
++fn event_architecture(contexts: usize, stages: usize, selection: ReadySelection) -> Architecture {
++    let mut a = pool_architecture(contexts, stages);
++    for c in &mut a.cores {
++        c.refinement.as_mut().unwrap().stream_ctrl = Some(StreamControlConfig {
++            event_ready: true,
++            selection,
++            ..Default::default()
++        });
++    }
++    a
++}
++
++#[tokio::test]
++async fn cohort_bursts_preserve_tail_k_order_bytes_and_reconcile_every_control_visit() {
++    for (me, mt, feedback, ports, selection) in [
++        (1, 1, 0, 1, ReadySelection::Rotating),
++        (8, 1, 60, 1, ReadySelection::Rotating),
++        (17, 1, 0, 1, ReadySelection::Lowest),
++        (32, 1, 60, 2, ReadySelection::Rotating),
++        (17, 4, 0, 2, ReadySelection::Lowest),
++        (32, 4, 0, 1, ReadySelection::Rotating),
++    ] {
++        let (mut w, bytes, dense) = fixture();
++        w.inputs_bf16 = vec![w.inputs_bf16[0].clone(); me];
++        w.routes = (0..me)
++            .map(|token| Route {
++                token,
++                slot: 0,
++                expert: 0,
++                weight: 1.0,
++            })
++            .collect();
++        let mut a = event_architecture(32, 2, selection);
++        a.dispatch_threshold = 1;
++        a.mac_pipeline_cycles = feedback;
++        for c in &mut a.cores {
++            c.mlen = 8; // D=9/F=11 force ascending K segments and padded tails.
++            c.weight_slots = 3;
++            let r = c.refinement.as_mut().unwrap();
++            r.m_rows = mt;
++            r.operand_latch_bytes = 2 * c.blen * c.mlen * 2;
++        }
++        let old = simulate(w.clone(), a.clone(), &bytes).await;
++        a.diagnostic.control_ports = ports;
++        for c in &mut a.cores {
++            c.refinement
++                .as_mut()
++                .unwrap()
++                .stream_ctrl
++                .as_mut()
++                .unwrap()
++                .cohort_control = true;
++        }
++        let one = simulate(w.clone(), a.clone(), &bytes).await;
++        let two = simulate(w.clone(), a.clone(), &bytes).await;
++        assert_eq!(
++            serde_json::to_value(&one).unwrap(),
++            serde_json::to_value(&two).unwrap()
++        );
++        assert_eq!(one.output_bf16, reference(&w, &dense));
++        assert_eq!(one.hbm_read_bytes, old.hbm_read_bytes);
++        for (got, expected) in [&one.output_f32, &one.pre_round_output_f32]
++            .into_iter()
++            .zip([&old.output_f32, &old.pre_round_output_f32])
++        {
++            assert_eq!(
++                got.iter()
++                    .flatten()
++                    .map(|x| x.to_bits())
++                    .collect::<Vec<_>>(),
++                expected
++                    .iter()
++                    .flatten()
++                    .map(|x| x.to_bits())
++                    .collect::<Vec<_>>()
++            );
++        }
++        let c = &one.cores[0];
++        let d = c.refinement.as_ref().unwrap();
++        let s = d.stream_ctrl.as_ref().unwrap();
++        let p = d.output_pool.as_ref().unwrap();
++        let admission: u64 = c
++            .projections
++            .iter()
++            .map(|x| x.metrics.band_admissions * (x.m.div_ceil(mt) as u64 + 1))
++            .sum();
++        assert_eq!(
++            p.scheduler_visits,
++            admission
++                + 8 * p.tile_admissions
++                + p.context_updates
++                + 4 * s.burst_starts
++                + s.completion_mask_cycles
++        );
++        assert_eq!(s.burst_starts, s.burst_completions);
++        assert_eq!(
++            s.event_counts_by_kind,
++            [p.tile_admissions, p.tile_admissions, s.burst_starts]
++        );
++        assert_eq!(
++            s.event_update_cycles_by_kind,
++            [
++                p.tile_admissions,
++                p.context_updates,
++                2 * s.burst_starts + s.completion_mask_cycles
++            ]
++        );
++        assert_eq!(s.completed_contexts, p.context_updates);
++        assert_eq!(s.writeback_order_checks, p.context_updates);
++        assert!(s.sequencer_cycles >= p.context_updates);
++        assert_eq!(s.sequencer_busy_ps, s.sequencer_cycles * a.clock_period_ps);
++        assert_eq!(
++            s.sequencer_cycles - p.context_updates,
++            s.burst_not_ready_checks
++        );
++        assert!(s.completion_collectors_peak <= 32);
++        assert_eq!(p.scheduler_busy_ps, p.scheduler_visits * a.clock_period_ps);
++        assert!(
++            s.control_occupancy_ps <= p.scheduler_busy_ps
++                && p.scheduler_busy_ps <= s.control_occupancy_ps * ports as u64
++        );
++        assert_eq!(
++            c.accumulator_peak_bytes,
++            old.cores[0].accumulator_peak_bytes + (ports - 1) * 64
++        );
++    }
++}
++
++#[tokio::test]
++async fn charged_n3_uses_identical_ports_and_exact_issue_install_completion_charges() {
++    let (w, bytes, _) = fixture();
++    let mut a = refined_architecture(3);
++    for c in &mut a.cores {
++        c.weight_slots = 3;
++        c.mlen = 8;
++        c.refinement.as_mut().unwrap().operand_latch_bytes = 3 * c.blen * c.mlen * 2;
++    }
++    let old = simulate(w.clone(), a.clone(), &bytes).await;
++    a.diagnostic.charge_legacy_control = true;
++    for ports in [1, 2] {
++        a.diagnostic.control_ports = ports;
++        let r = simulate(w.clone(), a.clone(), &bytes).await;
++        assert_eq!(r.output_bf16, old.output_bf16);
++        assert_eq!(r.output_f32, old.output_f32);
++        assert_eq!(r.pre_round_output_f32, old.pre_round_output_f32);
++        assert_eq!(r.hbm_read_bytes, old.hbm_read_bytes);
++        for (i, c) in r.cores.iter().enumerate() {
++            let d = c.refinement.as_ref().unwrap();
++            let l = d.legacy_control.as_ref().unwrap();
++            let tiles: u64 = c
++                .projections
++                .iter()
++                .map(|p| p.metrics.tile_loads.count)
++                .sum();
++            let issues: u64 = c
++                .projections
++                .iter()
++                .map(|p| p.metrics.tile_loads.count * p.m.div_ceil(d.m_rows) as u64)
++                .sum();
++            assert_eq!(l.operations_by_kind, [issues, tiles, issues]);
++            assert_eq!(
++                l.service_cycles_by_kind,
++                [2 * issues, 3 * tiles, 2 * issues]
++            );
++            assert_eq!(
++                l.service_ps_by_kind,
++                l.service_cycles_by_kind.map(|x| x * a.clock_period_ps)
++            );
++            assert_eq!(
++                c.accumulator_peak_bytes,
++                old.cores[i].accumulator_peak_bytes + (ports - 1) * 64
++            );
++            let total: u64 = l.service_ps_by_kind.iter().sum();
++            assert!(
++                l.control_occupancy_ps <= total && total <= l.control_occupancy_ps * ports as u64
++            );
++        }
++    }
++}
++
++#[test]
++fn cohort_mask_and_control_port_costs_cannot_escape_validation() {
++    let (mut w, bytes, _) = fixture();
++    let mut a = event_architecture(64, 2, ReadySelection::Rotating);
++    for c in &mut a.cores {
++        let r = c.refinement.as_mut().unwrap();
++        r.m_rows = 1;
++        r.stream_ctrl.as_mut().unwrap().cohort_control = true;
++    }
++    for ports in [0, 3] {
++        a.diagnostic.control_ports = ports;
++        assert!(validate(&w, &a, bytes.len() as u64).is_err());
++    }
++    a.diagnostic.control_ports = 1;
++    w.inputs_bf16 = vec![w.inputs_bf16[0].clone(); 33];
++    w.routes = (0..33)
++        .map(|token| Route {
++            token,
++            slot: 0,
++            expert: 0,
++            weight: 1.0,
++        })
++        .collect();
++    assert!(validate(&w, &a, bytes.len() as u64).is_err());
++}
++
++#[tokio::test]
++async fn long_event_fanout_backpressures_completions_without_losing_them() {
++    let (mut w, bytes, dense) = fixture();
++    w.inputs_bf16 = vec![w.inputs_bf16[0].clone(); 32];
++    w.routes = (0..32)
++        .map(|token| Route {
++            token,
++            slot: 0,
++            expert: 0,
++            weight: 1.0,
++        })
++        .collect();
++    w.shared_expert = None;
++    let mut a = event_architecture(32, 1, ReadySelection::Rotating);
++    a.mac_pipeline_cycles = 0;
++    for c in &mut a.cores {
++        c.weight_slots = 1;
++        let r = c.refinement.as_mut().unwrap();
++        r.m_rows = 1;
++        r.accumulator_elements_per_cycle = 32;
++    }
++    let report = simulate(w.clone(), a, &bytes).await;
++    assert_eq!(report.output_bf16, reference(&w, &dense));
++    let active = report.cores.iter().find(|c| c.jobs > 0).unwrap();
++    let s = active
++        .refinement
++        .as_ref()
++        .unwrap()
++        .stream_ctrl
++        .as_ref()
++        .unwrap();
++    assert!(s.blocked_producers_peak > 0);
++    assert!(s.event_queue_wait_ps > 0);
++    assert_eq!(s.event_queue_peak, 1);
++    assert_eq!(s.events_enqueued, s.events_processed);
++}
++
++#[test]
++fn event_control_is_disabled_by_default_and_charged_to_accumulator() {
++    let (w, bytes, _) = fixture();
++    let mut legacy = pool_architecture(32, 2);
++    for c in &mut legacy.cores {
++        c.weight_slots = 3;
++    }
++    let mut candidate = legacy.clone();
++    for c in &mut candidate.cores {
++        c.refinement.as_mut().unwrap().stream_ctrl = Some(StreamControlConfig {
++            event_ready: true,
++            ..Default::default()
++        });
++        assert_eq!(c.stream_control_bytes().unwrap(), 208);
++    }
++    let disabled: StreamControlConfig = serde_json::from_str("{}").unwrap();
++    assert!(!disabled.event_ready);
++    assert_eq!(disabled.selection, ReadySelection::Rotating);
++    let c = &mut candidate.cores[0];
++    let r = c.refinement.as_ref().unwrap();
++    let before = 4 * w.input_dim.max(w.expert_hidden_dim) * 4
++        + 4 * c.blen * (c.mlen.ilog2() as usize + candidate.mac_pipeline_cycles as usize)
++        + 128 * 32
++        + 64 * (3 + 2)
++        + 4 * 32 * r.m_rows * c.blen;
++    c.accumulator_bytes = before + 208;
++    validate(&w, &candidate, bytes.len() as u64).unwrap();
++    candidate.cores[0].accumulator_bytes -= 1;
++    assert!(validate(&w, &candidate, bytes.len() as u64).is_err());
++}
++
++#[tokio::test]
++async fn both_event_selectors_preserve_bytes_k_order_ports_and_repeat() {
++    let (w, bytes, dense) = fixture();
++    let legacy = simulate(w.clone(), pool_architecture(8, 2), &bytes).await;
++    for selection in [ReadySelection::Lowest, ReadySelection::Rotating] {
++        let a = event_architecture(8, 2, selection);
++        let one = simulate(w.clone(), a.clone(), &bytes).await;
++        let two = simulate(w.clone(), a.clone(), &bytes).await;
++        assert_eq!(one.output_bf16, reference(&w, &dense));
++        assert_eq!(one.output_f32, legacy.output_f32);
++        assert_eq!(
++            one.pre_round_output_f32
++                .iter()
++                .flatten()
++                .map(|x| x.to_bits())
++                .collect::<Vec<_>>(),
++            legacy
++                .pre_round_output_f32
++                .iter()
++                .flatten()
++                .map(|x| x.to_bits())
++                .collect::<Vec<_>>()
++        );
++        assert_eq!(one.hbm_read_bytes, legacy.hbm_read_bytes);
++        assert_eq!(
++            serde_json::to_value(&one).unwrap(),
++            serde_json::to_value(&two).unwrap()
++        );
++        for ((old, new), config) in legacy.cores.iter().zip(&one.cores).zip(&a.cores) {
++            let detail = new.refinement.as_ref().unwrap();
++            let s = detail.stream_ctrl.as_ref().unwrap();
++            let pool = detail.output_pool.as_ref().unwrap();
++            assert_eq!(s.events_enqueued, s.events_processed);
++            assert!(s.event_queue_peak <= config.weight_slots);
++            assert_eq!(s.budget, "accumulator");
++            assert_eq!(
++                new.accumulator_peak_bytes,
++                old.accumulator_peak_bytes + config.stream_control_bytes().unwrap()
++            );
++            assert_eq!(new.vector_sram_peak_bytes, old.vector_sram_peak_bytes);
++            assert_eq!(
++                detail.accumulator_port_busy_ps,
++                old.refinement.as_ref().unwrap().accumulator_port_busy_ps
++            );
++            assert_eq!(
++                detail.weight_port_busy_ps,
++                old.refinement.as_ref().unwrap().weight_port_busy_ps
++            );
++            assert_eq!(s.fanout_writes, pool.context_updates);
++            assert_eq!(s.event_fanout_busy_ps, s.fanout_writes * a.clock_period_ps);
++            assert_eq!(
++                pool.scheduler_busy_ps,
++                pool.scheduler_visits * a.clock_period_ps
++            );
++            assert!(pool.scheduler_busy_ps <= one.total_ps);
++            assert!(
++                new.projections
++                    .iter()
++                    .all(|p| p.metrics.first_tile_arrival_ps.is_some())
++            );
++        }
++    }
++}
++
++#[tokio::test]
++async fn event_queue_backpressure_drains_with_one_slot_slow_feedback_and_partial_cohorts() {
++    let (w, bytes, dense) = fixture();
++    for mt in [1, 3] {
++        let mut a = event_architecture(8, 1, ReadySelection::Rotating);
++        a.mac_pipeline_cycles = 100;
++        a.global_dma_credits = 1;
++        a.global_dma_staging_bytes = 64;
++        for c in &mut a.cores {
++            c.weight_slots = 1;
++            let r = c.refinement.as_mut().unwrap();
++            r.m_rows = mt;
++            r.accumulator_elements_per_cycle = 1;
++            r.weight_read_elements_per_cycle = 1;
++        }
++        let result = simulate(w.clone(), a, &bytes).await;
++        assert_eq!(result.output_bf16, reference(&w, &dense));
++        assert_eq!(result.job_completions.len(), 3);
++        assert!(result.total_ps < 100_000_000);
++        for c in &result.cores {
++            let s = c.refinement.as_ref().unwrap().stream_ctrl.as_ref().unwrap();
++            assert_eq!(s.event_queue_peak, 1);
++            assert_eq!(s.events_enqueued, s.events_processed);
++        }
++    }
++}
++
+ #[test]
+ fn pool_rejects_an_incomplete_m_cohort_before_execution() {
+     let (w, bytes, _) = fixture();
+@@ -62,6 +427,110 @@ fn pool_scheduler_and_operand_stages_have_finite_positive_costs() {
+     assert!(validate(&w, &bad, bytes.len() as u64).is_err());
+ }
+ 
++#[tokio::test]
++async fn diagnostic_third_stage_needs_opt_in_and_full_weight_and_control_funding() {
++    let (w, bytes, _) = fixture();
++    let mut a = event_architecture(8, 3, ReadySelection::Rotating);
++    for c in &mut a.cores {
++        c.weight_slots = 3;
++        c.weight_sram_bytes =
++            3 * c.blen * c.mlen * 25 / 8 + c.refinement.as_ref().unwrap().operand_latch_bytes;
++    }
++    assert!(validate(&w, &a, bytes.len() as u64).is_err());
++    a.diagnostic.allow_three_operand_stages = true;
++    validate(&w, &a, bytes.len() as u64).unwrap();
++    a.cores[0].weight_sram_bytes -= 1;
++    assert!(validate(&w, &a, bytes.len() as u64).is_err());
++    a.cores[0].weight_sram_bytes += 1;
++    let mut ordinary = a.clone();
++    for c in &mut ordinary.cores {
++        let r = c.refinement.as_mut().unwrap();
++        r.output_pool.as_mut().unwrap().operand_stages = 2;
++        r.operand_latch_bytes = 2 * c.blen * c.mlen * 2;
++    }
++    let before = simulate(w.clone(), ordinary, &bytes).await;
++    for (config, observed) in a.cores.iter_mut().zip(&before.cores) {
++        assert!(observed.jobs > 0);
++        config.accumulator_bytes = observed.accumulator_peak_bytes + 64;
++    }
++    validate(&w, &a, bytes.len() as u64).unwrap();
++    a.cores[0].accumulator_bytes -= 1;
++    assert!(validate(&w, &a, bytes.len() as u64).is_err());
++}
++
++#[tokio::test]
++async fn event_cost_and_third_stage_diagnostics_preserve_k_order_bytes_and_drain() {
++    let (w, bytes, _) = fixture();
++    let ordinary = simulate(
++        w.clone(),
++        event_architecture(8, 2, ReadySelection::Rotating),
++        &bytes,
++    )
++    .await;
++    for stages in [2, 3] {
++        for zero_cost in [false, true] {
++            let mut a = event_architecture(8, stages, ReadySelection::Rotating);
++            a.diagnostic.allow_three_operand_stages = stages == 3;
++            a.diagnostic.event_updates_zero_cost = zero_cost;
++            for c in &mut a.cores {
++                c.weight_slots = 3;
++            }
++            let r = simulate(w.clone(), a.clone(), &bytes).await;
++            assert_eq!(r.output_bf16, ordinary.output_bf16);
++            for (got, expected) in [&r.output_f32, &r.pre_round_output_f32]
++                .into_iter()
++                .zip([&ordinary.output_f32, &ordinary.pre_round_output_f32])
++            {
++                assert_eq!(
++                    got.iter()
++                        .flatten()
++                        .map(|v| v.to_bits())
++                        .collect::<Vec<_>>(),
++                    expected
++                        .iter()
++                        .flatten()
++                        .map(|v| v.to_bits())
++                        .collect::<Vec<_>>()
++                );
++            }
++            assert_eq!(r.hbm_read_bytes, ordinary.hbm_read_bytes);
++            for c in &r.cores {
++                let d = c.refinement.as_ref().unwrap();
++                let p = d.output_pool.as_ref().unwrap();
++                let s = d.stream_ctrl.as_ref().unwrap();
++                assert_eq!(s.events_enqueued, s.events_processed);
++                assert_eq!(
++                    s.event_counts_by_kind,
++                    [p.tile_admissions, p.tile_admissions, p.context_updates]
++                );
++                assert_eq!(
++                    s.event_update_cycles_by_kind,
++                    [p.tile_admissions, p.context_updates, 2 * p.context_updates]
++                );
++                let busy: u64 = s.event_service_ps_by_kind.iter().sum();
++                assert_eq!(
++                    s.event_service_mac_overlap_ps + s.event_service_no_mac_ps,
++                    busy
++                );
++                assert!(s.event_service_mac_overlap_ps <= c.compute_busy_ps);
++                let nominal: u64 = s.event_update_cycles_by_kind.iter().sum();
++                assert_eq!(
++                    busy,
++                    if zero_cost {
++                        0
++                    } else {
++                        nominal * a.clock_period_ps
++                    }
++                );
++                assert_eq!(
++                    p.scheduler_busy_ps,
++                    (p.scheduler_visits - if zero_cost { nominal } else { 0 }) * a.clock_period_ps
++                );
++            }
++        }
++    }
++}
++
+ #[test]
+ fn pool_capacity_boundary_includes_control_pending_and_packed_scales() {
+     let (w, bytes, _) = fixture();
+diff --git a/transactional_emulator/src/moe_normal/tests.rs b/transactional_emulator/src/moe_normal/tests.rs
+index a5c740fd..8540d39f 100644
+--- a/transactional_emulator/src/moe_normal/tests.rs
++++ b/transactional_emulator/src/moe_normal/tests.rs
+@@ -641,6 +641,7 @@ async fn native_dma_variants_preserve_moe_and_shared_expert_with_tail_masks() {
+                 sector_reads: sector,
+                 coalesce,
+                 fair_credits: fair,
++                reserved_byte_credits: false,
+                 lookup_ii_cycles: 2,
+                 frontend_sram_bytes: 45056,
+             });
+@@ -666,6 +667,7 @@ fn dma_metadata_and_prefetch_slots_fail_closed() {
+         sector_reads: true,
+         coalesce: true,
+         fair_credits: false,
++        reserved_byte_credits: false,
+         lookup_ii_cycles: 2,
+         frontend_sram_bytes: 1,
+     });
+@@ -724,6 +726,7 @@ async fn pipelined_dma_lookup_accounts_port_occupancy_and_preserves_numerics() {
+             sector_reads: true,
+             coalesce: true,
+             fair_credits: false,
++            reserved_byte_credits: false,
+             lookup_ii_cycles: ii,
+             frontend_sram_bytes: 45056,
+         });
+@@ -758,6 +761,7 @@ pub(super) fn refined_architecture(active: usize) -> Architecture {
+             accumulator_elements_per_cycle: 2,
+             operand_latch_bytes: active * core.blen * core.mlen * 2,
+             output_pool: None,
++            stream_ctrl: None,
+         });
+     }
+     a
+diff --git a/transactional_emulator/src/moe_normal/types.rs b/transactional_emulator/src/moe_normal/types.rs
+index a2f089fc..495af80e 100644
+--- a/transactional_emulator/src/moe_normal/types.rs
++++ b/transactional_emulator/src/moe_normal/types.rs
+@@ -118,6 +118,105 @@ pub struct CoreRefinement {
+     pub operand_latch_bytes: usize,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub output_pool: Option<OutputPoolConfig>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub stream_ctrl: Option<StreamControlConfig>,
++}
++
++#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
++#[serde(rename_all = "snake_case")]
++pub enum ReadySelection {
++    Lowest,
++    #[default]
++    Rotating,
++    BandRotating,
++}
++
++/// Step 1 changes control only. Other streaming mechanisms are not enabled.
++#[derive(Clone, Debug, Default, Deserialize, Serialize)]
++#[serde(default, deny_unknown_fields)]
++pub struct StreamControlConfig {
++    pub event_ready: bool,
++    pub selection: ReadySelection,
++    pub cohort_control: bool,
++    pub split_slot_lifetime: bool,
++    pub split_window: Option<SplitWindowConfig>,
++}
++
++#[derive(Clone, Debug, Deserialize, Serialize)]
++#[serde(deny_unknown_fields)]
++pub struct SplitWindowConfig {
++    pub window_tiles: usize,
++    pub load_latency_sum_ps: u64,
++    pub load_latency_samples: u64,
++    pub aging_multiplier: Option<u64>,
++}
++impl SplitWindowConfig {
++    pub fn threshold_ps(&self) -> Result<Option<u64>, String> {
++        if self.load_latency_samples == 0 {
++            return Err("aging reference has no measured tiles".into());
++        }
++        self.aging_multiplier
++            .map(|m| {
++                self.load_latency_sum_ps
++                    .checked_mul(m)
++                    .map(|v| v.div_ceil(self.load_latency_samples))
++                    .ok_or_else(|| "aging threshold overflows".into())
++            })
++            .transpose()
++    }
++}
++
++impl CoreConfig {
++    pub fn split_window(&self) -> Option<&SplitWindowConfig> {
++        self.refinement
++            .as_ref()
++            .and_then(|r| r.stream_ctrl.as_ref())
++            .filter(|s| s.split_slot_lifetime)
++            .and_then(|s| s.split_window.as_ref())
++    }
++    pub fn resident_slots(&self) -> usize {
++        self.split_window()
++            .map_or(self.weight_slots, |s| s.window_tiles)
++    }
++    pub fn cohort_control(&self) -> bool {
++        self.refinement
++            .as_ref()
++            .and_then(|r| r.stream_ctrl.as_ref())
++            .is_some_and(|s| s.event_ready && s.cohort_control)
++    }
++    pub fn event_ready(&self) -> bool {
++        self.refinement
++            .as_ref()
++            .and_then(|r| r.stream_ctrl.as_ref())
++            .is_some_and(|s| s.event_ready)
++    }
++
++    /// Three Q-bit maps, one expert activation map, W 16B events, 64B
++    /// actor state and 64B expert state. Paid inside accumulator SRAM, beside
++    /// the existing 128Q + 64(slots+stages) control records. W = resident_slots() (packed window if split).
++    pub fn stream_control_bytes(&self) -> Result<usize, String> {
++        if !self.event_ready() {
++            return Ok(0);
++        }
++        let q = self
++            .refinement
++            .as_ref()
++            .and_then(|r| r.output_pool.as_ref())
++            .ok_or("event-ready control requires an output pool")?
++            .output_contexts;
++        q.div_ceil(64)
++            .checked_mul(24)
++            .and_then(|bytes| {
++                self.resident_slots()
++                    .checked_mul(16)
++                    .and_then(|events| bytes.checked_add(events))
++            })
++            .and_then(|bytes| bytes.checked_add(8 + 64 + 64))
++            .and_then(|bytes| {
++                bytes.checked_add(self.split_window().map_or(0, |w| 16 * w.window_tiles))
++            })
++            .ok_or_else(|| "stream control storage overflow".into())
++    }
+ }
+ 
+ #[derive(Clone, Debug, Deserialize, Serialize)]
+@@ -161,6 +260,8 @@ pub struct DmaConfig {
+     pub coalesce: bool,
+     #[serde(default)]
+     pub fair_credits: bool,
++    #[serde(default)]
++    pub reserved_byte_credits: bool,
+     /// Lookup latency is two cycles; initiation interval is independently 1/2.
+     #[serde(default = "default_weight_slots")]
+     pub lookup_ii_cycles: usize,
+@@ -210,6 +311,68 @@ pub struct Architecture {
+     pub dma: Option<DmaConfig>,
+ }
+ 
++/// Explicit counterfactual timing; capacities, arithmetic and shape do not change.
++#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
++#[serde(rename_all = "snake_case")]
++pub enum OracleControl {
++    #[default]
++    Charged,
++    ZeroControl,
++    DescOnly,
++    LifecycleOnly,
++}
++
++/// Observer labels for the actual descriptor accesses, never scheduler state.
++#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
++#[serde(rename_all = "snake_case")]
++pub enum ControlCostClass {
++    Admission,
++    Header,
++    Load,
++    Arrival,
++    Install,
++    OperandBind,
++    PackedRetire,
++    OperandRetire,
++    BurstStart,
++    BurstComplete,
++    Mask,
++}
++
++impl OracleControl {
++    pub fn removes(self, class: ControlCostClass) -> bool {
++        use ControlCostClass::*;
++        match self {
++            Self::Charged => false,
++            Self::ZeroControl => true,
++            Self::DescOnly => matches!(class, Header | Install | Mask),
++            Self::LifecycleOnly => matches!(
++                class,
++                Load | Arrival
++                    | OperandBind
++                    | PackedRetire
++                    | OperandRetire
++                    | BurstStart
++                    | BurstComplete
++            ),
++        }
++    }
++}
++
++#[derive(Clone, Debug, Default, Serialize)]
++pub struct OracleControlCounters {
++    pub accesses: u64,
++    pub nominal_cycles: u64,
++    pub paid_ps: u64,
++    pub wait_ps: u64,
++}
++
++#[derive(Clone, Debug, Default, Serialize)]
++pub struct OracleControlReport {
++    pub mode: OracleControl,
++    pub categories: std::collections::BTreeMap<ControlCostClass, OracleControlCounters>,
++}
++
+ /// Explicit counterfactual timing; capacities, arithmetic and shape do not change.
+ #[derive(Clone, Debug, Deserialize, Serialize)]
+ #[serde(default, deny_unknown_fields)]
+@@ -225,6 +388,16 @@ pub struct DiagnosticConfig {
+     pub ideal_hbm: bool,
+     /// Job IDs in execution order per core, frozen from a baseline execution.
+     pub fixed_job_order: Option<Vec<Vec<usize>>>,
++    /// Step1 D3 only: opt in to a third, fully charged operand latch.
++    pub allow_three_operand_stages: bool,
++    /// Step1 D2 causal oracle, never an acceptance configuration. Event
++    /// descriptor writes retain their count/order but have zero service time.
++    pub event_updates_zero_cost: bool,
++    pub charge_legacy_control: bool,
++    /// Diagnostic only; second 64 B descriptor latch is paid in accumulator.
++    pub control_ports: usize,
++    /// Nonphysical timing oracle: preserves accesses, ownership and dependencies.
++    pub oracle_control: OracleControl,
+ }
+ 
+ impl Default for DiagnosticConfig {
+@@ -240,10 +413,21 @@ impl Default for DiagnosticConfig {
+             hbm_profile: ramulator::config::hbm2::HbmDiagnostic::Native,
+             ideal_hbm: false,
+             fixed_job_order: None,
++            allow_three_operand_stages: false,
++            event_updates_zero_cost: false,
++            charge_legacy_control: false,
++            control_ports: 1,
++            oracle_control: OracleControl::Charged,
+         }
+     }
+ }
+ 
++impl DiagnosticConfig {
++    pub fn additional_control_port_bytes(&self) -> usize {
++        self.control_ports.saturating_sub(1) * 64
++    }
++}
++
+ #[derive(Clone, Debug, Serialize)]
+ pub struct CoreReport {
+     pub id: String,
+@@ -292,6 +476,119 @@ pub struct RefinementReport {
+     pub finalized_elements: u64,
+     pub output_finalize_elapsed_ps: u64,
+     pub output_pool: Option<OutputPoolReport>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub stream_ctrl: Option<StreamControlReport>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub legacy_control: Option<LegacyControlReport>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub split_window: Option<SplitWindowReport>,
++}
++
++/// Observers only. Lifetime classes are disjoint: packed, ready operand,
++/// and operand destination reserved for an in-progress decode.
++#[derive(Clone, Debug, Default, Serialize)]
++pub struct SplitWindowReport {
++    pub packed_slots: usize,
++    pub packed_slot_bytes: usize,
++    pub operand_stage_bytes: usize,
++    pub weight_reserved_bytes: usize,
++    pub aging_threshold_ps: Option<u64>,
++    pub window_selections: u64,
++    pub window_header_updates: u64,
++    pub window_header_bytes: usize,
++    pub window_candidate_checks: u64,
++    pub window_max_candidates: usize,
++    pub aged_selected: u64,
++    pub aging_reorders: u64,
++    pub window_wait_ps: u64,
++    pub landing_slot_wait_ps: u64,
++    pub operand_stage_wait_ps: u64,
++    pub decode_queue_wait_ps: u64,
++    pub packed_read_busy_ps: u64,
++    pub packed_read_wait_ps: u64,
++    pub decode_vector_busy_ps: u64,
++    pub decode_vector_wait_ps: u64,
++    pub operand_write_busy_ps: u64,
++    pub operand_write_wait_ps: u64,
++    pub dma_credit_wait_ps: u64,
++    pub dma_lookup_wait_ps: u64,
++    pub dma_copy_wait_ps: u64,
++    pub dma_native_response_wait_ps: u64,
++    pub packed_arrivals: TileLoadStats,
++    pub live_current_bytes: [u64; 3],
++    pub live_peak_bytes: u64,
++    pub live_peak_classes: [u64; 3],
++    /// [time_ps, packed_bytes, ready_operand_bytes, decode_destination_bytes].
++    /// Exact transition trace; offline cycle peaks retain same-cycle maxima.
++    pub lifetime_changes: Vec<[u64; 4]>,
++}
++
++#[derive(Clone, Debug, Default, Serialize)]
++pub struct LegacyControlReport {
++    pub control_ports: usize,
++    pub additional_port_bytes: usize,
++    /// issue, tile installation, completion; costs 2, 3, 2 cycles.
++    pub operations_by_kind: [u64; 3],
++    pub service_cycles_by_kind: [u64; 3],
++    pub service_ps_by_kind: [u64; 3],
++    pub wait_ps_by_kind: [u64; 3],
++    pub control_occupancy_ps: u64,
++    pub control_ports_peak: usize,
++    pub control_conflict_wait_ps: u64,
++}
++
++#[derive(Clone, Debug, Default, Serialize)]
++pub struct StreamControlReport {
++    /// Observer-only categories, including removed nominal service in oracle runs.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub oracle_control: Option<OracleControlReport>,
++    pub selection: ReadySelection,
++    pub budget: String,
++    pub additional_control_bytes: usize,
++    pub event_capacity: usize,
++    pub events_enqueued: u64,
++    pub events_processed: u64,
++    pub event_queue_peak: usize,
++    pub event_queue_wait_ps: u64,
++    pub blocked_producers_peak: usize,
++    pub descriptor_reads: u64,
++    pub descriptor_writes: u64,
++    pub fanout_writes: u64,
++    pub selector_visits: u64,
++    pub selector_busy_ps: u64,
++    pub scheduler_port_wait_ps: u64,
++    pub operand_fill_busy_ps: u64,
++    pub operand_fill_elapsed_ps: u64,
++    pub issued_contexts: u64,
++    pub event_fanout_busy_ps: u64,
++    /// Observer-only statistics, indexed by decoded / installed / K done.
++    /// These neither occupy architectural entries nor affect scheduling.
++    pub event_counts_by_kind: [u64; 3],
++    pub event_update_cycles_by_kind: [u64; 3],
++    pub event_service_ps_by_kind: [u64; 3],
++    pub event_control_wait_ps_by_kind: [u64; 3],
++    pub event_queue_residence_ps_by_kind: [u64; 3],
++    pub event_delivery_ps_by_kind: [u64; 3],
++    pub event_delivery_max_ps_by_kind: [u64; 3],
++    pub event_service_mac_overlap_ps: u64,
++    pub event_service_no_mac_ps: u64,
++    pub cohort_control: bool,
++    pub control_ports: usize,
++    pub additional_port_bytes: usize,
++    pub control_occupancy_ps: u64,
++    pub control_ports_peak: usize,
++    pub control_conflict_wait_ps: u64,
++    pub burst_starts: u64,
++    pub burst_completions: u64,
++    pub burst_partial: u64,
++    pub burst_retry_checks: u64,
++    pub burst_not_ready_checks: u64,
++    pub sequencer_cycles: u64,
++    pub sequencer_busy_ps: u64,
++    pub completion_mask_cycles: u64,
++    pub completed_contexts: u64,
++    pub writeback_order_checks: u64,
++    pub completion_collectors_peak: usize,
+ }
+ 
+ #[derive(Clone, Debug, Default, Serialize)]
+@@ -320,6 +617,16 @@ pub struct TileLoadStats {
+ 
+ #[derive(Clone, Debug, Default, Serialize)]
+ pub struct ProjectionMetrics {
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub burst_starts: Option<u64>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub completion_mask_cycles: Option<u64>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub sequencer_cycles: Option<u64>,
++    /// First native response set copied into a packed slot; before decode.
++    /// Observational only, enabled for the streaming-control experiment.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub first_tile_arrival_ps: Option<u64>,
+     pub useful_macs: u64,
+     pub issued_macs: u64,
+     pub compute_busy_ps: u64,
+@@ -412,3 +719,54 @@ pub struct DmaReport {
+     pub fair_credit_reserve_per_core: usize,
+     pub fair_credit_wait_ps: u64,
+ }
++
++#[cfg(test)]
++mod oracle_control_tests {
++    use super::*;
++
++    #[test]
++    fn oracle_categories_are_disjoint_and_admission_remains_only_in_partial_oracles() {
++        use ControlCostClass::*;
++        for (class, descriptor, lifecycle) in [
++            (Admission, false, false),
++            (Header, true, false),
++            (Load, false, true),
++            (Arrival, false, true),
++            (Install, true, false),
++            (OperandBind, false, true),
++            (PackedRetire, false, true),
++            (OperandRetire, false, true),
++            (BurstStart, false, true),
++            (BurstComplete, false, true),
++            (Mask, true, false),
++        ] {
++            assert!(!OracleControl::Charged.removes(class));
++            assert!(OracleControl::ZeroControl.removes(class));
++            assert_eq!(OracleControl::DescOnly.removes(class), descriptor);
++            assert_eq!(OracleControl::LifecycleOnly.removes(class), lifecycle);
++        }
++    }
++
++    #[test]
++    fn absent_mode_is_charged_and_unknown_oracle_name_is_rejected() {
++        let absent: DiagnosticConfig = serde_json::from_str("{}").unwrap();
++        assert_eq!(absent.oracle_control, OracleControl::Charged);
++        for (name, mode) in [
++            ("charged", OracleControl::Charged),
++            ("zero_control", OracleControl::ZeroControl),
++            ("desc_only", OracleControl::DescOnly),
++            ("lifecycle_only", OracleControl::LifecycleOnly),
++        ] {
++            let json = serde_json::json!({"oracle_control": name});
++            let config: DiagnosticConfig = serde_json::from_value(json).unwrap();
++            assert_eq!(config.oracle_control, mode);
++            assert_eq!(serde_json::to_value(mode).unwrap(), name);
++        }
++        assert!(
++            serde_json::from_value::<DiagnosticConfig>(
++                serde_json::json!({"oracle_control": "zero_controls"})
++            )
++            .is_err()
++        );
++    }
++}
+diff --git a/transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py b/transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py
+index f17d707e..3a662b06 100644
+--- a/transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py
++++ b/transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py
+@@ -68,9 +68,116 @@ def validate_output_shape(values, tokens, width):
+     require(all(isinstance(row, list) and len(row) == width for row in values), "output width differs from workload")
+ 
+ 
++def split_config(core):
++    control = (core.get("refinement") or {}).get("stream_ctrl") or {}
++    return control.get("split_window") if control.get("split_slot_lifetime", False) else None
++
++
++def resident_slots(core):
++    split = split_config(core)
++    return split["window_tiles"] if split is not None else core.get("weight_slots", 2)
++
++
++
++def oracle_mode(architecture):
++    mode = (architecture.get("diagnostic") or {}).get("oracle_control", "charged")
++    require(mode in ("charged", "zero_control", "desc_only", "lifecycle_only"), "invalid control oracle")
++    return mode
++
++
++def oracle_paid(category, cycles, architecture):
++    mode = oracle_mode(architecture)
++    desc = {"header", "install", "mask"}
++    lifecycle = {"load", "arrival", "operand_bind", "packed_retire", "operand_retire", "burst_start", "burst_complete"}
++    waived = mode == "zero_control" or mode == "desc_only" and category in desc or mode == "lifecycle_only" and category in lifecycle
++    legacy_zero = (architecture.get("diagnostic") or {}).get("event_updates_zero_cost", False)
++    waived |= legacy_zero and category in {"arrival", "install", "burst_complete", "mask"}
++    return 0 if waived else cycles * architecture["clock_period_ps"]
++
++
++def oracle_categories(admissions, tiles, issues, bursts, masks):
++    return dict(admission=admissions, header=tiles, load=2 * tiles, arrival=tiles,
++                install=issues, operand_bind=2 * tiles, packed_retire=2 * tiles,
++                operand_retire=2 * tiles, burst_start=2 * bursts, burst_complete=2 * bursts, mask=masks)
++
++
++def validate_oracle_control(observed, core, architecture):
++    detail = observed["refinement"]
++    stream, pool = detail["stream_ctrl"], detail["output_pool"]
++    report = stream.get("oracle_control")
++    if report is None:
++        idle = observed["jobs"] == 0 and pool["scheduler_visits"] == pool["scheduler_busy_ps"] == 0
++        require(idle or oracle_mode(architecture) == "charged", "control oracle has no category evidence")
++        return
++    require(report["mode"] == oracle_mode(architecture), "control oracle mode differs")
++    mt = core["refinement"]["m_rows"]
++    admission = sum(p["metrics"]["band_admissions"] * ((p["m"] + mt - 1) // mt + 1) for p in observed["projections"])
++    expected = oracle_categories(admission, pool["tile_admissions"], pool["context_updates"],
++                                 stream["burst_starts"], stream["completion_mask_cycles"])
++    categories = report["categories"]
++    require(set(categories) <= set(expected), "unknown oracle control category")
++    for name, nominal in expected.items():
++        item = categories.get(name, dict(accesses=0, nominal_cycles=0, paid_ps=0, wait_ps=0))
++        require(all(type(item.get(k)) is int and item[k] >= 0 for k in ("accesses", "nominal_cycles", "paid_ps", "wait_ps")),
++                "invalid oracle category counters")
++        require(item["nominal_cycles"] == nominal and item["paid_ps"] == oracle_paid(name, nominal, architecture),
++                "oracle category cycle/service mismatch: " + name)
++        require((nominal == 0 and item["accesses"] == 0) or 0 < item["accesses"] <= nominal,
++                "oracle access count is inconsistent")
++    require(sum(expected.values()) == pool["scheduler_visits"], "oracle nominal control formula differs")
++    require(sum(c["paid_ps"] for c in categories.values()) == pool["scheduler_busy_ps"], "oracle paid control formula differs")
++    require(sum(c["wait_ps"] for c in categories.values()) == stream["scheduler_port_wait_ps"], "oracle control wait counters differ")
++
++def validate_split_lifetimes(observed, core, total_ps):
++    config = split_config(core)
++    report = observed["refinement"].get("split_window")
++    if config is None:
++        require(report is None, "disabled split lifetime produced state")
++        return
++    require(report is not None, "missing simultaneous lifetime evidence")
++    p, r, w = core["blen"], core["mlen"], config["window_tiles"]
++    packed, stage = p * (r // 8) * 9, p * r * 2
++    require(w in (3, 6) and config["aging_multiplier"] in (None, 2, 4, 8), "invalid split window")
++    count, load_sum = config["load_latency_samples"], config["load_latency_sum_ps"]
++    require(type(count) is int and count > 0 and type(load_sum) is int and load_sum > 0, "L is not measured")
++    expected_threshold = None if config["aging_multiplier"] is None else (config["aging_multiplier"] * load_sum + count - 1) // count
++    require(report["aging_threshold_ps"] == expected_threshold, "aging threshold not derived from frozen L")
++    require(report["packed_slots"] == w and report["packed_slot_bytes"] == packed
++            and report["operand_stage_bytes"] == stage
++            and report["weight_reserved_bytes"] == w * packed + 2 * stage <= core["weight_sram_bytes"],
++            "split physical storage reservation differs")
++    previous_time, peak, current, peak_seen = 0, 0, [0, 0, 0], False
++    for transition in report["lifetime_changes"]:
++        require(len(transition) == 4 and all(type(v) is int and v >= 0 for v in transition), "invalid lifetime transition")
++        at, pk, op, dec = transition
++        require(previous_time <= at <= total_ps, "lifetime time escapes execution")
++        require(pk % packed == 0 and op % stage == dec % stage == 0, "partial unowned storage")
++        require(pk <= w * packed and op + dec <= 2 * stage, "decode allocated a third operand stage")
++        require(pk + op + dec <= core["weight_sram_bytes"], "simultaneous live SRAM exceeds budget")
++        previous_time, current = at, [pk, op, dec]
++        peak = max(peak, sum(current))
++        peak_seen |= current == report["live_peak_classes"]
++    require(current == report["live_current_bytes"] == [0, 0, 0], "live buffers failed to drain")
++    require(peak == report["live_peak_bytes"] == sum(report["live_peak_classes"])
++            and (peak_seen or peak == 0), "peak is not a simultaneously observed allocation")
++    tiles = observed["refinement"]["output_pool"]["tile_admissions"]
++    require(report["window_header_updates"] == report["window_selections"] == report["packed_arrivals"]["count"] == tiles,
++            "packed tile not loaded exactly once")
++    require(report["window_header_bytes"] == 16 * w, "candidate registers are unpaid")
++    require(report["window_max_candidates"] <= w
++            and report["aging_reorders"] <= report["aged_selected"] <= tiles, "window arbitration exceeds bounds")
++    for field in ("landing_slot_wait_ps", "operand_stage_wait_ps", "packed_read_busy_ps", "decode_vector_busy_ps", "operand_write_busy_ps"):
++        require(0 <= report[field] <= total_ps, "split serialized service/full wait exceeds execution: " + field)
++    require(report["packed_read_busy_ps"] + report["operand_write_busy_ps"]
++            == observed["refinement"]["weight_port_busy_ps"], "split read/write port service does not reconcile")
++
++
+ def validate_native(envelope, architecture, channels):
+     cal = envelope["memory_model"]["calibration"]
+     result = envelope["result"]
++    dma_speedup = architecture.get("diagnostic", {}).get("dma_speedup", 1)
++    require(type(dma_speedup) is int and dma_speedup > 0, "invalid diagnostic DMA factor")
++    dma_period = (architecture["clock_period_ps"] + dma_speedup - 1) // dma_speedup
+     require(
+         cal["capi_version"] == 2
+         and cal["native_transaction_bytes"] == 32
+@@ -81,7 +188,7 @@ def validate_native(envelope, architecture, channels):
+     )
+     require(
+         cal["issue_policy"] == architecture.get("dma", {}).get("issue_policy", "global_fifo")
+-        and cal["issue_period_ps"] == architecture["clock_period_ps"],
++        and cal["issue_period_ps"] == dma_period,
+         "native injection configuration differs",
+     )
+     require(
+@@ -118,10 +225,33 @@ def validate_native(envelope, architecture, channels):
+     )
+     identity = envelope["provenance"]
+     require(digest(identity["native_library_path"]) == identity["native_library_sha256"], "native library hash differs")
++    validate_dma(envelope, architecture)
++
++
++def validate_dma(envelope, architecture):
++    result = envelope["result"]
++    dma_speedup = architecture.get("diagnostic", {}).get("dma_speedup", 1)
++    require(type(dma_speedup) is int and dma_speedup > 0, "invalid diagnostic DMA factor")
++    dma_period = (architecture["clock_period_ps"] + dma_speedup - 1) // dma_speedup
+     if architecture.get("dma"):
+         dma = result["dma_frontend"]
+         require(all(type(v) is int and v >= 0 for v in dma.values()), "invalid DMA metric")
+         require(dma["reserved_bytes"] <= architecture["dma"]["frontend_sram_bytes"], "DMA metadata SRAM exceeded")
++        weighted = architecture["dma"].get("reserved_byte_credits", False)
++        demand = architecture["dma"].get("issue_policy") == "demand_aware"
++        credits = architecture["global_dma_credits"]
++        reserved = 120 * credits + 8192 + (64 + 32 * len(architecture["cores"]) if weighted else 0)
++        reserved += 4096 + 32 * 16 + credits * 8 if demand else 0
++        for cfg in architecture["cores"]:
++            r, p = cfg["mlen"], cfg["blen"]
++            fragments = (r + 63) // 64 + (((r + 7) // 8) + 63) // 64 + 2
++            reserved += resident_slots(cfg) * (p * fragments * (40 if demand else 24) + 128)
++        require(dma["reserved_bytes"] == reserved, "frontend fragments or credit state uncharged")
++        if weighted:
++            require(not architecture["dma"].get("fair_credits", False)
++                    and all(split_config(c) is not None for c in architecture["cores"]), "invalid proportional-credit configuration")
++        if any(split_config(c) is not None for c in architecture["cores"]):
++            require(architecture["dma"]["issue_policy"] == "per_channel", "split window changed native policy")
+         require(dma["mshr_peak"] <= result["global_dma_inflight_peak"], "MSHR entries exceed admitted waiters")
+         require(
+             dma["sector_requests"] >= dma["merged_sectors"]
+@@ -130,11 +260,11 @@ def validate_native(envelope, architecture, channels):
+         )
+         require(
+             dma["lookup_busy_ps"]
+-            == architecture["dma"].get("lookup_ii_cycles", 2) * dma["line_requests"] * architecture["clock_period_ps"],
++            == architecture["dma"].get("lookup_ii_cycles", 2) * dma["line_requests"] * dma_period,
+             "lookup service unaccounted",
+         )
+         require(
+-            dma["copy_busy_ps"] * 32 >= dma["useful_copy_bytes"] * architecture["clock_period_ps"],
++            dma["copy_busy_ps"] * 32 >= dma["useful_copy_bytes"] * dma_period,
+             "copy bandwidth exceeded",
+         )
+         require(
+@@ -162,19 +292,87 @@ def validate_refined_core(observed, core, architecture, workload, jobs, total_ps
+     require(config["tail_policy"] in ("padded", "valid_rows"), "invalid M tail policy")
+     require(detail["m_rows"] == config["m_rows"], "reported M tile differs from configuration")
+     p, r, mt = core["blen"], core["mlen"], config["m_rows"]
+-    slots = core.get("weight_slots", 2)
++    slots = resident_slots(core)
++    diagnostics = architecture.get("diagnostic") or {}
++    control_ports = diagnostics.get("control_ports", 1)
++    require(type(control_ports) is int and control_ports in (1, 2), "invalid control-port count")
++    extra_port_bytes = (control_ports - 1) * 64
+     pool = config.get("output_pool")
+     pool_report = detail.get("output_pool")
+     if pool is not None:
+         require(all(type(pool[field]) is int and pool[field] > 0 for field in (
+             "output_contexts", "operand_stages", "scheduler_cycles"
+         )), "pool dimensions and scheduler cost must be positive integers")
+-        require(pool["output_contexts"] <= 256 and pool["operand_stages"] <= 2 and config["active_n_tiles"] == 2,
+-                "pool mode needs one or two stages and active_n_tiles=2")
+-        require(type(slots) is int and 1 <= slots <= 4 and pool["operand_stages"] <= slots,
++        diagnostics = architecture.get("diagnostic") or {}
++        max_stages = 3 if diagnostics.get("allow_three_operand_stages", False) else 2
++        require(pool["output_contexts"] <= 256 and pool["operand_stages"] <= max_stages and config["active_n_tiles"] == 2,
++                "pool stages exceed the normal contract or explicit diagnostic opt-in")
++        require(type(slots) is int and (slots in (3, 6) if split_config(core) else 1 <= slots <= 4) and pool["operand_stages"] <= slots,
+                 "pool stages exceed finite weight slots")
+         q, stages = pool["output_contexts"], pool["operand_stages"]
+         control = 128 * q + 64 * (slots + stages)
++        stream_config = config.get("stream_ctrl") or {}
++        stream = detail.get("stream_ctrl")
++        if stream_config.get("event_ready", False):
++            extra = 24 * ((q + 63) // 64) + 16 * slots + 8 + 64 + 64 + (16 * slots if split_config(core) else 0)
++            control += extra
++            require(stream is not None and stream["budget"] == "accumulator"
++                    and stream["additional_control_bytes"] == extra, "event control is uncharged")
++            require(stream["selection"] == stream_config.get("selection", "rotating"), "selector differs")
++            require(stream["event_capacity"] == slots and stream["event_queue_peak"] <= slots,
++                    "event FIFO exceeds the paid W entries")
++            require(stream["events_enqueued"] == stream["events_processed"], "events failed to drain")
++            event_cost = 0 if diagnostics.get("event_updates_zero_cost", False) else architecture["clock_period_ps"]
++            require(stream["fanout_writes"] == pool_report["context_updates"]
++                    and stream["event_fanout_busy_ps"] == oracle_paid("install", stream["fanout_writes"], architecture),
++                    "context fanout was not charged one cycle per write")
++            require(stream["descriptor_writes"] <= stream["descriptor_reads"] == pool_report["scheduler_visits"],
++                    "descriptor service does not reconcile")
++            cohort = stream_config.get("cohort_control", False)
++            require(stream.get("cohort_control", False) == cohort, "cohort mode differs")
++            require(stream.get("control_ports", 1) == control_ports
++                    and stream.get("additional_port_bytes", 0) == extra_port_bytes, "control ports are uncharged")
++            require(stream["issued_contexts"] == pool_report["context_updates"], "MAC issue count differs")
++            bursts = stream["burst_starts"] if cohort else pool_report["context_updates"]
++            require(stream["selector_visits"] == bursts, "selector/burst count differs")
++            mask_cycles = stream["completion_mask_cycles"] if cohort else 0
++            if cohort:
++                require(all((job["rows"] + mt - 1) // mt <= 32 for job in jobs), "cohort exceeds paid event mask")
++                require(stream["burst_completions"] == bursts
++                        and stream["completed_contexts"] == stream["writeback_order_checks"] == pool_report["context_updates"],
++                        "burst writebacks did not complete exactly once")
++                require(stream["completion_collectors_peak"] <= q, "completion references exceed pending records")
++                require(stream["sequencer_cycles"] == pool_report["context_updates"] + stream["burst_not_ready_checks"]
++                        and stream["sequencer_busy_ps"] == stream["sequencer_cycles"] * architecture["clock_period_ps"],
++                        "sequencer attempts are not charged")
++            if "control_occupancy_ps" in stream:
++                service, union = pool_report["scheduler_busy_ps"], stream["control_occupancy_ps"]
++                require(union <= service <= control_ports * union and union <= total_ps
++                        and stream["control_ports_peak"] <= control_ports, "control service/union occupancy differs")
++            if "event_counts_by_kind" in stream:
++                counts = stream["event_counts_by_kind"]
++                require(counts == [pool_report["tile_admissions"], pool_report["tile_admissions"],
++                                   bursts], "event sources do not reconcile")
++                require(sum(counts) == stream["events_processed"], "event totals differ")
++                cycles = stream["event_update_cycles_by_kind"]
++                require(cycles == [counts[0], stream["fanout_writes"], 2 * counts[2] + mask_cycles],
++                        "event update cycle accounting differs")
++                expected_event_ps = [x * event_cost for x in cycles]
++                if split_config(core) is not None:
++                    expected_event_ps = [oracle_paid("arrival", cycles[0], architecture),
++                                         oracle_paid("install", cycles[1], architecture),
++                                         oracle_paid("burst_complete", 2 * bursts, architecture) + oracle_paid("mask", mask_cycles, architecture)]
++                require(stream["event_service_ps_by_kind"] == expected_event_ps,
++                        "event service accounting differs")
++                require(stream["event_service_mac_overlap_ps"] + stream["event_service_no_mac_ps"]
++                        == sum(stream["event_service_ps_by_kind"]), "event/MAC overlap does not partition service")
++                require(stream["event_service_mac_overlap_ps"] <= observed["compute_busy_ps"],
++                        "event/MAC overlap exceeds MAC occupancy")
++        else:
++            require(stream is None, "disabled event path produced architectural state")
++            require(not diagnostics.get("event_updates_zero_cost", False)
++                    and not diagnostics.get("allow_three_operand_stages", False),
++                    "step1 diagnostics require event_ready")
+         pending = q * mt * p * 4
+         require(pool_report is not None, "missing bounded output-pool report")
+         require(all(type(v) is int and v >= 0 for v in pool_report.values()), "invalid output-pool metric")
+@@ -184,9 +382,18 @@ def validate_refined_core(observed, core, architecture, workload, jobs, total_ps
+         require(pool_report["contexts_peak"] <= q and pool_report["pending_contexts_peak"] <= pool_report["contexts_peak"],
+                 "output or pending contexts exceed bounded pool")
+         require(pool_report["operand_stages_peak"] <= stages, "operand stages exceed physical latches")
+-        require(pool_report["scheduler_busy_ps"] == pool_report["scheduler_visits"] * pool["scheduler_cycles"]
+-                * architecture["clock_period_ps"], "output scheduler service is unaccounted")
+-        require(pool_report["scheduler_busy_ps"] <= total_ps, "output scheduler occupancy exceeds run")
++        charged_visits = pool_report["scheduler_visits"]
++        if diagnostics.get("event_updates_zero_cost", False):
++            charged_visits -= sum(stream["event_update_cycles_by_kind"])
++        expected_service = charged_visits * pool["scheduler_cycles"] * architecture["clock_period_ps"]
++        if split_config(core) is not None:
++            admission = sum(p["metrics"]["band_admissions"] * ((p["m"] + mt - 1) // mt + 1) for p in observed["projections"])
++            nominal = oracle_categories(admission, pool_report["tile_admissions"], pool_report["context_updates"],
++                                        stream["burst_starts"], stream["completion_mask_cycles"])
++            expected_service = sum(oracle_paid(k, v, architecture) for k, v in nominal.items())
++            validate_oracle_control(observed, core, architecture)
++        require(pool_report["scheduler_busy_ps"] == expected_service, "output scheduler service is unaccounted")
++        require(pool_report["scheduler_busy_ps"] <= control_ports * total_ps, "output scheduler occupancy exceeds run")
+         require(not jobs or pool_report["scheduler_visits"] > 0, "output scheduler has zero cost for useful work")
+         require(all((job["rows"] + mt - 1) // mt <= q for job in jobs),
+                 "assigned expert does not fit its whole M cohort in output pool")
+@@ -195,13 +402,40 @@ def validate_refined_core(observed, core, architecture, workload, jobs, total_ps
+         stages = config["active_n_tiles"]
+         require(type(slots) is int and 2 <= slots <= 4 and 1 <= stages <= 3 and stages <= slots,
+                 "legacy N contexts exceed resident weight slots")
++    legacy = detail.get("legacy_control")
++    if diagnostics.get("charge_legacy_control", False):
++        require(pool is None and stages == 3 and legacy is not None, "charged control requires legacy N3")
++        tiles = sum(e["metrics"]["tile_loads"]["count"] for e in observed["projections"])
++        issues = sum(e["metrics"]["tile_loads"]["count"] * ((e["m"] + mt - 1) // mt)
++                     for e in observed["projections"])
++        cycles = [2 * issues, 3 * tiles, 2 * issues]
++        require(legacy["operations_by_kind"] == [issues, tiles, issues]
++                and legacy["service_cycles_by_kind"] == cycles, "legacy descriptor accounting differs")
++        speedup = diagnostics.get("scheduler_speedup", 1)
++        import math
++        unit = [math.ceil(c * architecture["clock_period_ps"] / speedup) for c in (2, 3, 2)]
++        require(legacy["service_ps_by_kind"] == [c * u for c, u in zip([issues, tiles, issues], unit)],
++                "legacy service is not charged")
++        require(legacy["control_ports"] == control_ports and legacy["additional_port_bytes"] == extra_port_bytes,
++                "legacy control ports uncharged")
++        service, union = sum(legacy["service_ps_by_kind"]), legacy["control_occupancy_ps"]
++        require(union <= service <= control_ports * union and union <= total_ps
++                and legacy["control_ports_peak"] <= control_ports, "legacy control occupancy differs")
++    else:
++        require(legacy is None, "legacy charge without diagnostic opt-in")
++    require(control_ports == 1 or legacy is not None or (config.get("stream_ctrl") or {}).get("event_ready", False),
++            "second port requires the shared control-port model")
+     latch = config["operand_latch_bytes"]
+     require(type(latch) is int and latch >= stages * p * r * 2, "operand latches are underfunded")
+-    require(slots * p * (r // 8) * 25 + latch <= core["weight_sram_bytes"],
++    factor = 9 if split_config(core) is not None else 25
++    if split_config(core) is not None:
++        require(stages == 2 and latch == 2 * p * r * 2, "split path requires exactly two funded operand stages")
++    require(slots * p * (r // 8) * factor + latch <= core["weight_sram_bytes"],
+             "packed/decoded weight slots plus latches exceed SRAM")
+     require(detail["operand_latch_reserved_bytes"] == latch, "reported operand latch reservation differs")
+-    require(observed["weight_sram_peak_bytes"] == observed["weight_slots_peak"] * p * (r // 8) * 25 + latch,
++    require(observed["weight_sram_peak_bytes"] == observed["weight_slots_peak"] * p * (r // 8) * factor + latch,
+             "weight peak omits packed scales, decoded operands or reserved latches")
++    validate_split_lifetimes(observed, core, total_ps)
+     pipeline = p * ((r - 1).bit_length() + architecture["mac_pipeline_cycles"]) * 4
+     require(observed["pipeline_register_bytes"] == pipeline, "pipeline register reservation differs")
+     expected_acc = expected_context = expected_pending = expected_contexts = 0
+@@ -213,7 +447,7 @@ def validate_refined_core(observed, core, architecture, workload, jobs, total_ps
+         else:
+             contexts = q
+         expected_acc = max(expected_acc, rows * max(workload["input_dim"], workload["expert_hidden_dim"]) * 4
+-                           + pipeline + control + pending)
++                           + pipeline + control + pending + extra_port_bytes)
+         expected_context = max(expected_context, control)
+         expected_pending = max(expected_pending, pending)
+         expected_contexts = max(expected_contexts, contexts)
+@@ -265,7 +499,8 @@ def validate_projection_reports(observed, core, architecture, workload, jobs, to
+                 "projection MAC count differs from matrix dimensions")
+         for field in ("compute_busy_ps", "weight_port_busy_ps", "accumulator_port_busy_ps", "scheduler_busy_ps",
+                       "output_finalize_elapsed_ps"):
+-            require(metrics[field] <= elapsed, "projection port occupancy exceeds interval: " + field)
++            lanes = (architecture.get("diagnostic") or {}).get("control_ports", 1) if field == "scheduler_busy_ps" else 1
++            require(metrics[field] <= elapsed * lanes, "projection port occupancy exceeds interval: " + field)
+         loads = metrics["tile_loads"]
+         count = ((n + core["blen"] - 1) // core["blen"]) * ((k + core["mlen"] - 1) // core["mlen"])
+         require(all(type(v) is int and v >= 0 for v in loads.values()) and loads["count"] == count,
+@@ -273,7 +508,7 @@ def validate_projection_reports(observed, core, architecture, workload, jobs, to
+         require(0 <= loads["min_ps"] <= loads["max_ps"] <= elapsed
+                 and count * loads["min_ps"] <= loads["total_ps"] <= count * loads["max_ps"],
+                 "invalid tile-load service distribution")
+-        require(metrics["weight_slots_peak"] <= core.get("weight_slots", 2), "projection exceeds weight slots")
++        require(metrics["weight_slots_peak"] <= resident_slots(core), "projection exceeds weight slots")
+         if pool is not None:
+             require(metrics["contexts_peak"] <= pool["output_contexts"]
+                     and metrics["pending_contexts_peak"] <= metrics["contexts_peak"]
+@@ -283,8 +518,27 @@ def validate_projection_reports(observed, core, architecture, workload, jobs, to
+                     "pool must admit each N band exactly once")
+             require(metrics["context_updates"] == count * ((job["rows"] + config["m_rows"] - 1) // config["m_rows"]),
+                     "pool did not execute all M contexts in each K tile")
+-            require(metrics["scheduler_visits"] > 0 and metrics["scheduler_busy_ps"]
+-                    == metrics["scheduler_visits"] * pool["scheduler_cycles"] * architecture["clock_period_ps"],
++            cohort = (config.get("stream_ctrl") or {}).get("cohort_control", False)
++            event_cycles = count + 3 * metrics["context_updates"]
++            if cohort:
++                c = (job["rows"] + config["m_rows"] - 1) // config["m_rows"]
++                bursts, mask_cycles = metrics["burst_starts"], metrics["completion_mask_cycles"]
++                require(mask_cycles == bursts * ((c + 7) // 8), "completion mask width uncharged")
++                require(metrics["scheduler_visits"] == metrics["band_admissions"] * (c + 1) + (10 if split_config(core) else 8) * count
++                        + metrics["context_updates"] + 4 * bursts + mask_cycles, "cohort service formula differs")
++                event_cycles = count + metrics["context_updates"] + 2 * bursts + mask_cycles
++            charged_visits = metrics["scheduler_visits"]
++            if (architecture.get("diagnostic") or {}).get("event_updates_zero_cost", False):
++                # Decoded notification: one write per tile; installed fanout:
++                # one per issue; K completion: two per issue. The oracle
++                # changes service time only, not descriptor operation counts.
++                charged_visits -= event_cycles
++            expected_service = charged_visits * pool["scheduler_cycles"] * architecture["clock_period_ps"]
++            if split_config(core) is not None:
++                nominal = oracle_categories(metrics["band_admissions"] * (c + 1), count,
++                                            metrics["context_updates"], bursts, mask_cycles)
++                expected_service = sum(oracle_paid(k, v, architecture) for k, v in nominal.items())
++            require(metrics["scheduler_visits"] > 0 and metrics["scheduler_busy_ps"] == expected_service,
+                     "projection scheduler service differs")
+     for field in ("useful_macs", "issued_macs", "compute_busy_ps", "hbm_read_bytes",
+                   "accumulator_dependency_stall_ps", "pipeline_drain_ps", "weight_ready_wait_ps"):
+@@ -298,6 +552,10 @@ def validate_projection_reports(observed, core, architecture, workload, jobs, to
+         for field in ("scheduler_busy_ps", "scheduler_visits", "band_admissions", "tile_admissions", "context_updates"):
+             require(sum(e["metrics"][field] for e in projections) == observed["refinement"]["output_pool"][field],
+                     "projection/output-pool totals differ: " + field)
++    if (config.get("stream_ctrl") or {}).get("cohort_control", False):
++        for field in ("burst_starts", "completion_mask_cycles", "sequencer_cycles"):
++            require(sum(e["metrics"][field] for e in projections) == observed["refinement"]["stream_ctrl"][field],
++                    "projection/cohort totals differ: " + field)
+     if pool is not None or "tile_loads" in observed:
+         loads = [e["metrics"]["tile_loads"] for e in projections]
+         expected_loads = dict(count=sum(v["count"] for v in loads), total_ps=sum(v["total_ps"] for v in loads),
+@@ -313,10 +571,14 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
+         envelope.get("evidence_level") != "fixed_route_timing_only_no_numerical_validation",
+         "timing-only report rejected",
+     )
++    diagnostic = architecture.get("diagnostic") or {}
++    oracle_mode(architecture)
++    ideal = diagnostic.get("ideal_hbm", False)
++    names = ("ideal_memory_timing_oracle",) if ideal else ("Ramulator HBM2 preset", "Ramulator HBM2 with explicit timing profile")
+     require(
+         envelope["memory_model"]["channels"] == hbm_channels
+         and envelope["memory_model"]["upper_burst_bytes"] == 64
+-        and envelope["memory_model"]["name"] == "Ramulator HBM2 preset",
++        and envelope["memory_model"]["name"] in names,
+         "unexpected memory model or bandwidth configuration",
+     )
+     for field in (
+@@ -380,7 +642,7 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
+             ("weight_sram_peak_bytes", "weight_sram_bytes"),
+         ):
+             require(observed[peak] <= core[capacity], core["id"] + " exceeded " + capacity)
+-        require(observed["weight_slots_peak"] <= core.get("weight_slots", 2), "weight slot count exceeded")
++        require(observed["weight_slots_peak"] <= resident_slots(core), "weight slot count exceeded")
+         if "read_cache_bytes" in core and not architecture.get("dma"):
+             for metric in ("cache_requests", "cache_hits", "cache_port_busy_ps", "cache_peak_bytes"):
+                 require(type(observed[metric]) is int and observed[metric] >= 0, "invalid cache metric: " + metric)
+@@ -470,7 +732,22 @@ def validate_run(envelope, golden, workload, architecture, atol, rtol, hbm_chann
+             validate_output_shape(source[field], token_count, workload["input_dim"])
+     validate_output_pair(result["output_bf16"], result["output_f32"])
+     validate_output_pair(golden["output_bf16"], golden["output_f32"])
+-    if architecture.get("dma") or "calibration" in envelope["memory_model"]:
++    if ideal:
++        require(envelope["memory_model"].get("calibration") is None, "ideal supply used native timing")
++        oracle = envelope["memory_model"].get("oracle")
++        require(isinstance(oracle, dict), "ideal supply lacks request drain evidence")
++        require(oracle.get("backend") == "native_timing_bypassed_zero_latency_oracle"
++                and oracle.get("request_bytes") == 32, "unrecognized ideal supply boundary")
++        for field in ("accepted", "completed", "pending", "read_bytes", "write_bytes"):
++            require(type(oracle.get(field)) is int and oracle[field] >= 0, "invalid ideal observer field " + field)
++        require(oracle["accepted"] == oracle["completed"] and oracle["pending"] == 0,
++                "ideal requests failed to drain")
++        require(oracle["read_bytes"] == result["hbm_read_bytes"]
++                and oracle["write_bytes"] == result["hbm_write_bytes"]
++                and oracle["accepted"] * 32 == oracle["read_bytes"] + oracle["write_bytes"],
++                "ideal byte accounting mismatch")
++        validate_dma(envelope, architecture)
++    elif architecture.get("dma") or "calibration" in envelope["memory_model"]:
+         validate_native(envelope, architecture, hbm_channels)
+     reference = golden["output_f32"]
+     error = numerical_gate(result["output_f32"], reference, atol, rtol)

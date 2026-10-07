@@ -1,0 +1,160 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/tracked_worktree_vs_HEAD.patch",
+      "bytes": 60930,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "633385fb22b9523126a11d6b4df476427a5ebded39a25fca8e1893cc4dd5b27d",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/lib/memory/src/chunked.rs",
+      "bytes": 13562,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/lib/memory/src/chunked.rs",
+      "sha256": "bf16c04ba2bdca3c19a91e75b1076c34b39455cc4dc766989f37e2e68a83f6f3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/lib/sram/src/matrix.rs",
+      "bytes": 94945,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/lib/sram/src/matrix.rs",
+      "sha256": "6847cbada895a4bc7ca9059ceeb83a39963fdfb2ba8c86054fbadfb97509f620",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/lib/sram/src/vector.rs",
+      "bytes": 25629,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/lib/sram/src/vector.rs",
+      "sha256": "d2edbfc53a39b8fbeee1cd720e0223f2b45eac9c9a632f379d889e5f893cfb93",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/accelerator/dispatch.rs",
+      "bytes": 95801,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/dispatch.rs",
+      "sha256": "c06328609b3eae32a440082d7e1585a3ea5f1661d072abbf213279f9e6fb1fb3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/accelerator/mod.rs",
+      "bytes": 3780,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/mod.rs",
+      "sha256": "874eb17dc3de8719ad1ea7578afbe1dce630d95975b71f0406c219be92969c9b",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/accelerator/mview_recurrence_tests.rs",
+      "bytes": 77767,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/mview_recurrence_tests.rs",
+      "sha256": "8e04d7f05dba6a74d7710dda047d57fcb0661bfe9e0cc0e704c275c2e7b23258",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/accelerator/v2.rs",
+      "bytes": 18774,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/v2.rs",
+      "sha256": "ba1638a810c393e1091fdcdf7b7fd8125176a73362caf99dbc5762f2b3c70f0f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/dma.rs",
+      "bytes": 24037,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/dma.rs",
+      "sha256": "3a0f0e79eff4077c19252c2ba49745e820fa2abc2abe789a1029093840fe928f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/ltile_v2.rs",
+      "bytes": 5512,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/ltile_v2.rs",
+      "sha256": "86c15bb96f8e975d9498c8890e069995b4267102cb675c6baa89445c69e64be1",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/main.rs",
+      "bytes": 1121,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/main.rs",
+      "sha256": "6b4716069cfb142114b67d1dd3d7d4d2af00c425813de9ca46f3b96a8e5251e1",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/op.rs",
+      "bytes": 53341,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/op.rs",
+      "sha256": "c4108100774ba65f2fede21726e42c523a885b732630f6abc2fbde5a869d536e",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/runner.rs",
+      "bytes": 18862,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/runner.rs",
+      "sha256": "d53d7e0b0a44fed326631a0f336d45fce08a9b4262e725d01cb33b50d80ba2bc",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/timing.rs",
+      "bytes": 8612,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/timing.rs",
+      "sha256": "ffcc9565b5ea84e7731318e5c0a3bad9712ad3bce0cacb0251e5cfe5ea3e6361",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/v2_timing.rs",
+      "bytes": 4483,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/v2_timing.rs",
+      "sha256": "d2652d89d17463ed3ffed0dcb806a3f09604af127ea046d3f2800d1f915e1c05",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    },
+    {
+      "archive": "research/ltile-microarch-v2/worktree_db67c7963f6c/modified_source/transactional_emulator/src/vector_machine.rs",
+      "bytes": 80368,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/vector_machine.rs",
+      "sha256": "d40b5afa068c774defbd57d651bf27632911d8de65bc40527ef2a1b6ce0af081",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+    }
+  ],
+  "origin": {
+    "HEAD": "3b284f93752a8e5108b57f42da02afb70f142108",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": "refs/heads/research/ltile-microarch-v2",
+    "original_branch_for_archive": "research/ltile-microarch-v2",
+    "stable_id": "db67c7963f6c",
+    "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

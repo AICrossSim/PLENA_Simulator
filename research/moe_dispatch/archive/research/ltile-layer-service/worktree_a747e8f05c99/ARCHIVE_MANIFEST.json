@@ -1,0 +1,169 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/tracked_worktree_vs_HEAD.patch",
+      "bytes": 58415,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "ec3f2800ea989baff0c2c9fac128d0e478b35df5b1dd662cddb10d11744775b3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/README.md",
+      "bytes": 11689,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/README.md",
+      "sha256": "e51fda64e4083fc7ac4b6153bef52beebaa12b4c5036f58a7cbdf99218d9be26",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/ltile_cost.py",
+      "bytes": 25826,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_cost.py",
+      "sha256": "3a0750c8b6f0087a18ee928c24138be49f7c4fe2d38f806b9502c4e3de6caef6",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/ltile_layers.py",
+      "bytes": 15782,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_layers.py",
+      "sha256": "58fd5ff66c6954852c2bdb754b22553c9d33b22f57de1c7e4895e1b8213aae5f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/ltile_model.py",
+      "bytes": 30792,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_model.py",
+      "sha256": "9b1abc78438b0bf4df447b6d496c9087720586719882b76c83fc68e6637b0dba",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/ltile_platform.py",
+      "bytes": 8804,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_platform.py",
+      "sha256": "b74142a9d7fd357cb962a967339f201fd8cf1cfb405202f6dce8d7b9cb463a37",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/ltile_services.py",
+      "bytes": 12916,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_services.py",
+      "sha256": "ba488ae736a274940e40aa9e8b9f6de44b960d93b65251dce3ff4bf41d842788",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/analytic_models/performance/test_ltile_cost.py",
+      "bytes": 9316,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/test_ltile_cost.py",
+      "sha256": "3cee3880b94d0a11b2a9e473274854cd0ed95df666b09857c24a6b181ba52e98",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/transactional_emulator/src/accelerator/access.rs",
+      "bytes": 36187,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/access.rs",
+      "sha256": "02506d9f5570eefc54580570fd4a70bbe18bff6576969e84bb620291ba58545d",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/transactional_emulator/src/accelerator/dispatch.rs",
+      "bytes": 98802,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/dispatch.rs",
+      "sha256": "db64f67886ee0b41abecf4aab4c47500ba3f888e41bfbbfd3773b080cfc07465",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/transactional_emulator/src/accelerator/mod.rs",
+      "bytes": 4038,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/mod.rs",
+      "sha256": "9b02aa004812fb54fab1d8d18a1f0d5d98e3adef5135fadb1fd6f36fe7ad614a",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/transactional_emulator/src/accelerator/v2.rs",
+      "bytes": 24216,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/v2.rs",
+      "sha256": "6a83ef93d7217613d148db28dd6df1179ee72c99fc83d2bbf43754b264e4c275",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/modified_source/transactional_emulator/src/op.rs",
+      "bytes": 54564,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/op.rs",
+      "sha256": "11a6cfffa49e4692f2ed4a22096c34d01c0fcb6ea1fb21569fd85aeee9b076b5",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/untracked/analytic_models/performance/ltile_access.py",
+      "bytes": 23332,
+      "reason": "selected_source_result_or_document",
+      "relative": "analytic_models/performance/ltile_access.py",
+      "sha256": "89e7d8c8e98e0244b173b4071316460c12530e8a7dfcaab3fc1c51cd9affb820",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/untracked/transactional_emulator/src/accelerator/native_coeff.rs",
+      "bytes": 4814,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/accelerator/native_coeff.rs",
+      "sha256": "54a12626447a0a8edb61db13d82c32b0b740dcbba9f490f6fde7027ebd0eaf32",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/untracked/transactional_emulator/testbench/models/connected_peripheral_test.py",
+      "bytes": 24505,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/connected_peripheral_test.py",
+      "sha256": "9b6f1b8add4be4d36681c59e47da40b3f60ee41f457bd1b5097e16d420a0e059",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    },
+    {
+      "archive": "research/ltile-layer-service/worktree_a747e8f05c99/untracked/transactional_emulator/testbench/models/native_supply_test.py",
+      "bytes": 12600,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/models/native_supply_test.py",
+      "sha256": "4e4dfe097ecbfbd2290c538eb006fd9dcc94d1826477c56341857cbc23c1c8d3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+    }
+  ],
+  "origin": {
+    "HEAD": "b013406fa91628d2f9d0de3fdd7ddafa8ef0a37b",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": "refs/heads/research/ltile-layer-service",
+    "original_branch_for_archive": "research/ltile-layer-service",
+    "stable_id": "a747e8f05c99",
+    "worktree": "/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

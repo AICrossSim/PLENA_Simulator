@@ -1,0 +1,3442 @@
+//! Flag-isolated request-level replay for arbitrary PLENA `(M, K, N)` cores.
+//!
+//! This path deliberately does not alter the functional emulator. It consumes
+//! an already validated Shared-MoE route manifest, reconstructs the compiler's
+//! MX weight layout, and compares a candidate core composition against the
+//! monolithic `(4, 1024, 4)` baseline. Both runs issue identical 64-byte HBM
+//! requests through a fresh Ramulator instance.
+//!
+//! Compute is scheduled as aligned rectangular tensor slices. One atomic work
+//! item is one token, one output element, and one 64-element K slice, but a
+//! dispatched task must remain inside one core's physical `(M, K, N)` box.
+//! Missing token rows and K tails therefore consume real issue capacity instead
+//! of being repacked into unrelated output coordinates. This is the main
+//! discretization missing from the analytical Stream-K upper bound.
+
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::mem::ManuallyDrop;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+use futures_util::stream::{FuturesUnordered, StreamExt};
+use memory::{ErasedMemoryModel, MemoryModel};
+use runtime::{Executor, Instant};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use tokio::sync::mpsc;
+
+use crate::runtime_config::{
+    PERIOD, SCALAR_INT_BASIC_CYCLES, VECTOR_ADD_CYCLES, VECTOR_EXP_CYCLES, VECTOR_MUL_CYCLES,
+    VECTOR_RECI_CYCLES,
+};
+
+const BASELINE_PES: u64 = 4096;
+const PROVISIONED_INPUT_WIDTH: u64 = 1024;
+const PROVISIONED_OUTPUT_SLOTS: u64 = 16;
+const COMPILER_MLEN: u64 = 64;
+const MX_BLOCK: u64 = 8;
+const HBM_BURST_BYTES: u64 = 64;
+const HBM_CHANNELS: usize = 8;
+const HBM_MAX_IN_FLIGHT: usize = 4096;
+const HBM_THEORETICAL_BYTES_PER_CYCLE: f64 = 128.0;
+const TRANSFERRED_HBM_REFERENCE_BYTES_PER_CYCLE: f64 = 39.717_745_692_89;
+const PANEL_N: u64 = 64;
+const M_MM_OVERHEAD: u64 = 8;
+const FIXED_OUTPUT_CYCLES: u64 = 17;
+const REDUCTION_WIDTH: u64 = 64;
+const REDUCTION_SYNC_CYCLES: u64 = 4;
+const COMPLETION_CYCLES: u64 = 32;
+const MAX_TASK_OUTPUTS: usize = PROVISIONED_OUTPUT_SLOTS as usize;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct MknCore {
+    #[serde(default)]
+    pub(crate) id: usize,
+    pub(crate) m: u64,
+    pub(crate) k: u64,
+    pub(crate) n: u64,
+}
+
+impl MknCore {
+    fn pes(&self) -> u64 {
+        self.k * self.n
+    }
+
+    fn output_slots(&self) -> u64 {
+        self.m * self.n
+    }
+
+    fn atom_capacity(&self) -> u64 {
+        self.m * (self.k / COMPILER_MLEN) * self.n
+    }
+
+    fn tile_cycles(&self) -> u64 {
+        let operand_load = self.m.max(self.n);
+        let fill_drain = self.m + self.n + M_MM_OVERHEAD;
+        let k_blocks = self.k.div_ceil(MX_BLOCK);
+        let k_reduction = if k_blocks <= 1 {
+            0
+        } else {
+            k_blocks.next_power_of_two().ilog2() as u64
+        };
+        operand_load + fill_drain + k_reduction + self.m + FIXED_OUTPUT_CYCLES
+    }
+}
+
+const DYNAMIC_MAPPING: &str = "dynamic_expert_dispatch";
+const STREAM_K_MAPPING: &str = "online_stream_k";
+const BASELINE_MAPPING: &str = "monolithic_integral_macro_tiles";
+
+fn default_scheduler_policy() -> String {
+    "earliest_finish_work_stealing".to_string()
+}
+
+fn default_allowed_modes() -> Vec<String> {
+    [
+        "expert_single_core",
+        "m_split",
+        "k_split",
+        "column_up_row_down",
+        "stream_k",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+fn default_cold_expert_max_tokens() -> u64 {
+    4
+}
+
+fn default_hot_expert_min_tokens() -> u64 {
+    8
+}
+
+fn default_prefer_output_locality() -> bool {
+    true
+}
+
+fn default_mode_switch_cycles() -> u64 {
+    0
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct DynamicSchedulerConfig {
+    #[serde(default = "default_scheduler_policy")]
+    pub(crate) policy: String,
+    #[serde(default = "default_allowed_modes")]
+    pub(crate) allowed_modes: Vec<String>,
+    #[serde(default = "default_cold_expert_max_tokens")]
+    pub(crate) cold_expert_max_tokens: u64,
+    #[serde(default = "default_hot_expert_min_tokens")]
+    pub(crate) hot_expert_min_tokens: u64,
+    #[serde(default = "default_prefer_output_locality")]
+    pub(crate) prefer_output_locality: bool,
+    #[serde(default = "default_mode_switch_cycles")]
+    pub(crate) mode_switch_cycles: u64,
+}
+
+impl Default for DynamicSchedulerConfig {
+    fn default() -> Self {
+        Self {
+            policy: default_scheduler_policy(),
+            allowed_modes: default_allowed_modes(),
+            cold_expert_max_tokens: default_cold_expert_max_tokens(),
+            hot_expert_min_tokens: default_hot_expert_min_tokens(),
+            prefer_output_locality: default_prefer_output_locality(),
+            mode_switch_cycles: default_mode_switch_cycles(),
+        }
+    }
+}
+
+impl DynamicSchedulerConfig {
+    fn allows(&self, mode: DispatchMode) -> bool {
+        self.allowed_modes
+            .iter()
+            .any(|candidate| candidate == mode.name())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if self.policy != "earliest_finish_work_stealing" {
+            return Err(format!("unsupported scheduler policy {}", self.policy));
+        }
+        if self.allowed_modes.is_empty() {
+            return Err("scheduler allowed_modes must not be empty".to_string());
+        }
+        for mode in &self.allowed_modes {
+            DispatchMode::parse(mode)
+                .ok_or_else(|| format!("unsupported dynamic mapping mode {mode}"))?;
+        }
+        if self.hot_expert_min_tokens <= self.cold_expert_max_tokens {
+            return Err("hot_expert_min_tokens must exceed cold_expert_max_tokens".to_string());
+        }
+        if self.mode_switch_cycles > 1024 {
+            return Err("mode_switch_cycles must be <=1024".to_string());
+        }
+        Ok(())
+    }
+}
+
+fn default_weight_buffer_banks() -> usize {
+    2
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct HardwareContract {
+    pub(crate) total_pes: u64,
+    pub(crate) maximum_sram_input_elements_per_cycle: u64,
+    pub(crate) maximum_accumulator_slots: u64,
+    pub(crate) hbm_channels: usize,
+    pub(crate) hbm_burst_bytes: u64,
+}
+
+impl Default for HardwareContract {
+    fn default() -> Self {
+        Self {
+            total_pes: BASELINE_PES,
+            maximum_sram_input_elements_per_cycle: PROVISIONED_INPUT_WIDTH,
+            maximum_accumulator_slots: PROVISIONED_OUTPUT_SLOTS,
+            hbm_channels: HBM_CHANNELS,
+            hbm_burst_bytes: HBM_BURST_BYTES,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct HbmContract {
+    dram: String,
+    data_rate_mtps: u64,
+    channels: usize,
+    channel_width_bits: u64,
+    burst_bytes: u64,
+    address_mapping: String,
+}
+
+impl Default for HbmContract {
+    fn default() -> Self {
+        Self {
+            dram: "HBM2".to_string(),
+            data_rate_mtps: 2000,
+            channels: HBM_CHANNELS,
+            channel_width_bits: 64,
+            burst_bytes: HBM_BURST_BYTES,
+            address_mapping: "CacheLineInterleave".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PerCoreSramAllocation {
+    core_id: usize,
+    matrix_sram_bytes: u64,
+    vector_sram_bytes: u64,
+    accumulator_bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SramContract {
+    matrix_sram_bytes: u64,
+    vector_sram_bytes: u64,
+    accumulator_bytes: u64,
+    allocation_policy: String,
+    #[serde(default)]
+    per_core: Vec<PerCoreSramAllocation>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct RecipeSramPeak {
+    matrix_bytes: u64,
+    vector_bytes: u64,
+    accumulator_bytes: u64,
+    accumulator_slots: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct MicroTileRecipe {
+    id: String,
+    job_kind: String,
+    hidden: u64,
+    intermediate: u64,
+    token_min: u64,
+    token_max: u64,
+    m_t: u64,
+    k_h: u64,
+    n_i: u64,
+    n_o: u64,
+    gate_up_buffer_depth: usize,
+    down_buffer_depth: usize,
+    loop_order: String,
+    mapping_mode: String,
+    peak_sram: RecipeSramPeak,
+}
+
+impl MicroTileRecipe {
+    fn validate(&self) -> Result<(), String> {
+        if self.id.trim().is_empty()
+            || !["routed", "shared", "any"].contains(&self.job_kind.as_str())
+            || self.token_min == 0
+            || self.token_min > self.token_max
+            || self.m_t == 0
+            || self.k_h == 0
+            || self.n_i == 0
+            || self.n_o == 0
+            || self.gate_up_buffer_depth == 0
+            || self.down_buffer_depth == 0
+        {
+            return Err(format!("invalid micro recipe {}", self.id));
+        }
+        for dimension in [self.hidden, self.intermediate, self.k_h, self.n_i, self.n_o] {
+            if !dimension.is_multiple_of(COMPILER_MLEN) {
+                return Err(format!("recipe {} has a non-K64 dimension", self.id));
+            }
+        }
+        if self.k_h > self.hidden || self.n_i > self.intermediate || self.n_o > self.hidden {
+            return Err(format!(
+                "recipe {} tile exceeds its model dimension",
+                self.id
+            ));
+        }
+        if !["expert_n_k", "expert_k_n", "token_n_k"].contains(&self.loop_order.as_str()) {
+            return Err(format!("recipe {} has unsupported loop_order", self.id));
+        }
+        if self.mapping_mode != DYNAMIC_MAPPING && DispatchMode::parse(&self.mapping_mode).is_none()
+        {
+            return Err(format!("recipe {} has unsupported mapping_mode", self.id));
+        }
+        Ok(())
+    }
+
+    fn matches(&self, job: &LogicalJob) -> bool {
+        let kind = match job.kind {
+            JobKind::Shared => "shared",
+            JobKind::Routed => "routed",
+        };
+        (self.job_kind == "any" || self.job_kind == kind)
+            && self.hidden == job.projections[2].n
+            && self.intermediate == job.projections[0].n
+            && (self.token_min..=self.token_max).contains(&job.tokens)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct MknArchitectureManifest {
+    pub(crate) schema_version: u64,
+    pub(crate) name: String,
+    pub(crate) mapping: String,
+    pub(crate) buffer_depth: usize,
+    #[serde(default = "default_weight_buffer_banks")]
+    pub(crate) weight_buffer_banks: usize,
+    #[serde(default)]
+    pub(crate) scheduler: DynamicSchedulerConfig,
+    #[serde(default)]
+    pub(crate) hardware_contract: Option<HardwareContract>,
+    #[serde(default)]
+    hbm_contract: Option<HbmContract>,
+    #[serde(default)]
+    sram_contract: Option<SramContract>,
+    #[serde(default)]
+    micro_recipe_table: Vec<MicroTileRecipe>,
+    pub(crate) cores: Vec<MknCore>,
+}
+
+impl MknArchitectureManifest {
+    fn baseline_like(candidate: &Self) -> Self {
+        Self {
+            schema_version: 2,
+            name: "baseline_1x_m4_k1024_n4".to_string(),
+            mapping: BASELINE_MAPPING.to_string(),
+            buffer_depth: candidate.buffer_depth,
+            weight_buffer_banks: candidate.weight_buffer_banks,
+            scheduler: candidate.scheduler.clone(),
+            hardware_contract: candidate.hardware_contract.clone(),
+            hbm_contract: candidate.hbm_contract.clone(),
+            sram_contract: candidate.sram_contract.clone(),
+            micro_recipe_table: candidate.micro_recipe_table.clone(),
+            cores: vec![MknCore {
+                id: 0,
+                m: 4,
+                k: 1024,
+                n: 4,
+            }],
+        }
+    }
+
+    fn pe_count(&self) -> u64 {
+        self.cores.iter().map(MknCore::pes).sum()
+    }
+
+    fn used_input_width(&self) -> u64 {
+        self.cores.iter().map(|core| core.k).sum()
+    }
+
+    fn used_output_slots(&self) -> u64 {
+        self.cores.iter().map(MknCore::output_slots).sum()
+    }
+
+    fn recipe_for_job(&self, job: &LogicalJob) -> Option<&MicroTileRecipe> {
+        if self.schema_version < 3 {
+            return None;
+        }
+        let matches = self
+            .micro_recipe_table
+            .iter()
+            .filter(|recipe| recipe.matches(job))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            matches.len(),
+            1,
+            "schema v3 must select exactly one recipe for {:?} job tokens={} hidden={} intermediate={}",
+            job.kind,
+            job.tokens,
+            job.projections[2].n,
+            job.projections[0].n
+        );
+        matches.into_iter().next()
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if !(1..=3).contains(&self.schema_version) {
+            return Err(format!(
+                "unsupported MKN architecture schema {}",
+                self.schema_version
+            ));
+        }
+        if self.name.trim().is_empty() || self.cores.is_empty() {
+            return Err("architecture name and cores must be non-empty".to_string());
+        }
+        if self.cores.len() > 9 {
+            return Err("architecture core count must be in 1..=9".to_string());
+        }
+        if ![STREAM_K_MAPPING, BASELINE_MAPPING, DYNAMIC_MAPPING].contains(&self.mapping.as_str()) {
+            return Err(format!("unsupported mapping {}", self.mapping));
+        }
+        if !(1..=8).contains(&self.buffer_depth) {
+            return Err("buffer_depth must be in 1..=8".to_string());
+        }
+        if self.weight_buffer_banks == 0 || self.weight_buffer_banks > self.buffer_depth {
+            return Err("weight_buffer_banks must be in 1..=buffer_depth".to_string());
+        }
+        self.scheduler.validate()?;
+        match &self.hardware_contract {
+            Some(contract) if contract != &HardwareContract::default() => {
+                return Err(
+                    "architecture hardware_contract disagrees with this replay engine".to_string(),
+                );
+            }
+            None if self.schema_version >= 2 => {
+                return Err("schema v2 architecture must declare hardware_contract".to_string());
+            }
+            _ => {}
+        }
+        if self.schema_version >= 3 {
+            if self.hbm_contract.as_ref() != Some(&HbmContract::default()) {
+                return Err("schema v3 requires the fixed HBM2-2000 8x64-bit contract".to_string());
+            }
+            let sram = self
+                .sram_contract
+                .as_ref()
+                .ok_or_else(|| "schema v3 requires sram_contract".to_string())?;
+            if min3(
+                sram.matrix_sram_bytes,
+                sram.vector_sram_bytes,
+                sram.accumulator_bytes,
+            ) == 0
+            {
+                return Err("typed SRAM capacities must be positive".to_string());
+            }
+            if !["explicit_per_core", "shared_pool"].contains(&sram.allocation_policy.as_str()) {
+                return Err("unsupported SRAM allocation policy".to_string());
+            }
+            if sram.allocation_policy == "explicit_per_core" {
+                if sram.per_core.len() != self.cores.len() {
+                    return Err("explicit SRAM allocation must cover every core".to_string());
+                }
+                for (index, allocation) in sram.per_core.iter().enumerate() {
+                    if allocation.core_id != index
+                        || min3(
+                            allocation.matrix_sram_bytes,
+                            allocation.vector_sram_bytes,
+                            allocation.accumulator_bytes,
+                        ) == 0
+                    {
+                        return Err("invalid explicit per-core SRAM allocation".to_string());
+                    }
+                }
+                if sram
+                    .per_core
+                    .iter()
+                    .map(|value| value.matrix_sram_bytes)
+                    .sum::<u64>()
+                    != sram.matrix_sram_bytes
+                    || sram
+                        .per_core
+                        .iter()
+                        .map(|value| value.vector_sram_bytes)
+                        .sum::<u64>()
+                        != sram.vector_sram_bytes
+                    || sram
+                        .per_core
+                        .iter()
+                        .map(|value| value.accumulator_bytes)
+                        .sum::<u64>()
+                        != sram.accumulator_bytes
+                {
+                    return Err(
+                        "per-core SRAM allocations do not conserve global capacity".to_string()
+                    );
+                }
+            }
+            if self.micro_recipe_table.is_empty() {
+                return Err("schema v3 requires a non-empty micro_recipe_table".to_string());
+            }
+            for recipe in &self.micro_recipe_table {
+                recipe.validate()?;
+                let actual = recipe_sram_peak(recipe);
+                if actual != recipe.peak_sram {
+                    return Err(format!(
+                        "recipe {} peak_sram disagrees with Rust liveness",
+                        recipe.id
+                    ));
+                }
+                if actual.matrix_bytes > sram.matrix_sram_bytes
+                    || actual.vector_bytes > sram.vector_sram_bytes
+                    || actual.accumulator_bytes > sram.accumulator_bytes
+                    || actual.accumulator_slots > PROVISIONED_OUTPUT_SLOTS
+                {
+                    return Err(format!("recipe {} exceeds typed SRAM capacity", recipe.id));
+                }
+                if sram.allocation_policy == "explicit_per_core"
+                    && sram.per_core.iter().any(|allocation| {
+                        actual.matrix_bytes > allocation.matrix_sram_bytes
+                            || actual.vector_bytes > allocation.vector_sram_bytes
+                            || actual.accumulator_bytes > allocation.accumulator_bytes
+                    })
+                {
+                    return Err(format!(
+                        "recipe {} is not dispatchable within every core's typed SRAM quota",
+                        recipe.id
+                    ));
+                }
+            }
+        }
+        for (index, core) in self.cores.iter().enumerate() {
+            if core.id != index {
+                return Err(format!(
+                    "core id {} must equal its zero-based manifest index {index}",
+                    core.id
+                ));
+            }
+            if core.m == 0 || core.k == 0 || core.n == 0 {
+                return Err(format!("core {index} has a zero dimension"));
+            }
+            if core.m > 16 || core.k > 1024 || core.n > 16 {
+                return Err(format!("core {index} exceeds M<=16, K<=1024, N<=16"));
+            }
+            if !core.k.is_multiple_of(COMPILER_MLEN) {
+                return Err(format!("core {index} K={} is not 64-aligned", core.k));
+            }
+            if !core.k.is_multiple_of(core.m) {
+                return Err(format!(
+                    "core {index} K={} is not divisible by M={}",
+                    core.k, core.m
+                ));
+            }
+        }
+        if self.pe_count() != BASELINE_PES {
+            return Err(format!(
+                "{} has {} PEs, expected {BASELINE_PES}",
+                self.name,
+                self.pe_count()
+            ));
+        }
+        if self.used_input_width() > PROVISIONED_INPUT_WIDTH {
+            return Err(format!(
+                "{} uses input width {}, budget is {PROVISIONED_INPUT_WIDTH}",
+                self.name,
+                self.used_input_width()
+            ));
+        }
+        if self.used_output_slots() > PROVISIONED_OUTPUT_SLOTS {
+            return Err(format!(
+                "{} uses {} output slots, budget is {PROVISIONED_OUTPUT_SLOTS}",
+                self.name,
+                self.used_output_slots()
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GroupedManifest {
+    model: String,
+    architecture: String,
+    #[serde(default)]
+    workload: String,
+    #[serde(default)]
+    phase: String,
+    #[serde(default)]
+    nominal_batch: u64,
+    #[serde(default)]
+    active_batch: u64,
+    #[serde(default)]
+    source_window_id: String,
+    #[serde(default)]
+    layer: u64,
+    #[serde(default)]
+    step: u64,
+    batch: u64,
+    top_k: u64,
+    num_experts: u64,
+    hidden: u64,
+    routed_intermediate: u64,
+    shared_intermediate: u64,
+    #[serde(default = "default_shared_experts")]
+    shared_experts: u64,
+    #[serde(default)]
+    shared_gate: String,
+    #[serde(default)]
+    selected_experts: Vec<u64>,
+    group_sizes: BTreeMap<String, u64>,
+    #[serde(default)]
+    token_routes: Vec<TokenRoute>,
+    #[serde(default)]
+    physical_equivalence: Option<PhysicalEquivalenceContract>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct TokenRoute {
+    token_id: u64,
+    experts: Vec<TokenExpertRoute>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct TokenExpertRoute {
+    expert_id: u64,
+    route_slot: u64,
+    #[allow(dead_code)]
+    route_weight: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct PhysicalEquivalenceContract {
+    useful_macs: u64,
+    hbm_physical_bytes: u64,
+    hbm_address_sha256: String,
+    intermediate_activation_offchip_write_bytes: u64,
+}
+
+fn default_shared_experts() -> u64 {
+    1
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum JobKind {
+    Shared,
+    Routed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DispatchMode {
+    ExpertSingleCore,
+    MSplit,
+    KSplit,
+    ColumnUpRowDown,
+    StreamK,
+}
+
+impl DispatchMode {
+    fn name(self) -> &'static str {
+        match self {
+            Self::ExpertSingleCore => "expert_single_core",
+            Self::MSplit => "m_split",
+            Self::KSplit => "k_split",
+            Self::ColumnUpRowDown => "column_up_row_down",
+            Self::StreamK => "stream_k",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "expert_single_core" => Some(Self::ExpertSingleCore),
+            "m_split" => Some(Self::MSplit),
+            "k_split" => Some(Self::KSplit),
+            "column_up_row_down" => Some(Self::ColumnUpRowDown),
+            "stream_k" => Some(Self::StreamK),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Projection {
+    k: u64,
+    n: u64,
+    base: u64,
+}
+
+#[derive(Clone, Debug)]
+struct SharedGateProjection {
+    base: u64,
+    physical_bytes: u64,
+    vector_cycles: u64,
+}
+
+#[derive(Clone, Debug)]
+struct LogicalJob {
+    id: usize,
+    kind: JobKind,
+    expert_id: Option<u64>,
+    tokens: u64,
+    token_ids: Vec<u64>,
+    projections: [Projection; 3],
+    shared_gate: Option<SharedGateProjection>,
+}
+
+#[derive(Clone, Debug)]
+struct WeightPanel {
+    id: usize,
+    job_id: usize,
+    projection: usize,
+    tokens: u64,
+    tensor: Projection,
+    n_start: u64,
+    n_stop: u64,
+    m_tile: u64,
+    k_tile: u64,
+}
+
+impl WeightPanel {
+    fn k_blocks(&self) -> u64 {
+        self.tensor.k / COMPILER_MLEN
+    }
+
+    fn output_count(&self) -> u64 {
+        self.tokens * (self.n_stop - self.n_start)
+    }
+
+    fn physical_bytes(&self) -> u64 {
+        let blocks = self.k_blocks() * (self.n_stop - self.n_start) / COMPILER_MLEN;
+        blocks * 2 * COMPILER_MLEN * HBM_BURST_BYTES
+    }
+}
+
+fn align_up(value: u64, alignment: u64) -> u64 {
+    value.div_ceil(alignment) * alignment
+}
+
+fn min3(a: u64, b: u64, c: u64) -> u64 {
+    a.min(b).min(c)
+}
+
+fn stored_mx_bytes(k: u64, n: u64) -> u64 {
+    let elements = k * n;
+    align_up(elements + elements / MX_BLOCK, HBM_BURST_BYTES)
+}
+
+fn recipe_sram_peak(recipe: &MicroTileRecipe) -> RecipeSramPeak {
+    let packed_tile = |k: u64, n: u64| {
+        let elements = k * n;
+        align_up(elements + elements / MX_BLOCK, HBM_BURST_BYTES)
+    };
+    let activation = |elements: u64| align_up(elements * 2, HBM_BURST_BYTES);
+    let accumulator = |elements: u64| align_up(elements * 4, HBM_BURST_BYTES);
+
+    let stage0_matrix =
+        2 * recipe.gate_up_buffer_depth as u64 * packed_tile(recipe.k_h, recipe.n_i);
+    let stage1_matrix = recipe.down_buffer_depth as u64 * packed_tile(recipe.n_i, recipe.n_o);
+    let input = activation(recipe.m_t * recipe.k_h);
+    let gate = activation(recipe.m_t * recipe.n_i);
+    let up = activation(recipe.m_t * recipe.n_i);
+    let post_swiglu = activation(recipe.m_t * recipe.n_i);
+    let output = activation(recipe.m_t * recipe.n_o);
+    let vector_bytes = (input + gate + up)
+        .max(gate + up + post_swiglu)
+        .max(post_swiglu + output);
+    let accumulator_slots = (2 * recipe.m_t * recipe.n_i.div_ceil(COMPILER_MLEN))
+        .max(recipe.m_t * recipe.n_o.div_ceil(COMPILER_MLEN));
+    let accumulator_elements = (2 * recipe.m_t * recipe.n_i).max(recipe.m_t * recipe.n_o);
+    RecipeSramPeak {
+        matrix_bytes: stage0_matrix.max(stage1_matrix),
+        vector_bytes,
+        accumulator_bytes: accumulator(accumulator_elements),
+        accumulator_slots,
+    }
+}
+
+fn shared_gate_vector_cycles(tokens: u64, hidden: u64) -> u64 {
+    let k_blocks = hidden.div_ceil(COMPILER_MLEN);
+    let physical_rows = tokens.div_ceil(4) * 4;
+    let dot_and_sigmoid = 3 + tokens * (10 + 12 * k_blocks);
+    let clear_and_broadcast = 195 + physical_rows * k_blocks * 65 + tokens * (196 + k_blocks * 66);
+    let apply_gate = tokens * k_blocks * 3;
+    dot_and_sigmoid + clear_and_broadcast + apply_gate
+}
+
+fn activation_vector_cycles(tokens: u64, intermediate: u64) -> u64 {
+    let chunks = tokens * intermediate.div_ceil(COMPILER_MLEN);
+    let cycles_per_chunk = 2 * u64::from(*VECTOR_ADD_CYCLES)
+        + u64::from(*VECTOR_EXP_CYCLES)
+        + u64::from(*VECTOR_RECI_CYCLES)
+        + 2 * u64::from(*VECTOR_MUL_CYCLES)
+        + 2 * u64::from(*SCALAR_INT_BASIC_CYCLES);
+    chunks * cycles_per_chunk
+}
+
+fn completion_vector_cycles(kind: JobKind, tokens: u64, hidden: u64) -> u64 {
+    let hidden_chunks = tokens * hidden.div_ceil(COMPILER_MLEN);
+    let cycles_per_chunk = match kind {
+        JobKind::Shared => u64::from(*VECTOR_ADD_CYCLES),
+        JobKind::Routed => {
+            u64::from(*VECTOR_MUL_CYCLES)
+                + u64::from(*VECTOR_ADD_CYCLES)
+                + u64::from(*SCALAR_INT_BASIC_CYCLES)
+        }
+    };
+    hidden_chunks * cycles_per_chunk
+}
+
+fn read_workload(path: &Path) -> GroupedManifest {
+    let manifest: GroupedManifest = serde_json::from_slice(
+        &std::fs::read(path)
+            .unwrap_or_else(|err| panic!("failed to read MKN workload manifest {path:?}: {err}")),
+    )
+    .unwrap_or_else(|err| panic!("failed to parse MKN workload manifest {path:?}: {err}"));
+    assert!(manifest.batch > 0 && manifest.top_k > 0 && manifest.num_experts > 0);
+    assert!(
+        matches!(manifest.shared_gate.as_str(), "" | "none" | "sigmoid"),
+        "shared_gate must be none or sigmoid"
+    );
+    assert_eq!(
+        manifest.group_sizes.values().sum::<u64>(),
+        manifest.batch * manifest.top_k,
+        "group_sizes must cover every routed token/expert pair"
+    );
+    for dimension in [manifest.hidden, manifest.routed_intermediate] {
+        assert!(
+            dimension > 0 && dimension.is_multiple_of(COMPILER_MLEN),
+            "model dimensions must be positive and 64-aligned"
+        );
+    }
+    if manifest.shared_experts == 0 {
+        assert_eq!(
+            manifest.shared_intermediate, 0,
+            "shared_intermediate must be zero when shared_experts is zero"
+        );
+        assert!(
+            matches!(manifest.shared_gate.as_str(), "" | "none"),
+            "a sigmoid shared gate requires a shared expert"
+        );
+    } else {
+        assert!(
+            manifest.shared_intermediate > 0
+                && manifest.shared_intermediate.is_multiple_of(COMPILER_MLEN),
+            "shared_intermediate must be positive and 64-aligned"
+        );
+    }
+    if !manifest.selected_experts.is_empty() {
+        assert!(
+            manifest
+                .selected_experts
+                .iter()
+                .all(|expert| manifest.group_sizes.contains_key(&expert.to_string()))
+        );
+    }
+    let _ = tokens_by_expert(&manifest);
+    manifest
+}
+
+fn tokens_by_expert(manifest: &GroupedManifest) -> BTreeMap<u64, Vec<u64>> {
+    let expected_histogram = manifest
+        .group_sizes
+        .iter()
+        .map(|(expert, count)| {
+            let expert = expert
+                .parse::<u64>()
+                .unwrap_or_else(|err| panic!("invalid expert id {expert:?}: {err}"));
+            assert!(expert < manifest.num_experts);
+            (expert, *count)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    if !manifest.token_routes.is_empty() {
+        assert_eq!(
+            manifest.token_routes.len() as u64,
+            manifest.batch,
+            "token_routes must contain exactly one record per token"
+        );
+        let mut result = BTreeMap::<u64, Vec<u64>>::new();
+        let mut seen_tokens = BTreeSet::new();
+        for token in &manifest.token_routes {
+            assert!(token.token_id < manifest.batch && seen_tokens.insert(token.token_id));
+            assert_eq!(token.experts.len() as u64, manifest.top_k);
+            let mut seen_experts = BTreeSet::new();
+            let mut slots = token
+                .experts
+                .iter()
+                .map(|route| route.route_slot)
+                .collect::<Vec<_>>();
+            slots.sort_unstable();
+            assert_eq!(slots, (0..manifest.top_k).collect::<Vec<_>>());
+            for route in &token.experts {
+                assert!(route.expert_id < manifest.num_experts);
+                assert!(seen_experts.insert(route.expert_id));
+                result
+                    .entry(route.expert_id)
+                    .or_default()
+                    .push(token.token_id);
+            }
+        }
+        let histogram = result
+            .iter()
+            .map(|(expert, tokens)| (*expert, tokens.len() as u64))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(
+            histogram, expected_histogram,
+            "token_routes histogram disagrees with group_sizes"
+        );
+        for tokens in result.values_mut() {
+            tokens.sort_unstable();
+        }
+        return result;
+    }
+
+    // Frozen v1 manifests did not retain token identities.  Reconstruct one
+    // deterministic legal bipartite assignment solely for backwards replay;
+    // all new v2 captures must provide token_routes explicitly.
+    assert!(
+        expected_histogram
+            .values()
+            .all(|count| *count <= manifest.batch),
+        "legacy histogram cannot represent unique expert choices per token"
+    );
+    let mut remaining = expected_histogram.clone();
+    let mut result = BTreeMap::<u64, Vec<u64>>::new();
+    for token in 0..manifest.batch {
+        let mut used = BTreeSet::new();
+        for _slot in 0..manifest.top_k {
+            let expert = remaining
+                .iter()
+                .filter(|(expert, count)| **count > 0 && !used.contains(*expert))
+                .max_by_key(|(expert, count)| (**count, std::cmp::Reverse(**expert)))
+                .map(|(expert, _)| *expert)
+                .expect("legacy histogram cannot be assigned without duplicate token experts");
+            *remaining.get_mut(&expert).unwrap() -= 1;
+            used.insert(expert);
+            result.entry(expert).or_default().push(token);
+        }
+    }
+    assert!(remaining.values().all(|count| *count == 0));
+    result
+}
+
+fn read_architecture(path: &Path) -> MknArchitectureManifest {
+    let architecture: MknArchitectureManifest =
+        serde_json::from_slice(&std::fs::read(path).unwrap_or_else(|err| {
+            panic!("failed to read MKN architecture manifest {path:?}: {err}")
+        }))
+        .unwrap_or_else(|err| panic!("failed to parse MKN architecture manifest {path:?}: {err}"));
+    architecture
+        .validate()
+        .unwrap_or_else(|err| panic!("invalid MKN architecture: {err}"));
+    assert_ne!(
+        architecture.mapping, BASELINE_MAPPING,
+        "candidate replay requires online_stream_k or dynamic_expert_dispatch"
+    );
+    architecture
+}
+
+fn jobs_from_manifest(manifest: &GroupedManifest) -> Vec<LogicalJob> {
+    let routed_tokens = tokens_by_expert(manifest);
+    let routed_gate_stride = stored_mx_bytes(manifest.hidden, manifest.routed_intermediate);
+    let routed_up_stride = routed_gate_stride;
+    let routed_down_stride = stored_mx_bytes(manifest.routed_intermediate, manifest.hidden);
+    let routed_gate_table = 0;
+    let routed_up_table = routed_gate_table + routed_gate_stride * manifest.num_experts;
+    let routed_down_table = routed_up_table + routed_up_stride * manifest.num_experts;
+    let shared_projection_gate_stride =
+        stored_mx_bytes(manifest.hidden, manifest.shared_intermediate);
+    let shared_up_stride = shared_projection_gate_stride;
+    let shared_down_stride = stored_mx_bytes(manifest.shared_intermediate, manifest.hidden);
+    let shared_projection_gate_table =
+        routed_down_table + routed_down_stride * manifest.num_experts;
+    let shared_up_table = shared_projection_gate_table + shared_projection_gate_stride;
+    let shared_down_table = shared_up_table + shared_up_stride;
+    let shared_router_gate_stride = align_up(manifest.hidden * 2, HBM_BURST_BYTES);
+    let shared_router_gate_table = shared_down_table + shared_down_stride;
+
+    let mut jobs = Vec::new();
+    if manifest.shared_experts > 0 {
+        jobs.push(LogicalJob {
+            id: jobs.len(),
+            kind: JobKind::Shared,
+            expert_id: None,
+            tokens: manifest.batch,
+            token_ids: (0..manifest.batch).collect(),
+            projections: [
+                Projection {
+                    k: manifest.hidden,
+                    n: manifest.shared_intermediate,
+                    base: shared_projection_gate_table,
+                },
+                Projection {
+                    k: manifest.hidden,
+                    n: manifest.shared_intermediate,
+                    base: shared_up_table,
+                },
+                Projection {
+                    k: manifest.shared_intermediate,
+                    n: manifest.hidden,
+                    base: shared_down_table,
+                },
+            ],
+            shared_gate: (manifest.shared_gate == "sigmoid").then(|| SharedGateProjection {
+                base: shared_router_gate_table,
+                physical_bytes: shared_router_gate_stride,
+                vector_cycles: shared_gate_vector_cycles(manifest.batch, manifest.hidden),
+            }),
+        });
+    }
+
+    let mut routed = routed_tokens
+        .into_iter()
+        .map(|(expert_id, token_ids)| (expert_id, token_ids))
+        .collect::<Vec<_>>();
+    routed.sort_unstable_by_key(|(expert, tokens)| (std::cmp::Reverse(tokens.len()), *expert));
+    for (expert_id, token_ids) in routed {
+        let tokens = token_ids.len() as u64;
+        let id = jobs.len();
+        jobs.push(LogicalJob {
+            id,
+            kind: JobKind::Routed,
+            expert_id: Some(expert_id),
+            tokens,
+            token_ids,
+            projections: [
+                Projection {
+                    k: manifest.hidden,
+                    n: manifest.routed_intermediate,
+                    base: routed_gate_table + expert_id * routed_gate_stride,
+                },
+                Projection {
+                    k: manifest.hidden,
+                    n: manifest.routed_intermediate,
+                    base: routed_up_table + expert_id * routed_up_stride,
+                },
+                Projection {
+                    k: manifest.routed_intermediate,
+                    n: manifest.hidden,
+                    base: routed_down_table + expert_id * routed_down_stride,
+                },
+            ],
+            shared_gate: None,
+        });
+    }
+    jobs
+}
+
+fn build_panels(
+    jobs: &[LogicalJob],
+    architecture: &MknArchitectureManifest,
+) -> (VecDeque<WeightPanel>, Vec<[usize; 3]>) {
+    let mut per_job = vec![VecDeque::new(); jobs.len()];
+    let mut totals = vec![[0_usize; 3]; jobs.len()];
+    for job in jobs {
+        for (projection, tensor) in job.projections.iter().enumerate() {
+            let recipe = architecture.recipe_for_job(job);
+            let panel_columns =
+                recipe.map_or(
+                    PANEL_N,
+                    |value| {
+                        if projection < 2 { value.n_i } else { value.n_o }
+                    },
+                );
+            let k_tile =
+                recipe.map_or(
+                    tensor.k,
+                    |value| {
+                        if projection < 2 { value.k_h } else { value.n_i }
+                    },
+                );
+            let m_tile = recipe.map_or(job.tokens, |value| value.m_t);
+            let mut n_start = 0;
+            while n_start < tensor.n {
+                let n_stop = (n_start + panel_columns).min(tensor.n);
+                assert!((n_stop - n_start).is_multiple_of(PANEL_N));
+                totals[job.id][projection] += 1;
+                per_job[job.id].push_back(WeightPanel {
+                    id: 0,
+                    job_id: job.id,
+                    projection,
+                    tokens: job.tokens,
+                    tensor: tensor.clone(),
+                    n_start,
+                    n_stop,
+                    m_tile,
+                    k_tile,
+                });
+                n_start = n_stop;
+            }
+        }
+    }
+    let mut result = VecDeque::new();
+    loop {
+        let mut moved = false;
+        for queue in &mut per_job {
+            if let Some(mut panel) = queue.pop_front() {
+                panel.id = result.len();
+                result.push_back(panel);
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    (result, totals)
+}
+
+fn append_panel_addresses(panel: &WeightPanel, addresses: &mut Vec<u64>) {
+    let scale_base = panel.tensor.base + panel.tensor.k * panel.tensor.n;
+    for n_start in (panel.n_start..panel.n_stop).step_by(PANEL_N as usize) {
+        for k_start in (0..panel.tensor.k).step_by(COMPILER_MLEN as usize) {
+            for row_offset in 0..COMPILER_MLEN {
+                let logical = (k_start + row_offset) * panel.tensor.n + n_start;
+                let element_addr = panel.tensor.base + logical;
+                assert!(element_addr.is_multiple_of(HBM_BURST_BYTES));
+                addresses.push(element_addr);
+                let scale_addr = scale_base + logical / MX_BLOCK;
+                addresses.push(scale_addr / HBM_BURST_BYTES * HBM_BURST_BYTES);
+            }
+        }
+    }
+}
+
+fn canonical_hbm_address_digest(jobs: &[LogicalJob], panels: &VecDeque<WeightPanel>) -> String {
+    let mut addresses = Vec::new();
+    for job in jobs {
+        if let Some(gate) = &job.shared_gate {
+            for offset in (0..gate.physical_bytes).step_by(HBM_BURST_BYTES as usize) {
+                addresses.push(gate.base + offset);
+            }
+        }
+    }
+    for panel in panels {
+        append_panel_addresses(panel, &mut addresses);
+    }
+    // Recipe-dependent panel grouping changes request order but not the
+    // physical multiset.  Sorting makes this equivalence digest invariant to
+    // legal scheduling/prefetch order while retaining duplicate scale reads.
+    addresses.sort_unstable();
+    let mut hasher = Sha256::new();
+    for address in addresses {
+        hasher.update(address.to_le_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+async fn issue_addresses(hbm: &Arc<dyn ErasedMemoryModel>, addresses: &mut Vec<u64>) {
+    async fn issue_one(hbm: Arc<dyn ErasedMemoryModel>, address: u64) {
+        let _ = hbm.read(address).await;
+    }
+
+    let mut source = std::mem::take(addresses).into_iter();
+    let mut pending = FuturesUnordered::new();
+    for address in source.by_ref().take(HBM_MAX_IN_FLIGHT) {
+        pending.push(issue_one(hbm.clone(), address));
+    }
+    while pending.next().await.is_some() {
+        if let Some(address) = source.next() {
+            pending.push(issue_one(hbm.clone(), address));
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Task {
+    panel_id: usize,
+    core_id: usize,
+    mode: DispatchMode,
+    stolen: bool,
+    contributions: [(usize, u64); MAX_TASK_OUTPUTS],
+    contribution_count: usize,
+    useful_atoms: u64,
+    issued_atoms: u64,
+    cycles: u64,
+}
+
+#[derive(Debug)]
+struct PanelState {
+    panel: WeightPanel,
+    loaded: bool,
+    bank_id: usize,
+    next_k_by_output: Vec<u64>,
+    output_owner: Vec<Option<usize>>,
+    in_flight_tasks: u64,
+    output_remaining: Vec<u64>,
+    output_participants: Vec<BTreeSet<usize>>,
+}
+
+impl PanelState {
+    fn new(panel: WeightPanel, bank_id: usize) -> Self {
+        let outputs = panel.output_count() as usize;
+        Self {
+            output_remaining: vec![panel.k_blocks(); outputs],
+            output_participants: vec![BTreeSet::new(); outputs],
+            next_k_by_output: vec![0; outputs],
+            output_owner: vec![None; outputs],
+            panel,
+            loaded: false,
+            bank_id,
+            in_flight_tasks: 0,
+        }
+    }
+
+    fn remaining_atoms(&self) -> u64 {
+        self.next_k_by_output
+            .iter()
+            .map(|next_k| self.panel.k_blocks() - next_k)
+            .sum()
+    }
+
+    fn all_work_assigned(&self) -> bool {
+        self.next_k_by_output
+            .iter()
+            .all(|next_k| *next_k == self.panel.k_blocks())
+    }
+
+    fn width(&self) -> u64 {
+        self.panel.n_stop - self.panel.n_start
+    }
+
+    fn output_index(&self, token: u64, n: u64) -> usize {
+        (token * self.width() + n) as usize
+    }
+
+    fn weighted_owner(position: u64, total: u64, weights: &[u64]) -> usize {
+        let weight_sum = weights.iter().sum::<u64>();
+        let target = position * weight_sum / total.max(1);
+        let mut prefix = 0;
+        for (index, weight) in weights.iter().enumerate() {
+            prefix += *weight;
+            if target < prefix {
+                return index;
+            }
+        }
+        weights.len() - 1
+    }
+
+    fn statically_owned(
+        &self,
+        token: u64,
+        n: u64,
+        k_start: u64,
+        core_id: usize,
+        cores: &[MknCore],
+        mode: DispatchMode,
+    ) -> bool {
+        match mode {
+            DispatchMode::MSplit => {
+                let weights = cores.iter().map(|core| core.m).collect::<Vec<_>>();
+                Self::weighted_owner(token, self.panel.tokens, &weights) == core_id
+            }
+            DispatchMode::ColumnUpRowDown if self.panel.projection < 2 => {
+                let weights = cores.iter().map(|core| core.n).collect::<Vec<_>>();
+                Self::weighted_owner(n, self.width(), &weights) == core_id
+            }
+            DispatchMode::KSplit | DispatchMode::ColumnUpRowDown => {
+                let weights = cores
+                    .iter()
+                    .map(|core| core.k / COMPILER_MLEN)
+                    .collect::<Vec<_>>();
+                Self::weighted_owner(k_start, self.panel.k_blocks(), &weights) == core_id
+            }
+            _ => true,
+        }
+    }
+
+    fn eligible_start(
+        &self,
+        core_id: usize,
+        cores: &[MknCore],
+        mode: DispatchMode,
+        prefer_locality: bool,
+        allow_steal: bool,
+    ) -> Option<(usize, bool)> {
+        let mut fallback = None;
+        for index in 0..self.next_k_by_output.len() {
+            if self.next_k_by_output[index] == self.panel.k_blocks() {
+                continue;
+            }
+            let token = index as u64 / self.width();
+            let n = index as u64 % self.width();
+            let statically_owned =
+                self.statically_owned(token, n, self.next_k_by_output[index], core_id, cores, mode);
+            if !statically_owned && !allow_steal {
+                continue;
+            }
+            match self.output_owner[index] {
+                Some(owner) if owner == core_id && statically_owned => {
+                    return Some((index, false));
+                }
+                Some(owner) if allow_steal => {
+                    fallback.get_or_insert((index, owner != core_id || !statically_owned));
+                }
+                Some(_) => {}
+                None if !prefer_locality => return Some((index, !statically_owned)),
+                None => {
+                    fallback.get_or_insert((index, !statically_owned));
+                }
+            };
+        }
+        fallback
+    }
+
+    fn rectangle_compatible(
+        &self,
+        output_coordinate: (u64, u64),
+        k_start: u64,
+        core_id: usize,
+        cores: &[MknCore],
+        mode: DispatchMode,
+        allow_steal: bool,
+    ) -> bool {
+        let (token, n) = output_coordinate;
+        let index = self.output_index(token, n);
+        self.next_k_by_output[index] == k_start
+            && (self.statically_owned(token, n, k_start, core_id, cores, mode) || allow_steal)
+            && match self.output_owner[index] {
+                None => true,
+                Some(owner) => owner == core_id || allow_steal,
+            }
+    }
+
+    fn assign_rectangular_task(
+        &mut self,
+        core_id: usize,
+        cores: &[MknCore],
+        mode: DispatchMode,
+        prefer_locality: bool,
+        allow_steal: bool,
+    ) -> Option<Task> {
+        let core = &cores[core_id];
+        let (output_index, stolen) =
+            self.eligible_start(core_id, cores, mode, prefer_locality, allow_steal)?;
+        let token_start = output_index as u64 / self.width();
+        let n_start = output_index as u64 % self.width();
+        let k_start = self.next_k_by_output[output_index];
+        let k_extent = (core.k / COMPILER_MLEN)
+            .min(self.panel.k_tile / COMPILER_MLEN)
+            .min(self.panel.k_blocks() - k_start);
+
+        let mut n_extent = 1;
+        while n_extent < core.n && n_start + n_extent < self.width() {
+            if !self.rectangle_compatible(
+                (token_start, n_start + n_extent),
+                k_start,
+                core_id,
+                cores,
+                mode,
+                allow_steal,
+            ) {
+                break;
+            }
+            n_extent += 1;
+        }
+        let mut token_extent = 1;
+        while token_extent < core.m
+            && token_extent < self.panel.m_tile
+            && token_start + token_extent < self.panel.tokens
+        {
+            let compatible = (n_start..n_start + n_extent).all(|n| {
+                self.rectangle_compatible(
+                    (token_start + token_extent, n),
+                    k_start,
+                    core_id,
+                    cores,
+                    mode,
+                    allow_steal,
+                )
+            });
+            if !compatible {
+                break;
+            }
+            token_extent += 1;
+        }
+
+        let mut contributions = [(0, 0); MAX_TASK_OUTPUTS];
+        let mut contribution_count = 0;
+        for token in token_start..token_start + token_extent {
+            for n in n_start..n_start + n_extent {
+                let output = self.output_index(token, n);
+                self.next_k_by_output[output] = k_start + k_extent;
+                self.output_owner[output].get_or_insert(core_id);
+                contributions[contribution_count] = (output, k_extent);
+                contribution_count += 1;
+            }
+        }
+        assert!(contribution_count <= MAX_TASK_OUTPUTS);
+        let useful_atoms = token_extent * n_extent * k_extent;
+        Some(Task {
+            panel_id: self.panel.id,
+            core_id,
+            mode,
+            stolen,
+            contributions,
+            contribution_count,
+            useful_atoms,
+            issued_atoms: core.atom_capacity(),
+            cycles: core.tile_cycles(),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct Reduction {
+    panel_id: usize,
+    cycles: u64,
+    bytes: u64,
+    elements: u64,
+    add_elements: u64,
+    ready_cycle: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum VectorWorkKind {
+    Activation,
+    Completion,
+}
+
+#[derive(Debug)]
+struct VectorWork {
+    kind: VectorWorkKind,
+    job_id: usize,
+    cycles: u64,
+}
+
+#[derive(Debug)]
+struct CombineWork {
+    token_id: usize,
+    cycles: u64,
+    add_elements: u64,
+    ready_cycle: u64,
+}
+
+#[derive(Debug)]
+enum Event {
+    PanelReady {
+        sequence: u64,
+        cycle: u64,
+        panel_id: usize,
+    },
+    CoreDone {
+        sequence: u64,
+        cycle: u64,
+        task: Task,
+    },
+    WeightBankReleased {
+        sequence: u64,
+        cycle: u64,
+        bank_id: usize,
+    },
+    CoreModeSwitchDone {
+        sequence: u64,
+        cycle: u64,
+        core_id: usize,
+    },
+    SharedGateReady {
+        sequence: u64,
+        cycle: u64,
+        job_id: usize,
+    },
+    ReductionDone {
+        sequence: u64,
+        cycle: u64,
+        reduction: Reduction,
+    },
+    VectorDone {
+        sequence: u64,
+        cycle: u64,
+        work: VectorWork,
+    },
+    CombineDone {
+        sequence: u64,
+        cycle: u64,
+        work: CombineWork,
+    },
+}
+
+impl Event {
+    fn key(&self) -> (u64, u64) {
+        match self {
+            Self::PanelReady {
+                sequence, cycle, ..
+            }
+            | Self::CoreDone {
+                sequence, cycle, ..
+            }
+            | Self::WeightBankReleased {
+                sequence, cycle, ..
+            }
+            | Self::CoreModeSwitchDone {
+                sequence, cycle, ..
+            }
+            | Self::SharedGateReady {
+                sequence, cycle, ..
+            }
+            | Self::ReductionDone {
+                sequence, cycle, ..
+            }
+            | Self::VectorDone {
+                sequence, cycle, ..
+            }
+            | Self::CombineDone {
+                sequence, cycle, ..
+            } => (*cycle, *sequence),
+        }
+    }
+}
+
+fn cycle_now() -> u64 {
+    Executor::current()
+        .now()
+        .as_picos()
+        .div_ceil(PERIOD.as_picos().max(1))
+}
+
+fn launch_panel_transfer(
+    hbm: Arc<dyn ErasedMemoryModel>,
+    panel: WeightPanel,
+    sequence: u64,
+    sender: mpsc::UnboundedSender<Event>,
+) {
+    Executor::current().spawn(async move {
+        let mut addresses = Vec::new();
+        append_panel_addresses(&panel, &mut addresses);
+        issue_addresses(&hbm, &mut addresses).await;
+        sender
+            .send(Event::PanelReady {
+                sequence,
+                cycle: cycle_now(),
+                panel_id: panel.id,
+            })
+            .expect("MKN replay scheduler dropped before panel transfer completed");
+    });
+}
+
+fn launch_shared_gate_transfer(
+    hbm: Arc<dyn ErasedMemoryModel>,
+    job_id: usize,
+    gate: SharedGateProjection,
+    sequence: u64,
+    sender: mpsc::UnboundedSender<Event>,
+) {
+    Executor::current().spawn(async move {
+        let mut addresses = (0..gate.physical_bytes)
+            .step_by(HBM_BURST_BYTES as usize)
+            .map(|offset| gate.base + offset)
+            .collect::<Vec<_>>();
+        issue_addresses(&hbm, &mut addresses).await;
+        sender
+            .send(Event::SharedGateReady {
+                sequence,
+                cycle: cycle_now(),
+                job_id,
+            })
+            .expect("MKN dispatcher dropped before shared-gate transfer completed");
+    });
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct HbmChannelReport {
+    channel: u32,
+    cycles: u64,
+    read_requests: u64,
+    read_requests_served: u64,
+    native_transaction_bytes: u64,
+    physical_read_bytes: u64,
+    bytes_per_layer_cycle: f64,
+    load_fraction: f64,
+    row_hits: u64,
+    row_misses: u64,
+    row_conflicts: u64,
+    row_hit_rate: f64,
+    row_conflict_rate: f64,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct CycleBreakdown {
+    compute_cycles: u64,
+    hbm_starvation_cycles: u64,
+    vector_swiglu_cycles: u64,
+    token_combine_cycles: u64,
+    gang_mode_switch_wait_cycles: u64,
+}
+
+impl CycleBreakdown {
+    fn total(&self) -> u64 {
+        self.compute_cycles
+            + self.hbm_starvation_cycles
+            + self.vector_swiglu_cycles
+            + self.token_combine_cycles
+            + self.gang_mode_switch_wait_cycles
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ReplayRun {
+    architecture: MknArchitectureManifest,
+    equal_area_pes: u64,
+    provisioned_input_width: u64,
+    used_input_width: u64,
+    provisioned_output_slots: u64,
+    used_output_slots: u64,
+    completed_jobs: usize,
+    #[serde(default)]
+    completed_tokens: usize,
+    completed_panels: usize,
+    total_cycles: u64,
+    executor_drained_cycles: u64,
+    hbm_physical_bytes: u64,
+    #[serde(default)]
+    hbm_physical_write_bytes: u64,
+    expected_hbm_physical_bytes: u64,
+    hbm_read_requests_64b: u64,
+    #[serde(default)]
+    hbm_address_sha256: String,
+    #[serde(default)]
+    hbm_channels: Vec<HbmChannelReport>,
+    #[serde(default)]
+    hbm_channel_skew: f64,
+    #[serde(default)]
+    hbm_row_hit_rate: f64,
+    #[serde(default)]
+    hbm_row_conflict_rate: f64,
+    hbm_last_completion_cycle: u64,
+    hbm_starved_cycles: u64,
+    hbm_active_cycles: u64,
+    achieved_hbm_bytes_per_cycle: f64,
+    hbm_bandwidth_utilization: f64,
+    transferred_hbm_reference_pressure_ratio: f64,
+    load_compute_overlap_cycles: u64,
+    load_compute_overlap_ratio: f64,
+    max_live_weight_panels: usize,
+    weight_panel_buffer_depth: usize,
+    weight_buffer_banks: usize,
+    scheduler_kind: String,
+    dispatch_mode_macro_tiles: BTreeMap<String, u64>,
+    job_mapping_modes: BTreeMap<String, String>,
+    dynamic_dispatches: u64,
+    work_steal_events: u64,
+    #[serde(default)]
+    mode_switch_events: u64,
+    #[serde(default)]
+    mode_switch_core_cycles: u64,
+    bank_port_stall_cycles: u64,
+    core_busy_cycles: Vec<u64>,
+    core_idle_cycles: Vec<u64>,
+    core_macro_tiles: Vec<u64>,
+    core_last_completion_cycles: Vec<u64>,
+    core_completion_skew_cycles: u64,
+    useful_macs: u64,
+    issued_macs: u64,
+    effective_mac_utilization: f64,
+    #[serde(default)]
+    padding_efficiency: f64,
+    #[serde(default)]
+    active_array_occupancy: f64,
+    #[serde(default)]
+    system_pe_utilization: f64,
+    reducer_busy_cycles: u64,
+    reducer_queue_wait_cycles: u64,
+    reduction_output_elements: u64,
+    reduction_add_elements: u64,
+    interconnect_bytes: u64,
+    activation_busy_cycles: u64,
+    activation_vector_cycles: u64,
+    completion_busy_cycles: u64,
+    completion_vector_cycles: u64,
+    #[serde(default)]
+    token_combine_busy_cycles: u64,
+    #[serde(default)]
+    token_combine_queue_wait_cycles: u64,
+    #[serde(default)]
+    token_combine_add_elements: u64,
+    #[serde(default)]
+    cycle_breakdown: CycleBreakdown,
+    #[serde(default)]
+    peak_matrix_sram_bytes: u64,
+    #[serde(default)]
+    peak_vector_sram_bytes: u64,
+    #[serde(default)]
+    peak_accumulator_bytes: u64,
+    #[serde(default)]
+    peak_accumulator_slots: u64,
+    #[serde(default)]
+    intermediate_activation_offchip_write_bytes: u64,
+    #[serde(default)]
+    useful_mac_equivalence_passed: bool,
+    #[serde(default)]
+    hbm_physical_byte_equivalence_passed: bool,
+    #[serde(default)]
+    hbm_address_digest_equivalence_passed: bool,
+    #[serde(default)]
+    zero_intermediate_writeback_passed: bool,
+    #[serde(default)]
+    typed_sram_capacity_passed: bool,
+    #[serde(default)]
+    token_completion_gate_passed: bool,
+    deterministic_sequence_events: u64,
+    all_atoms_completed: bool,
+    physical_byte_gate_passed: bool,
+    resource_contract_passed: bool,
+    executor_drain_passed: bool,
+}
+
+#[derive(Clone, Debug)]
+struct JobSchedule {
+    label: String,
+    mode: DispatchMode,
+    affinity: Option<usize>,
+    shared_gate_ready: bool,
+    activation_ready: bool,
+    activation_queued: bool,
+    down_complete: bool,
+    completion_queued: bool,
+    activation_cycles: u64,
+    completion_vector_cycles: u64,
+    token_ids: Vec<u64>,
+    hidden: u64,
+}
+
+fn select_job_mode(architecture: &MknArchitectureManifest, job: &LogicalJob) -> DispatchMode {
+    if architecture.mapping == BASELINE_MAPPING {
+        return DispatchMode::ExpertSingleCore;
+    }
+    if architecture.mapping == STREAM_K_MAPPING {
+        return DispatchMode::StreamK;
+    }
+    if let Some(recipe) = architecture.recipe_for_job(job) {
+        if recipe.mapping_mode != DYNAMIC_MAPPING {
+            let mode = DispatchMode::parse(&recipe.mapping_mode)
+                .unwrap_or_else(|| panic!("recipe {} has unsupported mapping mode", recipe.id));
+            assert!(architecture.scheduler.allows(mode));
+            return mode;
+        }
+    }
+
+    let scheduler = &architecture.scheduler;
+    if scheduler.allowed_modes.len() == 1 {
+        return DispatchMode::parse(&scheduler.allowed_modes[0]).unwrap();
+    }
+    let preferences: &[DispatchMode] = if job.tokens >= scheduler.hot_expert_min_tokens {
+        &[
+            DispatchMode::MSplit,
+            DispatchMode::StreamK,
+            DispatchMode::ColumnUpRowDown,
+            DispatchMode::KSplit,
+            DispatchMode::ExpertSingleCore,
+        ]
+    } else if job.kind == JobKind::Shared {
+        &[
+            DispatchMode::KSplit,
+            DispatchMode::StreamK,
+            DispatchMode::ColumnUpRowDown,
+            DispatchMode::MSplit,
+            DispatchMode::ExpertSingleCore,
+        ]
+    } else if job.tokens <= scheduler.cold_expert_max_tokens {
+        &[
+            DispatchMode::ExpertSingleCore,
+            DispatchMode::StreamK,
+            DispatchMode::KSplit,
+            DispatchMode::ColumnUpRowDown,
+            DispatchMode::MSplit,
+        ]
+    } else {
+        &[
+            DispatchMode::ColumnUpRowDown,
+            DispatchMode::StreamK,
+            DispatchMode::KSplit,
+            DispatchMode::MSplit,
+            DispatchMode::ExpertSingleCore,
+        ]
+    };
+    preferences
+        .iter()
+        .copied()
+        .find(|mode| scheduler.allows(*mode))
+        .expect("validated scheduler must allow at least one mapping mode")
+}
+
+struct DynamicExpertDispatcher {
+    architecture: MknArchitectureManifest,
+    sender: mpsc::UnboundedSender<Event>,
+    job_schedules: Vec<JobSchedule>,
+    pending_panels: VecDeque<WeightPanel>,
+    panel_totals: Vec<[usize; 3]>,
+    panel_completed: Vec<[usize; 3]>,
+    panels: BTreeMap<usize, PanelState>,
+    live_panels: usize,
+    max_live_panels: usize,
+    total_panels: usize,
+    completed_panels: usize,
+    free_cores: BTreeSet<usize>,
+    free_weight_banks: BTreeSet<usize>,
+    reducer_queue: VecDeque<Reduction>,
+    reducer_busy: bool,
+    vector_queue: VecDeque<VectorWork>,
+    vector_busy: bool,
+    combine_queue: VecDeque<CombineWork>,
+    combine_busy: bool,
+    token_remaining_contributions: Vec<u64>,
+    token_total_contributions: Vec<u64>,
+    completed_tokens: usize,
+    completed_jobs: usize,
+    next_sequence: u64,
+    core_busy_cycles: Vec<u64>,
+    core_macro_tiles: Vec<u64>,
+    core_last_completion_cycles: Vec<u64>,
+    core_last_modes: Vec<Option<DispatchMode>>,
+    switching_cores: BTreeSet<usize>,
+    mode_switch_events: u64,
+    mode_switch_core_cycles: u64,
+    dispatch_mode_macro_tiles: BTreeMap<String, u64>,
+    dynamic_dispatches: u64,
+    work_steal_events: u64,
+    useful_macs: u64,
+    issued_macs: u64,
+    reducer_busy_cycles: u64,
+    reducer_queue_wait_cycles: u64,
+    reduction_output_elements: u64,
+    reduction_add_elements: u64,
+    interconnect_bytes: u64,
+    activation_busy_cycles: u64,
+    completion_busy_cycles: u64,
+    combine_busy_cycles: u64,
+    combine_queue_wait_cycles: u64,
+    combine_add_elements: u64,
+    scheduled_events: BTreeMap<(u64, u64), Event>,
+    current_cycle: u64,
+}
+
+impl DynamicExpertDispatcher {
+    fn new(
+        architecture: MknArchitectureManifest,
+        jobs: &[LogicalJob],
+        panels: VecDeque<WeightPanel>,
+        panel_totals: Vec<[usize; 3]>,
+        sender: mpsc::UnboundedSender<Event>,
+    ) -> Self {
+        let cores = architecture.cores.len();
+        let total_panels = panels.len();
+        let job_schedules = jobs
+            .iter()
+            .map(|job| JobSchedule {
+                label: format!(
+                    "{}:{}",
+                    match job.kind {
+                        JobKind::Shared => "shared",
+                        JobKind::Routed => "routed",
+                    },
+                    job.expert_id.unwrap_or(0)
+                ),
+                mode: select_job_mode(&architecture, job),
+                affinity: None,
+                shared_gate_ready: job.shared_gate.is_none(),
+                activation_ready: false,
+                activation_queued: false,
+                down_complete: false,
+                completion_queued: false,
+                activation_cycles: activation_vector_cycles(job.tokens, job.projections[0].n),
+                completion_vector_cycles: job
+                    .shared_gate
+                    .as_ref()
+                    .map_or(0, |gate| gate.vector_cycles)
+                    + completion_vector_cycles(job.kind, job.tokens, job.projections[2].n),
+                token_ids: job.token_ids.clone(),
+                hidden: job.projections[2].n,
+            })
+            .collect();
+        let token_count = jobs
+            .iter()
+            .flat_map(|job| job.token_ids.iter().copied())
+            .max()
+            .map_or(0, |maximum| maximum as usize + 1);
+        let mut token_total_contributions = vec![0_u64; token_count];
+        for job in jobs {
+            for token in &job.token_ids {
+                token_total_contributions[*token as usize] += 1;
+            }
+        }
+        let weight_buffer_banks = architecture.weight_buffer_banks;
+        Self {
+            architecture,
+            sender,
+            job_schedules,
+            pending_panels: panels,
+            panel_completed: vec![[0; 3]; panel_totals.len()],
+            panel_totals,
+            panels: BTreeMap::new(),
+            live_panels: 0,
+            max_live_panels: 0,
+            total_panels,
+            completed_panels: 0,
+            free_cores: (0..cores).collect(),
+            free_weight_banks: (0..weight_buffer_banks).collect(),
+            reducer_queue: VecDeque::new(),
+            reducer_busy: false,
+            vector_queue: VecDeque::new(),
+            vector_busy: false,
+            combine_queue: VecDeque::new(),
+            combine_busy: false,
+            token_remaining_contributions: token_total_contributions.clone(),
+            token_total_contributions,
+            completed_tokens: 0,
+            completed_jobs: 0,
+            next_sequence: 0,
+            core_busy_cycles: vec![0; cores],
+            core_macro_tiles: vec![0; cores],
+            core_last_completion_cycles: vec![0; cores],
+            core_last_modes: vec![None; cores],
+            switching_cores: BTreeSet::new(),
+            mode_switch_events: 0,
+            mode_switch_core_cycles: 0,
+            dispatch_mode_macro_tiles: BTreeMap::new(),
+            dynamic_dispatches: 0,
+            work_steal_events: 0,
+            useful_macs: 0,
+            issued_macs: 0,
+            reducer_busy_cycles: 0,
+            reducer_queue_wait_cycles: 0,
+            reduction_output_elements: 0,
+            reduction_add_elements: 0,
+            interconnect_bytes: 0,
+            activation_busy_cycles: 0,
+            completion_busy_cycles: 0,
+            combine_busy_cycles: 0,
+            combine_queue_wait_cycles: 0,
+            combine_add_elements: 0,
+            scheduled_events: BTreeMap::new(),
+            current_cycle: 0,
+        }
+    }
+
+    fn set_current_cycle(&mut self, cycle: u64) {
+        self.current_cycle = cycle;
+    }
+
+    fn sequence(&mut self) -> u64 {
+        self.next_sequence += 1;
+        self.next_sequence
+    }
+
+    fn schedule_event(&mut self, event: Event) {
+        assert!(self.scheduled_events.insert(event.key(), event).is_none());
+    }
+
+    fn drain_scheduled_events(&mut self, events: &mut BTreeMap<(u64, u64), Event>) {
+        while let Some((key, event)) = self.scheduled_events.pop_first() {
+            assert!(events.insert(key, event).is_none());
+        }
+    }
+
+    fn launch_shared_gates(&mut self, hbm: &Arc<dyn ErasedMemoryModel>, jobs: &[LogicalJob]) {
+        for job in jobs {
+            let Some(gate) = job.shared_gate.clone() else {
+                continue;
+            };
+            let sequence = self.sequence();
+            launch_shared_gate_transfer(hbm.clone(), job.id, gate, sequence, self.sender.clone());
+        }
+    }
+
+    fn down_ready(&self, job: usize) -> bool {
+        self.panel_completed[job][0] == self.panel_totals[job][0]
+            && self.panel_completed[job][1] == self.panel_totals[job][1]
+    }
+
+    fn launch_pending(&mut self, hbm: &Arc<dyn ErasedMemoryModel>) {
+        while self.live_panels < self.architecture.buffer_depth {
+            let Some(panel) = self.pending_panels.pop_front() else {
+                break;
+            };
+            let sequence = self.sequence();
+            launch_panel_transfer(hbm.clone(), panel.clone(), sequence, self.sender.clone());
+            assert!(
+                self.panels
+                    .insert(
+                        panel.id,
+                        PanelState::new(
+                            panel.clone(),
+                            panel.id % self.architecture.weight_buffer_banks,
+                        ),
+                    )
+                    .is_none()
+            );
+            self.live_panels += 1;
+            self.max_live_panels = self.max_live_panels.max(self.live_panels);
+        }
+    }
+
+    fn panel_dependency_ready(&self, state: &PanelState) -> bool {
+        state.panel.projection != 2 || self.job_schedules[state.panel.job_id].activation_ready
+    }
+
+    fn core_can_take_job(&self, core_id: usize, job_id: usize) -> bool {
+        let schedule = &self.job_schedules[job_id];
+        schedule.mode != DispatchMode::ExpertSingleCore
+            || schedule.affinity.is_none()
+            || schedule.affinity == Some(core_id)
+    }
+
+    fn mode_supports_steal(mode: DispatchMode) -> bool {
+        matches!(
+            mode,
+            DispatchMode::KSplit | DispatchMode::ColumnUpRowDown | DispatchMode::StreamK
+        )
+    }
+
+    fn find_dispatch_pair(
+        &self,
+        allow_steal: bool,
+        ignore_bank_ports: bool,
+    ) -> Option<(usize, usize)> {
+        let mut best = None;
+        for core_id in self.free_cores.iter().copied() {
+            let core = &self.architecture.cores[core_id];
+            for (panel_id, state) in &self.panels {
+                if !state.loaded
+                    || state.remaining_atoms() == 0
+                    || !self.panel_dependency_ready(state)
+                    || !self.core_can_take_job(core_id, state.panel.job_id)
+                    || (!ignore_bank_ports && !self.free_weight_banks.contains(&state.bank_id))
+                {
+                    continue;
+                }
+                let mode = self.job_schedules[state.panel.job_id].mode;
+                if allow_steal && !Self::mode_supports_steal(mode) {
+                    continue;
+                }
+                if state
+                    .eligible_start(
+                        core_id,
+                        &self.architecture.cores,
+                        mode,
+                        self.architecture.scheduler.prefer_output_locality,
+                        allow_steal,
+                    )
+                    .is_none()
+                {
+                    continue;
+                }
+                let useful_capacity = state.panel.tokens.min(core.m)
+                    * state.width().min(core.n)
+                    * state.panel.k_blocks().min(core.k / COMPILER_MLEN);
+                let score = (
+                    state.remaining_atoms(),
+                    useful_capacity * 1_000_000 / core.tile_cycles().max(1),
+                    std::cmp::Reverse(*panel_id),
+                    std::cmp::Reverse(core_id),
+                );
+                if best
+                    .as_ref()
+                    .is_none_or(|(best_score, _, _)| score > *best_score)
+                {
+                    best = Some((score, core_id, *panel_id));
+                }
+            }
+        }
+        best.map(|(_, core_id, panel_id)| (core_id, panel_id))
+    }
+
+    fn dispatch(&mut self) {
+        loop {
+            let (allow_steal, pair) = if let Some(pair) = self.find_dispatch_pair(false, false) {
+                (false, pair)
+            } else if let Some(pair) = self.find_dispatch_pair(true, false) {
+                (true, pair)
+            } else {
+                break;
+            };
+            let (core_id, panel_id) = pair;
+            let job_id = self.panels[&panel_id].panel.job_id;
+            let mode = self.job_schedules[job_id].mode;
+            if self.architecture.scheduler.mode_switch_cycles > 0
+                && self.core_last_modes[core_id].is_some_and(|previous| previous != mode)
+            {
+                assert!(self.free_cores.remove(&core_id));
+                assert!(self.switching_cores.insert(core_id));
+                self.core_last_modes[core_id] = Some(mode);
+                self.mode_switch_events += 1;
+                self.mode_switch_core_cycles += self.architecture.scheduler.mode_switch_cycles;
+                let sequence = self.sequence();
+                self.schedule_event(Event::CoreModeSwitchDone {
+                    sequence,
+                    cycle: self.current_cycle + self.architecture.scheduler.mode_switch_cycles,
+                    core_id,
+                });
+                continue;
+            }
+            self.core_last_modes[core_id] = Some(mode);
+            if mode == DispatchMode::ExpertSingleCore
+                && self.job_schedules[job_id].affinity.is_none()
+            {
+                self.job_schedules[job_id].affinity = Some(core_id);
+            }
+            assert!(self.free_cores.remove(&core_id));
+            let bank_id = self.panels[&panel_id].bank_id;
+            assert!(self.free_weight_banks.remove(&bank_id));
+            let operand_load_cycles = self.architecture.cores[core_id]
+                .m
+                .max(self.architecture.cores[core_id].n);
+            let state = self.panels.get_mut(&panel_id).unwrap();
+            let task = state
+                .assign_rectangular_task(
+                    core_id,
+                    &self.architecture.cores,
+                    mode,
+                    self.architecture.scheduler.prefer_output_locality,
+                    allow_steal,
+                )
+                .expect("selected core/panel pair must remain dispatchable");
+            state.in_flight_tasks += 1;
+            self.core_busy_cycles[core_id] += task.cycles;
+            self.core_macro_tiles[core_id] += 1;
+            *self
+                .dispatch_mode_macro_tiles
+                .entry(task.mode.name().to_string())
+                .or_default() += 1;
+            self.dynamic_dispatches += 1;
+            if task.stolen {
+                self.work_steal_events += 1;
+            }
+            self.useful_macs += task.useful_atoms * COMPILER_MLEN;
+            self.issued_macs += task.issued_atoms * COMPILER_MLEN;
+            let bank_sequence = self.sequence();
+            let now = self.current_cycle;
+            self.schedule_event(Event::WeightBankReleased {
+                sequence: bank_sequence,
+                cycle: now + operand_load_cycles,
+                bank_id,
+            });
+            let completion_sequence = self.sequence();
+            self.schedule_event(Event::CoreDone {
+                sequence: completion_sequence,
+                cycle: now + task.cycles,
+                task,
+            });
+        }
+    }
+
+    fn start_reducer(&mut self) {
+        if self.reducer_busy {
+            return;
+        }
+        let Some(reduction) = self.reducer_queue.pop_front() else {
+            return;
+        };
+        self.reducer_busy = true;
+        self.reducer_queue_wait_cycles += self.current_cycle.saturating_sub(reduction.ready_cycle);
+        self.reducer_busy_cycles += reduction.cycles;
+        let sequence = self.sequence();
+        self.schedule_event(Event::ReductionDone {
+            sequence,
+            cycle: self.current_cycle + reduction.cycles,
+            reduction,
+        });
+    }
+
+    fn start_vector(&mut self) {
+        if self.vector_busy {
+            return;
+        }
+        let Some(work) = self.vector_queue.pop_front() else {
+            return;
+        };
+        self.vector_busy = true;
+        match work.kind {
+            VectorWorkKind::Activation => self.activation_busy_cycles += work.cycles,
+            VectorWorkKind::Completion => self.completion_busy_cycles += work.cycles,
+        }
+        let cycles = work.cycles;
+        let sequence = self.sequence();
+        self.schedule_event(Event::VectorDone {
+            sequence,
+            cycle: self.current_cycle + cycles,
+            work,
+        });
+    }
+
+    fn start_combine(&mut self) {
+        if self.combine_busy {
+            return;
+        }
+        let Some(work) = self.combine_queue.pop_front() else {
+            return;
+        };
+        self.combine_busy = true;
+        self.combine_busy_cycles += work.cycles;
+        self.combine_queue_wait_cycles += self.current_cycle.saturating_sub(work.ready_cycle);
+        let sequence = self.sequence();
+        self.schedule_event(Event::CombineDone {
+            sequence,
+            cycle: self.current_cycle + work.cycles,
+            work,
+        });
+    }
+
+    fn retire_token_contribution(&mut self, token_id: usize, hidden: u64) {
+        assert!(self.token_remaining_contributions[token_id] > 0);
+        self.token_remaining_contributions[token_id] -= 1;
+        if self.token_remaining_contributions[token_id] != 0 {
+            return;
+        }
+        let parts = self.token_total_contributions[token_id];
+        let levels = if parts <= 1 {
+            0
+        } else {
+            parts.next_power_of_two().ilog2() as u64
+        };
+        let cycles = hidden.div_ceil(REDUCTION_WIDTH) * levels;
+        let add_elements = hidden * parts.saturating_sub(1);
+        if cycles == 0 {
+            self.combine_add_elements += add_elements;
+            self.completed_tokens += 1;
+            return;
+        }
+        self.combine_queue.push_back(CombineWork {
+            token_id,
+            cycles,
+            add_elements,
+            ready_cycle: self.current_cycle,
+        });
+        self.start_combine();
+    }
+
+    fn finish_panel(&mut self, panel_id: usize) {
+        let state = self.panels.remove(&panel_id).unwrap();
+        assert!(state.all_work_assigned());
+        assert_eq!(state.in_flight_tasks, 0);
+        assert!(
+            state
+                .output_remaining
+                .iter()
+                .all(|remaining| *remaining == 0)
+        );
+        self.panel_completed[state.panel.job_id][state.panel.projection] += 1;
+        self.completed_panels += 1;
+        self.live_panels -= 1;
+        if state.panel.projection < 2 {
+            self.maybe_queue_activation(state.panel.job_id);
+        }
+        if state.panel.projection == 2
+            && self.panel_completed[state.panel.job_id][2]
+                == self.panel_totals[state.panel.job_id][2]
+        {
+            self.job_schedules[state.panel.job_id].down_complete = true;
+            self.maybe_queue_completion(state.panel.job_id);
+        }
+    }
+
+    fn maybe_queue_activation(&mut self, job_id: usize) {
+        if !self.down_ready(job_id) || self.job_schedules[job_id].activation_queued {
+            return;
+        }
+        let schedule = &mut self.job_schedules[job_id];
+        schedule.activation_queued = true;
+        self.vector_queue.push_back(VectorWork {
+            kind: VectorWorkKind::Activation,
+            job_id,
+            cycles: schedule.activation_cycles,
+        });
+        self.start_vector();
+    }
+
+    fn maybe_queue_completion(&mut self, job_id: usize) {
+        let schedule = &mut self.job_schedules[job_id];
+        if schedule.down_complete && schedule.shared_gate_ready && !schedule.completion_queued {
+            schedule.completion_queued = true;
+            self.vector_queue.push_back(VectorWork {
+                kind: VectorWorkKind::Completion,
+                job_id,
+                cycles: COMPLETION_CYCLES + schedule.completion_vector_cycles,
+            });
+            self.start_vector();
+        }
+    }
+
+    fn queue_panel_reduction(&mut self, panel_id: usize, cycle: u64) {
+        let state = self.panels.get(&panel_id).unwrap();
+        let mut by_parts = BTreeMap::<u64, u64>::new();
+        for participants in &state.output_participants {
+            if participants.len() > 1 {
+                *by_parts.entry(participants.len() as u64).or_default() += 1;
+            }
+        }
+        let mut cycles = 0;
+        let mut bytes = 0;
+        let mut elements = 0;
+        let mut add_elements = 0;
+        for (parts, count) in by_parts {
+            let levels = parts.next_power_of_two().ilog2() as u64;
+            cycles += count.div_ceil(REDUCTION_WIDTH) * levels;
+            bytes += count * 2 * (parts - 1);
+            elements += count;
+            add_elements += count * (parts - 1);
+        }
+        if cycles == 0 {
+            self.finish_panel(panel_id);
+        } else {
+            cycles += REDUCTION_SYNC_CYCLES;
+            self.reducer_queue.push_back(Reduction {
+                panel_id,
+                cycles,
+                bytes,
+                elements,
+                add_elements,
+                ready_cycle: cycle,
+            });
+            self.start_reducer();
+        }
+    }
+
+    fn handle_core_done(&mut self, cycle: u64, task: Task) {
+        assert!(self.free_cores.insert(task.core_id));
+        self.core_last_completion_cycles[task.core_id] = cycle;
+        let state = self.panels.get_mut(&task.panel_id).unwrap();
+        state.in_flight_tasks -= 1;
+        for (output, atoms) in &task.contributions[..task.contribution_count] {
+            let output = *output;
+            let atoms = *atoms;
+            assert!(state.output_remaining[output] >= atoms);
+            state.output_remaining[output] -= atoms;
+            state.output_participants[output].insert(task.core_id);
+        }
+        if state.all_work_assigned() && state.in_flight_tasks == 0 {
+            self.queue_panel_reduction(task.panel_id, cycle);
+        }
+    }
+
+    fn handle(&mut self, event: Event) {
+        match event {
+            Event::PanelReady { panel_id, .. } => {
+                self.panels.get_mut(&panel_id).unwrap().loaded = true;
+            }
+            Event::CoreDone { cycle, task, .. } => self.handle_core_done(cycle, task),
+            Event::WeightBankReleased { bank_id, .. } => {
+                assert!(self.free_weight_banks.insert(bank_id));
+            }
+            Event::CoreModeSwitchDone { core_id, .. } => {
+                assert!(self.switching_cores.remove(&core_id));
+                assert!(self.free_cores.insert(core_id));
+            }
+            Event::SharedGateReady { job_id, .. } => {
+                self.job_schedules[job_id].shared_gate_ready = true;
+                self.maybe_queue_completion(job_id);
+            }
+            Event::ReductionDone { reduction, .. } => {
+                assert!(self.reducer_busy);
+                self.reducer_busy = false;
+                self.reduction_output_elements += reduction.elements;
+                self.reduction_add_elements += reduction.add_elements;
+                self.interconnect_bytes += reduction.bytes;
+                self.finish_panel(reduction.panel_id);
+                self.start_reducer();
+            }
+            Event::VectorDone { work, .. } => {
+                assert!(self.vector_busy);
+                self.vector_busy = false;
+                match work.kind {
+                    VectorWorkKind::Activation => {
+                        assert!(self.down_ready(work.job_id));
+                        self.job_schedules[work.job_id].activation_ready = true;
+                    }
+                    VectorWorkKind::Completion => {
+                        assert_eq!(
+                            self.panel_completed[work.job_id][2],
+                            self.panel_totals[work.job_id][2]
+                        );
+                        self.completed_jobs += 1;
+                        let token_ids = self.job_schedules[work.job_id].token_ids.clone();
+                        let hidden = self.job_schedules[work.job_id].hidden;
+                        for token in token_ids {
+                            self.retire_token_contribution(token as usize, hidden);
+                        }
+                    }
+                }
+                self.start_vector();
+            }
+            Event::CombineDone { work, .. } => {
+                assert!(self.combine_busy);
+                self.combine_busy = false;
+                assert_eq!(self.token_remaining_contributions[work.token_id], 0);
+                self.combine_add_elements += work.add_elements;
+                self.completed_tokens += 1;
+                self.start_combine();
+            }
+        }
+    }
+
+    fn all_cores_free(&self) -> bool {
+        self.free_cores.len() == self.architecture.cores.len()
+    }
+
+    fn has_compute_inflight(&self) -> bool {
+        self.free_cores.len() + self.switching_cores.len() < self.architecture.cores.len()
+    }
+
+    fn all_weight_banks_free(&self) -> bool {
+        self.free_weight_banks.len() == self.architecture.weight_buffer_banks
+    }
+
+    fn has_loaded_ready_work(&self) -> bool {
+        self.panels.values().any(|state| {
+            state.loaded && state.remaining_atoms() > 0 && self.panel_dependency_ready(state)
+        })
+    }
+
+    fn has_unloaded_ready_work(&self) -> bool {
+        self.panels.values().any(|state| {
+            !state.loaded && state.remaining_atoms() > 0 && self.panel_dependency_ready(state)
+        })
+    }
+
+    fn has_inflight_hbm(&self) -> bool {
+        self.panels.values().any(|state| !state.loaded)
+            || self
+                .job_schedules
+                .iter()
+                .any(|schedule| !schedule.shared_gate_ready)
+    }
+
+    fn bank_port_blocked(&self) -> bool {
+        !self.free_cores.is_empty()
+            && self.find_dispatch_pair(false, false).is_none()
+            && self.find_dispatch_pair(true, false).is_none()
+            && (self.find_dispatch_pair(false, true).is_some()
+                || self.find_dispatch_pair(true, true).is_some())
+    }
+}
+
+struct ReplayTimingCounters {
+    hbm_last_completion_cycle: u64,
+    hbm_starved_cycles: u64,
+    hbm_active_cycles: u64,
+    load_compute_overlap_cycles: u64,
+    bank_port_stall_cycles: u64,
+    cycle_breakdown: CycleBreakdown,
+}
+
+fn finalize_replay(
+    dispatcher: DynamicExpertDispatcher,
+    architecture: MknArchitectureManifest,
+    total_cycles: u64,
+    actual_hbm_bytes: u64,
+    actual_hbm_write_bytes: u64,
+    expected_hbm_bytes: u64,
+    expected_useful_macs: u64,
+    hbm_address_sha256: String,
+    channel_telemetry: Vec<ramulator::raw::ChannelTelemetry>,
+    native_transaction_bytes: u64,
+    physical_equivalence: Option<PhysicalEquivalenceContract>,
+    timing: ReplayTimingCounters,
+) -> ReplayRun {
+    assert!(dispatcher.pending_panels.is_empty());
+    assert!(dispatcher.panels.is_empty());
+    assert_eq!(dispatcher.completed_panels, dispatcher.total_panels);
+    assert!(dispatcher.all_cores_free());
+    assert!(dispatcher.all_weight_banks_free());
+    assert!(!dispatcher.reducer_busy && dispatcher.reducer_queue.is_empty());
+    assert!(!dispatcher.vector_busy && dispatcher.vector_queue.is_empty());
+    assert!(!dispatcher.combine_busy && dispatcher.combine_queue.is_empty());
+    assert!(
+        dispatcher
+            .token_remaining_contributions
+            .iter()
+            .all(|remaining| *remaining == 0)
+    );
+    assert!(dispatcher.scheduled_events.is_empty());
+
+    let effective = if dispatcher.issued_macs == 0 {
+        0.0
+    } else {
+        dispatcher.useful_macs as f64 / dispatcher.issued_macs as f64
+    };
+    let physical_byte_gate_passed = actual_hbm_bytes == expected_hbm_bytes;
+    assert!(
+        physical_byte_gate_passed,
+        "MKN replay physical-byte gate failed"
+    );
+    let active_pe_capacity = dispatcher
+        .core_busy_cycles
+        .iter()
+        .zip(architecture.cores.iter())
+        .map(|(cycles, core)| cycles * core.pes())
+        .sum::<u64>();
+    let active_array_occupancy = dispatcher.issued_macs as f64 / active_pe_capacity.max(1) as f64;
+    let system_pe_utilization =
+        dispatcher.useful_macs as f64 / (BASELINE_PES * total_cycles.max(1)) as f64;
+    let useful_mac_equivalence_passed = dispatcher.useful_macs == expected_useful_macs
+        && physical_equivalence
+            .as_ref()
+            .is_none_or(|contract| dispatcher.useful_macs == contract.useful_macs);
+    assert!(useful_mac_equivalence_passed, "MKN useful-MAC gate failed");
+    let token_completion_gate_passed =
+        dispatcher.completed_tokens == dispatcher.token_remaining_contributions.len();
+    assert!(
+        token_completion_gate_passed,
+        "MKN token completion gate failed"
+    );
+    let zero_intermediate_writeback_passed = actual_hbm_write_bytes == 0
+        && physical_equivalence.as_ref().is_none_or(|contract| {
+            contract.intermediate_activation_offchip_write_bytes == actual_hbm_write_bytes
+        });
+    assert!(
+        zero_intermediate_writeback_passed,
+        "intermediate activation reached HBM"
+    );
+    assert_eq!(timing.cycle_breakdown.total(), total_cycles);
+
+    let total_controller_reads = channel_telemetry
+        .iter()
+        .map(|channel| channel.read_requests)
+        .sum::<u64>();
+    assert_eq!(
+        total_controller_reads * native_transaction_bytes,
+        actual_hbm_bytes,
+        "Ramulator channel counters disagree with issued physical reads"
+    );
+    let mean_channel_reads = total_controller_reads as f64 / HBM_CHANNELS as f64;
+    let maximum_channel_reads = channel_telemetry
+        .iter()
+        .map(|channel| channel.read_requests)
+        .max()
+        .unwrap_or(0);
+    let minimum_channel_reads = channel_telemetry
+        .iter()
+        .map(|channel| channel.read_requests)
+        .min()
+        .unwrap_or(0);
+    let hbm_channel_skew = if mean_channel_reads == 0.0 {
+        0.0
+    } else {
+        (maximum_channel_reads - minimum_channel_reads) as f64 / mean_channel_reads
+    };
+    let total_row_hits = channel_telemetry
+        .iter()
+        .map(|value| value.row_hits)
+        .sum::<u64>();
+    let total_row_misses = channel_telemetry
+        .iter()
+        .map(|value| value.row_misses)
+        .sum::<u64>();
+    let total_row_conflicts = channel_telemetry
+        .iter()
+        .map(|value| value.row_conflicts)
+        .sum::<u64>();
+    let total_row_events = total_row_hits + total_row_misses + total_row_conflicts;
+    let rate = |value: u64, total: u64| value as f64 / total.max(1) as f64;
+    let hbm_channels = channel_telemetry
+        .into_iter()
+        .map(|channel| {
+            let row_events = channel.row_hits + channel.row_misses + channel.row_conflicts;
+            HbmChannelReport {
+                channel: channel.channel,
+                cycles: channel.cycles,
+                read_requests: channel.read_requests,
+                read_requests_served: channel.read_requests_served,
+                native_transaction_bytes,
+                physical_read_bytes: channel.read_requests * native_transaction_bytes,
+                bytes_per_layer_cycle: channel.read_requests as f64
+                    * native_transaction_bytes as f64
+                    / total_cycles.max(1) as f64,
+                load_fraction: channel.read_requests as f64 / total_controller_reads.max(1) as f64,
+                row_hits: channel.row_hits,
+                row_misses: channel.row_misses,
+                row_conflicts: channel.row_conflicts,
+                row_hit_rate: rate(channel.row_hits, row_events),
+                row_conflict_rate: rate(channel.row_conflicts, row_events),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let recipe_peaks = architecture
+        .micro_recipe_table
+        .iter()
+        .map(|recipe| recipe.peak_sram.clone())
+        .collect::<Vec<_>>();
+    let peak_matrix_sram_bytes = recipe_peaks
+        .iter()
+        .map(|peak| peak.matrix_bytes)
+        .max()
+        .unwrap_or(0);
+    let peak_vector_sram_bytes = recipe_peaks
+        .iter()
+        .map(|peak| peak.vector_bytes)
+        .max()
+        .unwrap_or(0);
+    let peak_accumulator_bytes = recipe_peaks
+        .iter()
+        .map(|peak| peak.accumulator_bytes)
+        .max()
+        .unwrap_or(0);
+    let peak_accumulator_slots = recipe_peaks
+        .iter()
+        .map(|peak| peak.accumulator_slots)
+        .max()
+        .unwrap_or(0);
+    let typed_sram_capacity_passed = architecture.sram_contract.as_ref().is_none_or(|sram| {
+        peak_matrix_sram_bytes <= sram.matrix_sram_bytes
+            && peak_vector_sram_bytes <= sram.vector_sram_bytes
+            && peak_accumulator_bytes <= sram.accumulator_bytes
+    });
+    let hbm_physical_byte_equivalence_passed = physical_byte_gate_passed
+        && physical_equivalence
+            .as_ref()
+            .is_none_or(|contract| contract.hbm_physical_bytes == actual_hbm_bytes);
+    let hbm_address_digest_equivalence_passed = physical_equivalence
+        .as_ref()
+        .is_none_or(|contract| contract.hbm_address_sha256 == hbm_address_sha256);
+    assert!(
+        hbm_physical_byte_equivalence_passed,
+        "Python/Rust physical-byte gate failed"
+    );
+    assert!(
+        hbm_address_digest_equivalence_passed,
+        "Python/Rust HBM address-digest gate failed"
+    );
+    ReplayRun {
+        architecture: architecture.clone(),
+        equal_area_pes: architecture.pe_count(),
+        provisioned_input_width: PROVISIONED_INPUT_WIDTH,
+        used_input_width: architecture.used_input_width(),
+        provisioned_output_slots: PROVISIONED_OUTPUT_SLOTS,
+        used_output_slots: architecture.used_output_slots(),
+        completed_jobs: dispatcher.completed_jobs,
+        completed_tokens: dispatcher.completed_tokens,
+        completed_panels: dispatcher.completed_panels,
+        total_cycles,
+        executor_drained_cycles: 0,
+        hbm_physical_bytes: actual_hbm_bytes,
+        hbm_physical_write_bytes: actual_hbm_write_bytes,
+        expected_hbm_physical_bytes: expected_hbm_bytes,
+        hbm_read_requests_64b: actual_hbm_bytes / HBM_BURST_BYTES,
+        hbm_address_sha256,
+        hbm_channels,
+        hbm_channel_skew,
+        hbm_row_hit_rate: rate(total_row_hits, total_row_events),
+        hbm_row_conflict_rate: rate(total_row_conflicts, total_row_events),
+        hbm_last_completion_cycle: timing.hbm_last_completion_cycle,
+        hbm_starved_cycles: timing.hbm_starved_cycles,
+        hbm_active_cycles: timing.hbm_active_cycles,
+        achieved_hbm_bytes_per_cycle: actual_hbm_bytes as f64 / total_cycles.max(1) as f64,
+        hbm_bandwidth_utilization: actual_hbm_bytes as f64
+            / (total_cycles.max(1) as f64 * HBM_THEORETICAL_BYTES_PER_CYCLE),
+        transferred_hbm_reference_pressure_ratio: actual_hbm_bytes as f64
+            / (total_cycles.max(1) as f64 * TRANSFERRED_HBM_REFERENCE_BYTES_PER_CYCLE),
+        load_compute_overlap_cycles: timing.load_compute_overlap_cycles,
+        load_compute_overlap_ratio: timing.load_compute_overlap_cycles as f64
+            / timing.hbm_active_cycles.max(1) as f64,
+        max_live_weight_panels: dispatcher.max_live_panels,
+        weight_panel_buffer_depth: architecture.buffer_depth,
+        weight_buffer_banks: architecture.weight_buffer_banks,
+        scheduler_kind: architecture.scheduler.policy.clone(),
+        dispatch_mode_macro_tiles: dispatcher.dispatch_mode_macro_tiles,
+        job_mapping_modes: dispatcher
+            .job_schedules
+            .iter()
+            .map(|schedule| (schedule.label.clone(), schedule.mode.name().to_string()))
+            .collect(),
+        dynamic_dispatches: dispatcher.dynamic_dispatches,
+        work_steal_events: dispatcher.work_steal_events,
+        mode_switch_events: dispatcher.mode_switch_events,
+        mode_switch_core_cycles: dispatcher.mode_switch_core_cycles,
+        bank_port_stall_cycles: timing.bank_port_stall_cycles,
+        core_idle_cycles: dispatcher
+            .core_busy_cycles
+            .iter()
+            .map(|busy| total_cycles.saturating_sub(*busy))
+            .collect(),
+        core_busy_cycles: dispatcher.core_busy_cycles,
+        core_macro_tiles: dispatcher.core_macro_tiles,
+        core_completion_skew_cycles: dispatcher
+            .core_last_completion_cycles
+            .iter()
+            .max()
+            .unwrap_or(&0)
+            .saturating_sub(
+                *dispatcher
+                    .core_last_completion_cycles
+                    .iter()
+                    .min()
+                    .unwrap_or(&0),
+            ),
+        core_last_completion_cycles: dispatcher.core_last_completion_cycles,
+        useful_macs: dispatcher.useful_macs,
+        issued_macs: dispatcher.issued_macs,
+        effective_mac_utilization: effective,
+        padding_efficiency: effective,
+        active_array_occupancy,
+        system_pe_utilization,
+        reducer_busy_cycles: dispatcher.reducer_busy_cycles,
+        reducer_queue_wait_cycles: dispatcher.reducer_queue_wait_cycles,
+        reduction_output_elements: dispatcher.reduction_output_elements,
+        reduction_add_elements: dispatcher.reduction_add_elements,
+        interconnect_bytes: dispatcher.interconnect_bytes,
+        activation_busy_cycles: dispatcher.activation_busy_cycles,
+        activation_vector_cycles: dispatcher
+            .job_schedules
+            .iter()
+            .map(|schedule| schedule.activation_cycles)
+            .sum(),
+        completion_busy_cycles: dispatcher.completion_busy_cycles,
+        completion_vector_cycles: dispatcher
+            .job_schedules
+            .iter()
+            .map(|schedule| schedule.completion_vector_cycles)
+            .sum(),
+        token_combine_busy_cycles: dispatcher.combine_busy_cycles,
+        token_combine_queue_wait_cycles: dispatcher.combine_queue_wait_cycles,
+        token_combine_add_elements: dispatcher.combine_add_elements,
+        cycle_breakdown: timing.cycle_breakdown,
+        peak_matrix_sram_bytes,
+        peak_vector_sram_bytes,
+        peak_accumulator_bytes,
+        peak_accumulator_slots,
+        intermediate_activation_offchip_write_bytes: actual_hbm_write_bytes,
+        useful_mac_equivalence_passed,
+        hbm_physical_byte_equivalence_passed,
+        hbm_address_digest_equivalence_passed,
+        zero_intermediate_writeback_passed,
+        typed_sram_capacity_passed,
+        token_completion_gate_passed,
+        deterministic_sequence_events: dispatcher.next_sequence,
+        all_atoms_completed: true,
+        physical_byte_gate_passed,
+        resource_contract_passed: architecture.pe_count() == BASELINE_PES
+            && architecture.used_input_width() <= PROVISIONED_INPUT_WIDTH
+            && architecture.used_output_slots() <= PROVISIONED_OUTPUT_SLOTS,
+        executor_drain_passed: false,
+    }
+}
+
+async fn replay_controller(
+    hbm: Arc<dyn ErasedMemoryModel>,
+    hbm_telemetry: ramulator::Ramulator,
+    jobs: Vec<LogicalJob>,
+    architecture: MknArchitectureManifest,
+    physical_equivalence: Option<PhysicalEquivalenceContract>,
+) -> ReplayRun {
+    let expected_jobs = jobs.len();
+    let (panels, panel_totals) = build_panels(&jobs, &architecture);
+    let hbm_address_sha256 = canonical_hbm_address_digest(&jobs, &panels);
+    let expected_useful_macs = jobs
+        .iter()
+        .map(|job| {
+            job.tokens
+                * (2 * job.projections[0].k * job.projections[0].n
+                    + job.projections[2].k * job.projections[2].n)
+        })
+        .sum::<u64>();
+    let expected_bytes = panels.iter().map(WeightPanel::physical_bytes).sum::<u64>()
+        + jobs
+            .iter()
+            .filter_map(|job| job.shared_gate.as_ref())
+            .map(|gate| gate.physical_bytes)
+            .sum::<u64>();
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+    let mut dispatcher =
+        DynamicExpertDispatcher::new(architecture.clone(), &jobs, panels, panel_totals, sender);
+    let mut events = BTreeMap::<(u64, u64), Event>::new();
+    let mut observation_cycle = 0;
+    let mut hbm_last_completion_cycle = 0;
+    let mut hbm_starved_cycles = 0;
+    let mut hbm_active_cycles = 0;
+    let mut load_compute_overlap_cycles = 0;
+    let mut bank_port_stall_cycles = 0;
+    let mut cycle_breakdown = CycleBreakdown::default();
+
+    dispatcher.launch_shared_gates(&hbm, &jobs);
+    dispatcher.launch_pending(&hbm);
+    let expected_tokens = dispatcher.token_remaining_contributions.len();
+    while dispatcher.completed_tokens < expected_tokens {
+        dispatcher.set_current_cycle(cycle_now());
+        dispatcher.dispatch();
+        dispatcher.start_reducer();
+        dispatcher.start_vector();
+        dispatcher.start_combine();
+        dispatcher.drain_scheduled_events(&mut events);
+        loop {
+            let now = cycle_now();
+            match events.keys().next().map(|key| key.0) {
+                Some(cycle) if cycle <= now => break,
+                Some(cycle) => {
+                    let deadline = Instant::INIT + PERIOD * cycle;
+                    tokio::select! {
+                        _ = Executor::current().resolve_at(deadline) => {}
+                        event = receiver.recv() => {
+                            let event = event.expect(
+                                "MKN replay workers exited before all jobs completed"
+                            );
+                            assert!(events.insert(event.key(), event).is_none());
+                        }
+                    }
+                }
+                None => {
+                    let event = receiver
+                        .recv()
+                        .await
+                        .expect("MKN replay workers exited before all jobs completed");
+                    assert!(events.insert(event.key(), event).is_none());
+                }
+            }
+            while let Ok(event) = receiver.try_recv() {
+                assert!(events.insert(event.key(), event).is_none());
+            }
+        }
+        let next_cycle = events.keys().next().unwrap().0;
+        assert!(next_cycle <= cycle_now());
+        let interval_cycles = next_cycle.saturating_sub(observation_cycle);
+        if dispatcher.has_inflight_hbm() {
+            hbm_active_cycles += interval_cycles;
+            if dispatcher.has_compute_inflight() {
+                load_compute_overlap_cycles += interval_cycles;
+            }
+        }
+        let waiting_only_for_hbm = dispatcher.all_cores_free()
+            && !dispatcher.has_loaded_ready_work()
+            && dispatcher.has_unloaded_ready_work();
+        if waiting_only_for_hbm {
+            hbm_starved_cycles += interval_cycles;
+        }
+        if dispatcher.bank_port_blocked() {
+            bank_port_stall_cycles += interval_cycles;
+        }
+        if waiting_only_for_hbm {
+            cycle_breakdown.hbm_starvation_cycles += interval_cycles;
+        } else if dispatcher.vector_busy {
+            cycle_breakdown.vector_swiglu_cycles += interval_cycles;
+        } else if dispatcher.combine_busy {
+            cycle_breakdown.token_combine_cycles += interval_cycles;
+        } else if dispatcher.has_compute_inflight() || dispatcher.reducer_busy {
+            cycle_breakdown.compute_cycles += interval_cycles;
+        } else if !dispatcher.switching_cores.is_empty() {
+            cycle_breakdown.gang_mode_switch_wait_cycles += interval_cycles;
+        } else {
+            cycle_breakdown.gang_mode_switch_wait_cycles += interval_cycles;
+        }
+        observation_cycle = next_cycle;
+        dispatcher.set_current_cycle(next_cycle);
+        let keys = events
+            .range((next_cycle, 0)..=(next_cycle, u64::MAX))
+            .map(|(key, _)| *key)
+            .collect::<Vec<_>>();
+        for key in keys {
+            let event = events.remove(&key).unwrap();
+            if let Event::PanelReady { cycle, .. } | Event::SharedGateReady { cycle, .. } = &event {
+                hbm_last_completion_cycle = hbm_last_completion_cycle.max(*cycle);
+            }
+            dispatcher.handle(event);
+        }
+        dispatcher.launch_pending(&hbm);
+    }
+
+    assert!(events.is_empty());
+    assert_eq!(dispatcher.completed_jobs, expected_jobs);
+
+    let total_cycles = cycle_now();
+    let stats = hbm.statistics().expect("MKN replay HBM must expose stats");
+    let native_transaction_bytes = hbm_telemetry.transfer_size() as u64;
+    let channel_telemetry = hbm_telemetry
+        .channel_telemetry()
+        .expect("MKN replay Ramulator channel telemetry must be available");
+    finalize_replay(
+        dispatcher,
+        architecture,
+        total_cycles,
+        stats.total_bytes_read,
+        stats.total_bytes_written,
+        expected_bytes,
+        expected_useful_macs,
+        hbm_address_sha256,
+        channel_telemetry,
+        native_transaction_bytes,
+        physical_equivalence,
+        ReplayTimingCounters {
+            hbm_last_completion_cycle,
+            hbm_starved_cycles,
+            hbm_active_cycles,
+            load_compute_overlap_cycles,
+            bank_port_stall_cycles,
+            cycle_breakdown,
+        },
+    )
+}
+
+async fn run_isolated(
+    jobs: Vec<LogicalJob>,
+    architecture: MknArchitectureManifest,
+    physical_equivalence: Option<PhysicalEquivalenceContract>,
+) -> ReplayRun {
+    tokio::task::spawn_blocking(move || {
+        let host = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("failed to build isolated MKN host runtime");
+        host.block_on(async move {
+            let executor = Executor::new();
+            let result = Arc::new(Mutex::new(None));
+            let output = result.clone();
+            executor.spawn(async move {
+                let raw_hbm = ramulator::Ramulator::hbm2_preset(HBM_CHANNELS)
+                    .expect("failed to create MKN replay Ramulator");
+                let telemetry = raw_hbm.clone();
+                let typed = Arc::new(memory::WithStats::new(memory::WithTiming::new(
+                    ManuallyDrop::new(raw_hbm),
+                    memory::NoData,
+                )));
+                let hbm: Arc<dyn ErasedMemoryModel> = typed;
+                *output.lock().unwrap() = Some(
+                    replay_controller(hbm, telemetry, jobs, architecture, physical_equivalence)
+                        .await,
+                );
+            });
+            executor.enter(Instant::ETERNITY).await;
+            let drained = executor.now().as_picos().div_ceil(PERIOD.as_picos().max(1));
+            let mut run = result
+                .lock()
+                .unwrap()
+                .take()
+                .expect("MKN replay produced no result");
+            run.executor_drained_cycles = drained;
+            run.executor_drain_passed = run.total_cycles == drained;
+            assert!(run.executor_drain_passed, "MKN replay left pending events");
+            run
+        })
+    })
+    .await
+    .expect("isolated MKN replay worker panicked")
+}
+
+#[derive(Debug, Serialize)]
+struct Comparison {
+    baseline: ReplayRun,
+    candidate: ReplayRun,
+    speedup_request_region: f64,
+    hbm_byte_equality_passed: bool,
+    completed_job_equality_passed: bool,
+    equal_pe_count_passed: bool,
+    equal_global_sram_contract_passed: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct Report {
+    schema_version: u64,
+    evidence_tier: &'static str,
+    timing_source: &'static str,
+    compute_partition_contract: &'static str,
+    hbm_contract: &'static str,
+    model: String,
+    model_architecture: String,
+    workload: String,
+    phase: String,
+    nominal_batch: u64,
+    active_batch: u64,
+    source_window_id: String,
+    layer: u64,
+    step: u64,
+    batch: u64,
+    top_k: u64,
+    shared_experts: u64,
+    shared_gate: String,
+    active_routed_experts: usize,
+    routed_pairs: u64,
+    repeats: Vec<Comparison>,
+    repeat_gate_passed: bool,
+    limitations: Vec<&'static str>,
+}
+
+async fn compare_once(
+    jobs: Vec<LogicalJob>,
+    candidate_architecture: MknArchitectureManifest,
+    physical_equivalence: Option<PhysicalEquivalenceContract>,
+) -> Comparison {
+    let baseline_architecture = MknArchitectureManifest::baseline_like(&candidate_architecture);
+    baseline_architecture.validate().unwrap();
+    let expected_jobs = jobs.len();
+    let (baseline, candidate) = tokio::join!(
+        run_isolated(
+            jobs.clone(),
+            baseline_architecture,
+            physical_equivalence.clone()
+        ),
+        run_isolated(jobs, candidate_architecture, physical_equivalence),
+    );
+    comparison_from_runs(baseline, candidate, expected_jobs)
+}
+
+fn comparison_from_runs(
+    baseline: ReplayRun,
+    candidate: ReplayRun,
+    expected_jobs: usize,
+) -> Comparison {
+    let hbm_byte_equality_passed = baseline.hbm_physical_bytes == candidate.hbm_physical_bytes;
+    let completed_job_equality_passed =
+        baseline.completed_jobs == expected_jobs && candidate.completed_jobs == expected_jobs;
+    let equal_pe_count_passed = baseline.equal_area_pes == candidate.equal_area_pes;
+    let equal_global_sram_contract_passed = baseline.provisioned_input_width
+        == candidate.provisioned_input_width
+        && baseline.provisioned_output_slots == candidate.provisioned_output_slots
+        && baseline.weight_panel_buffer_depth == candidate.weight_panel_buffer_depth
+        && baseline.weight_buffer_banks == candidate.weight_buffer_banks;
+    assert!(hbm_byte_equality_passed);
+    assert!(completed_job_equality_passed);
+    assert!(equal_pe_count_passed);
+    assert!(equal_global_sram_contract_passed);
+    Comparison {
+        speedup_request_region: baseline.total_cycles as f64 / candidate.total_cycles as f64,
+        baseline,
+        candidate,
+        hbm_byte_equality_passed,
+        completed_job_equality_passed,
+        equal_pe_count_passed,
+        equal_global_sram_contract_passed,
+    }
+}
+
+fn read_cached_baselines(
+    report_path: &Path,
+    manifest: &GroupedManifest,
+    architecture: &MknArchitectureManifest,
+    repeat_count: usize,
+) -> Vec<ReplayRun> {
+    let bytes = std::fs::read(report_path)
+        .unwrap_or_else(|err| panic!("failed to read baseline report {report_path:?}: {err}"));
+    let report: serde_json::Value = serde_json::from_slice(&bytes)
+        .unwrap_or_else(|err| panic!("failed to parse baseline report {report_path:?}: {err}"));
+    assert!(matches!(
+        report["schema_version"].as_u64(),
+        Some(1) | Some(2)
+    ));
+    assert_eq!(
+        report["source_window_id"].as_str(),
+        Some(manifest.source_window_id.as_str()),
+        "baseline report belongs to a different workload window"
+    );
+    assert_eq!(
+        report["repeat_gate_passed"].as_bool(),
+        Some(true),
+        "baseline report did not pass its repeat gate"
+    );
+    let repeats = report["repeats"]
+        .as_array()
+        .expect("baseline report repeats must be an array");
+    assert_eq!(
+        repeats.len(),
+        repeat_count,
+        "baseline report repeat count differs from this replay"
+    );
+    repeats
+        .iter()
+        .map(|comparison| {
+            let run: ReplayRun = serde_json::from_value(comparison["baseline"].clone())
+                .expect("baseline report contains an invalid ReplayRun");
+            assert_eq!(run.architecture.mapping, BASELINE_MAPPING);
+            assert_eq!(run.architecture.buffer_depth, architecture.buffer_depth);
+            assert_eq!(
+                run.architecture.weight_buffer_banks,
+                architecture.weight_buffer_banks
+            );
+            assert!(run.physical_byte_gate_passed);
+            assert!(run.resource_contract_passed);
+            assert!(run.executor_drain_passed);
+            run
+        })
+        .collect()
+}
+
+pub(crate) async fn evaluate(
+    architecture_path: &Path,
+    workload_path: &Path,
+    output_path: &Path,
+    repeat_count: usize,
+    baseline_report_path: Option<&Path>,
+) {
+    assert!((1..=10).contains(&repeat_count));
+    let architecture = read_architecture(architecture_path);
+    let manifest = read_workload(workload_path);
+    let jobs = jobs_from_manifest(&manifest);
+    let physical_equivalence = manifest.physical_equivalence.clone();
+    let cached_baselines = baseline_report_path
+        .map(|path| read_cached_baselines(path, &manifest, &architecture, repeat_count));
+    let mut repeats = Vec::with_capacity(repeat_count);
+    let mut digests = Vec::with_capacity(repeat_count);
+    for repeat in 0..repeat_count {
+        let comparison = if let Some(baselines) = &cached_baselines {
+            let candidate = run_isolated(
+                jobs.clone(),
+                architecture.clone(),
+                physical_equivalence.clone(),
+            )
+            .await;
+            comparison_from_runs(baselines[repeat].clone(), candidate, jobs.len())
+        } else {
+            compare_once(
+                jobs.clone(),
+                architecture.clone(),
+                physical_equivalence.clone(),
+            )
+            .await
+        };
+        digests.push(serde_json::to_vec(&comparison).unwrap());
+        repeats.push(comparison);
+    }
+    let repeat_gate_passed = digests.iter().all(|digest| digest == &digests[0]);
+    assert!(repeat_gate_passed, "MKN replay repeat gate failed");
+    let report = Report {
+        schema_version: 2,
+        evidence_tier: "explicit software-tile MKN event replay with token combine and native Ramulator telemetry; not RTL sign-off",
+        timing_source: "isolated runtime::Executor + 8-channel Ramulator request/tick/callback",
+        compute_partition_contract: "schema-v3 m_t/k_h/n_i/n_o recipes bound rectangular physical-core tasks; Gate/Up finish full hidden-K reduction before SwiGLU, Down finishes full intermediate-K reduction before expert completion, and every useful atom retires exactly once",
+        hbm_contract: "baseline and candidate issue identical compiler-DMA 64B element/scale accesses, including scale-request amplification; HBM2 Ramulator splits each access into four native 16B transactions whose controller counters drive channel and row metrics",
+        model: manifest.model,
+        model_architecture: manifest.architecture,
+        workload: manifest.workload,
+        phase: manifest.phase,
+        nominal_batch: manifest.nominal_batch,
+        active_batch: manifest.active_batch,
+        source_window_id: manifest.source_window_id,
+        layer: manifest.layer,
+        step: manifest.step,
+        batch: manifest.batch,
+        top_k: manifest.top_k,
+        shared_experts: manifest.shared_experts,
+        shared_gate: if manifest.shared_gate.is_empty() {
+            "none".to_string()
+        } else {
+            manifest.shared_gate
+        },
+        active_routed_experts: manifest.group_sizes.len(),
+        routed_pairs: manifest.group_sizes.values().sum(),
+        repeats,
+        repeat_gate_passed,
+        limitations: vec![
+            "formal token-combine evidence requires workload schema v2 produced from a validated token-level route capture; legacy v1 histogram reconstruction is compatibility-only",
+            "replay covers shared/routed expert weights, matrix work, SwiGLU activation, route-weight/scatter completion, and optional sigmoid shared gate; router and gather remain outside this replay region",
+            "macro-tile latency terms match the analytical DSE and remain provisional until 1/2/4-way RTL calibration",
+            "typed Matrix/Vector/Accumulator capacity is gated by the schema-v3 liveness contract; SRAM macro banking and PPA remain unsynthesized",
+            "SwiGLU, route/scatter, and shared-gate vector cycles follow checked-in compiler lowering formulas rather than a full emitted instruction stream",
+            "Stream-K uses deterministic aligned rectangular slices inside a 64-column panel; a production scheduler may choose a different legal order",
+        ],
+    };
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(
+        output_path,
+        serde_json::to_string_pretty(&report).unwrap() + "\n",
+    )
+    .unwrap_or_else(|err| panic!("failed to write MKN replay report {output_path:?}: {err}"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn winner() -> MknArchitectureManifest {
+        MknArchitectureManifest {
+            schema_version: 2,
+            name: "qwen_exact_winner".to_string(),
+            mapping: "online_stream_k".to_string(),
+            buffer_depth: 2,
+            weight_buffer_banks: 2,
+            scheduler: DynamicSchedulerConfig::default(),
+            hardware_contract: Some(HardwareContract::default()),
+            hbm_contract: None,
+            sram_contract: None,
+            micro_recipe_table: Vec::new(),
+            cores: vec![
+                MknCore {
+                    id: 0,
+                    m: 1,
+                    k: 64,
+                    n: 4,
+                },
+                MknCore {
+                    id: 1,
+                    m: 3,
+                    k: 960,
+                    n: 4,
+                },
+            ],
+        }
+    }
+
+    fn dynamic_two_core() -> MknArchitectureManifest {
+        MknArchitectureManifest {
+            schema_version: 2,
+            name: "dynamic_2x_m2_k512_n4".to_string(),
+            mapping: DYNAMIC_MAPPING.to_string(),
+            buffer_depth: 2,
+            weight_buffer_banks: 2,
+            scheduler: DynamicSchedulerConfig::default(),
+            hardware_contract: Some(HardwareContract::default()),
+            hbm_contract: None,
+            sram_contract: None,
+            micro_recipe_table: Vec::new(),
+            cores: vec![
+                MknCore {
+                    id: 0,
+                    m: 2,
+                    k: 512,
+                    n: 4,
+                },
+                MknCore {
+                    id: 1,
+                    m: 2,
+                    k: 512,
+                    n: 4,
+                },
+            ],
+        }
+    }
+
+    fn fixture_manifest() -> GroupedManifest {
+        GroupedManifest {
+            model: "fixture".to_string(),
+            architecture: "shared_moe".to_string(),
+            workload: "tiny".to_string(),
+            phase: "decode".to_string(),
+            nominal_batch: 1,
+            active_batch: 1,
+            source_window_id: "fixture:0".to_string(),
+            layer: 0,
+            step: 0,
+            batch: 1,
+            top_k: 1,
+            num_experts: 2,
+            hidden: 64,
+            routed_intermediate: 64,
+            shared_intermediate: 64,
+            shared_experts: 1,
+            shared_gate: "none".to_string(),
+            selected_experts: vec![1],
+            group_sizes: BTreeMap::from([("1".to_string(), 1)]),
+            token_routes: Vec::new(),
+            physical_equivalence: None,
+        }
+    }
+
+    #[test]
+    fn qwen_winner_is_strict_iso_resource() {
+        let architecture = winner();
+        architecture.validate().unwrap();
+        assert_eq!(architecture.pe_count(), 4096);
+        assert_eq!(architecture.used_input_width(), 1024);
+        assert_eq!(architecture.used_output_slots(), 16);
+        assert_eq!(architecture.cores[0].atom_capacity(), 4);
+        assert_eq!(architecture.cores[1].atom_capacity(), 180);
+    }
+
+    #[test]
+    fn rectangular_tasks_preserve_m_and_k_tail_padding() {
+        let panel = WeightPanel {
+            id: 0,
+            job_id: 0,
+            projection: 2,
+            tokens: 1,
+            tensor: Projection {
+                k: 512,
+                n: 64,
+                base: 0,
+            },
+            n_start: 0,
+            n_stop: 64,
+            m_tile: 1,
+            k_tile: 512,
+        };
+        let mut state = PanelState::new(panel, 0);
+        let cores = vec![MknCore {
+            id: 0,
+            m: 4,
+            k: 1024,
+            n: 4,
+        }];
+        let task = state
+            .assign_rectangular_task(0, &cores, DispatchMode::StreamK, true, false)
+            .unwrap();
+        assert_eq!(
+            &task.contributions[..task.contribution_count],
+            &[(0, 8), (1, 8), (2, 8), (3, 8)]
+        );
+        assert_eq!(task.useful_atoms, 32);
+        assert_eq!(task.issued_atoms, 256);
+        let mut useful = task.useful_atoms;
+        let mut issued = task.issued_atoms;
+        while !state.all_work_assigned() {
+            let task = state
+                .assign_rectangular_task(0, &cores, DispatchMode::StreamK, true, false)
+                .unwrap();
+            useful += task.useful_atoms;
+            issued += task.issued_atoms;
+        }
+        assert!(state.all_work_assigned());
+        assert_eq!(useful, 1 * 64 * 8);
+        assert_eq!(issued, 16 * 4 * 16 * 4);
+        assert_eq!(useful as f64 / issued as f64, 0.125);
+    }
+
+    #[test]
+    fn heterogeneous_cores_split_k_without_crossing_output_shape() {
+        let panel = WeightPanel {
+            id: 0,
+            job_id: 0,
+            projection: 0,
+            tokens: 1,
+            tensor: Projection {
+                k: 2048,
+                n: 64,
+                base: 0,
+            },
+            n_start: 0,
+            n_stop: 64,
+            m_tile: 1,
+            k_tile: 2048,
+        };
+        let mut state = PanelState::new(panel, 0);
+        let cores = vec![
+            MknCore {
+                id: 0,
+                m: 1,
+                k: 64,
+                n: 4,
+            },
+            MknCore {
+                id: 1,
+                m: 3,
+                k: 960,
+                n: 4,
+            },
+        ];
+        let large = state
+            .assign_rectangular_task(1, &cores, DispatchMode::StreamK, true, true)
+            .unwrap();
+        let small = state
+            .assign_rectangular_task(0, &cores, DispatchMode::StreamK, true, true)
+            .unwrap();
+        assert_eq!(
+            &large.contributions[..large.contribution_count],
+            &[(0, 15), (1, 15), (2, 15), (3, 15)]
+        );
+        assert_eq!(large.useful_atoms, 60);
+        assert_eq!(large.issued_atoms, 180);
+        assert_eq!(
+            &small.contributions[..small.contribution_count],
+            &[(0, 1), (1, 1), (2, 1), (3, 1)]
+        );
+        assert_eq!(small.useful_atoms, 4);
+        assert_eq!(small.issued_atoms, 4);
+        assert_eq!(state.remaining_atoms(), (32 - 16) * 4 + 15 * 32 * 4);
+    }
+
+    #[test]
+    fn incomplete_or_overprovisioned_architectures_are_rejected() {
+        let mut architecture = winner();
+        architecture.cores[1].k = 1024;
+        assert!(architecture.validate().is_err());
+        architecture = winner();
+        architecture.cores[0].n = 5;
+        assert!(architecture.validate().is_err());
+        architecture = winner();
+        architecture.cores[0].id = 7;
+        assert!(architecture.validate().is_err());
+
+        architecture = winner();
+        architecture.hardware_contract = None;
+        assert!(architecture.validate().is_err());
+        architecture.schema_version = 1;
+        architecture.validate().unwrap();
+    }
+
+    #[test]
+    fn equivalent_shared_expert_count_builds_one_non_overlapping_shared_ffn() {
+        let mut manifest = fixture_manifest();
+        manifest.shared_experts = 2;
+        manifest.shared_intermediate = 128;
+        manifest.shared_gate = "sigmoid".to_string();
+        let jobs = jobs_from_manifest(&manifest);
+        let mut ranges = Vec::new();
+        for job in jobs.iter().filter(|job| job.kind == JobKind::Shared) {
+            for projection in &job.projections {
+                ranges.push((
+                    projection.base,
+                    projection.base + stored_mx_bytes(projection.k, projection.n),
+                ));
+            }
+            let gate = job.shared_gate.as_ref().unwrap();
+            ranges.push((gate.base, gate.base + gate.physical_bytes));
+        }
+        assert_eq!(
+            jobs.iter()
+                .filter(|job| job.kind == JobKind::Shared)
+                .count(),
+            1
+        );
+        assert_eq!(ranges.len(), 4);
+        ranges.sort_unstable();
+        assert!(
+            ranges.windows(2).all(|pair| pair[0].1 <= pair[1].0),
+            "shared matrix and sigmoid-gate address ranges overlap: {ranges:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tiny_ramulator_replay_is_three_repeat_deterministic_and_byte_exact() {
+        let jobs = jobs_from_manifest(&fixture_manifest());
+        let mut digests = Vec::new();
+        for _ in 0..3 {
+            let comparison = compare_once(jobs.clone(), winner(), None).await;
+            assert!(comparison.hbm_byte_equality_passed);
+            assert!(comparison.completed_job_equality_passed);
+            assert!(comparison.equal_pe_count_passed);
+            assert!(comparison.equal_global_sram_contract_passed);
+            assert_eq!(comparison.baseline.completed_jobs, 2);
+            assert_eq!(comparison.candidate.completed_jobs, 2);
+            assert!(comparison.baseline.all_atoms_completed);
+            assert!(comparison.candidate.all_atoms_completed);
+            assert!(comparison.baseline.executor_drain_passed);
+            assert!(comparison.candidate.executor_drain_passed);
+            digests.push(serde_json::to_vec(&comparison).unwrap());
+        }
+        assert!(digests.iter().all(|digest| digest == &digests[0]));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn dynamic_dispatch_maps_shared_and_cold_jobs_without_changing_hbm_bytes() {
+        let jobs = jobs_from_manifest(&fixture_manifest());
+        let mut architecture = dynamic_two_core();
+        architecture.scheduler.mode_switch_cycles = 8;
+        let comparison = compare_once(jobs, architecture, None).await;
+        assert!(comparison.hbm_byte_equality_passed);
+        assert_eq!(
+            comparison.candidate.job_mapping_modes["shared:0"],
+            DispatchMode::KSplit.name()
+        );
+        assert_eq!(
+            comparison.candidate.job_mapping_modes["routed:1"],
+            DispatchMode::ExpertSingleCore.name()
+        );
+        assert!(comparison.candidate.dynamic_dispatches > 0);
+        assert!(comparison.candidate.mode_switch_events > 0);
+        assert_eq!(
+            comparison.candidate.mode_switch_core_cycles,
+            comparison.candidate.mode_switch_events * 8
+        );
+        assert!(comparison.candidate.activation_busy_cycles > 0);
+        assert_eq!(
+            comparison.baseline.activation_vector_cycles,
+            comparison.candidate.activation_vector_cycles
+        );
+        assert!(comparison.candidate.executor_drain_passed);
+    }
+}

@@ -1,0 +1,430 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/tracked_worktree_vs_HEAD.patch",
+      "bytes": 102899,
+      "reason": "sameSHA256",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "ede9f09f850dfdd55b67b54b4b5e7c0852efa9abc8ee016c9816e732356bb8d9",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/modified_source/transactional_emulator/src/bin/moe_dual_normal.rs",
+      "bytes": 12966,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/bin/moe_dual_normal.rs",
+      "sha256": "eb5dc340a25dc56413cd91ccd2b6f94926aefb2412fba5c0e7c459d5f1fad6fe",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/modified_source/transactional_emulator/src/moe_normal/engine.rs",
+      "bytes": 96254,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/engine.rs",
+      "sha256": "d55fee885d21271af5485c3e07d7a5e4d680ef4e25b1330d85dc9aba056a82bb",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/mod.rs",
+      "bytes": 670,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/mod.rs",
+      "sha256": "0ad4b7ce2b95a8094d949afff96fc024d29bf7ae6d20222abc8c87a3105ffadb",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/output_pool.rs",
+      "bytes": 17850,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/output_pool.rs",
+      "sha256": "9424548923cbd5c23fcd1858d1d66222f8a90e7f19393e80597eeff8cec07adf",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/output_pool_tests.rs",
+      "bytes": 32734,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/output_pool_tests.rs",
+      "sha256": "5d43c0333ef3ad8e4a530b6a0f041469449cc7c9a3b7b50003566ab7db9b6884",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/tests.rs",
+      "bytes": 31995,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/tests.rs",
+      "sha256": "899588d8587b3ba9f874efabd3407d0968a8fc87b54c830254c5b592168ae2fd",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/modified_source/transactional_emulator/src/moe_normal/types.rs",
+      "bytes": 25924,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/types.rs",
+      "sha256": "ea898c94181a34b83020f36443488b0f513aab795060d9372697e86b33d6c206",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/modified_source/transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py",
+      "bytes": 60673,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py",
+      "sha256": "9cd82f1675f0f5bbc362bf0a7c3e8310dc8b5599ff953fd086b6f68cf4348b67",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_cohort_step1.md",
+      "bytes": 5082,
+      "reason": "sameSHA256",
+      "relative": "doc/moe_cohort_step1.md",
+      "sha256": "cd345e3b8497dbbd6cf4ca488e75f65617b14b61e3879307f4e5b6bc86008329",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_event_ready_step1.md",
+      "bytes": 6033,
+      "reason": "sameSHA256",
+      "relative": "doc/moe_event_ready_step1.md",
+      "sha256": "b238a59a4df3ddf7cbaf9c7aebd7f649f745bb566770a21f4a07c05c2924f202",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_event_ready_step1_diagnostics.md",
+      "bytes": 4250,
+      "reason": "sameSHA256",
+      "relative": "doc/moe_event_ready_step1_diagnostics.md",
+      "sha256": "f0c41f39c5f36376f08f602337d6be1fd062ad720210ac7198316fe371c35ab5",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/doc/moe_spatial_m_contract.md",
+      "bytes": 5934,
+      "reason": "sameSHA256",
+      "relative": "doc/moe_spatial_m_contract.md",
+      "sha256": "d0ff278ef171154698f6f5fc11b72eca6847f946849caff15a6dee3edb921971",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_split_window_step2.md",
+      "bytes": 6975,
+      "reason": "sameSHA256",
+      "relative": "doc/moe_split_window_step2.md",
+      "sha256": "082498dd3f22a321b9db84cee8476553c51767a34e33cfec7ff0b80edf186a59",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/scripts/moe_spatial/README.md",
+      "bytes": 3262,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_spatial/README.md",
+      "sha256": "2800e0d9139cfd002b2419283c4f2a9a3b5059217ec27cceac38bc8336e44715",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/scripts/moe_spatial/plot_results.py",
+      "bytes": 2170,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_spatial/plot_results.py",
+      "sha256": "734f3b225591042e8460f58e6df3b7f9795d81bcaa7be87c2403da8e817c131e",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/scripts/moe_spatial/run_experiment.py",
+      "bytes": 18298,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_spatial/run_experiment.py",
+      "sha256": "6aa2f6ea5099668dc0794bb98dfbd10dd5df9e5b021eb55b24a7415c607ba779",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/scripts/moe_spatial/summarize.py",
+      "bytes": 11565,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_spatial/summarize.py",
+      "sha256": "85e84d91f07e88c962a26e090082b2977643bea8f01b5328e0a7e34c5ff12cc0",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/scripts/moe_stream_ctrl/analyze_oracle.py",
+      "bytes": 16635,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/analyze_oracle.py",
+      "sha256": "75452ea64e5de7a60da2459e438a6c5d78ba6369dc7192593555dea5232733ce",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/audit_step2.py",
+      "bytes": 4514,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/audit_step2.py",
+      "sha256": "005ed1d29db8c9f9b73333adcdf79726443b3fd876e3ccc9234602daf9211573",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/cohort_step1.py",
+      "bytes": 9550,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/cohort_step1.py",
+      "sha256": "104e0c71ff997e5eaba58a886980f3f4fae01beaaf78553b35e4ef3e387bbf66",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/common_baseline.py",
+      "bytes": 10590,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/common_baseline.py",
+      "sha256": "871b34d9204f2f39115de9f05a6290833fd772ca7f10a0e16fb7806e3ffdb1f0",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/diagnose_step1.py",
+      "bytes": 16946,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/diagnose_step1.py",
+      "sha256": "9c034709232412b2518b1cf6e356c87fbe8e59f278218dbadf771810a4cbd083",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/fixed_common_baseline.py",
+      "bytes": 6332,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/fixed_common_baseline.py",
+      "sha256": "e8f322bb99d74be2c7371675fc1d59d920dd4b859ff47d9ea1859407ef64dfee",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/frozen_me1_step2.py",
+      "bytes": 2286,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/frozen_me1_step2.py",
+      "sha256": "75bff58f315bdfd263435207494851e69273e70278f56acde7bfc31a19363671",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/scripts/moe_stream_ctrl/oracle.py",
+      "bytes": 21177,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/oracle.py",
+      "sha256": "cc8a8f05062fe8a84f70409b63c168e369639296cad92f302bb913d08cf9a2fc",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/regress_step2.py",
+      "bytes": 3087,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/regress_step2.py",
+      "sha256": "aa89f8f69598ffed98c1f23a4c8f221e49ae199c8f8e817549b60205f220289d",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/report_step1_diagnostics.py",
+      "bytes": 23763,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/report_step1_diagnostics.py",
+      "sha256": "2d84d6033b8d30d3f8143eef0378248d7b442f25b4ac167690eb87b071263135",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/report_step2.py",
+      "bytes": 18148,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/report_step2.py",
+      "sha256": "d65069f75344439fb75ac909ff5a9828f25df3edce89444f149c99bb2e2a758c",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/reproduce_step0.sh",
+      "bytes": 2345,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/reproduce_step0.sh",
+      "sha256": "7c1bfeacabc0a2f48823bfa437dc9581b34cfd313e1c30bf8f8dbbbc6432ab68",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/step0.py",
+      "bytes": 15712,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/step0.py",
+      "sha256": "e404558febc5456042c5877a64a1c88d9ba041f45b60e3ebc16b72116b4608f7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/step1.py",
+      "bytes": 16620,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/step1.py",
+      "sha256": "89f0e6de40206bc9d49ba56909487abb82c5e23d3812102e6ddde578fa23c339",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/step2.py",
+      "bytes": 12250,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/step2.py",
+      "sha256": "a8ba216db631073ed80b757eb8221b28366a08ab3843d1c9f71f16f4be4907bf",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/summarize_step0.py",
+      "bytes": 14895,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/summarize_step0.py",
+      "sha256": "539a018e7be22eedef1579b66ac9c8cb9d8d5b2e6209faf7b4727f168330dd35",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/summarize_step1.py",
+      "bytes": 17192,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/summarize_step1.py",
+      "sha256": "867aed26c66e73d63140988607b034914d5dbb77e704004ef8037c907ecaea12",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/verify_step2.py",
+      "bytes": 4695,
+      "reason": "sameSHA256",
+      "relative": "scripts/moe_stream_ctrl/verify_step2.py",
+      "sha256": "da10bc4dbc67636804eefe05a811fab05a8315034502d889cbc5bcce163e7ec5",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/transactional_emulator/src/bin/moe_spatial_m.rs",
+      "bytes": 844,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/bin/moe_spatial_m.rs",
+      "sha256": "8b769fcbb4f3371b164a5b90ff30cb04b658b77895a2197e189feb25b828831c",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/transactional_emulator/src/moe_normal/cohort.rs",
+      "bytes": 25195,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/cohort.rs",
+      "sha256": "092731de56d27fbecf6d15b2570eb5e4f108a413adf1d39109bacb874bbafdb9",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/transactional_emulator/src/moe_normal/control_port.rs",
+      "bytes": 5684,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/control_port.rs",
+      "sha256": "49044ec0981e9ae2063009848ec9be10d61bbd3007671625b784cc23e7487197",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/transactional_emulator/src/moe_normal/event_ready.rs",
+      "bytes": 40170,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/event_ready.rs",
+      "sha256": "d84bd7c8975e8b04b6808603709d891e073ead2d641d37ee02005c7685d6067b",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/reserved_credits.rs",
+      "bytes": 5584,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/reserved_credits.rs",
+      "sha256": "e2b36069ff85420017ee4470a1aa772e496dea732518509f21ce3b9025c0727f",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/split_data.rs",
+      "bytes": 7630,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/split_data.rs",
+      "sha256": "995b31a4dd8049b3bacc73be14bae7ea4ec96e627696428a6346e6f436147b25",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/transactional_emulator/src/moe_normal/split_stream.rs",
+      "bytes": 14583,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/split_stream.rs",
+      "sha256": "cc208d44902fbf8bfa6f6efd84c687b3fe2e31dcbcba91a3a27e1c0d813c866b",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_167beb75a5c5/untracked/transactional_emulator/src/moe_normal/split_window_tests.rs",
+      "bytes": 15618,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_normal/split_window_tests.rs",
+      "sha256": "46663df47e7002543376ee6f064efd0183baa2b514a244f72c1554b7111e228a",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_70910af1de8e/untracked/transactional_emulator/src/moe_spatial/mod.rs",
+      "bytes": 18511,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_spatial/mod.rs",
+      "sha256": "34c524ee4696bcc44d69434817f2637031c3ded27ff73c5c0934950b612b3efb",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    },
+    {
+      "archive": "local/moe-bottleneck-diagnostic-20260911/worktree_c8ead26ef6d0/untracked/transactional_emulator/src/moe_spatial/tests.rs",
+      "bytes": 5278,
+      "reason": "sameSHA256",
+      "relative": "transactional_emulator/src/moe_spatial/tests.rs",
+      "sha256": "d381b4e94db33c1fd9b991b12f36c37e0a91b38790ebca39b23e0c56f655cc89",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+    }
+  ],
+  "origin": {
+    "HEAD": "da93c32a220338818924e767c3ba3294c789a349",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": null,
+    "original_branch_for_archive": "local/moe-bottleneck-diagnostic-20260911",
+    "stable_id": "70910af1de8e",
+    "worktree": "/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

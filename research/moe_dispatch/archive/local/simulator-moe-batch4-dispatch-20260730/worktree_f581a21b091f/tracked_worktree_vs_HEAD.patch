@@ -1,0 +1,363 @@
+diff --git a/transactional_emulator/src/accelerator/dispatch.rs b/transactional_emulator/src/accelerator/dispatch.rs
+index c2748fd9..0b6379f9 100644
+--- a/transactional_emulator/src/accelerator/dispatch.rs
++++ b/transactional_emulator/src/accelerator/dispatch.rs
+@@ -18,6 +18,33 @@ use super::Accelerator;
+ use super::loop_state::LoopDecision;
+ 
+ impl Accelerator {
++    fn resolve_topk_policy(&self, policy: u8, pc: usize) -> (usize, usize) {
++        let (expert_count, topk) = match policy {
++            0 => (32, 4),
++            1 => (128, 8),
++            15 => self.reg_file.topk_policy().unwrap_or_else(|| {
++                panic!("V_TOPK/C_ROUTE_BEGIN policy 15 at pc {pc} requires C_SET_TOPK_REG")
++            }),
++            other => {
++                tracing::error!(pc, policy = other, "unsupported TopK policy");
++                panic!(
++                    "unsupported TopK policy {other} at pc {pc}; expected 0=32/top4, \
++                     1=128/top8, or 15=C_SET_TOPK_REG"
++                );
++            }
++        };
++
++        assert!(
++            (1..=256).contains(&expert_count),
++            "TopK expert count {expert_count} at pc {pc} is outside RTL range [1, 256]"
++        );
++        assert!(
++            (1..=8).contains(&topk) && topk <= expert_count,
++            "TopK k={topk} at pc {pc} must be in [1, 8] and no larger than {expert_count}"
++        );
++        (expert_count, topk)
++    }
++
+     /// Resolve the V_* opcode mask.
+     ///
+     /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
+@@ -309,20 +336,7 @@ impl Accelerator {
+                     rs2,
+                     rmask,
+                 } => {
+-                    let (expert_count, topk) = match *rmask {
+-                        0 => (32, 4),
+-                        1 => (128, 8),
+-                        other => {
+-                            // Consistent with the Opcode::Invalid handler: a
+-                            // malformed-but-encodable field is a bad-program error,
+-                            // logged with the pc before aborting.
+-                            tracing::error!(pc, rmask = other, "unsupported V_TOPK rmask policy");
+-                            panic!(
+-                                "unsupported V_TOPK rmask policy {other} at pc {pc}; \
+-                                 expected 0=32/top4 or 1=128/top8"
+-                            );
+-                        }
+-                    };
++                    let (expert_count, topk) = self.resolve_topk_policy(*rmask, pc);
+                     let fp_base = self.reg_file.read_gp(*rd) as usize;
+                     let int_base = self.reg_file.read_gp(*rs2) as usize;
+                     let (indices, weights) = self
+@@ -333,6 +347,35 @@ impl Accelerator {
+                         self.scalar_sram.write_int(int_base + offset, *idx);
+                         self.scalar_sram.write_fp(fp_base + offset, *weight);
+                     }
++                    let stored_indices: Vec<u32> = (0..topk)
++                        .map(|offset| self.scalar_sram.read_int(int_base + offset))
++                        .collect();
++                    let stored_weights: Vec<f32> = (0..topk)
++                        .map(|offset| self.scalar_sram.read_fp(fp_base + offset))
++                        .collect();
++                    self.route_state.capture_topk(
++                        int_base,
++                        fp_base,
++                        &stored_indices,
++                        &stored_weights,
++                    );
++                }
++                op::Opcode::V_ROUTE_MUL {
++                    rd,
++                    rs1,
++                    rs2,
++                    token,
++                } => {
++                    assert_eq!(*rs2, 0, "V_ROUTE_MUL reserved rs2 field must be gp0");
++                    let (active, weight) = self.route_state.current_route(*token);
++                    self.v_machine
++                        .route_mul(
++                            self.reg_file.read_gp(*rd),
++                            self.reg_file.read_gp(*rs1),
++                            weight,
++                            active,
++                        )
++                        .await;
+                 }
+                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
+                     let mask = self.resolve_v_mask(*rmask);
+@@ -605,6 +648,10 @@ impl Accelerator {
+                     self.reg_file.set_v_mask(self.reg_file.read_gp(*rd));
+                     cycle!(1);
+                 }
++                op::Opcode::C_SET_TOPK_REG { rd } => {
++                    self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
++                    cycle!(1);
++                }
+                 op::Opcode::C_LOOP_START { rd, imm } => {
+                     self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
+                     cycle!(1);
+@@ -617,6 +664,34 @@ impl Accelerator {
+                     }
+                     cycle!(1);
+                 }
++                op::Opcode::C_ROUTE_BEGIN {
++                    rd,
++                    rs1,
++                    rs2,
++                    policy,
++                } => {
++                    let (expert_count, topk) = self.resolve_topk_policy(*policy, pc);
++                    self.route_state.configure(
++                        *rd,
++                        self.reg_file.read_gp(*rs1) as usize,
++                        self.reg_file.read_gp(*rs2) as usize,
++                        expert_count,
++                        topk,
++                    );
++                    cycle!(1);
++                }
++                op::Opcode::C_ROUTE_LOOP_START => {
++                    let (expert_gp, expert) = self.route_state.start_loop(pc);
++                    self.reg_file.write_gp(expert_gp, expert as u32);
++                    cycle!(1);
++                }
++                op::Opcode::C_ROUTE_LOOP_END => {
++                    if let Some((target_pc, expert_gp, expert)) = self.route_state.end_loop() {
++                        self.reg_file.write_gp(expert_gp, expert as u32);
++                        jump_pc = Some(target_pc);
++                    }
++                    cycle!(1);
++                }
+                 op::Opcode::C_BREAK => {
+                     // RTL exposes C_BREAK as the whole-program termination pulse.
+                     // C_LOOP_END is the only instruction that exits an ISA loop.
+diff --git a/transactional_emulator/src/accelerator/mod.rs b/transactional_emulator/src/accelerator/mod.rs
+index 8d3b82a8..d903f958 100644
+--- a/transactional_emulator/src/accelerator/mod.rs
++++ b/transactional_emulator/src/accelerator/mod.rs
+@@ -16,10 +16,12 @@ use crate::vector_machine::VectorMachine;
+ mod dispatch;
+ mod loop_state;
+ mod registers;
++mod route_state;
+ mod scalar_sram;
+ 
+ use loop_state::LoopState;
+ use registers::AcceleratorRegFile;
++use route_state::RouteState;
+ use scalar_sram::ScalarSram;
+ 
+ pub(crate) struct Accelerator {
+@@ -29,6 +31,7 @@ pub(crate) struct Accelerator {
+     reg_file: AcceleratorRegFile,
+     scalar_sram: ScalarSram,
+     loop_state: LoopState,
++    route_state: RouteState,
+ }
+ 
+ impl Accelerator {
+@@ -45,6 +48,7 @@ impl Accelerator {
+             reg_file: AcceleratorRegFile::new(scalar_fp_type),
+             scalar_sram: ScalarSram::new(scalar_fp_type),
+             loop_state: LoopState::new(),
++            route_state: RouteState::new(),
+         }
+     }
+ 
+diff --git a/transactional_emulator/src/accelerator/registers.rs b/transactional_emulator/src/accelerator/registers.rs
+index 8a1247ea..3d1a243f 100644
+--- a/transactional_emulator/src/accelerator/registers.rs
++++ b/transactional_emulator/src/accelerator/registers.rs
+@@ -14,6 +14,7 @@ pub(super) struct AcceleratorRegFile {
+     stride: u32,
+     bmm_scale: f32,
+     v_mask: u32,
++    topk_policy: Option<u32>,
+ }
+ 
+ impl AcceleratorRegFile {
+@@ -33,6 +34,7 @@ impl AcceleratorRegFile {
+             // The current opcode dispatch does not expose a writer for this.
+             bmm_scale: 0.25,
+             v_mask: 0,
++            topk_policy: None,
+         }
+     }
+ 
+@@ -96,6 +98,15 @@ impl AcceleratorRegFile {
+         self.v_mask = v;
+     }
+ 
++    pub(super) fn set_topk_policy(&mut self, v: u32) {
++        self.topk_policy = Some(v);
++    }
++
++    pub(super) fn topk_policy(&self) -> Option<(usize, usize)> {
++        self.topk_policy
++            .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
++    }
++
+     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP
+     /// instructions (S_ADD_INT / S_SUB_INT / S_MUL_INT).
+     pub(super) fn binop_gp<F: FnOnce(u32, u32) -> u32>(
+@@ -140,6 +151,14 @@ mod tests {
+         assert_eq!(regs.stride(), 1);
+         assert_eq!(regs.bmm_scale(), 0.25);
+         assert_eq!(regs.v_mask(), 0);
++        assert_eq!(regs.topk_policy(), None);
++    }
++
++    #[test]
++    fn topk_policy_register_preserves_256_experts() {
++        let mut regs = AcceleratorRegFile::new(DataType::Fp(FpType::BF16));
++        regs.set_topk_policy((256 << 8) | 8);
++        assert_eq!(regs.topk_policy(), Some((256, 8)));
+     }
+ 
+     #[test]
+diff --git a/transactional_emulator/src/op.rs b/transactional_emulator/src/op.rs
+index 6ba974ac..6ab4817b 100644
+--- a/transactional_emulator/src/op.rs
++++ b/transactional_emulator/src/op.rs
+@@ -133,13 +133,19 @@ pub enum Opcode {
+     /// - `rs2`: GP register whose value is the INT SRAM base for the selected
+     ///   expert indices.
+     /// - `rmask`: policy selector (`0` = 32 experts/top-4, `1` = 128
+-    ///   experts/top-8).
++    ///   experts/top-8, `15` = shape from `C_SET_TOPK_REG`).
+     V_TOPK {
+         rd: u8,
+         rs1: u8,
+         rs2: u8,
+         rmask: u8,
+     },
++    V_ROUTE_MUL {
++        rd: u8,
++        rs1: u8,
++        rs2: u8,
++        token: u8,
++    },
+     V_EXP_V {
+         rd: u8,
+         rs1: u8,
+@@ -279,6 +285,9 @@ pub enum Opcode {
+     C_SET_V_MASK_REG {
+         rd: u8,
+     },
++    C_SET_TOPK_REG {
++        rd: u8,
++    },
+     C_LOOP_START {
+         rd: u8,
+         imm: u32,
+@@ -286,6 +295,14 @@ pub enum Opcode {
+     C_LOOP_END {
+         rd: u8,
+     },
++    C_ROUTE_BEGIN {
++        rd: u8,
++        rs1: u8,
++        rs2: u8,
++        policy: u8,
++    },
++    C_ROUTE_LOOP_START,
++    C_ROUTE_LOOP_END,
+     // Extensions
+     V_SHFT_V {
+         rd: u8,
+@@ -454,6 +471,21 @@ impl Opcode {
+                 rs2,
+                 rmask: rs3,
+             },
++            0x38 => Self::C_SET_TOPK_REG { rd },
++            0x39 => Self::C_ROUTE_BEGIN {
++                rd,
++                rs1,
++                rs2,
++                policy: rs3,
++            },
++            0x3A => Self::C_ROUTE_LOOP_START,
++            0x3B => Self::C_ROUTE_LOOP_END,
++            0x3C => Self::V_ROUTE_MUL {
++                rd,
++                rs1,
++                rs2,
++                token: rs3,
++            },
+ 
+             // Scalar Operations (Floating-Point)
+             0x17 => Self::S_ADD_FP { rd, rs1, rs2 },
+@@ -557,7 +589,7 @@ mod tests {
+     #[test]
+     fn test_decode_invalid_and_unknown_are_invalid() {
+         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
+-        // 0x3F is past the highest defined opcode (0x37, V_TOPK).
++        // 0x3F is past the highest defined opcode (0x3C, V_ROUTE_MUL).
+         assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+     }
+ 
+@@ -874,4 +906,32 @@ mod tests {
+             }
+         }
+     }
++
++    #[test]
++    fn test_decode_compiler_batch4_route_fixtures() {
++        assert!(matches!(
++            Opcode::decode(rform(0x38, 6, 0, 0, 0, 0)),
++            Opcode::C_SET_TOPK_REG { rd: 6 }
++        ));
++        match Opcode::decode(0x0004_C879) {
++            Opcode::C_ROUTE_BEGIN {
++                rd,
++                rs1,
++                rs2,
++                policy,
++            } => assert_eq!((rd, rs1, rs2, policy), (1, 2, 3, 1)),
++            other => panic!("expected C_ROUTE_BEGIN, got {other:?}"),
++        }
++        assert!(matches!(Opcode::decode(0x3A), Opcode::C_ROUTE_LOOP_START));
++        match Opcode::decode(0x000C_153C) {
++            Opcode::V_ROUTE_MUL {
++                rd,
++                rs1,
++                rs2,
++                token,
++            } => assert_eq!((rd, rs1, rs2, token), (4, 5, 0, 3)),
++            other => panic!("expected V_ROUTE_MUL, got {other:?}"),
++        }
++        assert!(matches!(Opcode::decode(0x3B), Opcode::C_ROUTE_LOOP_END));
++    }
+ }
+diff --git a/transactional_emulator/src/vector_machine.rs b/transactional_emulator/src/vector_machine.rs
+index 1ecab01c..9cc89408 100644
+--- a/transactional_emulator/src/vector_machine.rs
++++ b/transactional_emulator/src/vector_machine.rs
+@@ -135,6 +135,18 @@ impl VectorMachine {
+         }
+     }
+ 
++    pub(crate) async fn route_mul(&self, vd: u32, vs1: u32, weight: f32, active: bool) {
++        let a = self.vram.read(vs1).await;
++        let result = if active {
++            a.as_tensor() * (weight as f64)
++        } else {
++            Tensor::zeros_like(a.as_tensor())
++        };
++        let c = QuantTensor::quantize(result, a.data_type());
++        cycle!(*VECTOR_MUL_CYCLES);
++        self.vram.write(vd, c).await;
++    }
++
+     pub(crate) async fn max_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
+         let a = self.vram.read(vs1).await;
+         if rmask == 0 {

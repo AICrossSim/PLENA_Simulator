@@ -1,0 +1,1456 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/tracked_worktree_vs_HEAD.patch",
+      "bytes": 16215,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "ca2341c31f1380f94025bbb9c4bd2bb7fb2cbbad3828cee2f80975b7f73be8dc",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/Cargo.lock",
+      "bytes": 56250,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/Cargo.lock",
+      "sha256": "3385fe6d7ece3d05b76e9cbb119ffa8c7c2c1602453fa1da8c31babdd990bb93",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/Cargo.toml",
+      "bytes": 940,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/Cargo.toml",
+      "sha256": "22f32cac4f0ad50346010f49ef211f21405c86c3014c9b8a6c81c4136322f159",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/lib/ramulator/src/model.rs",
+      "bytes": 13798,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/lib/ramulator/src/model.rs",
+      "sha256": "218a8cb5d044e95cd6b7cf0e4d022d0152c2bde18339116808bb02c2251e8f10",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/lib/ramulator/src/raw.rs",
+      "bytes": 7767,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/lib/ramulator/src/raw.rs",
+      "sha256": "a91266e19e09ddeab933eed6bc84937b56a4c7ae920243858bc6986f82879c8e",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/pkgs/ramulator2/ramulator_capi.cc",
+      "bytes": 3517,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/pkgs/ramulator2/ramulator_capi.cc",
+      "sha256": "6beccac0418afb57fcba46cc8f2e3f2e2f39f8bc0052487787dfa449bf4f4a82",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/pkgs/ramulator2/ramulator_capi.h",
+      "bytes": 907,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/pkgs/ramulator2/ramulator_capi.h",
+      "sha256": "6a1be06b90f25f261b8badc36470e729d55e5325d31d4ffbf1212d8949139ec2",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/src/cli.rs",
+      "bytes": 8543,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/cli.rs",
+      "sha256": "7b2c372065816cc685c3a763f5bfe78a4368545993a75228fd6bf6c2918cb953",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/src/main.rs",
+      "bytes": 2396,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/main.rs",
+      "sha256": "075dd0d9dada8047ad2702efb01cd9b99b2dd82b0949ffde8b955976e521646c",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/src/runner.rs",
+      "bytes": 14615,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/runner.rs",
+      "sha256": "e62dbf3373ad43ffff845c870bc99a0d4a0d1132e5ad7060572a6bd6fbf0ee36",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/modified_source/transactional_emulator/src/stage_profile.rs",
+      "bytes": 96702,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/stage_profile.rs",
+      "sha256": "6c38d99bac72420f16ff5d79ad971bc0bae8bf8abb1d79aea1e464006f0c31ac",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4018,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1485,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/rust_emulator_run_stats.json",
+      "bytes": 3181,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/rust_emulator_run_stats.json",
+      "sha256": "4d2b2deb808b162601766989887b0ec5420fcc86cc36a6788039339297b8d889",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/rust_emulator_stdout.log",
+      "bytes": 2035,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/rust_emulator_stdout.log",
+      "sha256": "eccfcd53bb32c1effa861b37b6218a21aa9997b277987bc5df75c62c71e77af3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/stage_profile.json",
+      "bytes": 15621,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/stage_profile.json",
+      "sha256": "b98ce6d24ea16701c2f91eceb4f6c33389319c25aaf4fbab80c9b2f255fece21",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/timing_gate_case_result.json",
+      "bytes": 17377,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/timing_gate_case_result.json",
+      "sha256": "e01edd9264fef4958103e2992d38704ba446747d08d868e814a4dc3bce30d0c3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4037,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1485,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/rust_emulator_run_stats.json",
+      "bytes": 3206,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/rust_emulator_run_stats.json",
+      "sha256": "61beca3a21722eb47cdb7c65b219e73228a4b5e6bbb1c4625fe9745a73253aff",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/rust_emulator_stdout.log",
+      "bytes": 2039,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/rust_emulator_stdout.log",
+      "sha256": "ae227a2628f62efe74286d347228f74996dadf54cdafbb3684c0644bdf6794df",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/stage_profile.json",
+      "bytes": 15621,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/stage_profile.json",
+      "sha256": "01335a191f9cd2045d781ba57a5f9b1dba726010bf4d4ebfaf828fd0d9039362",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/timing_gate_case_result.json",
+      "bytes": 17385,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/timing_gate_case_result.json",
+      "sha256": "73d06615c5925447a776d77a9f4772ba7aeb0040bcdb22534cd172e1c258d022",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_random_order_prefetch_v/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 3812,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1485,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/rust_emulator_run_stats.json",
+      "bytes": 3228,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/rust_emulator_run_stats.json",
+      "sha256": "4e6fee6e794c035d06e1c5a5f6929aac4d7fb54e1fc162fa586ab2271d6ca932",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/rust_emulator_stdout.log",
+      "bytes": 2042,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/rust_emulator_stdout.log",
+      "sha256": "283b24cbfeda1f9010fd2291ed16c725e3bb1b05076b6bb0473c0779da4c303c",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/stage_profile.json",
+      "bytes": 15623,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/stage_profile.json",
+      "sha256": "8397d5c4d9c6ac217c45d52c286fa0d3056a9971464f8f588cae5994f92053d3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/timing_gate_case_result.json",
+      "bytes": 17395,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/timing_gate_case_result.json",
+      "sha256": "58fb7753bdd7089014cd5aac55f5ced0563e4af0c5bc7ae8e0927e7ee404bdab",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_row_hit_repeat_prefetch_v/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4106,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1485,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/rust_emulator_run_stats.json",
+      "bytes": 3287,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/rust_emulator_run_stats.json",
+      "sha256": "40c9c51f5ceaf68bc3992c33b4e50aa3dd749a4260d18eb8537c7be14897e0ce",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/rust_emulator_stdout.log",
+      "bytes": 2052,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/rust_emulator_stdout.log",
+      "sha256": "d8fb0773250fa020d421057cc08599513c729275066183d8eb1b39bb15560eed",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/stage_profile.json",
+      "bytes": 15621,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/stage_profile.json",
+      "sha256": "79776d657842cefa5624cf7596688ed6c970ea8ebea68a1439e5499b9eb70e6f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/timing_gate_case_result.json",
+      "bytes": 17413,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/timing_gate_case_result.json",
+      "sha256": "f9e6141614cf184b062d239c63147bf560c9f9240bf02d72d02c4ddae543e99e",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g1_sparse_cross_region_prefetch_v/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1944,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1100,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_compute_only/rust_emulator_run_stats.json",
+      "bytes": 3058,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/rust_emulator_run_stats.json",
+      "sha256": "ab5924b6f1795f47cb547182b0a82bc3daa803f837ae47f8a8c2fcbd37c57097",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_compute_only/rust_emulator_stdout.log",
+      "bytes": 2012,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/rust_emulator_stdout.log",
+      "sha256": "eb4ac3b08b0ae78a942f2af46d8f0dbe1cb2054996a6d2f53a5be09866d11990",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_compute_only/stage_profile.json",
+      "bytes": 15599,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/stage_profile.json",
+      "sha256": "ee16fd77ed032d20f60e199fe7d68e83d6456fdedb43e1ba6ede41cfe3340caf",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_compute_only/timing_gate_case_result.json",
+      "bytes": 17315,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/timing_gate_case_result.json",
+      "sha256": "a5aad4759b94966a9173b8fe7e3a10cbf3dd817838b632eb1008634d0aeefa2f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_compute_only/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 255,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 99,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_only/rust_emulator_run_stats.json",
+      "bytes": 3071,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/rust_emulator_run_stats.json",
+      "sha256": "24857cd057007f851b2fa92917875efed9e93a0ffbfa282b7a1741c75ed8e54c",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_only/rust_emulator_stdout.log",
+      "bytes": 2012,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/rust_emulator_stdout.log",
+      "sha256": "360b988deca0cc41080ee92e23afe91c97842a27937230871e2cdb20c5000ed6",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_only/stage_profile.json",
+      "bytes": 15551,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/stage_profile.json",
+      "sha256": "0f15711c5840266b76881b5a4b6202fd5d1e4c6351dec57ae71ded7f8f76f6c2",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_only/timing_gate_case_result.json",
+      "bytes": 17271,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/timing_gate_case_result.json",
+      "sha256": "b28857b202180b99a8bb28ed28907af6b9b2344370486b68a4556b9ea41b1e9e",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_only/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2165,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1199,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute/rust_emulator_run_stats.json",
+      "bytes": 3177,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/rust_emulator_run_stats.json",
+      "sha256": "51dbc54cae3a4d87ad4e5695c73cad7455745d472ce099a984b7806a4af04f45",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute/rust_emulator_stdout.log",
+      "bytes": 2032,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/rust_emulator_stdout.log",
+      "sha256": "b1564b107238fb0fac5015da917b098ac4e4d7d359a54287bff6f5146b0f77fe",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute/stage_profile.json",
+      "bytes": 15623,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/stage_profile.json",
+      "sha256": "5f01c2a6537a813f08b66ba07caee1bc73fa79090a4c03e3713b5300bbf37161",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute/timing_gate_case_result.json",
+      "bytes": 17377,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/timing_gate_case_result.json",
+      "sha256": "4f008e7683eb504f6bd8269781b6b606c1108d031bcede3854750c6a27135a53",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2165,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1199,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/rust_emulator_run_stats.json",
+      "bytes": 2774,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/rust_emulator_run_stats.json",
+      "sha256": "f9667857b2c00ebd310d5396186e67632201b970542baaa35576e708bdf7f5b6",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/rust_emulator_stdout.log",
+      "bytes": 2388,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/rust_emulator_stdout.log",
+      "sha256": "2e3fb6655a9c01d3926856b0e5d0257050287849be5200d0a7ae03003b9a3383",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/timing_gate_case_result.json",
+      "bytes": 701,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/timing_gate_case_result.json",
+      "sha256": "e97c2ffbe1ee56374aa866b20dcc8decbb7fef1c03b279146269199c52c685b7",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g2_prefetch_then_compute_overlap_on/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 19,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 11,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mm/rust_emulator_run_stats.json",
+      "bytes": 3034,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/rust_emulator_run_stats.json",
+      "sha256": "b1ee44380e9b240ebd8bb34a5b4cf9a12ccd97dad1fdcc68b4b13f6d1dfdb7d9",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mm/rust_emulator_stdout.log",
+      "bytes": 2006,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/rust_emulator_stdout.log",
+      "sha256": "cc1107fa876bf932dba6a995798f1050c22031b37bc6b064c733abc6fe68cb91",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mm/stage_profile.json",
+      "bytes": 15539,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/stage_profile.json",
+      "sha256": "79f5aa90f01d2e6bd807a0fec8a8c2b9d819a48f5bd23e25f3095ae8cab4df7b",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mm/timing_gate_case_result.json",
+      "bytes": 17249,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/timing_gate_case_result.json",
+      "sha256": "9fff7868bdab7e237a83e6fa4a39d285f842149948e7fce8fa641b1ea91c4bd3",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mm/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/fp_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 2048,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/fpsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 19,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/generated_asm_code.asm",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 11,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/generated_machine_code.mem",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 1048576,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/hbm_for_behave_sim.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/hbm_size.txt",
+      "bytes": 8,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/hbm_size.txt",
+      "sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/int_sram.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 4096,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/intsram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g1_continuous_prefetch_v/plena_settings.toml",
+      "bytes": 8252,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/plena_settings.toml",
+      "sha256": "bd03fa4141700e63efe26e8ece4972be8b945453f99761da9effc257dcad6500",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mv/rust_emulator_run_stats.json",
+      "bytes": 3035,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/rust_emulator_run_stats.json",
+      "sha256": "1f0ee3427cdba348e840430d99a68b4d27709bdeb22046ecaa3054fe2a977fbc",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mv/rust_emulator_stdout.log",
+      "bytes": 2006,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/rust_emulator_stdout.log",
+      "sha256": "6f3041fc937f3d154a6549abb91a22a5d78419d1017fcca596dba43a03a0cde9",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mm/stage_profile.json",
+      "bytes": 15539,
+      "reason": "sameSHA256",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/stage_profile.json",
+      "sha256": "79f5aa90f01d2e6bd807a0fec8a8c2b9d819a48f5bd23e25f3095ae8cab4df7b",
+      "status": "deduplicated",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gate_runs/g5_single_m_mv/timing_gate_case_result.json",
+      "bytes": 17249,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/timing_gate_case_result.json",
+      "sha256": "672a1143962a994d83342025d6cc64460118bd20ea9e9eb675e1d5e922b4256b",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "",
+      "bytes": 536870912,
+      "reason": "not_a_selected_source_result_or_document_format",
+      "relative": "outputs/replay/timing_gate_runs/g5_single_m_mv/vram_dump.bin",
+      "sha256": "",
+      "status": "skipped",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/outputs/replay/timing_gates_summary.json",
+      "bytes": 9084,
+      "reason": "selected_source_result_or_document",
+      "relative": "outputs/replay/timing_gates_summary.json",
+      "sha256": "0ce1e8b935b7230398ff6303ce8144c67356923ccc0d699c3ccae19efff5b5bc",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/lib/ramulator/examples/hbm_moe_probe.rs",
+      "bytes": 6655,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/lib/ramulator/examples/hbm_moe_probe.rs",
+      "sha256": "5737fff5be19c4d2f40948f8179171ea2e1bbcc623955a382eff0bc99d83ace8",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/bin/matrix_request_replay.rs",
+      "bytes": 1008,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/bin/matrix_request_replay.rs",
+      "sha256": "9b3efa02187b6af1c40049c7667a1d2c3e6dfc8fb292808b64e98f8867013d3d",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/bin/mkn_request_replay.rs",
+      "bytes": 2794,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/bin/mkn_request_replay.rs",
+      "sha256": "0b91d52de60be6f53da85d9bec0b29ffdf05a6b9253f9afcd84f7afce82d32ad",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/bin/mkn_request_replay.rs.bak_pre_inline_20260903",
+      "bytes": 1092,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/bin/mkn_request_replay.rs.bak_pre_inline_20260903",
+      "sha256": "3c7187d02612cc83531fe4fb06f0f955f9cb36854190a6c2e7aa1f7f308ee62a",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/bin/mkn_request_replay.rs.bak_pre_pipe_20260904",
+      "bytes": 1854,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/bin/mkn_request_replay.rs.bak_pre_pipe_20260904",
+      "sha256": "95546bfd8ee7fd165c5fcdec2626309075c34af3a69bef5e30980afa893111e1",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/matrix_arch_overlay.rs",
+      "bytes": 138950,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/matrix_arch_overlay.rs",
+      "sha256": "2325a2c5fa37c8b900cf6e0b69969cee9d73f4097f1cadf063097600f9410db6",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/mkn_request_replay.rs",
+      "bytes": 131097,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/mkn_request_replay.rs",
+      "sha256": "9356e70effc6a8363b6721f39a66a4620f2bf93414acc5ab63c1f12e1d58f8e6",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/mkn_request_replay.rs.bak_pre_inline_20260903",
+      "bytes": 123484,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/mkn_request_replay.rs.bak_pre_inline_20260903",
+      "sha256": "d4ae1266464fe10d42e4266a9d4952618d3280f1eb1a5452022460d07f3fa330",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    },
+    {
+      "archive": "local/shared-route-sync-20260810/worktree_054f0222d07a/untracked/transactional_emulator/src/mkn_request_replay.rs.bak_pre_pipe_20260904",
+      "bytes": 127073,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/mkn_request_replay.rs.bak_pre_pipe_20260904",
+      "sha256": "a8e5321ec9f735749c257eb61ab5fa1e0f257567049ebf0affff54f4b76faa11",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+    }
+  ],
+  "origin": {
+    "HEAD": "a97eceeac7cdc94d95d45a456d61e5b39161018b",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": "refs/heads/local/shared-route-sync-20260810",
+    "original_branch_for_archive": "local/shared-route-sync-20260810",
+    "stable_id": "054f0222d07a",
+    "worktree": "/scratch/shared/mcl123/plena/repos/PLENA_Simulator"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}

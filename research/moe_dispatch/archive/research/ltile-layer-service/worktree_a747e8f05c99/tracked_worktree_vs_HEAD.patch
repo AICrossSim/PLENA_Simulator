@@ -1,0 +1,1113 @@
+diff --git a/analytic_models/performance/README.md b/analytic_models/performance/README.md
+index fe668d8f..d4164662 100644
+--- a/analytic_models/performance/README.md
++++ b/analytic_models/performance/README.md
+@@ -32,22 +32,25 @@ then writes each completed output row once. It owns Vector rows 0..57;
+ rows 58..63 are reserved for the 24 KiB weight decoder. Cache misses still DMA
+ full owned windows; there is no assumed unaligned read or left shift. Panels
+ that exceed Matrix capacity fall back to serial requests with weight rereads.
+-This schedule is shared by all three comparison arms. Historical `stream`
++This schedule is shared by all four comparison arms. Historical `stream`
+ projection and `pattern` gather remain selectable through `build_layer` and
+ `build_batch` for ablation and reproduction. These are legal, conservative
+ compiled schedules, not a proof of globally optimal Matrix scheduling.
+ 
+-The three comparisons are:
++The default comparisons are:
+ 
+ | Control | Recurrence | Purpose |
+ | --- | --- | --- |
+ | `old_isa` | BF16 ordinary updates and SRAM tree | Optimized software recurrence |
+ | `row` | Fused FP32 update, BF16 tree, explicit row control | Same arithmetic/data path as FSM |
+ | `fsm` | Same fused operations, bounded traversal | Incremental control benefit |
++| `native` | Same fused arithmetic/tree, original compact coefficient layout | Descriptor supply versus software packing |
+ 
+ All share projections, memory, capacity, SFU and weight decoding. `old_isa` is
+ the old **recurrent** ISA on this common platform, not unmodified original PLENA.
+ Do not describe old-ISA versus fused-update comparisons as identical arithmetic.
++`fsm` versus `native` isolates supply at the same arithmetic. `row` versus
++`native` changes both control and supply and is not a pure FSM ablation.
+ 
+ ## Weight and memory accounting
+ 
+@@ -87,6 +90,7 @@ the current appended key. Its zero-based append position is `context - 1`.
+ 
+ `--codec-lanes 128|256|512`, `--sfu-scale 1|2` and `--dma-window 1..64` expose
+ uncertain service assumptions without changing one comparison arm in isolation.
++`--supply native` is the default; `--supply packed` retains the three-arm graph.
+ 
+ ## Validation and limits
+ 
+@@ -105,15 +109,82 @@ remains outside that test.
+ boundaries, oversized-panel fallback, and repeated gather subsets under cache
+ pressure, through actual machine code. It compares all cost components and
+ HBM transfers, not just arithmetic output.
+-Five archived real-weight sublayers can be independently repriced; optimized
+-packing also requires a new numerical execution, not just a timing replay.
++`transactional_emulator.testbench.models.connected_peripheral_test` adds
++continuous machine-code programs for projected GQA with private KV append,
++representative MLA, fixed-route experts with weighted combine, decoded NVFP4
++weight projections, and two-token private KDA states with reversed request order.
++`--case attention --model-shape --batch 2 --keys 4096` checks Nemotron GQA
++dimensions; `--case experts --model-shape --batch 16` checks its 2688/1856 expert
++widths and cross-row combine. These use synthetic values. The expert case is a
++three-expert subset with fixed routing, not a full top6/router quality test.
++NVFP4 decoding is independently checked in Python before Rust projection;
++the decoder itself is not an executed Rust instruction.
++
++Native Mamba and KDA B1/2/4/8/16 real-weight sublayers have executed with private
++request storage and shared weight panels. Their seven timing components and
++physical HBM bytes match the shared analytical service. Batch members repeat
++the captured B1 input; independent private-state tests use distinct values.
++Exact agreement is with the declared arithmetic, not original-model FP32
++accuracy or long-sequence task quality.
+ 
+ Whole-model results are deliberately `analytical_candidate`. A service cache
+ starts Ramulator afresh between independent operators; that is not equivalent
+ to arbitrary continuous whole-model memory history. Held-out composition and
+ address-phase checks must be reported separately from recurrent calibration.
+-Router selection and masked KV packing remain named finite orchestration
+-budgets; their 0x/2x sensitivity is reported. Complete attention/MLA/MoE numerical
+-connections, global buffer relocation and routing-quality preservation are not
+-certified by primitive tests. No offload-free execution or formal end-to-end
+-speedup claim follows from this candidate table alone.
++KV append now compiles gather plus masked Vector read/modify/write instructions,
++with owned rows, immutable masks, and measured DMA. Router selection remains a
++named finite orchestration budget; its 0x/2x sensitivity is reported. Connected
++programs test representative peripheral boundaries, while full-shape coverage,
++global buffer relocation and routing quality remain incomplete. The existing
++64-bit HBM base registers can support addressing beyond the local 32-bit GP
++offsets, but a complete global placement/base-switch schedule is not yet emitted.
++No offload-free execution or certified end-to-end speedup follows from this
++candidate table alone.
++
++## Candidate coefficient and state access study
++
++`ltile_access` is an isolated, uncalibrated UPDATE-path design experiment. It
++does not replace the compiled/Rust-checked R3 service model. It enumerates the
++actual 64 banks of 32 BF16 elements, keeps both layouts inside the same 512 KiB
++state allocation, and compares native head-major coefficient sectors with
++row-packed coefficient pairs. A 32-element coefficient sector is explicitly
++staged and charged; it is not a free arbitrary gather port.
++
++The finite scheduler accounts for input slots, reserved output credits,
++update II/latency, alignment delay, shared or 1R/1W arbitration, and write
++acceptance. It retains destination metadata until the last write completes.
++Periodic port blocking is a synthetic sensitivity, not measured DMA overlap.
++State words still cost 64 bytes each: widening a read reduces service waves,
++not the number of bank words or automatically the number of execution cycles.
++
++The numerical check compares synthetic native-SRAM coefficient fetches with
++independently packed BF16 operands and the same separate FP32 update arithmetic.
++It is not Rust execution, a real-model precision gate, or a complete KDA pass.
++Projection, coefficient production/DMA, dot/tree/residual, ISA encoding and
++integrated routing/PPA remain outside this candidate. Preserve that scope when
++using the generated buffer, wave-count or latency tables.
++
++The separate compiled native path now lives in Compiler `ltile_native.py`,
++Rust `accelerator/native_coeff.rs` and the existing `v2.rs` execution loop.
++`build_layer/build_batch(..., native_coefficients=True)` emits CCFG descriptors
++and native EXEC forms instead of `pack_update/pack_dot`. The unified decode
++entry calls this same path through `Services.layer(..., supply="native")`;
++configuration and result files explicitly record the selected supply. Small
++dt/beta/skip gathering is still executed and charged.
++
++`ltile_cost` models those executed operations with two finite state-input slots,
++bounded result credits, real coefficient bank words, incremental addressing,
++registered alignment/selection, shared Matrix service and the existing BF16
++Vector tree. `Machine.native_read_width/native_result_slots` propagate through
++the common execution profile. SRAM capacities and DMA service are unchanged.
++
++`native_supply_test` runs real checkpoint-derived full-sublayer fixtures;
++batch requests share projection weight panels but own private state. Its
++BF16 weight execution must not be described as a runtime NVFP4 codec. Fixture
++allocation holes preserve historical addresses only; native code never reads
++or writes the removed packing arrays. The test compares all remaining arrays,
++not merely a final checksum. Exact same-arithmetic agreement is a mechanism
++test, not a new long-sequence task-quality result.
++`--mapped-archive` validates full reconstructed image hashes before removing
++duplicate raw images. The resulting archive depends on the recorded immutable
++B1 fixtures; full-array comparison counts include unchanged weights.
+diff --git a/analytic_models/performance/ltile_cost.py b/analytic_models/performance/ltile_cost.py
+index 6c2c49ce..f5e022d1 100644
+--- a/analytic_models/performance/ltile_cost.py
++++ b/analytic_models/performance/ltile_cost.py
+@@ -42,8 +42,14 @@ class Machine:
+     sfu_ii: int = 1
+     reduction_tree_bf16: bool = False
+     clock_hz: int = 1_000_000_000
++    native_read_width: int = 512
++    native_result_slots: int = 4
+ 
+     def __post_init__(self):
++        if self.native_read_width not in (256, 512, 2048) or self.native_result_slots not in (1, 2, 4, 8):
++            raise ValueError("native supply requires bounded width/credits")
++        if self.native_read_width < self.lanes:
++            raise ValueError("native read width must cover a lane subgroup")
+         if self.lanes not in (128, 256, 512):
+             raise ValueError("validated lane search is 128/256/512")
+         if self.dot not in ("tree", "fp32"):
+@@ -175,9 +181,24 @@ class Schedule:
+ 
+ 
+ @lru_cache(maxsize=32768)
+-def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows):
++def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows, native_views=()):
+     """Shape-derived stage schedule; arithmetic values do not enter timing."""
+     m = machine
++    native = op in (9, 10, 11)
++    if native:
++        if len(native_views) != 3:
++            raise ValueError("native execution requires coefficient configurations")
++        from .ltile_access import CoefficientView
++        fields = (2,) if op == 10 else (0, 1)
++        cv = [CoefficientView.unpack(native_views[i]) for i in fields]
++        if any(not ((v.row_stride == 0 and v.head_stride in (0, 1)) or
++                    (v.row_stride == 1 and v.head_stride in (0, 128) and v.base % 32 == 0)) for v in cv):
++            raise ValueError("unsupported native sector geometry")
++        if any(v.heads != dst.heads for v in cv):
++            raise ValueError("coefficient head count differs")
++        op = {9: 3, 10: 5, 11: 6}[op]
++        if op == 3 and src.rows != 1:
++            raise ValueError("native UPDATE requires invariant outer operand")
+     width, heads = dst.cols, dst.heads
+     if width > m.lanes or m.lanes % width:
+         raise ValueError("partial head subgroups are outside this contract")
+@@ -251,13 +272,27 @@ def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows):
+         else m.dot_latency + (m.update_latency if op == 6 else 0)
+     )
+     interval = m.update_ii if op == 3 else m.dot_ii
+-    credits = [0] * math.ceil(latency / interval)
++    credits = [0] * (m.native_result_slots if native else math.ceil(latency / interval))
+     feedback = [0] * math.ceil(heads * width / m.lanes)
+     supply = row_ready = launches = 0
++    wide_group = m.native_read_width // width if native else group
++    outer_ready = matrix(sb, src, [(h, 0) for h in range(heads)], 0) if native and op == 3 else 0
++    sector_ready = 0
+     for row in range(rows):
++        slots = []
++        next_input = 0
++        if native and row % 32 == 0:
++            words = {v.location(r, h)[0] for v in cv for h in range(heads)
++                     for r in range(row, min(row+32, rows))}
++            if len(words) > 64:
++                raise ValueError("sector exceeds 4 KiB staging")
++            banks = Counter(bank for bank, _ in words)
++            sector_ready = c.reserve("matrix", max(row_ready, supply) + len(words),
++                max(banks.values()) * m.sram_cycles, "matrix_reads", len(words)) + 1
++            c.finish = max(c.finish, sector_ready)
+         compact_ready = (
+             matrix(cb, coeff, [(0, 0 if coeff.rows == 1 else row)], max(row_ready, supply))
+-            if coeff.broadcast
++            if coeff.broadcast and not native
+             else row_ready
+         )
+         leaves_ready = row_ready
+@@ -266,17 +301,29 @@ def primitive_cost(machine, op, dst, src, coeff, db, sb, cb, reduction_rows):
+             chunk, slot = first * width // m.lanes, launches % len(credits)
+             operands_ready = max(row_ready, supply, credits[slot])
+             lines = tuple((h, row) for h in range(first, last))
+-            ready = matrix(sb if reducing else db, src if reducing else dst, lines, operands_ready)
+-            if coeff.broadcast:
+-                scalar_ready = compact_ready
++            if native:
++                if first % wide_group == 0:
++                    if first > 0:
++                        slots.pop(0)
++                    while len(slots) < 2 and next_input < heads:
++                        packet = [(h, row) for h in range(next_input, min(heads, next_input+wide_group))]
++                        end = matrix(sb if reducing else db, src if reducing else dst, packet, max(row_ready, supply))
++                        slots.append(end + 1)
++                        next_input += wide_group
++                ready = max(slots[0], operands_ready)
++                scalar_ready = sector_ready
+             else:
++                ready = matrix(sb if reducing else db, src if reducing else dst, lines, operands_ready)
++            if not native and coeff.broadcast:
++                scalar_ready = compact_ready
++            elif not native:
+                 sliced = View(1, 2 * (last - first) * width, 1, coeff.pitch, coeff.phase, False)
+                 offset = row * math.ceil(coeff.cols / 2048) * 2048 + 2 * first * width
+                 scalar_ready = matrix(cb + offset, sliced, [(0, 0)], operands_ready)
+             ready = max(ready, scalar_ready)
+             if op == 3:
+                 sources = tuple((h, 0 if src.rows == 1 else row) for h in range(first, last))
+-                ready = max(ready, matrix(sb, src, sources, operands_ready))
++                ready = max(ready, outer_ready if native else matrix(sb, src, sources, operands_ready))
+                 done = c.compute(ready, m.update_latency, m.update_ii)
+                 credits[slot] = matrix(db, dst, lines, done, True)
+             elif m.dot == "tree":
+@@ -348,6 +395,7 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
+     cost = ProgramCost()
+     registers = [0] * 16
+     views = {}
++    native_views = [None, None, None]
+     loops = []
+     reduction_rows = 0
+     pc = 0
+@@ -404,6 +452,12 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
+                 pc = loops[-1][0]
+                 continue
+             loops.pop()
++        elif op == "L_TILE_CCFG":
++            slot = int(args[0])
++            if not 0 <= slot < 3:
++                raise ValueError("invalid coefficient slot")
++            native_views[slot] = value(args[1]) | value(args[2]) << 32
++            cost.scalar += 1
+         elif op == "L_TILE_CFG":
+             views[int(args[0])] = View.decode(value(args[1]), value(args[2]))
+             cost.scalar += 1
+@@ -419,6 +473,7 @@ def assembly_cost(assembly: str, machine: Machine = Machine(), *, trace_memory=F
+                 value(args[1]),
+                 value(args[2]),
+                 reduction_rows,
++                tuple(native_views) if primitive >= 9 else (),
+             )
+             cost.sram += bank
+             cost.arithmetic += arith
+diff --git a/analytic_models/performance/ltile_layers.py b/analytic_models/performance/ltile_layers.py
+index 529e7eb2..d97777b2 100644
+--- a/analytic_models/performance/ltile_layers.py
++++ b/analytic_models/performance/ltile_layers.py
+@@ -144,7 +144,10 @@ def build_layer(
+     projection_schedule="stream",
+     arena=None,
+     shared_weights=None,
++    native_coefficients=False,
+ ):
++    if native_coefficients and control != "fsm":
++        raise ValueError("native prototype requires FSM")
+     if kind not in ("mamba", "kda") or control not in ("old_isa", "row", "fsm"):
+         raise ValueError("expected Mamba/KDA and matched row/FSM control")
+     p = LayerPlan(
+@@ -191,8 +194,10 @@ def build_layer(
+                 for h in heads:
+                     update.extend([lane(delta, h), lane(conv, 4096 + h // 8 * 128 + row)])
+                     dot.extend([lane(conv, 5120 + h // 8 * 128 + row), None])
+-            u = p.gather(f"pack_update_{group}", update)
+-            d = p.gather(f"pack_dot_{group}", dot)
++            # Keep historical fixture addresses stable. Native execution never
++            # reads/writes these reserved HBM holes; no packing cost is hidden.
++            u = p.output(len(update)) if native_coefficients else p.gather(f"pack_update_{group}", update)
++            d = p.output(len(dot)) if native_coefficients else p.gather(f"pack_dot_{group}", dot)
+             scalar = p.gather(f"pack_dt_{group}", [s for h in heads for s in (None, lane(dt, h))])
+             skip = p.gather(f"pack_skip_{group}", [s for h in heads for s in (lane(onebase, 0), lane(skipbase, h))])
+             state = a.add(32 * 128 * 64)
+@@ -205,6 +210,12 @@ def build_layer(
+                 skip=skip,
+                 output=raw + group * 4096,
+             )
++            if native_coefficients:
++                memory["native"] = [
++                    (delta, group*32, 1, 0, 0),
++                    (conv + 8192, group*512, 128, 1, 3),
++                    (conv + 8192, 1024 + group*512, 128, 1, 3),
++                ]
+             p.emit(f"recurrence_{group}", "\n".join(p.lower_group(p.Options(kind, control), memory).lines) + "\n")
+         silu, gated = p.output(4096), p.output(4096)
+         p.emit(
+@@ -262,10 +273,10 @@ def build_layer(
+                 p.old_group(kind, group, dict(value=conv["v"] + group * 4096, output=raw + group * 4096), mapping)
+                 continue
+             indices = [h * 128 + r for r in range(128) for h in heads]
+-            update = p.gather(
+-                f"pack_update_{group}", [s for i in indices for s in (lane(delta, i), lane(vectors["k"], i))]
+-            )
+-            dot = p.gather(f"pack_dot_{group}", [s for i in indices for s in (lane(vectors["q"], i), None)])
++            umap = [s for i in indices for s in (lane(delta, i), lane(vectors["k"], i))]
++            dmap = [s for i in indices for s in (lane(vectors["q"], i), None)]
++            update = p.output(len(umap)) if native_coefficients else p.gather(f"pack_update_{group}", umap)
++            dot = p.output(len(dmap)) if native_coefficients else p.gather(f"pack_dot_{group}", dmap)
+             scalar = p.gather(f"pack_beta_{group}", [s for h in heads for s in (lane(beta[0], h), None)])
+             state = a.add(16 * 128 * 128)
+             memory = dict(
+@@ -276,6 +287,9 @@ def build_layer(
+                 scalar=scalar,
+                 output=raw + group * 4096,
+             )
++            if native_coefficients:
++                memory["native"] = [(base + group*4096, 0, 128, 1, 0)
++                    for base in (delta, vectors["k"], vectors["q"])]
+             p.emit(f"recurrence_{group}", "\n".join(p.lower_group(p.Options(kind, control), memory).lines) + "\n")
+         rms = p.output(12288)
+         p.emit("output_rms", c.lower_l2norm_rows(c.L2NormRows(raw, rms, 12288, p.masks, p.zero, 5, 6)))
+@@ -290,7 +304,7 @@ def build_layer(
+     return p
+ 
+ 
+-def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream"):
++def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped", projection_schedule="stream", native_coefficients=False):
+     """Compile batch stages with shared weight panels and private state.
+ 
+     No B1 cycle multiplication. Matrix SRAM weights stay resident across
+@@ -311,6 +325,7 @@ def build_batch(kind, batch, compiler_root, *, control="fsm", gather="grouped",
+             projection_schedule=projection_schedule,
+             arena=arena,
+             shared_weights=weights,
++            native_coefficients=native_coefficients,
+         )
+         for _ in range(batch)
+     ]
+diff --git a/analytic_models/performance/ltile_model.py b/analytic_models/performance/ltile_model.py
+index e4c2c3b4..4c8fe162 100644
+--- a/analytic_models/performance/ltile_model.py
++++ b/analytic_models/performance/ltile_model.py
+@@ -235,6 +235,11 @@ def compose_peripheral(stage, w, b, context, services, occupancy):
+                 vec("mul", mid, count, experts, "moe")
+             vec("copy", h if hasattr(a, "moe") else a.routed_expert_hidden_size, count, experts, "moe_dispatch")
+         return terms
++    if n == "mla_q_low_rank_projection":
++        mat(h, a.q_lora_rank)
++        vec("norm", a.q_lora_rank, category="norm")
++        mat(a.q_lora_rank, a.kda.num_heads * (a.qk_nope_head_dim + a.qk_rope_head_dim))
++        return terms
+     specs = linear_shapes(n, a)
+     if specs:
+         cat = "output_head" if n == "lm_head" else "moe" if "moe" in n or "ffn" in n else "projection"
+@@ -269,7 +274,7 @@ def compose_peripheral(stage, w, b, context, services, occupancy):
+             count = 2 * a.num_kv_heads * a.head_dim if hasattr(a, "moe") else a.kv_lora_rank + a.qk_rope_head_dim
+             vec("copy", count, category="kv_append")
+             add(
+-                "kv_pack_budget",
++                "kv_append",
+                 services.kv_append(
+                     b,
+                     a.num_kv_heads if hasattr(a, "moe") else 1,
+@@ -378,8 +383,10 @@ def run(args):
+                 routing=route_meta,
+                 composition="serial HBM-backed operators, no cross-operator overlap; within-layer memory history retained",
+                 context_semantics="number of keys attended in this step, including the newly appended key; append index=context-1",
+-                uncertainty="routing/KV packing are conservative finite budgets; sample address/phase sensitivity separately",
++                uncertainty="routing selection is a finite budget; KV append is compiled; sample address/phase sensitivity separately",
+                 scope="decode analytical predictions; no task quality, complete RTL, TTFT, power or GPU comparison",
++                coefficient_supply=args.supply,
++                comparison="old_isa, packed row, packed FSM, and native FSM; row/native also changes supply and is not a pure FSM ablation",
+             ),
+             indent=2,
+         )
+@@ -413,7 +420,7 @@ def run(args):
+                     WorkloadScenario(InferencePhase.DECODE, batch_size=b, context_length=context, moe_unique_experts=1)
+                 )
+                 for routing in scenarios:
+-                    for control in ("old_isa", "row", "fsm"):
++                    for control in (("old_isa", "row", "fsm", "native") if args.supply == "native" else ("old_isa", "row", "fsm")):
+                         ledger = Counter()
+                         categories = Counter()
+                         read = write = 0
+@@ -434,7 +441,8 @@ def run(args):
+                                     if kind == "mamba"
+                                     else "BF16"
+                                 )
+-                                result = services.layer(kind, b, control, weight)
++                                result = services.layer(kind, b, "fsm" if control == "native" else control, weight,
++                                                        supply="native" if control == "native" else "packed")
+                                 cats = {s["name"]: s["category"] for s in result["metadata"]["stages"]}
+                                 terms = [
+                                     (
+@@ -475,6 +483,7 @@ def run(args):
+                                         context=context,
+                                         routing=routing,
+                                         control=control,
++                                        coefficient_supply="native" if control == "native" else "packed",
+                                         layer=stage.layer_id,
+                                         stage=stage.name,
+                                         category=category,
+@@ -498,6 +507,7 @@ def run(args):
+                                 context=context,
+                                 routing=routing,
+                                 control=control,
++                                coefficient_supply="native" if control == "native" else "packed",
+                                 cycles_per_batch_step=total,
+                                 ms_per_step=total / 1e6,
+                                 aggregate_tokens_s=b * 1e9 / total,
+@@ -530,8 +540,11 @@ def run(args):
+         group = [r for r in tables if all(r[k] == row[k] for k in ("model", "batch", "context", "routing"))]
+         base = next(r for r in group if r["control"] == "old_isa")
+         matched = next(r for r in group if r["control"] == "row")
++        packed = next(r for r in group if r["control"] == "fsm")
+         row["speedup_vs_old_recurrent_isa"] = base["cycles_per_batch_step"] / row["cycles_per_batch_step"]
+         row["speedup_vs_matched_row"] = matched["cycles_per_batch_step"] / row["cycles_per_batch_step"]
++        row["speedup_vs_packed_fsm"] = packed["cycles_per_batch_step"] / row["cycles_per_batch_step"]
++        row["row_comparison_scope"] = "same arithmetic; supply also changes" if row["control"] == "native" else "packed supply"
+         budget = base.get("routing_budget_cycles", 0) + base.get("kv_pack_budget_cycles", 0)
+         # Remove/add the SAME uncertain orchestration costs in both arms.
+         row["speedup_budget_0x"] = (base["cycles_per_batch_step"] - budget) / (row["cycles_per_batch_step"] - budget)
+@@ -549,11 +562,11 @@ def run(args):
+                 capacity_feasible_points=sum(r["capacity_feasible"] for r in tables),
+                 limits=[
+                     "independent-operator memory reset requires composition error validation",
+-                    "KV append and router orchestration are named resource budgets",
++                    "router selection remains a named resource budget; KV append uses real instructions",
+                     "Kimi routing is a boundary scenario; its full checkpoint is not executed",
+                     "BF16 software updates and fused FP32 updates have different arithmetic",
+                     "candidate codec throughput is not RTL-measured",
+-                    "peripheral primitive timing calibrated; complete attention/MLA/MoE numerical composition and routing quality remain unvalidated",
++                    "representative connected attention/MLA/fixed-route MoE checked; full-shape global composition and router selection not executed",
+                 ],
+             ),
+             indent=2,
+@@ -574,6 +587,8 @@ def main(argv=None):
+     p.add_argument("--dma-window", type=int, default=32)
+     p.add_argument("--codec-lanes", type=int, choices=(128, 256, 512), default=256)
+     p.add_argument("--sfu-scale", type=int, choices=(1, 2), default=1)
++    p.add_argument("--supply", choices=("native", "packed"), default="native",
++                   help="native adds the executed native-supply arm; packed preserves the historical three-arm graph")
+     p.add_argument("--models", nargs="+", choices=("nemotron3", "kimi_k3"), default=["nemotron3", "kimi_k3"])
+     p.add_argument("--batches", nargs="+", type=int, default=[1, 2, 4, 8, 16])
+     p.add_argument("--contexts", nargs="+", type=int, default=[4096, 32768, 131072])
+diff --git a/analytic_models/performance/ltile_platform.py b/analytic_models/performance/ltile_platform.py
+index e1412fd6..5c8ffa01 100644
+--- a/analytic_models/performance/ltile_platform.py
++++ b/analytic_models/performance/ltile_platform.py
+@@ -129,6 +129,8 @@ class ExecutionProfile:
+             PLENA_V2_SRAM_PORT=str(m.sram_cycles),
+             PLENA_V2_CONTEXT_PORT=str(m.context_cycles),
+             PLENA_V2_STATE_ROUNDING=self.state_rounding,
++            PLENA_NATIVE_READ_WIDTH=str(m.native_read_width),
++            PLENA_NATIVE_RESULT_SLOTS=str(m.native_result_slots),
+         )
+ 
+ 
+diff --git a/analytic_models/performance/ltile_services.py b/analytic_models/performance/ltile_services.py
+index 84a89f1e..4d528a11 100644
+--- a/analytic_models/performance/ltile_services.py
++++ b/analytic_models/performance/ltile_services.py
+@@ -10,7 +10,6 @@ from .ltile_layers import build_batch, compiler_api
+ from .ltile_program import ShapeArena
+ from .ltile_execution import price_program
+ from .ltile_dma import sha
+-from .ltile_cost import ProgramCost
+ 
+ 
+ class Services:
+@@ -27,6 +26,7 @@ class Services:
+             here / name
+             for name in (
+                 "ltile_cost.py",
++                "ltile_access.py",
+                 "ltile_dma.py",
+                 "ltile_program.py",
+                 "ltile_execution.py",
+@@ -41,6 +41,7 @@ class Services:
+             self.compiler / "aten/plena" / name
+             for name in (
+                 "ltile_v2.py",
++                "ltile_native.py",
+                 "isa_matrix_projection.py",
+                 "recurrent_coefficients.py",
+                 "prepared_vector_recurrence.py",
+@@ -71,13 +72,16 @@ class Services:
+         print(json.dumps(dict(operator=spec, cycles=cost.total)), flush=True)
+         return result
+ 
+-    def layer(self, kind, batch, control, weight="BF16"):
++    def layer(self, kind, batch, control, weight="BF16", *, supply="packed"):
+         if weight not in ("BF16", "NVFP4"):
+             raise ValueError("unsupported weight contract")
++        if supply not in ("packed", "native") or (supply == "native" and control != "fsm"):
++            raise ValueError("native coefficient supply requires the resident FSM interface")
+ 
+         def generate():
+             plan = build_batch(
+-                kind, batch, self.compiler, control=control, gather="cached", projection_schedule="resident"
++                kind, batch, self.compiler, control=control, gather="cached", projection_schedule="resident",
++                native_coefficients=supply == "native",
+             )
+             regions = (
+                 {(s.weight_base, s.weight_bytes) for s in plan.stages if s.matrix_shape} if weight == "NVFP4" else set()
+@@ -92,9 +96,11 @@ class Services:
+                     batch_mapping="shared Matrix weight panels; private input/output/state; serial request tiles",
+                     projection_workspace_bytes=58 * 4096,
+                     projection_reserved_codec_bytes=6 * 4096,
++                    coefficient_supply=supply,
+                     baseline="compact coefficients cached in existing Vector SRAM; ordinary BF16 row/tree instructions"
+                     if control == "old_isa"
+-                    else "SRAM-reused software coefficient packing; fused update; BF16 tree",
++                    else ("native coefficient descriptors; bounded sector/state/result buffers; fused update; BF16 tree"
++                          if supply == "native" else "SRAM-reused software coefficient packing; fused update; BF16 tree"),
+                 ),
+             )
+ 
+@@ -107,6 +113,7 @@ class Services:
+                 weight=weight,
+                 gather="cached",
+                 projection_schedule="resident",
++                coefficient_supply=supply,
+             ),
+             generate,
+         )
+@@ -229,42 +236,40 @@ class Services:
+         return self.cached(dict(type="vector", kind=kind, values=values, groups=groups), generate)
+ 
+     def kv_append(self, batch, heads, key_dim, value_dim, context):
+-        """Finite masked word RMW for packed K; contiguous words for packed V.
++        """Actual old-ISA append to packed K/V, shared by all comparison arms.
+ 
+-        Memory service is executed, while 12 serial issue/port/ALU cycles per
+-        masked word are an explicit orchestration budget. No free append or
+-        free layout conversion. K/V live in separate packed allocations.
++        Preserves whole owned Vector rows using immutable compile-time masks.
++        Only the new values are gathered; no invented masked-word opcode.
++        Allocations are local service addresses, not a whole-model address map.
+         """
+-        cost = ProgramCost()
+-        base = 64
+-        for _ in range(batch * heads):
+-            for r in range(key_dim):
+-                address = base + (context // 32 * key_dim + r) * 64
+-                cost.memory_trace.extend([("d", 4, 0), ("r", address, 64), ("d", 8, 0), ("w", address, 64)])
+-                cost.transfers["read", 64] += 1
+-                cost.transfers["write", 64] += 1
+-                cost.issue += 4
+-                cost.scalar += 2
+-                cost.sram += 4
+-                cost.arithmetic += 2
+-            base += ((context + 32) // 32) * key_dim * 64 + 4096
+-            for c in range((value_dim + 31) // 32):
+-                address = base + (c * (context + 32) + context) * 64
+-                cost.memory_trace.extend([("d", 6, 0), ("w", address, 64)])
+-                cost.transfers["write", 64] += 1
+-                cost.issue += 2
+-                cost.scalar += 1
+-                cost.sram += 2
+-                cost.arithmetic += 1
+-            base += ((value_dim + 31) // 32) * (context + 32) * 64 + 4096
+-        self.backend.price(cost, self.profile.dma.service)
+-        return dict(
+-            components=cost.components(),
+-            hbm_read_bytes=sum(n * c for (d, n), c in cost.transfers.items() if d == "read"),
+-            hbm_write_bytes=sum(n * c for (d, n), c in cost.transfers.items() if d == "write"),
+-            metadata=dict(
+-                validation="Ramulator memory + finite masked-word orchestration budget",
+-                input_buffer_bytes=4096,
+-                word_buffer_bytes=64,
+-            ),
+-        )
++        if min(batch, heads, key_dim, value_dim) < 1 or context < 0:
++            raise ValueError("invalid KV append shape")
++
++        def generate():
++            c, _, _, _, _ = compiler_api(self.compiler)
++            a = ShapeArena()
++            zero, one_hot, scratch = (a.add(2048) for _ in range(3))
++            code = []
++            for request in range(batch * heads):
++                for k, n, column in ((key_dim, context + 1, True), (context + 1, value_dim, False)):
++                    packed = ((k + 31)//32*32) * ((n + 31)//32*32)
++                    base = a.add(((packed + 2047)//2048 + 1)*2048)
++                    source = a.add(((k if column else n) + 2047)//2048*2048)
++                    masks = {}
++                    constants = {}
++                    for row, edits in c.packed_append_edits(k,n,column=column).items():
++                        pattern = tuple(edits)
++                        if pattern not in constants:
++                            constants[pattern] = a.add(2048)
++                        masks[row] = constants[pattern]
++                    code.append(c.lower_packed_matrix_append(
++                        base,k,n,source,zero,one_hot,scratch,column=column,keep_masks=masks))
++            return "; @operator=kv_append\n" + "".join(code), [], dict(
++                validation="compiled gather + masked Vector RMW; connected Rust numerical checks",
++                hbm_allocated_bytes=a.size, vector_live_bytes=64*4096,
++                constants="BF16 keep masks: ones except updated lanes; immutable shape metadata",
++                precision="finite BF16; zero-sign preservation not guaranteed",
++            )
++
++        return self.cached(dict(type="kv_append",batch=batch,heads=heads,key_dim=key_dim,
++                                value_dim=value_dim,context=context,schedule="masked_vector_rmw"), generate)
+diff --git a/analytic_models/performance/test_ltile_cost.py b/analytic_models/performance/test_ltile_cost.py
+index 77f4d8f3..66c42037 100644
+--- a/analytic_models/performance/test_ltile_cost.py
++++ b/analytic_models/performance/test_ltile_cost.py
+@@ -12,6 +12,111 @@ from .ltile_decode import unique_prepared_bytes, run as decode_run
+ from .ltile_program import build_program
+ 
+ 
++@pytest.mark.parametrize("kind", ["mamba", "kda"])
++def test_access_candidate_counts_real_bank_words_and_equal_capacity(kind):
++    from .ltile_access import Shape, bank_waves
++
++    shape = Shape(kind)
++    assert shape.state_bytes == 512 * 1024
++    for layout in ("head_major", "head_phase"):
++        words = [word for row in range(128) for word in shape.stripe(row, 0, 2048, layout)]
++        assert len(set(words)) == 8192
++        assert max(address for bank, address in words) == 127
++    assert len(bank_waves(shape.stripe(0, 0, 2048, "head_major"))) == 2
++    assert len(bank_waves(shape.stripe(0, 0, 2048, "head_phase"))) == 1
++    for layout in ("head_major", "head_phase"):
++        assert len(bank_waves(shape.stripe(0, 0, 256, layout))) == 1
++
++
++@pytest.mark.parametrize("kind,rows", [("mamba", 128), ("kda", 128), ("kda", 33)])
++def test_native_coefficient_fetch_preserves_bf16_update_bits(kind, rows):
++    from .ltile_access import Shape, verify_native_update
++
++    result = verify_native_update(Shape(kind, rows), seed=20260924, tokens=4)
++    assert result["coefficient_bits_exact"] and result["update_bits_exact"]
++
++
++@pytest.mark.parametrize("width,credits,policy,blocked", [
++    (256, 1, "shared", 0), (512, 2, "shared", 4),
++    (2048, 4, "1r1w", 8), (1024, 3, "shared", 0),
++])
++def test_access_candidate_enforces_ports_backpressure_tags_and_tail(width, credits, policy, blocked):
++    from .ltile_access import Shape, AccessConfig, simulate_update, validate_trace
++
++    cfg = AccessConfig(read_values=width, output_slots=credits, port_policy=policy, blocked_every=blocked)
++    result = simulate_update(Shape("kda", 33), cfg, layout="head_major", trace=True)
++    assert validate_trace(result)
++    assert result["peak_occupancy"]["input_slots"] <= cfg.input_slots
++    assert result["peak_occupancy"]["output_slots"] <= credits
++
++
++def test_wide_read_cannot_remove_compute_bound_or_invent_end_to_end_speedup():
++    from .ltile_access import Shape, AccessConfig, simulate_update
++
++    narrow = simulate_update(Shape("kda"), AccessConfig(read_values=256))
++    wide = simulate_update(Shape("kda"), AccessConfig(read_values=2048))
++    assert wide["counters"]["state_read_waves"] * 8 == narrow["counters"]["state_read_waves"]
++    assert wide["counters"]["state_read_words"] == narrow["counters"]["state_read_words"]
++    assert abs(wide["cycles"] - narrow["cycles"]) < 10
++    assert wide["cycles"] >= wide["compute_lower_bound"]
++    assert "whole layer" in wide["excluded"]
++
++
++def test_native_supply_refills_are_not_free_and_result_credits_limit_throughput():
++    from .ltile_access import Shape, AccessConfig, simulate_update
++
++    shape = Shape("kda")
++    native = simulate_update(shape)
++    packed = simulate_update(shape, coefficients="packed")
++    limited = simulate_update(shape, AccessConfig(output_slots=1))
++    assert native["counters"]["coefficient_read_words"] == packed["counters"]["coefficient_read_words"]
++    assert native["counters"]["coefficient_read_waves"] == 9  # input + four blocks of two fields
++    assert native["cycles"] < packed["cycles"] < limited["cycles"]
++
++
++def test_native_layout_cannot_reinterpret_already_written_state():
++    from .ltile_access import Shape, Coefficients, AccessConfig, physical_word
++
++    shape = Shape("kda")
++    assert shape.state_word(0, 1, 0, "head_major") != shape.state_word(0, 1, 0, "head_phase")
++    with pytest.raises(ValueError, match="512 KiB"):
++        Shape("kda", 256)
++    with pytest.raises(ValueError, match="multiple"):
++        AccessConfig(lanes=512, read_values=256)
++    with pytest.raises(ValueError, match="outside"):
++        physical_word(16384)
++    assert Coefficients(shape, "native").allocated_bytes <= 1024 * 1024
++
++
++def test_native_descriptor_is_generic_bounded_and_rejects_reserved_bits():
++    from .ltile_access import CoefficientView, Coefficients, Shape
++
++    for kind in ("mamba", "kda"):
++        source = Coefficients(Shape(kind), "native")
++        for view in source.views.values():
++            assert CoefficientView.unpack(view.pack()) == view
++            for row in (0, 31, 32, 127):
++                for head in range(view.heads):
++                    assert CoefficientView.unpack(view.pack()).location(row, head) == view.location(row, head)
++    with pytest.raises(ValueError, match="reserved"):
++        CoefficientView.unpack(1 << 62)
++    with pytest.raises(ValueError, match="extent"):
++        CoefficientView(0, 128, 1, 0, 16, 2048).location(128, 15)
++
++
++def test_candidate_state_phase_matches_compiled_view_addresses():
++    from .ltile_access import Shape, bank_waves
++
++    for kind in ("mamba", "kda"):
++        shape = Shape(kind)
++        view = View(shape.rows, shape.width, shape.heads, 0, shape.width // 32, False)
++        for row in (0, 1, 63, 127):
++            for first in range(0, shape.heads, 256 // shape.width):
++                lines = tuple((h, row) for h in range(first, first + 256 // shape.width))
++                words = shape.stripe(row, first * shape.width, 256, "head_phase")
++                assert bank_service(0, view, lines) == (len(bank_waves(words)), len(words))
++
++
+ def test_sfu_drains_last_partial_subchunk_and_prices_both_sram_accesses():
+     machine = Machine(sfu_lanes=300, sfu_ii=2, vector_softplus_cycles=13)
+     cost = assembly_cost('V_SOFTPLUS_V gp1, gp2, 0\n', machine)
+@@ -65,6 +170,9 @@ def test_decode_rejects_an_unrelated_pass_label(tmp_path):
+ 
+ @pytest.mark.parametrize("width,heads,phase,conflict", [(64, 32, 2, 32), (128, 16, 4, 16)])
+ def test_fixed_diagonal_bank_phase_removes_same_packet_conflicts(width, heads, phase, conflict):
++    # Address-only padded view, NOT the 512 KiB capacity-matched comparison:
++    # heads*pitch=2048/4096 addresses per bank exceeds the actual depth=256.
++    # Do not reuse its 16/32 conflict factor as a feasible full-tile baseline.
+     flat = View(128, width, heads, 128, 0, False)
+     phased = View(128, width, heads, 128, phase, False)
+     lines = tuple((h, 0) for h in range(heads))
+diff --git a/transactional_emulator/src/accelerator/access.rs b/transactional_emulator/src/accelerator/access.rs
+index 6fbf5e42..13ae0bd3 100644
+--- a/transactional_emulator/src/accelerator/access.rs
++++ b/transactional_emulator/src/accelerator/access.rs
+@@ -706,6 +706,13 @@ pub(crate) fn op_access(
+             vec![Gp(value)],
+             vec![Resource::Cfg(Cfg::LStream)],
+         ),
++        // Native execution is serial-only; serialize its descriptor writes
++        // with other view configuration and declare both GP operands.
++        op::Opcode::L_TILE_CCFG { low, high, .. } => OpAccess::new(
++            Unit::Scalar,
++            vec![Gp(low), Gp(high)],
++            vec![Resource::Cfg(Cfg::MatrixView)],
++        ),
+         op::Opcode::L_TILE_CFG { shape, mapping, .. } => OpAccess::new(
+             Unit::Scalar,
+             vec![Gp(shape), Gp(mapping)],
+diff --git a/transactional_emulator/src/accelerator/dispatch.rs b/transactional_emulator/src/accelerator/dispatch.rs
+index a0034fb3..7bf6d86c 100644
+--- a/transactional_emulator/src/accelerator/dispatch.rs
++++ b/transactional_emulator/src/accelerator/dispatch.rs
+@@ -213,6 +213,9 @@ impl Accelerator {
+                 | op::LTilePrimitive::DecayReduceAcc
+                 | op::LTilePrimitive::ReduceWrite
+                 | op::LTilePrimitive::ResidualWrite
++                | op::LTilePrimitive::NativeDeltaUpdate
++                | op::LTilePrimitive::NativeReduceAcc
++                | op::LTilePrimitive::NativeDecayReduceAcc
+         ) || (args.primitive == op::LTilePrimitive::DeltaUpdate
+             && std::env::var("PLENA_V2_STREAM_ENGINE").as_deref() == Ok("1"))
+         {
+@@ -570,6 +573,7 @@ impl Accelerator {
+                             | op::Opcode::M_MV { view: Some(_), .. }
+                             | op::Opcode::M_MV_WO { .. }
+                             | op::Opcode::L_TILE_CFG { .. }
++                            | op::Opcode::L_TILE_CCFG { .. }
+                             | op::Opcode::L_TILE_EXEC { .. }
+                             | op::Opcode::H_PREFETCH_V { .. }
+                             | op::Opcode::H_STORE_V { .. }
+@@ -1551,6 +1555,13 @@ impl Accelerator {
+                         });
+                     cycle!(1);
+                 }
++                op::Opcode::L_TILE_CCFG { low, high, slot } => {
++                    let word = u64::from(self.reg_file.read_gp(*low))
++                        | (u64::from(self.reg_file.read_gp(*high)) << 32);
++                    self.native_coeff[*slot as usize] =
++                        Some(super::native_coeff::CoefficientView::unpack(word));
++                    cycle!(1);
++                }
+                 op::Opcode::L_TILE_CFG {
+                     shape,
+                     mapping,
+@@ -2245,6 +2256,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
+         | op::Opcode::C_SET_TOPK_REG { .. }
+         | op::Opcode::L_CFG { .. }
+         | op::Opcode::L_TILE_CFG { .. }
++        | op::Opcode::L_TILE_CCFG { .. }
+         | op::Opcode::C_LOOP_START { .. }
+         | op::Opcode::C_LOOP_END { .. }
+         | op::Opcode::C_BREAK => ResourceKind::Scalar,
+diff --git a/transactional_emulator/src/accelerator/mod.rs b/transactional_emulator/src/accelerator/mod.rs
+index aedff965..eb2af1e2 100644
+--- a/transactional_emulator/src/accelerator/mod.rs
++++ b/transactional_emulator/src/accelerator/mod.rs
+@@ -20,6 +20,7 @@ mod lstream;
+ mod mview;
+ #[cfg(test)]
+ mod mview_recurrence_tests;
++mod native_coeff;
+ #[cfg(test)]
+ mod pipeline_tests;
+ mod registers;
+@@ -47,6 +48,7 @@ pub(crate) struct Accelerator {
+     scalar_sram: ScalarSram,
+     loop_state: LoopState,
+     v2: v2::ReductionState,
++    native_coeff: [Option<native_coeff::CoefficientView>; 3],
+ }
+ 
+ impl Accelerator {
+@@ -70,6 +72,7 @@ impl Accelerator {
+             scalar_sram: ScalarSram::new(),
+             loop_state: LoopState::new(),
+             v2: v2::ReductionState::default(),
++            native_coeff: [None; 3],
+         }
+     }
+ 
+diff --git a/transactional_emulator/src/accelerator/v2.rs b/transactional_emulator/src/accelerator/v2.rs
+index 90ecc3ed..414c32f5 100644
+--- a/transactional_emulator/src/accelerator/v2.rs
++++ b/transactional_emulator/src/accelerator/v2.rs
+@@ -38,6 +38,15 @@ impl Accelerator {
+         serde_json::json!({
+             "L": c.lanes, "update_latency": c.latency, "update_II": c.interval,
+             "dot": if tree() { "BF16_SRAM_tree" } else { "FP32_context" },
++            "native_coefficients": {
++                "descriptors": "3 x 64 bit; L_TILE form2, native primitives9..11",
++                "state_read_width": number("PLENA_NATIVE_READ_WIDTH", 512),
++                "result_slots": number("PLENA_NATIVE_RESULT_SLOTS", 4),
++                "sector_limit_bytes": 4096, "operand_latch_bytes": 4096,
++                "address_generation": "one coefficient word address/cycle",
++                "alignment_cycles": 1, "selection_cycles": 1,
++                "prefetch": "two bounded state slots, released only after last operand acceptance",
++            },
+             "P": 2048, "allocated_context_bytes": if tree() { 0 } else { 8192 },
+             "tree_rows": if tree() { 8 } else { 0 },
+             "feedback_core_latency": number("PLENA_V2_DOT_LATENCY", 6),
+@@ -156,7 +165,31 @@ impl Accelerator {
+         let db = self.reg_file.read_gp(args.destination_register);
+         let sb = self.reg_file.read_gp(args.source_register);
+         let cb = self.reg_file.read_gp(args.scale_register);
+-        let op = args.primitive;
++        let native = matches!(
++            args.primitive,
++            Op::NativeDeltaUpdate | Op::NativeReduceAcc | Op::NativeDecayReduceAcc
++        );
++        let op = match args.primitive {
++            Op::NativeDeltaUpdate => Op::DeltaUpdate,
++            Op::NativeReduceAcc => Op::ReduceAcc,
++            Op::NativeDecayReduceAcc => Op::DecayReduceAcc,
++            x => x,
++        };
++        if native {
++            assert_eq!(self.m_machine.mram.banks(), 64);
++            assert_eq!(self.m_machine.mram.bank_width(), 32);
++            assert_eq!(self.m_machine.mram.depth_rows(), 256);
++            assert_eq!(
++                self.m_machine.mram.ty(),
++                quantize::MxDataType::Plain(quantize::DataType::Fp(quantize::FpType::BF16))
++            );
++            if op == Op::DeltaUpdate {
++                assert_eq!(
++                    src.shape.rows, 1,
++                    "native UPDATE requires invariant outer operand"
++                );
++            }
++        }
+         let config = self.v_machine.update_lane.config;
+         let lanes = config.lanes as usize;
+         let width = dst.shape.cols as usize;
+@@ -300,12 +333,51 @@ impl Accelerator {
+         // A fixed ring represents pipeline register credits, not a runtime
+         // scheduling queue. Backpressure holds the input and does not advance
+         // RNG. At most ceil(latency/II) subchunks can be in flight.
+-        let mut credits = vec![0u64; latency.div_ceil(interval) as usize];
++        let mut credits = vec![
++            0u64;
++            if native {
++                number("PLENA_NATIVE_RESULT_SLOTS", 4) as usize
++            } else {
++                latency.div_ceil(interval) as usize
++            }
++        ];
+         let mut launched = 0usize;
+         let mut supply_ready = 0;
++        let read_width = if native {
++            number("PLENA_NATIVE_READ_WIDTH", 512) as usize
++        } else {
++            lanes
++        };
++        assert!(read_width >= lanes && read_width <= 2048 && read_width.is_multiple_of(lanes));
++        let wide_group = read_width / width;
++        let mut sector = None;
++        // x/residual is invariant throughout UPDATE. Explicit 4 KiB operand
++        // latch, loaded through the real shared SRAM port, not a free input.
++        let (outer_latch, outer_ready) = if native && op == Op::DeltaUpdate {
++            let lines: Vec<_> = (0..heads).map(|h| (h as u32, 0)).collect();
++            self.v2_read(sb, src, &lines, 0, &mut clock).await
++        } else {
++            (Vec::new(), 0)
++        };
+         for row in 0..rows {
++            if native && row % 32 == 0 {
++                let fields: &[usize] = if op == Op::ReduceAcc { &[2] } else { &[0, 1] };
++                sector = Some(
++                    self.native_sector(
++                        fields,
++                        row,
++                        rows,
++                        heads as u32,
++                        row_ready.max(supply_ready),
++                        &mut clock,
++                    )
++                    .await,
++                );
++            }
++            let mut input_slots = std::collections::VecDeque::new();
++            let mut next_input = 0;
+             // Compact scalars occupy <=128 B, held for this logical row only.
+-            let (compact, compact_ready) = if coeff.broadcast_minor() {
++            let (compact, compact_ready) = if !native && coeff.broadcast_minor() {
+                 self.v2_read(
+                     cb,
+                     coeff,
+@@ -327,16 +399,49 @@ impl Accelerator {
+                 let source_lines = (first..last)
+                     .map(|h| (h as u32, if src.shape.rows == 1 { 0 } else { row }))
+                     .collect::<Vec<_>>();
+-                let (state, mut ready) = self
+-                    .v2_read(
++                let (state, mut ready) = if native {
++                    if first % wide_group == 0 {
++                        if first > 0 {
++                            input_slots.pop_front();
++                        }
++                        // Two W-wide slots. Refill only after the previous
++                        // slot's last lane group has accepted its operands.
++                        while input_slots.len() < 2 && next_input < heads {
++                            let lines: Vec<_> = (next_input..(next_input + wide_group).min(heads))
++                                .map(|h| (h as u32, row))
++                                .collect();
++                            let (values, ready) = self
++                                .v2_read(
++                                    if reducing { sb } else { db },
++                                    if reducing { src } else { dst },
++                                    &lines,
++                                    row_ready.max(supply_ready),
++                                    &mut clock,
++                                )
++                                .await;
++                            input_slots.push_back((next_input, values, ready + 1));
++                            next_input += wide_group;
++                        }
++                    }
++                    let (wide_first, wide_state, wide_ready) = input_slots.front().unwrap();
++                    let start = (first - wide_first) * width;
++                    (
++                        wide_state[start..start + (last - first) * width].to_vec(),
++                        (*wide_ready).max(operands_at),
++                    )
++                } else {
++                    self.v2_read(
+                         if reducing { sb } else { db },
+                         if reducing { src } else { dst },
+                         &state_lines,
+                         operands_at,
+                         &mut clock,
+                     )
+-                    .await;
+-                let (scalars, scalar_ready) = if compact.is_empty() {
++                    .await
++                };
++                let (scalars, scalar_ready) = if native {
++                    (Vec::new(), sector.as_ref().unwrap().ready)
++                } else if compact.is_empty() {
+                     let mut slice = coeff;
+                     slice.shape.rows = 1;
+                     slice.shape.cols = (2 * (last - first) * width) as u32;
+@@ -350,7 +455,12 @@ impl Accelerator {
+                     (Vec::new(), compact_ready)
+                 };
+                 ready = ready.max(scalar_ready);
+-                let (outer, source_ready) = if op == Op::DeltaUpdate {
++                let (outer, source_ready) = if native && op == Op::DeltaUpdate {
++                    (
++                        outer_latch[first * width..last * width].to_vec(),
++                        outer_ready,
++                    )
++                } else if op == Op::DeltaUpdate {
+                     self.v2_read(sb, src, &source_lines, operands_at, &mut clock)
+                         .await
+                 } else {
+@@ -360,7 +470,17 @@ impl Accelerator {
+                 let mut values = Vec::with_capacity(state.len());
+                 for (i, &s) in state.iter().enumerate() {
+                     let h = first + i / width;
+-                    let (a, b) = if compact.is_empty() {
++                    let (a, b) = if native {
++                        let s = sector.as_ref().unwrap();
++                        (
++                            s.value(0, row, h as u32),
++                            if op == Op::ReduceAcc {
++                                0.0
++                            } else {
++                                s.value(1, row, h as u32)
++                            },
++                        )
++                    } else if compact.is_empty() {
+                         let local = i / width * 2 * width + i % width;
+                         (scalars[local], scalars[local + width])
+                     } else {
+diff --git a/transactional_emulator/src/op.rs b/transactional_emulator/src/op.rs
+index 4f4c75f9..d62cbc34 100644
+--- a/transactional_emulator/src/op.rs
++++ b/transactional_emulator/src/op.rs
+@@ -30,6 +30,9 @@ pub enum LTilePrimitive {
+     DecayReduceAcc,
+     ReduceWrite,
+     ResidualWrite,
++    NativeDeltaUpdate,
++    NativeReduceAcc,
++    NativeDecayReduceAcc,
+ }
+ 
+ impl TryFrom<u8> for LTilePrimitive {
+@@ -46,6 +49,9 @@ impl TryFrom<u8> for LTilePrimitive {
+             6 => Ok(Self::DecayReduceAcc),
+             7 => Ok(Self::ReduceWrite),
+             8 => Ok(Self::ResidualWrite),
++            9 => Ok(Self::NativeDeltaUpdate),
++            10 => Ok(Self::NativeReduceAcc),
++            11 => Ok(Self::NativeDecayReduceAcc),
+             _ => Err(()),
+         }
+     }
+@@ -439,6 +445,11 @@ pub enum Opcode {
+         field: u8,
+     },
+     /// Atomically configure a packed Matrix-SRAM placement view.
++    L_TILE_CCFG {
++        low: u8,
++        high: u8,
++        slot: u8,
++    },
+     L_TILE_CFG {
+         shape: u8,
+         mapping: u8,
+@@ -922,6 +933,17 @@ impl Opcode {
+                     }
+                 }
+             }
++            0x3F if funct1 == 2 => {
++                if instr >> 26 != 0 || rs2 >= 3 || rs3 != 0 {
++                    Self::Invalid
++                } else {
++                    Self::L_TILE_CCFG {
++                        low: rd,
++                        high: rs1,
++                        slot: rs2,
++                    }
++                }
++            }
+             0x3F if funct1 == 3 => {
+                 if instr >> 28 != 0 {
+                     tracing::error!(instr, "non-canonical L_TILE_EXEC encoding");
+@@ -1473,6 +1495,22 @@ mod tests {
+                 ..
+             }
+         ));
++        assert!(matches!(
++            Opcode::decode(0x0080b73f),
++            Opcode::L_TILE_CCFG {
++                low: 12,
++                high: 13,
++                slot: 2
++            }
++        ));
++        for (number, primitive) in [
++            (9, LTilePrimitive::NativeDeltaUpdate),
++            (10, LTilePrimitive::NativeReduceAcc),
++            (11, LTilePrimitive::NativeDecayReduceAcc),
++        ] {
++            assert!(matches!(Opcode::decode(rform(0x3f, 1, 2, 3, number, 3)),
++                Opcode::L_TILE_EXEC { primitive: got, .. } if got == primitive));
++        }
+         match Opcode::decode(rform(0x3F, 7, 9, 2, 0, 1)) {
+             Opcode::L_TILE_CFG {
+                 shape,
+@@ -1482,7 +1520,7 @@ mod tests {
+             other => panic!("expected L_TILE_CFG, got {other:?}"),
+         }
+         assert!(matches!(
+-            Opcode::decode(rform(0x3F, 9, 2, 2, 0, 2)),
++            Opcode::decode(rform(0x3F, 9, 2, 3, 0, 2)),
+             Opcode::Invalid
+         ));
+         match Opcode::decode(rform(0x09, 9, 5, 6, 0, 3)) {

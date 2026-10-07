@@ -1,0 +1,39 @@
+[package]
+name = "transactional_emulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+runtime =  { path = "lib/runtime" }
+memory =  { path = "lib/memory" }
+ramulator =  { path = "lib/ramulator" }
+buddy =  { path = "lib/buddy" }
+quantize =  { path = "lib/quantize" }
+sram =  { path = "lib/sram" }
+tokio = { version = "1.45.1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
+tch = { version = "0.20.0", features = ["download-libtorch"] }
+half = "2"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+mimalloc = "0.1.52"
+futures-util = "0.3"
+sha2 = "0.10"
+
+[workspace]
+members = [
+    "lib/runtime",
+    "lib/memory",
+    "lib/ramulator",
+    "lib/buddy",
+    "lib/quantize",
+    "lib/sram",
+]
+
+[profile.release]
+debug = true
+lto = true

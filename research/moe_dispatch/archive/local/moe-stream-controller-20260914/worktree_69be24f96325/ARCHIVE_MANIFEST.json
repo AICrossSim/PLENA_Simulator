@@ -1,0 +1,331 @@
+{
+  "copied_source_is_not_active_source": true,
+  "credential_policy": "credential filenames and literal key/privatekey patterns excluded",
+  "files": [
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/tracked_worktree_vs_HEAD.patch",
+      "bytes": 83480,
+      "reason": "selected_source_result_or_document",
+      "relative": "tracked_worktree_vs_HEAD.patch",
+      "sha256": "84b7bcab792d5c4760f27ef762104d8a62f6e1bc0148845e26e308e054adf3dd",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/engine.rs",
+      "bytes": 95113,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/engine.rs",
+      "sha256": "2fa7742b21dbb629f03eaf1cb73190e7114afe2769592b02b8f933142c9b6bf9",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/mod.rs",
+      "bytes": 670,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/mod.rs",
+      "sha256": "0ad4b7ce2b95a8094d949afff96fc024d29bf7ae6d20222abc8c87a3105ffadb",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/output_pool.rs",
+      "bytes": 17850,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/output_pool.rs",
+      "sha256": "9424548923cbd5c23fcd1858d1d66222f8a90e7f19393e80597eeff8cec07adf",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/output_pool_tests.rs",
+      "bytes": 32734,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/output_pool_tests.rs",
+      "sha256": "5d43c0333ef3ad8e4a530b6a0f041469449cc7c9a3b7b50003566ab7db9b6884",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/tests.rs",
+      "bytes": 31995,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/tests.rs",
+      "sha256": "899588d8587b3ba9f874efabd3407d0968a8fc87b54c830254c5b592168ae2fd",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/src/moe_normal/types.rs",
+      "bytes": 21975,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/types.rs",
+      "sha256": "d777fc1c31e9a4faf1846a5e88b991610f6c99d6afcfcd41f8e9367cdf1f84c7",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/modified_source/transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py",
+      "bytes": 54397,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/testbench/moe_timing/replay/compare_moe_normal.py",
+      "sha256": "9674435b172dfcc0cff82be147cf696cf5cac12da4d62f34593f1d9727f44497",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_cohort_step1.md",
+      "bytes": 5082,
+      "reason": "selected_source_result_or_document",
+      "relative": "doc/moe_cohort_step1.md",
+      "sha256": "cd345e3b8497dbbd6cf4ca488e75f65617b14b61e3879307f4e5b6bc86008329",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_event_ready_step1.md",
+      "bytes": 6033,
+      "reason": "selected_source_result_or_document",
+      "relative": "doc/moe_event_ready_step1.md",
+      "sha256": "b238a59a4df3ddf7cbaf9c7aebd7f649f745bb566770a21f4a07c05c2924f202",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_event_ready_step1_diagnostics.md",
+      "bytes": 4250,
+      "reason": "selected_source_result_or_document",
+      "relative": "doc/moe_event_ready_step1_diagnostics.md",
+      "sha256": "f0c41f39c5f36376f08f602337d6be1fd062ad720210ac7198316fe371c35ab5",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/doc/moe_split_window_step2.md",
+      "bytes": 6975,
+      "reason": "selected_source_result_or_document",
+      "relative": "doc/moe_split_window_step2.md",
+      "sha256": "082498dd3f22a321b9db84cee8476553c51767a34e33cfec7ff0b80edf186a59",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/audit_step2.py",
+      "bytes": 4514,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/audit_step2.py",
+      "sha256": "005ed1d29db8c9f9b73333adcdf79726443b3fd876e3ccc9234602daf9211573",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/cohort_step1.py",
+      "bytes": 9550,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/cohort_step1.py",
+      "sha256": "104e0c71ff997e5eaba58a886980f3f4fae01beaaf78553b35e4ef3e387bbf66",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/common_baseline.py",
+      "bytes": 10590,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/common_baseline.py",
+      "sha256": "871b34d9204f2f39115de9f05a6290833fd772ca7f10a0e16fb7806e3ffdb1f0",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/diagnose_step1.py",
+      "bytes": 16946,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/diagnose_step1.py",
+      "sha256": "9c034709232412b2518b1cf6e356c87fbe8e59f278218dbadf771810a4cbd083",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/fixed_common_baseline.py",
+      "bytes": 6332,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/fixed_common_baseline.py",
+      "sha256": "e8f322bb99d74be2c7371675fc1d59d920dd4b859ff47d9ea1859407ef64dfee",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/frozen_me1_step2.py",
+      "bytes": 2286,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/frozen_me1_step2.py",
+      "sha256": "75bff58f315bdfd263435207494851e69273e70278f56acde7bfc31a19363671",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/regress_step2.py",
+      "bytes": 3087,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/regress_step2.py",
+      "sha256": "aa89f8f69598ffed98c1f23a4c8f221e49ae199c8f8e817549b60205f220289d",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/report_step1_diagnostics.py",
+      "bytes": 23763,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/report_step1_diagnostics.py",
+      "sha256": "2d84d6033b8d30d3f8143eef0378248d7b442f25b4ac167690eb87b071263135",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/report_step2.py",
+      "bytes": 18148,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/report_step2.py",
+      "sha256": "d65069f75344439fb75ac909ff5a9828f25df3edce89444f149c99bb2e2a758c",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/reproduce_step0.sh",
+      "bytes": 2345,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/reproduce_step0.sh",
+      "sha256": "7c1bfeacabc0a2f48823bfa437dc9581b34cfd313e1c30bf8f8dbbbc6432ab68",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/step0.py",
+      "bytes": 15712,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/step0.py",
+      "sha256": "e404558febc5456042c5877a64a1c88d9ba041f45b60e3ebc16b72116b4608f7",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/step1.py",
+      "bytes": 16620,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/step1.py",
+      "sha256": "89f0e6de40206bc9d49ba56909487abb82c5e23d3812102e6ddde578fa23c339",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/step2.py",
+      "bytes": 12250,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/step2.py",
+      "sha256": "a8ba216db631073ed80b757eb8221b28366a08ab3843d1c9f71f16f4be4907bf",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/summarize_step0.py",
+      "bytes": 14895,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/summarize_step0.py",
+      "sha256": "539a018e7be22eedef1579b66ac9c8cb9d8d5b2e6209faf7b4727f168330dd35",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/summarize_step1.py",
+      "bytes": 17192,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/summarize_step1.py",
+      "sha256": "867aed26c66e73d63140988607b034914d5dbb77e704004ef8037c907ecaea12",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/scripts/moe_stream_ctrl/verify_step2.py",
+      "bytes": 4695,
+      "reason": "selected_source_result_or_document",
+      "relative": "scripts/moe_stream_ctrl/verify_step2.py",
+      "sha256": "da10bc4dbc67636804eefe05a811fab05a8315034502d889cbc5bcce163e7ec5",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/cohort.rs",
+      "bytes": 24615,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/cohort.rs",
+      "sha256": "e0d7634735e52d621471f63920fc98fcc33680700838c54fd1ee9e09b4f1f7d4",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/control_port.rs",
+      "bytes": 3810,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/control_port.rs",
+      "sha256": "979d99405b5cbd9392732d273f665fc82c700021c28599f76475ecfda56753cc",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/event_ready.rs",
+      "bytes": 38559,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/event_ready.rs",
+      "sha256": "009f1681b62c653f7ed01190fd8dd6599b061c183b489854f5c1174e5e97c179",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/reserved_credits.rs",
+      "bytes": 5584,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/reserved_credits.rs",
+      "sha256": "e2b36069ff85420017ee4470a1aa772e496dea732518509f21ce3b9025c0727f",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/split_data.rs",
+      "bytes": 7630,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/split_data.rs",
+      "sha256": "995b31a4dd8049b3bacc73be14bae7ea4ec96e627696428a6346e6f436147b25",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/split_stream.rs",
+      "bytes": 14384,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/split_stream.rs",
+      "sha256": "337c640bf319010451891f65304afbccd3d2ef3f35d4656864fefba1a6231c39",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    },
+    {
+      "archive": "local/moe-stream-controller-20260914/worktree_69be24f96325/untracked/transactional_emulator/src/moe_normal/split_window_tests.rs",
+      "bytes": 8816,
+      "reason": "selected_source_result_or_document",
+      "relative": "transactional_emulator/src/moe_normal/split_window_tests.rs",
+      "sha256": "29f6b88804435c900c7c29b08d25f434aa28494f2e962fdae7c46ec2edb515ae",
+      "status": "copied",
+      "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+    }
+  ],
+  "origin": {
+    "HEAD": "da93c32a220338818924e767c3ba3294c789a349",
+    "audited_dirty": true,
+    "author_owned_by_inventory": true,
+    "branch": "refs/heads/local/moe-stream-controller-20260914",
+    "original_branch_for_archive": "local/moe-stream-controller-20260914",
+    "stable_id": "69be24f96325",
+    "worktree": "/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller"
+  },
+  "scope": "pre-merge audited dirty files, useful untracked source/results/docs, bounded ignored result roots"
+}
