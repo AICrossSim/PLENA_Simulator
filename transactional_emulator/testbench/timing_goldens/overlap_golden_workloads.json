@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "description": "Experimental off-by-default prefetch/compute overlap golden. This fixture intentionally requires --experimental-overlap-prefetch-compute and must not be mixed with default timing goldens.",
+  "defaults": {
+    "threads": 1,
+    "stage_profile": false,
+    "overlap_prefetch_compute": true
+  },
+  "workloads": [
+    {
+      "id": "g2_prefetch_then_compute_overlap_on",
+      "build_dir": "outputs/window1_p1/timing_gate_runs/g2_prefetch_then_compute_overlap_on",
+      "expected": {
+        "sim_latency_cycles": 6408,
+        "hbm_bytes_read": 512,
+        "hbm_bytes_written": 0
+      }
+    }
+  ]
+}

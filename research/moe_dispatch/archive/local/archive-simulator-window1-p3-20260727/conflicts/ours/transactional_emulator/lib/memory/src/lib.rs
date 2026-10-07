@@ -1,0 +1,550 @@
+pub mod chunked;
+mod frfcfs;
+mod naive;
+mod simple;
+pub mod testutils;
+
+use std::mem::ManuallyDrop;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+pub use naive::NaiveTiming;
+pub use simple::SimpleTiming;
+
+/// Monotonic urgency shared by a resident tile and its in-flight requests.
+/// Coalescing callers must share/promote the same line token for every consumer.
+/// This only affects requests not yet accepted by a supporting timing model.
+#[derive(Clone, Debug, Default)]
+pub struct ReadPriority(Arc<AtomicBool>);
+
+impl ReadPriority {
+    pub fn prefetch() -> Self {
+        Self::new(false)
+    }
+
+    pub fn demand() -> Self {
+        Self::new(true)
+    }
+
+    pub fn new(demand: bool) -> Self {
+        Self(Arc::new(AtomicBool::new(demand)))
+    }
+
+    pub fn promote(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    pub fn is_demand(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Statistics {
+    pub total_bytes_read: u64,
+    pub total_bytes_written: u64,
+}
+
+#[trait_variant::make(Send)]
+pub trait MemoryTimingModel: Send + Sync {
+    /// Read 64-bytes of memory.
+    ///
+    /// We fix to 64-bytes to accomodate memory emulators.
+    async fn read(&self, addr: u64);
+
+    /// Optional 32-byte sector reads; the default deliberately fetches a full line.
+    fn read_mask(&self, addr: u64, mask: u8) -> impl Future<Output = ()> + Send {
+        async move {
+            assert!((1..=3).contains(&mask));
+            self.read(addr).await;
+        }
+    }
+    fn read_mask_priority(
+        &self,
+        addr: u64,
+        mask: u8,
+        _priority: ReadPriority,
+    ) -> impl Future<Output = ()> + Send {
+        self.read_mask(addr, mask)
+    }
+    fn supports_sector_reads(&self) -> bool {
+        false
+    }
+
+    /// Write 64-bytes of memory.
+    async fn write(&self, addr: u64);
+}
+
+impl<T: MemoryTimingModel> MemoryTimingModel for ManuallyDrop<T> {
+    async fn read(&self, addr: u64) {
+        T::read(self, addr).await
+    }
+
+    async fn read_mask(&self, addr: u64, mask: u8) {
+        T::read_mask(self, addr, mask).await
+    }
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) {
+        T::read_mask_priority(self, addr, mask, priority).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        T::supports_sector_reads(self)
+    }
+    async fn write(&self, addr: u64) {
+        T::write(self, addr).await
+    }
+}
+
+#[trait_variant::make(Send)]
+pub trait MemoryModel: Send + Sync {
+    /// Read 64-bytes of memory.
+    async fn read(&self, addr: u64) -> [u8; 64];
+
+    fn read_mask(&self, addr: u64, mask: u8) -> impl Future<Output = [u8; 64]> + Send {
+        async move {
+            assert!((1..=3).contains(&mask));
+            self.read(addr).await
+        }
+    }
+    fn read_mask_priority(
+        &self,
+        addr: u64,
+        mask: u8,
+        _priority: ReadPriority,
+    ) -> impl Future<Output = [u8; 64]> + Send {
+        self.read_mask(addr, mask)
+    }
+    fn supports_sector_reads(&self) -> bool {
+        false
+    }
+
+    /// Write 64-bytes of memory.
+    async fn write(&self, addr: u64, bytes: [u8; 64]);
+
+    /// Data-only read for functional models with separately scheduled timing.
+    async fn functional_read(&self, addr: u64) -> [u8; 64];
+
+    /// Data-only write for functional models with separately scheduled timing.
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]);
+
+    /// Optional utilization statistics for wrappers that collect them.
+    fn statistics(&self) -> Option<Statistics> {
+        None
+    }
+
+    /// Addressable byte capacity, when the backing model has a finite range.
+    fn capacity_bytes(&self) -> Option<u64> {
+        None
+    }
+}
+
+#[async_trait::async_trait]
+pub trait ErasedMemoryModel: Send + Sync {
+    async fn box_read(&self, addr: u64) -> [u8; 64];
+    async fn box_read_mask(&self, addr: u64, mask: u8) -> [u8; 64];
+    async fn box_read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority)
+    -> [u8; 64];
+    fn supports_sector_reads(&self) -> bool;
+    async fn box_write(&self, addr: u64, bytes: [u8; 64]);
+    async fn box_functional_read(&self, addr: u64) -> [u8; 64];
+    async fn box_functional_write(&self, addr: u64, bytes: [u8; 64]);
+    fn statistics(&self) -> Option<Statistics>;
+    fn box_capacity_bytes(&self) -> Option<u64>;
+}
+
+#[async_trait::async_trait]
+impl<T: MemoryModel> ErasedMemoryModel for T {
+    async fn box_read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        self.read_mask(addr, mask).await
+    }
+    async fn box_read_mask_priority(
+        &self,
+        addr: u64,
+        mask: u8,
+        priority: ReadPriority,
+    ) -> [u8; 64] {
+        self.read_mask_priority(addr, mask, priority).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        MemoryModel::supports_sector_reads(self)
+    }
+    async fn box_read(&self, addr: u64) -> [u8; 64] {
+        self.read(addr).await
+    }
+
+    async fn box_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.write(addr, bytes).await
+    }
+
+    async fn box_functional_read(&self, addr: u64) -> [u8; 64] {
+        self.functional_read(addr).await
+    }
+
+    async fn box_functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.functional_write(addr, bytes).await
+    }
+
+    fn statistics(&self) -> Option<Statistics> {
+        MemoryModel::statistics(self)
+    }
+
+    fn box_capacity_bytes(&self) -> Option<u64> {
+        MemoryModel::capacity_bytes(self)
+    }
+}
+
+impl MemoryModel for dyn ErasedMemoryModel {
+    async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        self.box_read_mask(addr, mask).await
+    }
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) -> [u8; 64] {
+        self.box_read_mask_priority(addr, mask, priority).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        ErasedMemoryModel::supports_sector_reads(self)
+    }
+    async fn read(&self, addr: u64) -> [u8; 64] {
+        self.box_read(addr).await
+    }
+
+    async fn write(&self, addr: u64, bytes: [u8; 64]) {
+        self.box_write(addr, bytes).await
+    }
+
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.box_functional_read(addr).await
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.box_functional_write(addr, bytes).await
+    }
+
+    fn statistics(&self) -> Option<Statistics> {
+        ErasedMemoryModel::statistics(self)
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        ErasedMemoryModel::box_capacity_bytes(self)
+    }
+}
+
+/// A memory that discards all written data.
+///
+/// This is useful to just test the timing without caring the actual data.
+pub struct NoData;
+
+impl MemoryModel for NoData {
+    /// Read 64-bytes of memory.
+    async fn read(&self, _addr: u64) -> [u8; 64] {
+        [0; 64]
+    }
+
+    /// Write 64-bytes of memory.
+    async fn write(&self, _addr: u64, _bytes: [u8; 64]) {}
+
+    async fn functional_read(&self, _addr: u64) -> [u8; 64] {
+        [0; 64]
+    }
+
+    async fn functional_write(&self, _addr: u64, _bytes: [u8; 64]) {}
+}
+
+/// A simulated memory that is backed by memory.
+///
+/// This is useful to just test the timing without caring the actual data.
+pub struct MemoryBacked {
+    data: Mutex<Vec<[u8; 64]>>,
+}
+
+impl MemoryBacked {
+    pub fn with_capacity(size: usize) -> Self {
+        assert!(size.is_multiple_of(64));
+        Self {
+            data: Mutex::new(vec![[0; 64]; size / 64]),
+        }
+    }
+
+    pub fn with_data(&self, f: impl FnOnce(&mut [u8])) {
+        use zerocopy::IntoBytes;
+
+        let mut guard = self.data.lock().unwrap();
+        f(guard.as_mut_bytes())
+    }
+}
+
+impl MemoryModel for MemoryBacked {
+    /// Read 64-bytes of memory.
+    async fn read(&self, addr: u64) -> [u8; 64] {
+        // HBM bursts read aligned 64-byte words covering [addr, addr+len); an
+        // H_PREFETCH that requests more rows than a tensor has (e.g. blen > seq_len)
+        // over-reads past the tensor's end. Those bytes land in unused (padding) VRAM
+        // rows and are never compared, so return zeros for out-of-capacity addresses
+        // instead of panicking on the backing Vec index.
+        self.data
+            .lock()
+            .unwrap()
+            .get(addr as usize / 64)
+            .copied()
+            .unwrap_or([0u8; 64])
+    }
+
+    /// Write 64-bytes of memory.
+    async fn write(&self, addr: u64, bytes: [u8; 64]) {
+        self.data.lock().unwrap()[addr as usize / 64] = bytes;
+    }
+
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.data
+            .lock()
+            .unwrap()
+            .get(addr as usize / 64)
+            .copied()
+            .unwrap_or([0u8; 64])
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.data.lock().unwrap()[addr as usize / 64] = bytes;
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        Some((self.data.lock().unwrap().len() as u64) * 64)
+    }
+}
+
+/// Combine a data model with an extra timing model.
+pub struct WithTiming<T, M> {
+    timing: T,
+    data: M,
+}
+
+impl<T, M> WithTiming<T, M> {
+    pub fn new(timing: T, data: M) -> Self {
+        WithTiming { timing, data }
+    }
+
+    pub fn data(&self) -> &M {
+        &self.data
+    }
+}
+
+impl<T: MemoryTimingModel, M: MemoryModel> MemoryModel for WithTiming<T, M> {
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) -> [u8; 64] {
+        self.timing.read_mask_priority(addr, mask, priority).await;
+        self.data.read(addr).await
+    }
+    async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        self.timing.read_mask(addr, mask).await;
+        self.data.read(addr).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        self.timing.supports_sector_reads()
+    }
+    /// Read 64-bytes of memory.
+    async fn read(&self, addr: u64) -> [u8; 64] {
+        self.timing.read(addr).await;
+        self.data.read(addr).await
+    }
+
+    /// Write 64-bytes of memory.
+    async fn write(&self, addr: u64, bytes: [u8; 64]) {
+        self.timing.write(addr).await;
+        self.data.write(addr, bytes).await
+    }
+
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.data.functional_read(addr).await
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.data.functional_write(addr, bytes).await
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        self.data.capacity_bytes()
+    }
+}
+
+// Memory model with utilization statistics
+pub struct WithStats<T> {
+    model: T,
+    statistics: Mutex<Statistics>,
+}
+
+impl<T> WithStats<T> {
+    pub fn new(model: T) -> Self {
+        let stats = Statistics {
+            total_bytes_read: 0,
+            total_bytes_written: 0,
+        };
+        WithStats {
+            model,
+            statistics: Mutex::new(stats),
+        }
+    }
+
+    pub fn model(&self) -> &T {
+        &self.model
+    }
+
+    pub fn statistics(&self) -> Statistics {
+        *self.statistics.lock().unwrap()
+    }
+}
+
+impl<T: MemoryModel> MemoryModel for WithStats<T> {
+    async fn read_mask_priority(&self, addr: u64, mask: u8, priority: ReadPriority) -> [u8; 64] {
+        assert!((1..=3).contains(&mask));
+        let bytes = if self.model.supports_sector_reads() {
+            32 * u64::from(mask.count_ones())
+        } else {
+            64
+        };
+        self.statistics.lock().unwrap().total_bytes_read += bytes;
+        self.model.read_mask_priority(addr, mask, priority).await
+    }
+    async fn read_mask(&self, addr: u64, mask: u8) -> [u8; 64] {
+        assert!((1..=3).contains(&mask));
+        let bytes = if self.model.supports_sector_reads() {
+            32 * u64::from(mask.count_ones())
+        } else {
+            64
+        };
+        self.statistics.lock().unwrap().total_bytes_read += bytes;
+        self.model.read_mask(addr, mask).await
+    }
+    fn supports_sector_reads(&self) -> bool {
+        self.model.supports_sector_reads()
+    }
+    async fn read(&self, addr: u64) -> [u8; 64] {
+        {
+            let mut guard = self.statistics.lock().unwrap();
+            guard.total_bytes_read += 64;
+        }
+        self.model.read(addr).await
+    }
+
+    async fn write(&self, addr: u64, bytes: [u8; 64]) {
+        {
+            let mut guard = self.statistics.lock().unwrap();
+            guard.total_bytes_written += 64;
+        }
+        self.model.write(addr, bytes).await
+    }
+
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.model.functional_read(addr).await
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.model.functional_write(addr, bytes).await
+    }
+
+    fn statistics(&self) -> Option<Statistics> {
+        Some(WithStats::statistics(self))
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        self.model.capacity_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct PriorityProbe(Arc<Mutex<Vec<bool>>>);
+
+    impl MemoryTimingModel for PriorityProbe {
+        async fn read(&self, _addr: u64) {
+            panic!("priority was dropped by a memory wrapper");
+        }
+
+        async fn read_mask_priority(&self, _addr: u64, mask: u8, priority: ReadPriority) {
+            assert_eq!(mask, 1);
+            self.0.lock().unwrap().push(priority.is_demand());
+        }
+
+        fn supports_sector_reads(&self) -> bool {
+            true
+        }
+
+        async fn write(&self, _addr: u64) {}
+    }
+
+    #[tokio::test]
+    async fn priority_alias_survives_erasure_timing_and_statistics_wrappers() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let timing = PriorityProbe(seen.clone());
+        let memory = WithStats::new(WithTiming::new(timing, NoData));
+        let erased: &dyn ErasedMemoryModel = &memory;
+        let priority = ReadPriority::prefetch();
+        let alias = priority.clone();
+        assert!(!alias.is_demand());
+        priority.promote();
+        assert!(alias.is_demand());
+        assert_eq!(erased.box_read_mask_priority(0, 1, alias).await, [0; 64]);
+        assert_eq!(*seen.lock().unwrap(), vec![true]);
+        assert_eq!(memory.statistics().total_bytes_read, 32);
+    }
+
+    #[tokio::test]
+    async fn test_memory_backed_roundtrip() {
+        let mb = MemoryBacked::with_capacity(128);
+        assert_eq!(mb.capacity_bytes(), Some(128));
+        let mut block = [0u8; 64];
+        for (i, b) in block.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        mb.write(64, block).await;
+        assert_eq!(mb.read(64).await, block);
+        assert_eq!(mb.read(0).await, [0u8; 64]); // other block untouched
+    }
+
+    #[tokio::test]
+    async fn test_nodata_discards_writes() {
+        let nd = NoData;
+        nd.write(0, [7u8; 64]).await;
+        assert_eq!(nd.read(0).await, [0u8; 64]); // always reads back zero
+    }
+
+    #[tokio::test]
+    async fn test_with_stats_counts_bytes_and_delegates() {
+        let s = WithStats::new(MemoryBacked::with_capacity(128));
+        assert_eq!(s.capacity_bytes(), Some(128));
+        let _ = s.read(0).await;
+        let _ = s.read(64).await;
+        s.write(0, [1u8; 64]).await;
+
+        let stats = s.statistics();
+        assert_eq!(stats.total_bytes_read, 128); // two 64-byte reads
+        assert_eq!(stats.total_bytes_written, 64); // one 64-byte write
+        assert_eq!(s.read(0).await, [1u8; 64]); // data still flows through
+    }
+
+    /// A zero-cost timing model used only to exercise `WithTiming`'s data path
+    /// without involving the simulation executor.
+    struct NoTiming;
+
+    impl MemoryTimingModel for NoTiming {
+        async fn read(&self, _addr: u64) {}
+        async fn write(&self, _addr: u64) {}
+    }
+
+    #[tokio::test]
+    async fn test_with_timing_delegates_data() {
+        let wt = WithTiming::new(NoTiming, MemoryBacked::with_capacity(64));
+        assert_eq!(wt.capacity_bytes(), Some(64));
+        wt.write(0, [9u8; 64]).await;
+        assert_eq!(wt.read(0).await, [9u8; 64]);
+        assert_eq!(wt.data().read(0).await, [9u8; 64]); // data() accessor
+    }
+
+    #[tokio::test]
+    async fn functional_access_bypasses_stats_but_preserves_data() {
+        let memory = WithStats::new(MemoryBacked::with_capacity(64));
+        memory.functional_write(0, [7u8; 64]).await;
+        assert_eq!(memory.functional_read(0).await, [7u8; 64]);
+        let stats = memory.statistics();
+        assert_eq!(stats.total_bytes_read, 0);
+        assert_eq!(stats.total_bytes_written, 0);
+    }
+}

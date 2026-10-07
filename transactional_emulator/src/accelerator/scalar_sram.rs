@@ -114,6 +114,10 @@ impl ScalarSram {
     pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
         self.intsram.iter().flat_map(|v| v.to_le_bytes()).collect()
     }
+
+    pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
+        self.intsram.iter().flat_map(|v| v.to_le_bytes()).collect()
+    }
 }
 
 fn quantize_scalar(fp_type: DataType, value: f32) -> f32 {

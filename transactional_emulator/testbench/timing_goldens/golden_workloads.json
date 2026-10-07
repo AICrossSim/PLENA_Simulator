@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic timing goldens for PLENA transactional emulator. Expected values are simulation cycles and emulator HBM byte counters from final-source repeat gates.",
+  "defaults": {
+    "threads": 1,
+    "stage_profile": false
+  },
+  "workloads": [
+    {
+      "id": "gpt_synthetic_small",
+      "build_dir": "outputs/timing_validation/g3_synthetic_gpt_small/true_decoder_block",
+      "expected": {
+        "sim_latency_cycles": 147758,
+        "hbm_bytes_read": 475136,
+        "hbm_bytes_written": 16384
+      }
+    },
+    {
+      "id": "qwen_synthetic_small",
+      "build_dir": "outputs/timing_validation/g3_synthetic_qwen_small/true_decoder_block",
+      "expected": {
+        "sim_latency_cycles": 256559,
+        "hbm_bytes_read": 868352,
+        "hbm_bytes_written": 16384
+      }
+    },
+    {
+      "id": "gpt_real_layer0_tok1",
+      "build_dir": "outputs/timing_validation/g3_real_gpt_default",
+      "expected": {
+        "sim_latency_cycles": 34354344,
+        "hbm_bytes_read": 199096320,
+        "hbm_bytes_written": 0
+      }
+    },
+    {
+      "id": "qwen_real_decoder_block",
+      "build_dir": "outputs/timing_validation/g3_real_qwen_default/true_decoder_block",
+      "expected": {
+        "sim_latency_cycles": 65073075,
+        "hbm_bytes_read": 165019648,
+        "hbm_bytes_written": 262144
+      }
+    }
+  ]
+}
