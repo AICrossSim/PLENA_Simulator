@@ -161,10 +161,11 @@ class Figures:
                 if k not in closest or v<closest[k][0]:closest[k]=(v,int(r['concentration_level']),int(r['batch']))
             locations=defaultdict(int)
             for _,level,batch in closest.values():locations[level,math.log2(batch)-1]+=1
-            for (level,y),count in locations.items():ax.scatter(level,y,s=30+6*count,facecolors='none',edgecolors='black',lw=1.5)
+            if math.isclose(bw,256*32/65,rel_tol=1e-5):
+                for (level,y),count in locations.items():ax.scatter(level,y,s=30+6*count,facecolors='none',edgecolors='black',lw=1.5)
             ax.set_xticks(range(5),['0\ndiffuse','1','2','3','4\nconcentrated']);ax.set_yticks(range(len(batches)),[f'B{b}' for b in batches]);ax.set_xlabel('Calibrated synthetic concentration level');ax.set_title(f'Effective HBM {bw:.1f} GB/s')
             fig.colorbar(image,ax=ax,label='Selected hetero / single latency change (%)')
-        self.save(fig,'fig_workload_map','Synthetic region only: E=64, top-6, routed F=1408, Shared=2 units. Both concentration endpoints are fitted on development captures; diffuse does not mean perfectly uniform. Circles mark captures at nearest calibrated histogram level (mixed B96 on log2 batch axis). * = open hardware-search proof; candidate estimate, not certified optimum.')
+        self.save(fig,'fig_workload_map','Synthetic region only: E=64, top-6, routed F=1408, Shared=2 units. Both concentration endpoints are fitted on development captures; diffuse does not mean perfectly uniform. Circles appear only in the actual ~126 GB/s regime and mark nearest calibrated capture histogram levels (mixed B96 on log2 batch axis); other bandwidth panels are hypothetical. * = open hardware-search proof; candidate estimate, not certified optimum.')
 
     def sobol(self):
         rows=self.csv('E3/sobol.csv');x=np.arange(len(rows));fig,ax=plt.subplots(figsize=(9,4.8))
@@ -172,7 +173,7 @@ class Figures:
             ax.bar(x+(j-.5)*.32,[number(r[val]) for r in rows],.32,yerr=[number(r[ci]) for r in rows],capsize=3,color=COLORS[j],label=label)
         ax.set_xticks(x,[r['param'].replace('_','\n') for r in rows]);ax.set_ylabel('Sobol sensitivity index');ax.legend();ax.grid(axis='y',alpha=.2)
         complete=all(truth(r['all_searches_certified']) for r in rows)
-        self.save(fig,'fig_sobol','Hardware is reoptimized per parameter sample. '+('All search optima certified.' if complete else 'Indices describe best-evaluated candidates from time-limited searches; they do not certify global-optimum sensitivity.')+' Error bars are estimator confidence intervals.')
+        self.save(fig,'fig_sobol','Hardware is reoptimized per parameter sample. '+('All sample proofs close at the declared 2% improvement tolerance; these are not exact optima.' if complete else 'Indices describe best-evaluated candidates from time-limited searches; they do not certify global-optimum sensitivity.')+' Error bars are estimator confidence intervals.')
 
     def flip_boundary(self):
         rows=self.csv('E3/flip_samples.csv');flips=self.csv('E3/flip_boundary.csv');params=list(dict.fromkeys(r['param'] for r in rows));fig,axes=plt.subplots(2,3,figsize=(14,8.1))

@@ -632,7 +632,15 @@ def render_report(e, status, args):
         add(5, "继续运行保留原证书并写入 *_continued.json 新恢复结果；下一次继续使用最新生成的证书。恢复会核对原始工作负载及引擎哈希。\n\n```sh\n" + "\n".join(status["sections"]["5.1"]["resume_commands"]) + "\n```")
 
     calibration = e.rows("results/E3/synthetic_calibration.csv")
+    calibration_fit = e.data("results/E3/synthetic_calibration.json")
     add(6, f"合成全网格已记录 {len(grid):,}/4,320 点，其中硬件证明闭合 {sum(truth(r.get('proof_complete')) for r in grid):,} 点。只在本负载区域分析使用合成路由；每点的单核/同构/异构候选重新搜索，不能把其 best_single/best_homo 偷换为真实负载冻结 B1/B2。")
+    if calibration_fit:
+        endpoints = calibration_fit.get("endpoint_fits", {})
+        add(6, table(("浓度端点", "拟合α", "拟合损失", "开发窗口数"),
+                     [(name, fmt(value.get("alpha"), 6), fmt(value.get("loss"), 6), len(value.get("source_ids", []))) for name, value in endpoints.items()]))
+        add(6, "扩散端点使用开发集中路由熵最高的非SWE组 `" + calibration_fit.get("selection_protocol", {}).get("selected_diffuse_cohort", "缺失") +
+            "`；集中端点使用SWE开发窗口。端点顺序符合预期=" + str(calibration_fit.get("fitted_endpoint_order_matches_expected", "缺失")) +
+            "。两端都是有限α的经验拟合，扩散端点不等于严格均匀路由；损失非零，合成区域不能代替真实留出数据。窗口ID、熵规则和参数见 [synthetic_calibration.json](results/E3/synthetic_calibration.json)。")
     if calibration:
         kval = [float(r["me_hist_KL_real_to_synthetic"]) for r in calibration if number(r.get("me_hist_KL_real_to_synthetic")) is not None]
         dval = [abs(float(r["distinct_relative_error"])) for r in calibration if number(r.get("distinct_relative_error")) is not None]
@@ -652,24 +660,33 @@ def render_report(e, status, args):
 
     robust = e.rows("results/E3/robust_objectives.csv")
     stability = e.rows("results/E3/selection_stability.csv")
+    robust_protocol = e.data("results/E3/robust_protocol.json").get("modes", {})
+    def full_design_label(row):
+        design = row.get("design", "")
+        short_id = hashlib.sha256(design.encode()).hexdigest()[:8] if design else "缺失"
+        return row.get("geometry", "缺失") + "/" + row.get("flows", "缺失") + " [" + short_id + "]"
     rr = []
     for mode in MODES:
         winners = {}
         for objective in ("geomean", "cvar10", "minimax"):
             row = next((r for r in robust if r.get("onchip_mode") == mode and r.get("selection_family") == "all" and r.get("objective") == objective and truth(r.get("selected_by_objective"))), {})
-            winner = row.get("geometry", "缺失") + "/" + row.get("flows", "缺失")
-            winners[objective] = winner
+            winner = full_design_label(row)
+            winners[objective] = row.get("design", "")
             top = [r for r in stability if r.get("onchip_mode") == mode and r.get("selection_family") == "all" and r.get("objective") == objective and truth(r.get("most_selected"))]
             rr.append((mode, objective, *baseline_context(e, mode, "milp"), winner, fmt(row.get("heldout_ratio_vs_frozen_single")),
-                       "; ".join(r["geometry"] + "/" + r["flows"] + ":" + fmt(100 * float(r["selection_share"]), 1) + "%" for r in top) or "缺失"))
-        add(7, f"{mode} 三目标的全候选诊断选择" + ("一致。" if len(set(winners.values())) == 1 and "缺失" not in next(iter(winners.values())) else "不同或证据未完整；对应 batch 比值见 robust_objectives.csv。"))
+                       "; ".join(full_design_label(r) + ":" + fmt(100 * float(r["selection_share"]), 1) + "%" for r in top) or "缺失"))
+        agreement = robust_protocol.get(mode, {}).get("objectives_agree", {}).get("all")
+        if agreement is None:
+            agreement = len(set(winners.values())) == 1 and bool(next(iter(winners.values())))
+        add(7, f"{mode} 三目标按完整硬件配置判断的全候选诊断选择" + ("一致。" if agreement else "不同或证据未完整；对应 batch 比值见 robust_objectives.csv。"))
     add(7, "CVaR10=最差 ceil(0.1×窗口数) 个配对比值的算术平均；minimax=各 batch 配对几何平均的最大值。开发集 200 次 bootstrap 统计候选重选份额。留出集目标选择是诊断，主表硬件仍来自开发集冻结，不能将此诊断改成新的 headline。")
     add(7, table(("模式", "目标", "B0 MILP ms", "B1 MILP ms", "B2 MILP ms", "诊断选择", "目标值 vs 冻结 B1", "开发 bootstrap 最常选择"), rr))
     add(7, "如组织族证明开放，候选集合仅为已评估开发候选的 1% 内集合，不能称全域近优集合。各族细表见 [robust_objectives.csv](results/E3/robust_objectives.csv) 与 [selection_stability.csv](results/E3/selection_stability.csv)。")
+    add(7, "方括号短ID对应CSV中的完整design字段，包含全部缓冲、bank与vector切分；形状/数据流相同而资源切分不同的候选仍是不同设计。")
 
-    add(8, "每 tile 片上时间 1–30.4 拍、bank 带宽 8–32 B/cycle、点积每级 1–4 拍、信用 256–512、vector 吞吐 0.5–2 倍；Saltelli 基础 N=256，五参数一阶/总效应采样 1,792 点。每点重新搜索硬件，不固定真实负载候选。")
+    add(8, "W前端每4096B的服务时间τ=1–30.4拍，合计W带宽为min(64×bank带宽,4096/τ)；算术发射间隔保持1拍，不能把τ解释成每核额外的发射流水线。另扫bank带宽8–32 B/cycle、点积每级1–4拍、信用256–512、vector吞吐0.5–2倍；Saltelli基础N=256，五参数一阶/总效应采样1,792点。每点重新搜索硬件，不固定真实负载候选。")
     add(8, table(("参数", "S1", "S1 置信半宽", "ST", "ST 置信半宽", "全采样硬件证明"),
-                 [(r["param"], *(fmt(r.get(k)) for k in ("S1", "S1_ci", "ST", "ST_ci")), "闭合" if truth(r.get("all_searches_certified")) else "开放；候选指数") for r in sobol]) if sobol else "Sobol 数据尚缺。")
+                 [(r["param"], *(fmt(r.get(k)) for k in ("S1", "S1_ci", "ST", "ST_ci")), "2%容差证书闭合" if truth(r.get("all_searches_certified")) else "开放；候选指数") for r in sobol]) if sobol else "Sobol 数据尚缺。")
     flip = e.rows("results/E3/flip_boundary.csv")
     add(8, table(("参数", "Δ 目标", "边界值", "左端", "右端", "状态", "证明"), [(r["param"], r["target_delta"], fmt(r.get("value")), fmt(r.get("bracket_low")), fmt(r.get("bracket_high")), r.get("status"), r.get("proof_complete")) for r in flip]) if flip else "翻转边界数据尚缺。")
     if ranked:
