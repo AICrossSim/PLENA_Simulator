@@ -35,3 +35,11 @@ E1、E2整层表、E4、E5依赖 `E3/FROZEN_SELECTION.json` 中的开发集冻�
 网格/Saltelli/翻转切片重跑原命令从逐点checkpoint继续。CMA每次保存实际搜索证书和目标轨迹；最终验证δ0未闭合要保留gap。不要把一次预热当成两次完整测量；不要把逐相位计算服务占用当成有效MAC周期。
 
 边界和合法下界推导见 CONTRACT.md。原任务书逐字保存在 TASK.md。本轮只有分析模型，不是RTL或原生HBM实测；没有匹配的attention/router/norm计时就不填完整模型时间。
+
+新增执行入口：`python -m research.moe_dispatch.round2.heldout_runner --jobs 16 --wait-selection` 会等待三种模式的当前源码冻结选择，再依次运行E1、E2整层、E4、E5、E6；每条实际命令和退出码保存在results/executions。主搜索和补充搜索按上面的独立命令执行。
+
+run.py支持`--onchip-mode all/pipelined/port_tight/fixed_issue`。默认all生成正式完整三模式结果；单模式重跑写入`results/isolated_modes/<mode>/`，避免覆盖全模式表。`profile_inputs.py`输出153个真实窗口的专家数、低token专家数、唯一权重与HBM下限；Me≤2仍然是活跃专家，Shared单独统计。
+
+每个微实验两次都清空纯函数cost缓存，真实重算后比较；整层每次运行重建完整运行时状态。连续敏感性τ表示共享W前端每4096B的服务时间，合计带宽min(64×bank_Bpc,4096/τ)，计算发射间隔仍为1；SensitivityParameters额外记录源码哈希，续跑必须一致。保守全域下界忽略该新增带宽上限时只会更松，不会失去合法性。
+
+E5的oracle目前为同政策profile/replay参考，预取和归属改变会产生残差；不把它冒充任务书要求的同一实际调度完美oracle，此子项在最终状态中保留部分完成。所有开放搜索同样保留具体LB/gap/继续命令。
