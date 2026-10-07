@@ -271,3 +271,86 @@
 - `transactional_emulator/src/stage_profile.rs`：旧快照e93b832f6586（2276行）与当前2391行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
 - `transactional_emulator/testbench/emulator_runner.py`：旧快照e93b832f6586（651行）与当前744行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：compare；旧接口不接回新ISA。合并后运行全套相关单测验证。
 - `transactional_emulator/testbench/sim_env_utils.py`：旧快照e93b832f6586（837行）与当前969行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+
+- `research/projection-pipeline-20260928` `57d2b051aee4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `origin/research/projection-pipeline-20260928` `6ea7434697bc` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-layer-service` `b013406fa916` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-full-layer` `60d3dec21c47` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `research/ltile-analytic-v3` `db3e59afac35` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `local/moe-bottleneck-diagnostic-20260911` `da93c32a2203` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-output-pool-20260909` `582c1f9e11ef` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-refinement-20260909` `5d0ce828f8c5` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/matrix-sram-lcompute` `3b284f93752a` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/moe-dual-normal-20260905` `fe6768aac2e4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/matrix-lcompute-20260905` `44693edaf041` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `origin/review/moe-dual-normal-20260905` `ddcfae5d0f2f` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `archive/pr-116-before-mechanism-scope-20260905` `0e7effade1d4` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `archive/pr-116-before-scope-cleanup-20260905` `2cd96e29eb7c` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/moe-dual-normal-v0` `f74f454d2fab` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/static-kda-official-layer` `a3100ea38b29` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feat/static-kda-gpu-evidence` `4ce1611270ab` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `feature/mamba-kda-support` `e93b832f6586` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/mamba-kda-s3-connected` `e1c49badf0da` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/mamba-kda-s2-state-engine` `21611e3066d6` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+- `review/mamba-kda-s1-analytic-dse` `8a9ea5f55d6c` 已是当前 HEAD 祖先，历史已完整包含，无需重复 merge。
+
+## feat/nemotron3-mamba-dse (445cd954bd53)
+
+- 使用 `git merge --no-ff --no-commit`；37 个冲突，双方版本已归档。
+- `.github/workflows/transactional_emulator.yml`：旧快照445cd954bd53（184行）与当前225行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `README.md`：旧快照445cd954bd53（386行）与当前185行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/__init__.py`：旧快照445cd954bd53（3行）与当前10行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/b200_campaign_raw.py`：旧快照445cd954bd53（729行）与当前720行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/b200_formal_campaign.py`：旧快照445cd954bd53（413行）与当前405行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/kimi_k3_workload.py`：旧快照445cd954bd53（685行）与当前802行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/layout_mode_dse.py`：旧快照445cd954bd53（210行）与当前229行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/nemotron3_routing_dse.py`：旧快照445cd954bd53（247行）与当前264行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/nemotron3_workload.py`：旧快照445cd954bd53（833行）与当前979行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：_block_norm；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/profile_paths.py`：旧快照445cd954bd53（22行）与当前20行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/test_b200_formal_campaign.py`：旧快照445cd954bd53（114行）与当前102行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/performance/test_nemotron3_routing_dse.py`：旧快照445cd954bd53（59行）与当前59行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/reference/kimi_k3_kda.py`：旧快照445cd954bd53（360行）与当前367行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `analytic_models/reference/test_kimi_k3_kda.py`：旧快照445cd954bd53（216行）与当前256行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `doc/COMMON_STATE_ENGINE_DESIGN_ZH.md`：旧快照445cd954bd53（194行）与当前192行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `doc/L_COMPUTE_PRE_RTL_STATUS_ZH.md`：旧快照445cd954bd53（98行）与当前118行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `doc/connected_hybrid_validation.md`：旧快照445cd954bd53（113行）与当前221行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `justfile`：旧快照445cd954bd53（353行）与当前558行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/lib/sram/src/vector.rs`：旧快照445cd954bd53（460行）与当前653行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：capacity_elements；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/dispatch.rs`：旧快照445cd954bd53（1378行）与当前2338行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：batched_matrix_vector_mirrors_the_rs1_plus_rd_addressing, batched_write_out_ops_read_nothing_but_still_provide_hiding_capacity, classify, classify_timing_access, classify_with_topk, classify_with_topk_bias, control_flow_barriers_and_scalar_ops_stay_out_of_the_model, failed_state_commands_stop_the_program, fp0_reductions_are_no_ops_and_must_not_retire_prefetches, gp_stub, prefetch_write_extents_match_the_dma_transfer_sizes, read_ranges, require_state_success, store_reads_the_region_it_drains_rather_than_acting_as_a_barrier, successful_state_commands_may_retire, timing_access_for_opcode, topk_correction_bias_is_a_real_second_vram_read, topk_escape_policy_takes_its_read_extent_from_the_control_register, topk_reads_every_row_the_expert_policy_spans, vector_write_out_ops_read_their_destination_row, write_ranges；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/mod.rs`：旧快照445cd954bd53（115行）与当前132行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：fence_all_state_queues, write_state_profile；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/accelerator/registers.rs`：旧快照445cd954bd53（310行）与当前331行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：set_topk_bias_vram_addr, set_topk_control, topk_bias_vram_addr, topk_control_target_selects_policy_or_bias_without_clobbering_the_other, topk_policy_preserves_kimi_sigmoid_mode_without_corrupting_shape, topk_sigmoid_normalized, topk_uses_correction_bias；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/cli.rs`：旧快照445cd954bd53（233行）与当前223行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/dma.rs`：旧快照445cd954bd53（531行）与当前610行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：test_layout_sub_byte_element_uses_packed_byte_lengths；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/main.rs`：旧快照445cd954bd53（63行）与当前48行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/op.rs`：旧快照445cd954bd53（1071行）与当前1742行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：test_decode_funct1_does_not_bleed_into_rmask, test_decode_l_scatter_m, test_decode_rejects_noncanonical_c_set_topk_reg, test_decode_rejects_noncanonical_l_scatter_m, test_decode_rejects_noncanonical_x_state, test_decode_x_state_golden_fence, test_decode_x_state_golden_step, vector_precision_from；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/runner.rs`：旧快照445cd954bd53（342行）与当前466行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/stage_profile.rs`：旧快照445cd954bd53（2276行）与当前2391行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/state_engine/functional/kda.rs`：旧快照445cd954bd53（240行）与当前269行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/state_engine/layout.rs`：旧快照445cd954bd53（1108行）与当前1175行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/src/state_engine/mod.rs`：旧快照445cd954bd53（1683行）与当前1778行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/emulator_runner.py`：旧快照445cd954bd53（651行）与当前744行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：compare；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/models/kimi3/connected_blocks_test.py`：旧快照445cd954bd53（786行）与当前834行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/models/kimi3/kda_connected_test.py`：旧快照445cd954bd53（664行）与当前665行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/models/nemotron3/mamba_connected_test.py`：旧快照445cd954bd53（632行）与当前648行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testbench/sim_env_utils.py`：旧快照445cd954bd53（837行）与当前969行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。
+- `transactional_emulator/testdata/l_scatter_m_v1_golden.json`：旧快照445cd954bd53（16行）与当前36行功能冲突；保留较新projection/L-TILE/原生HBM兼容版本。旧版本双方已完整归档。旧版独有函数/测试名：无；旧接口不接回新ISA。合并后运行全套相关单测验证。

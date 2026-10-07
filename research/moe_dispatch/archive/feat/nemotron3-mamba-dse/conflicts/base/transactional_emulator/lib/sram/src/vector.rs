@@ -1,0 +1,455 @@
+use quantize::{tensor_from_f32_slice, tensor_to_f32_vec, DataType, MxDataType, QuantTensor};
+use tokio::sync::oneshot::Receiver;
+use tokio::sync::Mutex;
+
+use crate::{addr_to_cell, Cell};
+
+/// Vector SRAM that stores data in pure binary format with row-based storage.
+///
+/// The SRAM supports two data types:
+/// - FP (Floating Point): Stored as binary representation of the FP type
+/// - INT (Integer): Stored as binary representation of integers
+///
+/// The SRAM is organized as rows, where each row has a width of `vlen * element_size_in_bytes`.
+/// During read/write operations, data is clipped to VLEN-sized vectors.
+pub struct VectorSram {
+    /// Vector length (VLEN) - determines the size of each vector operation
+    vlen: u32,
+    /// Number of rows in the SRAM
+    depth: usize,
+    /// Data type for FP storage (used when writing QuantTensor)
+    fp_type: DataType,
+    /// Size of integer in bytes (used when writing integer vectors)
+    int_size_bytes: usize,
+    /// Raw binary storage: each row is stored as bytes
+    /// Row width = vlen * element_size_in_bytes
+    rows: Vec<Mutex<Cell<Vec<u8>>>>,
+}
+
+impl VectorSram {
+    fn row_width_bytes(vlen: u32, fp_type: DataType) -> usize {
+        (vlen as usize * fp_type.size_in_bits() as usize).div_ceil(8)
+    }
+
+    /// Create a new Vector SRAM with given vector length, depth, and data types.
+    ///
+    /// # Arguments
+    /// * `vlen` - Vector length (VLEN)
+    /// * `depth` - Number of rows in the SRAM
+    /// * `fp_type` - Floating point data type for FP operations
+    /// * `int_size_bytes` - Size of integer in bytes (typically 4 for i32)
+    pub fn new(vlen: u32, depth: usize, fp_type: DataType, int_size_bytes: usize) -> Self {
+        let row_width = Self::row_width_bytes(vlen, fp_type);
+
+        let rows = (0..depth)
+            .map(|_| Mutex::new(Cell::Ready(vec![0u8; row_width])))
+            .collect();
+
+        Self {
+            vlen,
+            depth,
+            fp_type,
+            int_size_bytes,
+            rows,
+        }
+    }
+
+    /// Create a new Vector SRAM from MxDataType (for backward compatibility).
+    ///
+    /// Extracts the Plain DataType from MxDataType and uses it for FP storage.
+    pub fn from_mx_type(vlen: u32, depth: usize, mx_type: MxDataType) -> Self {
+        let fp_type = match mx_type {
+            MxDataType::Plain(dt) => dt,
+            MxDataType::Mx { elem, .. } => elem,
+        };
+        Self::new(vlen, depth, fp_type, 4) // Default to 4 bytes for int (i32)
+    }
+
+    /// Get the vector length (VLEN)
+    pub fn tile_size(&self) -> u32 {
+        self.vlen
+    }
+
+    /// Get the data type (for backward compatibility)
+    pub fn ty(&self) -> MxDataType {
+        MxDataType::Plain(self.fp_type)
+    }
+
+    /// Get the size of the SRAM in bytes
+    pub fn size_in_bytes(&self) -> usize {
+        Self::row_width_bytes(self.vlen, self.fp_type) * self.depth
+    }
+
+    /// Read a vector from the SRAM at the given address as FP (QuantTensor).
+    ///
+    /// The address must be a multiple of vlen (in element units).
+    /// Data is read from binary storage and converted to QuantTensor.
+    pub async fn read(&self, addr: u32) -> QuantTensor {
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        tracing::trace!(addr, row_idx, vlen = self.vlen, "VRAM read");
+        let mut guard = self.rows[row_idx].lock().await;
+        let row_bytes = guard
+            .resolve_with(|t| self.quant_tensor_to_bytes(&t))
+            .await
+            .clone();
+        self.bytes_to_quant_tensor(&row_bytes, self.vlen)
+    }
+
+    /// Read a vector from the SRAM at the given address as integers.
+    ///
+    /// The address must be a multiple of vlen (in element units).
+    /// Returns a vector of i32 values.
+    pub async fn read_int(&self, addr: u32) -> Vec<i32> {
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        let mut guard = self.rows[row_idx].lock().await;
+        let row_bytes = guard
+            .resolve_with(|t| self.quant_tensor_to_bytes(&t))
+            .await
+            .clone();
+        self.bytes_to_int_vec(&row_bytes, self.vlen)
+    }
+
+    /// Write a vector to the SRAM at the given address as FP (QuantTensor).
+    ///
+    /// The address must be a multiple of vlen (in element units).
+    /// Data is converted from QuantTensor to binary storage.
+    pub async fn write(&self, addr: u32, tensor: QuantTensor) {
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+
+        // Clip to VLEN
+        let clipped = self.clip_to_vlen(&tensor);
+
+        // Convert to bytes
+        let row_bytes = self.quant_tensor_to_bytes(&clipped);
+
+        *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
+    }
+
+    /// Write a vector to the SRAM at the given address as integers.
+    ///
+    /// The address must be a multiple of vlen (in element units).
+    /// Data is converted from integers to binary storage.
+    pub async fn write_int(&self, addr: u32, int_vec: &[i32]) {
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        assert!(int_vec.len() <= self.vlen as usize, "Vector too long");
+
+        // Convert integers to bytes
+        let row_bytes = self.int_vec_to_bytes(int_vec, self.vlen);
+
+        *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
+    }
+
+    /// Write a vector with delayed delivery (from a channel).
+    pub async fn write_delayed(&self, addr: u32, tensor: Receiver<QuantTensor>) {
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        *self.rows[row_idx].lock().await = Cell::Pending(tensor);
+    }
+
+    /// Continuous write delayed - writes multiple rows from a single tensor.
+    pub async fn continous_write_delayed(
+        &self,
+        addr: u32,
+        write_amount: u32,
+        tensor: Receiver<QuantTensor>,
+    ) {
+        let start_row_idx = addr_to_cell(addr, self.vlen, self.depth);
+
+        // Await the tensor from the channel and extract data immediately to make it Send
+        let tensor = tensor.await.unwrap_or_else(|err| {
+            tracing::error!(addr, write_amount, %err, "delayed vector write failed: DMA sender dropped");
+            panic!("delayed vector write: DMA sender dropped");
+        });
+        let tensor_data = tensor.as_tensor();
+        let total_elements = tensor_data.size1().unwrap() as usize;
+
+        let data_vec = tensor_to_f32_vec(tensor_data);
+
+        let chunk_size = self.vlen as usize;
+        let num_chunks = write_amount.min(total_elements.div_ceil(chunk_size) as u32);
+
+        for i in 0..num_chunks {
+            let row_idx = start_row_idx + i as usize;
+            if row_idx >= self.depth {
+                break;
+            }
+
+            let start = (i as usize) * chunk_size;
+            let end = (start + chunk_size).min(total_elements);
+            let chunk_data = &data_vec[start..end];
+
+            // Pad to VLEN if needed
+            let mut padded_data = vec![0.0f32; chunk_size];
+            let chunk_len = end - start;
+            padded_data[..chunk_len].copy_from_slice(chunk_data);
+
+            // Create tensor from padded data and convert to bytes
+            let padded_tensor = tensor_from_f32_slice(&padded_data);
+            let chunk_qt = QuantTensor::quantize(padded_tensor, MxDataType::Plain(self.fp_type));
+            let row_bytes = self.quant_tensor_to_bytes(&chunk_qt);
+
+            *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
+        }
+    }
+
+    /// Continuous write delayed for integers - writes multiple rows from a single integer vector.
+    pub async fn continous_write_delayed_int(
+        &self,
+        addr: u32,
+        write_amount: u32,
+        int_vec: Receiver<Vec<i32>>,
+    ) {
+        let start_row_idx = addr_to_cell(addr, self.vlen, self.depth);
+
+        // Await the integer vector from the channel
+        let int_vec = int_vec.await.unwrap_or_else(|err| {
+            tracing::error!(addr, write_amount, %err, "delayed vector int write failed: DMA sender dropped");
+            panic!("delayed vector int write: DMA sender dropped");
+        });
+        let total_elements = int_vec.len();
+        let chunk_size = self.vlen as usize;
+        let num_chunks = write_amount.min(total_elements.div_ceil(chunk_size) as u32);
+
+        for i in 0..num_chunks {
+            let row_idx = start_row_idx + i as usize;
+            if row_idx >= self.depth {
+                break;
+            }
+
+            let start = (i as usize) * chunk_size;
+            let end = (start + chunk_size).min(total_elements);
+            let chunk = &int_vec[start..end];
+
+            // Convert to bytes (will pad to VLEN if needed)
+            let row_bytes = self.int_vec_to_bytes(chunk, self.vlen);
+            *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
+        }
+    }
+
+    /// Load data from bytes into the SRAM.
+    ///
+    /// This is used for preloading the SRAM with test data.
+    pub async fn load_from_bytes(&self, bytes: &[u8]) {
+        let bits_per_element = self.fp_type.size_in_bits() as usize;
+        let total_elements = (bytes.len() * 8) / bits_per_element;
+        let num_rows = total_elements.div_ceil(self.vlen as usize);
+
+        for row_idx in 0..num_rows.min(self.depth) {
+            let start_element = row_idx * self.vlen as usize;
+            let end_element = (start_element + self.vlen as usize).min(total_elements);
+            let elements_in_row = end_element - start_element;
+
+            let start_bit = start_element * bits_per_element;
+            let end_bit = end_element * bits_per_element;
+            assert!(
+                start_bit.is_multiple_of(8) && end_bit.is_multiple_of(8),
+                "Vector SRAM preload rows must be byte-aligned"
+            );
+            let start_byte = start_bit / 8;
+            let end_byte = end_bit / 8;
+
+            let mut vec = vec![0f32; elements_in_row];
+            self.fp_type
+                .convert_bytes_to_f32_vec(&bytes[start_byte..end_byte], &mut vec);
+
+            // Pad with zeros if needed
+            if elements_in_row < self.vlen as usize {
+                vec.resize(self.vlen as usize, 0.0f32);
+            }
+
+            // Create QuantTensor and convert to bytes
+            let tensor = tensor_from_f32_slice(&vec);
+            let quant_tensor = QuantTensor::quantize(tensor, MxDataType::Plain(self.fp_type));
+            let row_bytes = self.quant_tensor_to_bytes(&quant_tensor);
+            *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
+        }
+    }
+
+    /// Dump the entire SRAM content as bytes.
+    ///
+    /// This returns the raw binary representation of all stored data.
+    pub async fn as_bytes(&self) -> Vec<u8> {
+        // Reserve the exact final size. Every row contributes `row_width_bytes`, so
+        // this is not an estimate. Growing into it instead would reallocate ~20 times
+        // on the way to half a gigabyte, and an allocator that cannot extend the
+        // mapping in place has to keep both copies live at each step.
+        let mut result = Vec::with_capacity(self.size_in_bytes());
+
+        for row_mutex in &self.rows {
+            let mut guard = row_mutex.lock().await;
+            let row_bytes = guard
+                .resolve_with(|t| self.quant_tensor_to_bytes(&t))
+                .await
+                .clone();
+            result.extend_from_slice(&row_bytes);
+        }
+
+        result
+    }
+
+    // Helper methods
+
+    /// Clip a tensor to VLEN size
+    fn clip_to_vlen(&self, tensor: &QuantTensor) -> QuantTensor {
+        let tensor_data = tensor.as_tensor();
+        let len = tensor_data.size1().unwrap();
+
+        if len <= self.vlen as i64 {
+            tensor.clone()
+        } else {
+            let clipped = tensor_data.narrow(0, 0, self.vlen as i64);
+            QuantTensor::quantize(clipped, tensor.data_type())
+        }
+    }
+
+    /// Convert QuantTensor to bytes (FP format)
+    fn quant_tensor_to_bytes(&self, tensor: &QuantTensor) -> Vec<u8> {
+        let tensor_data = tensor.as_tensor();
+        let f32_vec = tensor_to_f32_vec(tensor_data);
+        let len = f32_vec.len();
+
+        let total_bits = len * self.fp_type.size_in_bits() as usize;
+        let bytes_needed = total_bits.div_ceil(8);
+        let mut bytes = vec![0u8; bytes_needed];
+        self.fp_type.bytes_from_f32(&f32_vec, &mut bytes);
+        bytes
+    }
+
+    /// Convert bytes to QuantTensor (FP format)
+    fn bytes_to_quant_tensor(&self, bytes: &[u8], expected_len: u32) -> QuantTensor {
+        let bits_per_element = self.fp_type.size_in_bits() as usize;
+        let num_elements = (bytes.len() * 8) / bits_per_element;
+        let actual_len = num_elements.min(expected_len as usize);
+
+        let mut vec = vec![0f32; actual_len];
+        self.fp_type.convert_bytes_to_f32_vec(bytes, &mut vec);
+
+        // Pad to expected_len if needed
+        if actual_len < expected_len as usize {
+            vec.resize(expected_len as usize, 0.0f32);
+        }
+
+        let tensor = tensor_from_f32_slice(&vec);
+        QuantTensor::quantize(tensor, MxDataType::Plain(self.fp_type))
+    }
+
+    /// Convert integer vector to bytes
+    fn int_vec_to_bytes(&self, int_vec: &[i32], expected_len: u32) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(expected_len as usize * self.int_size_bytes);
+
+        // Write the actual integers
+        for &val in int_vec.iter() {
+            bytes.extend_from_slice(&val.to_le_bytes());
+        }
+
+        // Pad with zeros to expected_len
+        bytes.resize(expected_len as usize * self.int_size_bytes, 0);
+
+        bytes
+    }
+
+    /// Convert bytes to integer vector
+    fn bytes_to_int_vec(&self, bytes: &[u8], expected_len: u32) -> Vec<i32> {
+        let mut result = Vec::with_capacity(expected_len as usize);
+        let mut offset = 0;
+
+        for _ in 0..expected_len as usize {
+            if offset + self.int_size_bytes <= bytes.len() {
+                let mut int_bytes = [0u8; 4];
+                let copy_len = self.int_size_bytes.min(4);
+                int_bytes[..copy_len].copy_from_slice(&bytes[offset..offset + copy_len]);
+                let val = i32::from_le_bytes(int_bytes);
+                result.push(val);
+                offset += self.int_size_bytes;
+            } else {
+                result.push(0);
+            }
+        }
+
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::FpType;
+    use tch::Tensor;
+    use tokio::sync::oneshot;
+
+    fn f32_ty() -> DataType {
+        DataType::Fp(FpType::F32)
+    }
+
+    fn e4m3_ty() -> DataType {
+        DataType::Fp(FpType {
+            sign: true,
+            exponent: 4,
+            mantissa: 3,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_vector_int_roundtrip_pads_to_vlen() {
+        let v = VectorSram::new(4, 8, f32_ty(), 4);
+        v.write_int(0, &[1, 2, 3]).await;
+        assert_eq!(v.read_int(0).await, vec![1, 2, 3, 0]); // padded to vlen = 4
+    }
+
+    #[tokio::test]
+    async fn test_vector_addresses_distinct_rows() {
+        let v = VectorSram::new(4, 8, f32_ty(), 4);
+        v.write_int(0, &[10, 11, 12, 13]).await;
+        v.write_int(4, &[20, 21, 22, 23]).await; // addr 4 -> row 1 (addr / vlen)
+        assert_eq!(v.read_int(0).await, vec![10, 11, 12, 13]);
+        assert_eq!(v.read_int(4).await, vec![20, 21, 22, 23]);
+    }
+
+    // NB: reading 32-bit (f32) elements overflows the byte-unpacking shift
+    // (`data >>= 32`). That panics only under debug overflow-checks and wraps
+    // under release, so it isn't portably characterizable here; the overflow is
+    // tracked separately as a bug to fix.
+
+    #[test]
+    fn test_vector_tile_size_is_vlen_and_size_in_bytes() {
+        let v = VectorSram::new(4, 8, f32_ty(), 4);
+        assert_eq!(v.tile_size(), 4); // "tile_size" returns vlen for VectorSram
+                                      // row width = ceil(4 * 32 / 8) = 16 bytes; depth 8 -> 128 bytes.
+        assert_eq!(v.size_in_bytes(), 128);
+    }
+
+    #[tokio::test]
+    async fn test_vector_write_delayed_resolves_pending_cell() {
+        // Exercises the Cell Pending -> Ready resolution on read via the FP
+        // path with a narrow element type (no byte-packing overflow).
+        let ty = e4m3_ty();
+        let v = VectorSram::new(4, 8, ty, 4);
+        let qt = QuantTensor::new_assuming_quantized(
+            Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]),
+            MxDataType::Plain(ty),
+        )
+        .unwrap();
+        let (tx, rx) = oneshot::channel();
+        assert!(tx.send(qt).is_ok());
+        v.write_delayed(0, rx).await;
+        let mut got = v.read(0).await;
+
+        // A delayed write must resolve to exactly what a direct write of the
+        // same data produces (not merely a vlen-length row).
+        let direct = VectorSram::new(4, 8, ty, 4);
+        let qt2 = QuantTensor::new_assuming_quantized(
+            Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]),
+            MxDataType::Plain(ty),
+        )
+        .unwrap();
+        direct.write(0, qt2).await;
+        let mut want = direct.read(0).await;
+        assert_eq!(got.into_bytes(), want.into_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_vector_as_bytes_of_fresh_sram_is_zeroed() {
+        // A fresh SRAM holds zero-initialised rows; dumping returns all zeros.
+        let v = VectorSram::new(4, 8, e4m3_ty(), 4); // row = 4 bytes; depth 8 -> 32 bytes
+        assert_eq!(v.as_bytes().await, vec![0u8; 32]);
+    }
+}

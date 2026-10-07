@@ -1,0 +1,225 @@
+name: Transactional Emulator
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'artifacts/matrix_lcompute*/**'
+      - 'artifacts/gpu_energy_reanalysis_v1/**'
+      - 'docs/MATRIX_LCOMPUTE*'
+      - 'doc/**'
+      - 'PLENA_Tools/**'
+      # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
+      # stage-attribution guard below.
+      - 'PLENA_Compiler'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'justfile'
+      - 'plena_settings.toml'
+      - 'uv.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'artifacts/matrix_lcompute*/**'
+      - 'artifacts/gpu_energy_reanalysis_v1/**'
+      - 'docs/MATRIX_LCOMPUTE*'
+      - 'doc/**'
+      - 'PLENA_Tools/**'
+      - 'PLENA_Compiler'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'justfile'
+      - 'plena_settings.toml'
+      - 'uv.lock'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-lint:
+    runs-on: ubuntu-latest
+    steps:
+      # Submodules: clippy compiles `--all-targets`, and one test guard reads the
+      # compiler's `doc/operation.svh` through `include_str!` to check that every
+      # opcode the compiler emits decodes here. Without the submodule that is a
+      # compile error, not a skipped test.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Pinned: with `-D warnings`, a rolling channel reds unrelated PRs.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      # clippy compiles the workspace; torch-sys fetches ~200 MB per run.
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: clippy-${{ runner.os }}-1.97.1-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            clippy-${{ runner.os }}-1.97.1-
+
+      - name: Check formatting
+        working-directory: transactional_emulator
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        working-directory: transactional_emulator
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
+  # runs alongside the Rust jobs rather than behind them.
+  stage-attribution-guard:
+    name: MoE stage-attribution guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      # Named individually rather than by directory: most of `testbench/` needs
+      # torch and a built emulator. `test_every_guard_file_is_wired_into_ci`
+      # asserts this list stays complete.
+      - name: Run the testbench stage-attribution guard
+        run: |
+          python3 -m pytest \
+            transactional_emulator/testbench/test_testbench_stage_attribution.py \
+            transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            transactional_emulator/testbench/moe_timing/replay/test_compare_moe_normal.py \
+            transactional_emulator/testbench/moe_timing/campaign/test_run_subset_gates.py \
+            -v
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build Rust emulator
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Run Rust tests
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo test --workspace --release -- --test-threads=1"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run Compiler to Rust MoE normal-core smoke
+        run: |
+          nix develop --command bash -c 'PYTHONPATH="$PWD/PLENA_Tools" uv run python \
+            transactional_emulator/testbench/moe_normal_review/smoke.py \
+            --compiler "$PWD/PLENA_Compiler" \
+            --binary "$PWD/transactional_emulator/target/release/moe_dual_normal" \
+            --output-dir /tmp/plena-moe-review-smoke'
+
+      - name: Run ATen linear integration test
+        run: |
+          nix develop --command bash -c "just test-aten-linear"
+
+      - name: Run routed-MoE substrate integration tests
+        run: |
+          nix develop --command bash -c "just test-routed-moe-topk && just test-routed-moe-clamp && just test-routed-moe-activation && just test-routed-moe-gate-up && just test-routed-moe-expert && just test-routed-moe-combine"
+
+
+      - name: Run shared-expert MoE and routing-policy tests
+        run: |
+          nix develop --command bash -c "just test-moe-shared-all"
+
+      # The only check that can catch a timing-model regression. It computed its
+      # verdict and threw it away until the exit code landed, and nothing ran it
+      # even then -- a gate nobody invokes is the same as no gate.
+      - name: Run emulator timing gates
+        run: |
+          nix develop --command bash -c "just test-timing-gates"
+
+      # Mamba-2 / selective SSM. Synthetic like the tests above -- no checkpoint,
+      # no HF libs. Inputs are drawn exactly representable in MX-FP8 so the
+      # reported error is the kernel's rather than the input quantisation's.
+      #
+      # All four cases are bit-exact (max absolute error 0.000000), so any
+      # regression shows up as a hard failure rather than as tolerance drift.
+      - name: Run Mamba-2 stage tests
+        run: |
+          nix develop --command bash -c "just test-mamba2-all"
+
+      # The chunked-SSD reference vs the plain recurrence, plus the cross-repo
+      # stage-marker contract. Pure torch.
+      - name: Run Mamba-2 reference cross-check
+        run: |
+          nix develop --command bash -c "just test-mamba2-reference"
+
+      # Assembles and executes every KDA stage on the Rust emulator. The second
+      # half crosses two 64-lane blocks, matching Kimi's 128x128 head geometry.
+      - name: Run KDA transactional stage tests
+        run: |
+          nix develop --command bash -c "just test-kda-all"
+
+      # Executes the actual Matrix writeback -> affine bank placement ->
+      # explicitly marked Vector-consumer path, then regenerates and hashes the
+      # two checked Compiler/Simulator campaigns.
+      - name: Run Hybrid L-Compute integration and artifact guards
+        run: |
+          nix develop --command bash -c "just test-lcompute-affine-projection && just test-hybrid-lcompute"
+
+      # The canonical Matrix-view v3 gate uses the checked-out Compiler pin and
+      # includes legal/invalid allocation cases plus actual Compiler-to-Rust DMA.
+      - name: Run canonical Matrix L-Compute pre-RTL gate
+        run: |
+          nix develop --no-write-lock-file --command just test-matrix-lcompute PLENA_Compiler
+
+      # Bandwidth term + the two KV-cost bugs it exposed in the analytic model.
+      - name: Run analytic performance-model regression tests
+        run: |
+          nix develop --command bash -c "just test-perf-model"
+
+      # Small, path-independent CSV/JSON contracts. This validates the real
+      # workload shapes and baselines without downloading checkpoints or raw
+      # Nsight reports.
+      - name: Validate GPU evidence contracts
+        run: |
+          nix develop --command bash -c "just test-gpu-evidence"
