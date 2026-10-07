@@ -1,0 +1,46 @@
+[
+  {
+    "path": "transactional_emulator/src/cli.rs",
+    "sha256": "46e44078b89c834ea02986f40bab1004b624a7705df44a75b885b24a7ba1dbbf"
+  },
+  {
+    "path": "transactional_emulator/src/vector_machine.rs",
+    "sha256": "accef3587b24ae8aaeea4def5df0453694052e2aa8170437393f34994cfdcba2"
+  },
+  {
+    "path": "transactional_emulator/src/op.rs",
+    "sha256": "33bd45352d5c9f3d472b6d9b2207a116b10cdd1be6ffd6c5591e9e38297b96de"
+  },
+  {
+    "path": "transactional_emulator/src/dma.rs",
+    "sha256": "35f6f2fc7bbe33f0baa430b5f4397caf10ed5b624f97c3cf50f443d9fc59dfcd"
+  },
+  {
+    "path": "transactional_emulator/src/accelerator/scalar_sram.rs",
+    "sha256": "99f92cf9d9749d6139d27106653c9ba9b681f2bdd52df534da5d3883c00111a8"
+  },
+  {
+    "path": "transactional_emulator/src/accelerator/mod.rs",
+    "sha256": "0c8fee235aa46833a1cf6762dc2d9aafa9d3e59e94e0fd087e06e5676bdf1688"
+  },
+  {
+    "path": "transactional_emulator/src/accelerator/dispatch.rs",
+    "sha256": "e5a9e1f67efc10876f3bc4812ed556fd3d0be13b34ea4024f7c2f05b722e834b"
+  },
+  {
+    "path": "transactional_emulator/src/accelerator/access.rs",
+    "sha256": "2e8622768aad9ba1cd6803dac271c834fd5a1d7e627b05ca4c0b2619b7e7e0b3"
+  },
+  {
+    "path": "transactional_emulator/src/accelerator/registers.rs",
+    "sha256": "46267e69c0dac7576c101e7b0b72fcdb3b0d30d00d18135abf0ff9567c3fc1c2"
+  },
+  {
+    "path": "transactional_emulator/lib/memory/src/chunked.rs",
+    "sha256": "01db1a658c6f49c6aae705e53bb5c0a127eb012291ade96b7f7ab441193e4fb6"
+  },
+  {
+    "path": "transactional_emulator/src/accelerator/route_dispatch_tests.rs",
+    "sha256": "168c42700e0616becbc3890cbd1ee21868e95c216bb61cc8460d9587f5f49538"
+  }
+]

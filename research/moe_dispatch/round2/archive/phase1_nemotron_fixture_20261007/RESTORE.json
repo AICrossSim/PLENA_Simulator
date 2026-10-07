@@ -1,0 +1,8 @@
+{
+  "old_sha256": "ba8533831bd88cf209aaf4b8e4d2f927889358c51699eb081ff183c69844d0cc",
+  "restored_sha256": "32edf142276564a76e6163180cd233f2d0c3fd13392cda6f25a7a13206d61673",
+  "historical_commit": "e93b832f6586",
+  "target": "analytic_models/performance/profiles/nemotron3_decode_routing_trace.json",
+  "reason": "restore captured 128/2048/8192 coverage required by merged loader; no invented trace events",
+  "old_exact_bytes_archived": true
+}

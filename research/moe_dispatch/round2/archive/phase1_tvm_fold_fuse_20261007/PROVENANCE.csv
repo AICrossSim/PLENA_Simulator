@@ -1,0 +1,7 @@
+file,sha256,scope
+MANIFEST.json,b556007551a345e30d4a411cdb5f358fd4fd9dad49740cd7af48b7a790f0f6c8,exact pre-repair Compiler TVM fold/fuse source snapshot
+README.md,8212ce750fa691f2560e604df859d0c75ec43f96dec4e8db7d6eee366fa986ee,exact pre-repair Compiler TVM fold/fuse source snapshot
+tilelang_tvm_compiler/frontend/mid_ir/passes/fold.py,e0b34187d0717d1149b2210e55a2011aa4a662f69eab6b59492d34180e2066ff,exact pre-repair Compiler TVM fold/fuse source snapshot
+tilelang_tvm_compiler/frontend/mid_ir/passes/fuse.py,49b5981a53a1bc0d3b307589f850177a0a2575ff91945d6288f707b6433e6744,exact pre-repair Compiler TVM fold/fuse source snapshot
+tilelang_tvm_compiler/tests/test_mid_ir_fold.py,a601f35b49f2f722325824f4b7c41e85e437706db038bba78e60e444c417d93e,exact pre-repair Compiler TVM fold/fuse source snapshot
+tilelang_tvm_compiler/tests/test_mid_ir_fuse.py,bfff2152ac8bf877f05c52db5657f74273d3d1b3a751660f126ce4ed09db2c45,exact pre-repair Compiler TVM fold/fuse source snapshot

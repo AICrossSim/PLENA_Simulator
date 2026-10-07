@@ -1,0 +1,58 @@
+{
+  "GPU_benchmarks_run": false,
+  "all_requested_suites_passed": true,
+  "binary": null,
+  "binary_scope": "explicit existing binary for Python integration; fresh Rust unit build recorded separately",
+  "binary_sha256": null,
+  "build_environment": {
+    "LD_LIBRARY_PATH": "/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:",
+    "LIBRARY_PATH": ":/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:",
+    "PATH": "/nix/store/kks0nbx2riwry5qsx0qr87qr0lswmhzi-gcc-wrapper-14.3.0/bin:/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin:/usr/bin:/bin",
+    "PLENA_COMPILER_ROOT": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler",
+    "PLENA_DISPATCH_COMPILER": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/research/moe_dispatch",
+    "TMPDIR": "/tmp/plena-round2-test-tmp"
+  },
+  "cargo_command": "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+  "cargo_target": "/tmp/plena-round2-cargo-target",
+  "checkpoint_inference_run": false,
+  "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "compiler_root_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler",
+  "compiler_source_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/research/moe_dispatch",
+  "main_rust_target": "/tmp/mcl123-plena-layout-async-target",
+  "package_versions": {
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "ortools": "missing",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "scipy": "missing",
+    "torch": "2.12.1"
+  },
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "python_executable": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "rustc_override": "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/rustc",
+  "suites": [
+    {
+      "command": [
+        "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "research/moe_dispatch/rust/Cargo.toml",
+        "--target-dir",
+        "/tmp/plena-round2-cargo-target",
+        "--",
+        "--test-threads=2"
+      ],
+      "finished_utc": "2026-10-07T11:03:19.400537+00:00",
+      "initial_classification": "passed",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T110253385260Z/rust.log",
+      "log_sha256": "ec00fab049eb198b9800ce04b9c991380e60a8126101b03ef143e1e51e4536ce",
+      "returncode": 0,
+      "started_utc": "2026-10-07T11:02:53.400831+00:00",
+      "suite": "rust"
+    }
+  ],
+  "temporary_directory": "/tmp/plena-round2-test-tmp"
+}

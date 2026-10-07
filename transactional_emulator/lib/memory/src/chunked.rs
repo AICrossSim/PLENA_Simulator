@@ -253,6 +253,12 @@ mod tests {
             async fn write(&self, _addr: u64, _data: [u8; 64]) {
                 panic!("gather must never issue writes")
             }
+            async fn functional_read(&self, addr: u64) -> [u8; 64] {
+                [addr as u8 / 64; 64]
+            }
+            async fn functional_write(&self, _addr: u64, _data: [u8; 64]) {
+                panic!("gather must never issue writes")
+            }
         }
         let tracked = Arc::new(Outstanding {
             active: AtomicUsize::new(0),
@@ -383,6 +389,10 @@ mod tests {
         }
 
         async fn write(&self, _addr: u64, _bytes: [u8; 64]) {}
+        async fn functional_read(&self, _addr: u64) -> [u8; 64] {
+            [0; 64]
+        }
+        async fn functional_write(&self, _addr: u64, _bytes: [u8; 64]) {}
     }
 
     #[tokio::test]

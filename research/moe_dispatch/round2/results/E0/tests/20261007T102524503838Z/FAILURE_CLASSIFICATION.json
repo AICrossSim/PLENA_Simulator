@@ -1,0 +1,17 @@
+{
+  "counts": {
+    "missing_or_old_compiler_source": 49,
+    "routing_trace_fixture_schema_mismatch": 22,
+    "compiler_source_path_mixing": 10
+  },
+  "research_suite": "281 tests and 282 subtests passed",
+  "analytical_suite": "387 passed, 67 failed, 14 errors, 10 skipped",
+  "rust_attempt": "environment failure before test execution; no toolchain default configured",
+  "next_step": "fresh process with restored nested Compiler and PLENA_COMPILER_ROOT; inspect routing fixture",
+  "temporary_move": {
+    "source": "/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-842",
+    "destination": "/tmp/plena-round2-test-tmp/pytest-of-mcl123/pytest-842",
+    "reason": "newly generated test temp tree moved off full scratch; old pytest-841 untouched",
+    "du": "5.4 GiB"
+  }
+}

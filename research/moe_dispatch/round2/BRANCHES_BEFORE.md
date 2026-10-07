@@ -356,3 +356,80 @@
 | Simulator | /tmp/plena-projection-segment-simulator |  | aebecf8ed568fafb02023b905a25c9b7839deaae |  |
 | Simulator | /tmp/plena-joint-delivery-simulator | refs/heads/research/moe-joint-runtime | 3ea69acce1fbfcd9e48518b54c8c2e17c6291931 |  |
 | Simulator | /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator | refs/heads/research/moe-supply-first-v3 | 55d47a2d9bd4615ef93587fdf28e8c16848bf496 |  |
+
+## Worktree dirty-file counts (pre-merge audited snapshot)
+
+| Repository | Worktree | Modified tracked | Untracked |
+|---|---|---:|---:|
+| Compiler | `/scratch/shared/mcl123/plena/repos/PLENA_Compiler` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/compiler` | 9 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/compiler` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/compiler` | 8 | 1 |
+| Compiler | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/compiler` | 4 | 1 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/e2e_worktrees/PLENA_Compiler` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/integration_20260810/PLENA_Compiler` | 3 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/organized_20260727/compiler_expert_ffn` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/organized_20260727/compiler_moe_batch4_dispatch` | 6 | 1 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/organized_20260727/review_compiler_pr69` | 3 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/review_20260727/compiler_topk_contract` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/review_20260804/compiler_pr72` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/repos/shared_expert_review_20260802/PLENA_Compiler_pr69` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260819/compiler-c1-state-isa` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260819/compiler-c2-plena-substrate` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260819/compiler-c3-nemotron` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260819/compiler-c4-kimi` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260826/compiler-pr77-static-kda` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260828/compiler-static-kda-latest` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260905/compiler-lcompute-review` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260914/compiler-ltile-architecture` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/review_20260928/compiler-moe-dispatch` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/worktrees/nemotron3-mamba-compiler/PLENA_Compiler` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/worktrees/nemotron3-mamba2/PLENA_Compiler` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/wt-croute` | 0 | 0 |
+| Compiler | `/tmp/plena-joint-compiler` | 2 | 0 |
+| Compiler | `/tmp/plena-joint-delivery-compiler` | 0 | 0 |
+| Compiler | `/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/PLENA_Simulator` | 10 | 6 |
+| Simulator | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E/simulator` | 15 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/analytic_model_20260920/simulator` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/implementation_20260922/simulator` | 12 | 4 |
+| Simulator | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/full_layer_20260921/simulator` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/artifacts/L_TILE_ARCHITECTURE_20260914/v2/E2/projection_pipeline_20260928/simulator` | 10 | 11 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/e2e_worktrees/PLENA_Simulator` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/organized_20260727/review_simulator_pr100` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_fp12_expert` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/organized_20260727/simulator_moe_batch4_dispatch` | 5 | 1 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/review_20260727/simulator_topk_semantics` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/review_20260730/PLENA_Simulator_origin_main` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/review_20260804/simulator_pr106` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/review_20260804/simulator_pr107` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/repos/shared_expert_review_20260802/PLENA_Simulator_pr97` | 1 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260819/simulator-s1-analytic-dse` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260819/simulator-s2-state-engine` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260819/simulator-s3-connected` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260826/simulator-pr115-static-kda` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260903/simulator-layout-async-ablation` | 12 | 21 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260905/simulator-lcompute-review` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260905/simulator-moe-dual-normal` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260905/simulator-moe-review` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260909/simulator-moe-output-pool` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260909/simulator-moe-refinement` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260911/simulator-moe-bottleneck` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260914/simulator-moe-stream-controller` | 7 | 12 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260916/simulator-moe-oracle` | 8 | 12 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-fabric` | 8 | 19 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260919/simulator-moe-spatial-m` | 8 | 16 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260921/simulator-moe-batch-real` | 8 | 21 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260921/simulator-moe-native-spatial` | 8 | 22 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260922/simulator-moe-private-cores` | 8 | 23 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260922/simulator-moe-private-diagnostic` | 8 | 24 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260923/simulator-moe-band-prefetch` | 8 | 24 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260924/simulator-moe-structural-model` | 8 | 28 |
+| Simulator | `/scratch/shared/mcl123/plena/review_20260928/simulator-moe-dispatch` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/worktrees/nemotron3-mamba-dse/PLENA_Simulator` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/worktrees/nemotron3-mamba2/PLENA_Simulator` | 0 | 0 |
+| Simulator | `/tmp/plena-joint-simulator` | 2 | 5 |
+| Simulator | `/tmp/plena-projection-segment-simulator` | 0 | 0 |
+| Simulator | `/tmp/plena-joint-delivery-simulator` | 0 | 0 |
+| Simulator | `/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator` | 0 | 0 |

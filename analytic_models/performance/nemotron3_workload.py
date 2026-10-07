@@ -25,6 +25,7 @@ class Precision(StrEnum):
     BF16 = "bf16"
     FP16 = "fp16"
     MX8 = "mx8"
+    MXFP8 = "mxfp8"
     MXFP4 = "mxfp4"
     NVFP4 = "nvfp4"
 
@@ -43,19 +44,21 @@ class StorageFormat:
     alignment_bytes: int = 1
 
     def __post_init__(self) -> None:
-        quantized = self.precision in {Precision.MX8, Precision.MXFP4, Precision.NVFP4}
+        quantized = self.precision in {Precision.MX8, Precision.MXFP8, Precision.MXFP4, Precision.NVFP4}
         if (quantized and self.block <= 0) or (not quantized and self.block != 0):
             raise ValueError("quantized formats require a block; plain formats use block=0")
         if self.precision == Precision.NVFP4 and self.block != 16:
             raise ValueError("NVFP4 requires block16")
         if self.precision == Precision.MXFP4 and self.block != 32:
             raise ValueError("MXFP4 requires block32")
+        if self.precision == Precision.MXFP8 and self.block != 32:
+            raise ValueError("MXFP8 requires block32")
         if self.alignment_bytes <= 0:
             raise ValueError("alignment_bytes must be positive")
 
     @classmethod
     def for_precision(cls, precision: Precision, *, mx8_block: int = 128) -> StorageFormat:
-        return cls(precision, {Precision.MX8: mx8_block, Precision.MXFP4: 32, Precision.NVFP4: 16}.get(precision, 0))
+        return cls(precision, {Precision.MX8: mx8_block, Precision.MXFP8: 32, Precision.MXFP4: 32, Precision.NVFP4: 16}.get(precision, 0))
 
     @property
     def element_bits(self) -> int:
@@ -64,6 +67,7 @@ class StorageFormat:
             Precision.BF16: 16,
             Precision.FP16: 16,
             Precision.MX8: 8,
+            Precision.MXFP8: 8,
             Precision.MXFP4: 4,
             Precision.NVFP4: 4,
         }[self.precision]
@@ -84,6 +88,7 @@ class StorageFormat:
                 Precision.BF16: "E8M7",
                 Precision.FP16: "E5M10",
                 Precision.MX8: "E4M3",
+                Precision.MXFP8: "E4M3",
                 Precision.MXFP4: "E2M1",
                 Precision.NVFP4: "E2M1",
             }[self.precision],
@@ -239,6 +244,10 @@ def storage_bytes(elements: int, precision: Precision, block_size: int = 128) ->
         return elements * 2
     if precision == Precision.MX8:
         return elements + math.ceil(elements / block_size)
+    if precision == Precision.MXFP8:
+        # OCP MXFP8 uses one E8M0 scale per 32 E4M3 elements. The
+        # older MX8 contract remains caller-configurable (default 128).
+        return elements + math.ceil(elements / 32)
     if precision == Precision.MXFP4:
         # OCP MXFP4: two E2M1 values per byte and one E8M0 scale per
         # 32-value block. Tensor padding/alignment remains a separate physical

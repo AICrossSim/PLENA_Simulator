@@ -1,0 +1,10 @@
+[
+  {
+    "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/test_matrix_lcompute_campaign.py",
+    "sha256": "0f6190d2ea38618a22c00be4b8c7f46887d6c97793ad082b37920257a4cc195e"
+  },
+  {
+    "source": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/test_nemotron3_formal_dse.py",
+    "sha256": "69b38e783380aeaf27616a0b9a6688a079303e0c732340f37c60839da0881e43"
+  }
+]

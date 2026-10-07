@@ -1,0 +1,14 @@
+{
+  "logical_read_bytes": 1039508736,
+  "logical_write_bytes": 1236480,
+  "logical_weight_read_bytes": 1037283072,
+  "b200_physical_read_bytes": 1114920410,
+  "b200_physical_write_bytes": 5890,
+  "b200_duration_ns": 6530860,
+  "b200_duration_fraction": 0.6036138119708677,
+  "physical_to_logical_read_ratio": 1.0725454932588465,
+  "moe_combine_read_bytes": 865536,
+  "moe_combine_formula": "23 MoE layers x(6 routed+1 shared) x hidden2688 x BF16 2B",
+  "old_logical_read_without_combine": 1038643200,
+  "old_ratio_without_combine": 1.0734392811698954
+}

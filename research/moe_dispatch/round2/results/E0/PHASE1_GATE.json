@@ -1,0 +1,164 @@
+{
+  "all_collected_tests_executed_without_skips": false,
+  "all_supported_current_tests_passed": true,
+  "analytical": {
+    "aggregation": "exact current node-ID union of broad historical-pin receipt, broad remaining receipt, and full repaired Matrix/formal files; no duplicate test counting",
+    "collected_current": 478,
+    "coverage": "tests/analytical_gate_coverage.csv",
+    "optional_archive_skipped": 9,
+    "receipts": [
+      "analytical_full_historical_pin.xml",
+      "analytical_remaining.xml",
+      "live_golden_full_files.xml"
+    ],
+    "remaining_failures": 0,
+    "skipped": [
+      {
+        "node_id": "analytic_models/performance/test_b200_formal_campaign.py::test_local_kda_stage2_independently_matches_the_formal_core_traffic",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_KDA_STAGE2_ROOT to cross-check the optional raw archive",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_b200_formal_campaign.py::test_raw_campaign_rebuilds_the_pinned_contract_and_routing_trace",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_B200_CAMPAIGN_ROOT to rebuild from the optional raw archive",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_gpu_evidence.py::test_local_archives_reproduce_every_imported_file",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "raw GPU archives are not part of a fresh clone",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_ltile_cost.py::test_published_r3_component_oracles[mamba-fsm-expected0]",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_E_COMPILER to the pinned E compiler worktree",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_ltile_cost.py::test_published_r3_component_oracles[mamba-row-expected1]",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_E_COMPILER to the pinned E compiler worktree",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_ltile_cost.py::test_published_r3_component_oracles[kda-fsm-expected2]",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_E_COMPILER to the pinned E compiler worktree",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_ltile_cost.py::test_published_r3_component_oracles[kda-row-expected3]",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_E_COMPILER to the pinned E compiler worktree",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_ltile_cost.py::test_published_r3_component_oracles[mamba-old_isa-expected4]",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_E_COMPILER to the pinned E compiler worktree",
+        "status": "skipped"
+      },
+      {
+        "node_id": "analytic_models/performance/test_ltile_cost.py::test_published_r3_component_oracles[kda-old_isa-expected5]",
+        "receipt": "tests/analytical_remaining.xml",
+        "skip_reason": "set PLENA_E_COMPILER to the pinned E compiler worktree",
+        "status": "skipped"
+      }
+    ],
+    "uncovered": 0,
+    "unique_passed": 469
+  },
+  "compiler": {
+    "additional_final_lifetime_tests_passed": 41,
+    "affected_final_integration_passed": 45,
+    "current_tvm_passed": 143,
+    "evidence": "compiler_integration/TEST_RESULTS.md",
+    "historical_precision_ablation_passed": 1,
+    "ordinary_passed": 1143,
+    "ordinary_retired_profile_skipped": 29,
+    "ordinary_subtests_passed": 11,
+    "research_passed": 33,
+    "research_subtests_passed": 3,
+    "scope": "Counts are suite-specific and overlap; do not add reruns to unique total. Archived-profile skips and numerical-precision correction are explicit in TEST_RESULTS.md.",
+    "slow_connected_passed": 3,
+    "slow_connected_retired_profile_skipped": 1,
+    "tvm_retired_demos_skipped": 5,
+    "tvm_standalone_entrypoints_passed": 13
+  },
+  "compiler_sha": "80ac775c91e1b9384ec40382090e525dd24e732a",
+  "exact_reproduction": {
+    "all_exact": true,
+    "cohorts": [
+      {
+        "all_exact": true,
+        "cohort": "historical945",
+        "repeats": 2,
+        "rows": 945,
+        "sha256": "bcd3897ed29b5a68d891c2822a521caf0cd56ff26719ff79b926165d37f945eb"
+      },
+      {
+        "all_exact": true,
+        "cohort": "previous_BF16_c256_three",
+        "repeats": 2,
+        "rows": 405,
+        "sha256": "476e8fbf849678e108e9d739ebeb3f0c627c9a52966040c570cbba9ccfd9f93a"
+      }
+    ],
+    "receipt": "post_integration_replay_20261007/reproduction_receipt.json",
+    "repeats": 2,
+    "rows": 1350
+  },
+  "fresh_isolated_dispatch_rust": {
+    "passed": 89,
+    "receipt": "tests/20261007T110253385260Z/UNIT_CHECKS.json"
+  },
+  "fresh_main_rust": {
+    "passed": 408,
+    "receipt": "tests/20261007T105511300902Z/UNIT_CHECKS.json",
+    "scope": "225 main tests + 183 linked workspace/dependency tests; fresh build and linker environment in receipt"
+  },
+  "generated_utc": "2026-10-07T11:49:46.973249+00:00",
+  "limitations": [
+    "No new checkpoint inference or GPU benchmarks for round2 BF16 MoE.",
+    "Optional raw GPU archive rebuilds and six pinned historical-E-Compiler oracles remain explicitly skipped.",
+    "Existing archive native integration binary is hash/source checked; fresh Rust unit builds are separately recorded.",
+    "New-model searches, native timing calibration and synthesis/PPA are outside this phase-1 gate."
+  ],
+  "receipt_sha256": {
+    "compiler_integration/COPY_MANIFEST.json": "0be485ff3a87c1ad02adb5ba1fea513fd2bf68446da08a2e8a1dc013493021aa",
+    "compiler_integration/TEST_RESULTS.md": "898fefea054e3773b0140bf26b2531ff51935c8008783e0eae05576be49a5a2a",
+    "compiler_integration/tests/evidence_manifest.json": "e7729274ba0ba502729fab02ef8e973f9968457c5d0e09aad8b5dd553b3a0976",
+    "post_integration_replay_20261007/reproduction_receipt.json": "ed2211368b755fb32972a6d53e80fb19aa6b31699affb1c491803212a6e16764",
+    "tests/20261007T105511300902Z/UNIT_CHECKS.json": "2ac23f5ef21f80d5d8f63fe243bd559d56cd7abae28b4aa46a3594e0640a232d",
+    "tests/20261007T110253385260Z/UNIT_CHECKS.json": "35c4a4e187c4b52607d2187ae4ce1455a0a75c87c896168337da259ed593d896",
+    "tests/20261007T114345980637Z/UNIT_CHECKS.json": "55dd5a91a5009d3300b981de4c0552b44df674df60529ab6333b19a95cca9a95",
+    "tests/analytical_collection_current.log": "007cda097f84c4fe791b63583d4b7829726364985b163828ed02ddf3f617fbd5",
+    "tests/analytical_full_historical_pin.xml": "34d6a29599407f82ff2af7b0440f54922a2a4d5bd057157b0fa475d676251de9",
+    "tests/analytical_gate_coverage.csv": "0a1800eb64f435ce0443943ec7ff21833cc2f755ad342fb2b959cbf79a3f8ce1",
+    "tests/analytical_remaining.xml": "6f88782bbf9fadc009febb20c969b1b4cbe66c2c4b569dfd1ac90b7ffb3bbaef",
+    "tests/live_golden_fix.xml": "6c7b3062ffd320e9d55397ab7e96d6fb919c827cfddfe5c29e6833927cf0850b",
+    "tests/live_golden_full_files.xml": "87cda5fcae3073a40317fe28be3027a3749dad5d25caa5527790d1c72e38ebe4"
+  },
+  "research_python": {
+    "archived_tests_excluded": "research/moe_dispatch/archive, round2/archive and result directories; failed collection attempts retained",
+    "compiler": "80ac775c91e1b9384ec40382090e525dd24e732a",
+    "failures": 0,
+    "passed": 281,
+    "receipt": "tests/20261007T114345980637Z/UNIT_CHECKS.json",
+    "skipped": 0,
+    "subtests_passed": 282
+  },
+  "schema_version": 1,
+  "scope": "Phase-1 integrated source validation plus exact historical BF16 replay; not new-design latency evidence",
+  "simulator_execution_commit_before_source_commit": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "source_sha256": {
+    "analytic_models/performance/hybrid_lcompute_campaign.py": "9e9a8039168b86612695c10cf4e7ab16ed66cd328a8391ad81042641c1296c01",
+    "analytic_models/performance/profiles/historical_hybrid_compiler_evidence.json": "ab2f2615a108ce69e28a6c293c6bf14973dc8a049bf8c3efd22cbc3941ed9083",
+    "analytic_models/performance/test_matrix_lcompute_campaign.py": "0f6190d2ea38618a22c00be4b8c7f46887d6c97793ad082b37920257a4cc195e",
+    "analytic_models/performance/test_nemotron3_formal_dse.py": "69b38e783380aeaf27616a0b9a6688a079303e0c732340f37c60839da0881e43",
+    "research/moe_dispatch/round2/run_unit_checks.py": "30b9af2dbd34bd94cb459b18673a896d129519bf5b87f101284a0c1703e7d076"
+  }
+}

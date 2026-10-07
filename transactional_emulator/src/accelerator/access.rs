@@ -85,10 +85,12 @@ pub(crate) enum Cfg {
     TopkPolicy,
     LStream,
     MatrixView,
+    TopkBias,
+    RouteState,
 }
 
 impl Cfg {
-    pub(crate) const COUNT: usize = 6;
+    pub(crate) const COUNT: usize = 8;
 
     pub(crate) fn index(self) -> usize {
         match self {
@@ -98,6 +100,8 @@ impl Cfg {
             Cfg::TopkPolicy => 3,
             Cfg::LStream => 4,
             Cfg::MatrixView => 5,
+            Cfg::TopkBias => 6,
+            Cfg::RouteState => 7,
         }
     }
 }
@@ -568,13 +572,28 @@ pub(crate) fn op_access(
             ];
             if rmask == 15 {
                 reads.push(Resource::Cfg(Cfg::TopkPolicy));
+                reads.push(Resource::Cfg(Cfg::TopkBias));
             }
             OpAccess::new(
                 Unit::Vector,
                 reads,
-                vec![scalar_int(gp(rs2), topk), scalar_fp(gp(rd), topk)],
+                vec![
+                    scalar_int(gp(rs2), topk),
+                    scalar_fp(gp(rd), topk),
+                    Resource::Cfg(Cfg::RouteState),
+                ],
             )
         }
+        op::Opcode::V_ROUTE_MUL { rd, rs1, .. } => OpAccess::new(
+            Unit::Vector,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Resource::Cfg(Cfg::RouteState),
+                vector(gp(rs1), vector_tile),
+            ],
+            vec![vector(gp(rd), vector_tile)],
+        ),
 
         // Writing to fp0 is discarded; the execution arm returns immediately.
         op::Opcode::S_ADD_FP { rd: 0, .. }
@@ -725,11 +744,38 @@ pub(crate) fn op_access(
         op::Opcode::C_SET_V_MASK_REG { rd } => {
             OpAccess::new(Unit::Scalar, vec![Gp(rd)], vec![Resource::Cfg(Cfg::VMask)])
         }
-        op::Opcode::C_SET_TOPK_REG { rd } => OpAccess::new(
+        op::Opcode::C_SET_TOPK_REG { rd, target } => OpAccess::new(
             Unit::Scalar,
             vec![Gp(rd)],
-            vec![Resource::Cfg(Cfg::TopkPolicy)],
+            vec![Resource::Cfg(if target == 0 {
+                Cfg::TopkPolicy
+            } else {
+                Cfg::TopkBias
+            })],
         ),
+        op::Opcode::C_ROUTE_BEGIN {
+            rs1, rs2, policy, ..
+        } => {
+            let mut reads = vec![Gp(rs1), Gp(rs2)];
+            if policy == 15 {
+                reads.push(Resource::Cfg(Cfg::TopkPolicy));
+            }
+            let mut access =
+                OpAccess::new(Unit::Scalar, reads, vec![Resource::Cfg(Cfg::RouteState)]);
+            access.barrier = true;
+            access
+        }
+        op::Opcode::C_ROUTE_LOOP_START | op::Opcode::C_ROUTE_LOOP_END => {
+            // The current expert's GP destination is route-state-dependent.
+            // A full barrier charges and orders the route context transition.
+            let mut access = OpAccess::new(
+                Unit::Scalar,
+                vec![Resource::Cfg(Cfg::RouteState)],
+                vec![Resource::Cfg(Cfg::RouteState)],
+            );
+            access.barrier = true;
+            access
+        }
         op::Opcode::L_CFG { value, .. } => OpAccess::new(
             Unit::Scalar,
             vec![Gp(value)],
@@ -965,6 +1011,45 @@ mod tests {
             ]
         );
         assert!(a.reads.contains(&Resource::Cfg(Cfg::TopkPolicy)));
+        assert!(a.reads.contains(&Resource::Cfg(Cfg::TopkBias)));
+        assert!(a.writes.contains(&Resource::Cfg(Cfg::RouteState)));
+    }
+
+    #[test]
+    fn route_transitions_are_barriers_and_route_multiply_tracks_its_operands() {
+        for op in [
+            op::Opcode::C_ROUTE_BEGIN {
+                rd: 7,
+                rs1: 2,
+                rs2: 3,
+                policy: 15,
+            },
+            op::Opcode::C_ROUTE_LOOP_START,
+            op::Opcode::C_ROUTE_LOOP_END,
+        ] {
+            let a = access(op);
+            assert!(a.barrier);
+            assert_eq!(a.unit, Unit::Scalar);
+            assert!(a.writes.contains(&Resource::Cfg(Cfg::RouteState)));
+        }
+        let a = access(op::Opcode::V_ROUTE_MUL {
+            rd: 1,
+            rs1: 2,
+            rs2: 0,
+            token: 3,
+        });
+        assert_eq!(a.unit, Unit::Vector);
+        assert!(a.reads.contains(&Resource::Cfg(Cfg::RouteState)));
+        assert_eq!(
+            sram_ranges(&a.reads),
+            vec![(SramSpace::Vector, gp_stub(2), *VLEN)]
+        );
+        assert_eq!(
+            sram_ranges(&a.writes),
+            vec![(SramSpace::Vector, gp_stub(1), *VLEN)]
+        );
+        let bias = access(op::Opcode::C_SET_TOPK_REG { rd: 4, target: 1 });
+        assert_eq!(bias.writes, vec![Resource::Cfg(Cfg::TopkBias)]);
     }
 
     #[test]

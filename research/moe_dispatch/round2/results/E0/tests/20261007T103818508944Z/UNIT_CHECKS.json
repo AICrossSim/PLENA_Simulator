@@ -1,0 +1,228 @@
+{
+  "GPU_benchmarks_run": false,
+  "all_requested_suites_passed": false,
+  "binary": null,
+  "binary_scope": "explicit existing binary for Python integration; fresh Rust unit build recorded separately",
+  "binary_sha256": null,
+  "cargo_command": "cargo",
+  "cargo_target": "/tmp/plena-round2-cargo-target",
+  "checkpoint_inference_run": false,
+  "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "compiler_root_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler",
+  "compiler_source_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch",
+  "package_versions": {
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "ortools": "missing",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "scipy": "missing",
+    "torch": "2.12.1"
+  },
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "python_executable": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "rustc_override": null,
+  "suites": [
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+        "-m",
+        "pytest",
+        "analytic_models",
+        "-q",
+        "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T103818508944Z/analytical.xml"
+      ],
+      "errors": 4,
+      "failed_tests": [
+        {
+          "class": "analytic_models.performance.test_gpu_evidence",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_gpu_evidence_pins_real_shapes_bottlenecks_and_precision"
+        },
+        {
+          "class": "analytic_models.performance.test_gpu_evidence",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_profiled_nemotron_config_matches_the_full_checkpoint_campaign"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_lane_dse_recompiles_each_width_instead_of_scaling_counts"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_compiler_and_gpu_evidence_are_the_pinned_real_shapes"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_ablation_separates_arlo_stride_from_consumer_major_and_affine"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_explicit_state_tile_transfers_only_at_decode_boundaries"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_zero_fifo_is_legal_and_serializes_the_overlap_boundary"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_full_schedules_and_compressed_mla_are_validated_in_both_phases"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_full_model_uses_one_shared_hbm_timeline"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_checked_in_long_campaign_is_self_consistent"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_checked_in_paper_2048_campaign_is_self_consistent"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_checked_in_paper_2048_batch_campaign_is_self_consistent"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "AttributeError: MXFP8",
+          "name": "test_formal_state_capacities_match_real_dtypes"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"AttributeError: MXFP8\"",
+          "name": "test_report_contains_full_prefill_decode_dse_and_ablation"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"AttributeError: MXFP8\"",
+          "name": "test_layout_and_state_cache_ablations_are_physical"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"AttributeError: MXFP8\"",
+          "name": "test_mixed_precision_keeps_model_specific_weight_formats"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"AttributeError: MXFP8\"",
+          "name": "test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "assert 0 == 69",
+          "name": "test_prefill_uses_mamba_and_kda_chunk_algorithms"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "AttributeError: MXFP8",
+          "name": "test_mx_storage_contracts_keep_formats_distinct"
+        },
+        {
+          "class": "analytic_models.performance.test_ltile_execution",
+          "message": "analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json",
+          "name": "test_decode_kv_write_is_inside_the_attention_extent"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_compiler_evidence_uses_frozen_matrix_view_v3"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_real_lowering_service_replays_fixed_and_affine_paths"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0]"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1]"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'",
+          "name": "test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical"
+        }
+      ],
+      "failures": 31,
+      "finished_utc": "2026-10-07T10:51:00.560665+00:00",
+      "initial_classification": "unit_or_build_failure_review_required",
+      "junit_sha256": "72727745c3c4eefc909e61f651efae419adcdf4b0e22f058cdbad9b120acaeb2",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T103818508944Z/analytical.log",
+      "log_sha256": "0e801ab8ee41d66b31433722ab6f6f97a99353d30bdada9349a23f970b8f7b4e",
+      "returncode": 2,
+      "skipped": 9,
+      "started_utc": "2026-10-07T10:38:18.526101+00:00",
+      "suite": "analytical",
+      "tests": 209
+    }
+  ],
+  "temporary_directory": "/tmp/plena-round2-test-tmp"
+}

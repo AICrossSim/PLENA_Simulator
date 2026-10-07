@@ -24,6 +24,9 @@ mod native_coeff;
 #[cfg(test)]
 mod pipeline_tests;
 mod registers;
+#[cfg(test)]
+mod route_dispatch_tests;
+mod route_state;
 mod scalar_sram;
 mod scoreboard;
 mod v2;
@@ -38,6 +41,7 @@ pub(crate) use scoreboard::Scoreboard;
 
 use loop_state::LoopState;
 use registers::AcceleratorRegFile;
+use route_state::RouteState;
 use scalar_sram::ScalarSram;
 
 pub(crate) struct Accelerator {
@@ -47,8 +51,10 @@ pub(crate) struct Accelerator {
     reg_file: AcceleratorRegFile,
     scalar_sram: ScalarSram,
     loop_state: LoopState,
+    route_state: RouteState,
     v2: v2::ReductionState,
     native_coeff: [Option<native_coeff::CoefficientView>; 3],
+    coalesce_hbm_bursts: bool,
 }
 
 impl Accelerator {
@@ -69,10 +75,12 @@ impl Accelerator {
                 mview_banks,
                 mview_bank_width,
             ),
-            scalar_sram: ScalarSram::new(),
+            scalar_sram: ScalarSram::new(crate::load_config::scalar_fp_type()),
             loop_state: LoopState::new(),
+            route_state: RouteState::new(),
             v2: v2::ReductionState::default(),
             native_coeff: [None; 3],
+            coalesce_hbm_bursts: false,
         }
     }
 
@@ -81,7 +89,11 @@ impl Accelerator {
     }
 
     pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {
-        self.scalar_sram.load_fpsram_from_f16_bytes(bytes);
+        self.scalar_sram.load_fpsram_from_bytes(bytes);
+    }
+
+    pub(crate) fn set_coalesce_hbm_bursts(&mut self, coalesce: bool) {
+        self.coalesce_hbm_bursts = coalesce;
     }
 
     pub(crate) fn load_intsram_from_u32_bytes(&mut self, bytes: &[u8]) {

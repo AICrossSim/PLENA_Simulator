@@ -1,0 +1,50 @@
+{
+  "GPU_benchmarks_run": false,
+  "all_requested_suites_passed": false,
+  "binary": null,
+  "binary_scope": "explicit existing binary for Python integration; fresh Rust unit build recorded separately",
+  "binary_sha256": null,
+  "cargo_command": "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+  "cargo_target": "/tmp/plena-round2-cargo-target",
+  "checkpoint_inference_run": false,
+  "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "compiler_root_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler",
+  "compiler_source_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch",
+  "package_versions": {
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "ortools": "missing",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "scipy": "missing",
+    "torch": "2.12.1"
+  },
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "python_executable": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "rustc_override": "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/rustc",
+  "suites": [
+    {
+      "command": [
+        "/nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/bin/cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "transactional_emulator/Cargo.toml",
+        "--workspace",
+        "--target-dir",
+        "/tmp/mcl123-plena-layout-async-target",
+        "--",
+        "--test-threads=2"
+      ],
+      "finished_utc": "2026-10-07T10:47:23.501349+00:00",
+      "initial_classification": "unit_or_build_failure_review_required",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T104708097208Z/main_rust.log",
+      "log_sha256": "7b7a879bc5d231e055685d48ce9603fde1bfa24ab77b59e3e4568d1856841419",
+      "returncode": 101,
+      "started_utc": "2026-10-07T10:47:08.112776+00:00",
+      "suite": "main_rust"
+    }
+  ],
+  "temporary_directory": "/tmp/plena-round2-test-tmp"
+}

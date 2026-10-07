@@ -24,6 +24,8 @@ pub(super) struct AcceleratorRegFile {
     /// `topk > 0` — the program would abort with "topk must be positive", which
     /// says nothing about the missing `C_SET_TOPK_REG`.
     topk_policy: Option<u32>,
+    /// Optional correction-bias vector base, written using TOPK target 1.
+    topk_bias_base: Option<u32>,
     lstream: StreamTable,
     mviews: MatrixViewTable,
 }
@@ -50,6 +52,7 @@ impl AcceleratorRegFile {
             bmm_scale: 0.25,
             v_mask: 0,
             topk_policy: None,
+            topk_bias_base: None,
             lstream: StreamTable::new(lstream_banks),
             mviews: MatrixViewTable::new(mview_banks, mview_bank_width),
         }
@@ -135,7 +138,25 @@ impl AcceleratorRegFile {
     /// asserts `0 < top_k <= num_experts`.
     pub(super) fn topk_policy(&self) -> Option<(usize, usize)> {
         self.topk_policy
-            .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
+            .map(|packed| (((packed >> 8) & 0x3FFF) as usize, (packed & 0xFF) as usize))
+    }
+
+    pub(super) fn topk_sigmoid_normalized(&self) -> bool {
+        self.topk_policy
+            .is_some_and(|packed| packed & (1 << 22) != 0)
+    }
+
+    pub(super) fn topk_uses_correction_bias(&self) -> bool {
+        self.topk_policy
+            .is_some_and(|packed| packed & (1 << 23) != 0)
+    }
+
+    pub(super) fn set_topk_bias_base(&mut self, base: u32) {
+        self.topk_bias_base = Some(base);
+    }
+
+    pub(super) fn topk_bias_base(&self) -> Option<u32> {
+        self.topk_bias_base
     }
 
     pub(super) fn configure_lstream(
@@ -327,5 +348,21 @@ mod tests {
     fn topk_policy_is_none_until_c_set_topk_reg_runs() {
         // Fail-closed: V_TOPK rmask=15 traps on the unset policy.
         assert_eq!(AcceleratorRegFile::new(16).topk_policy(), None);
+    }
+
+    #[test]
+    fn topk_normalization_flags_do_not_expand_expert_count() {
+        let mut regs = AcceleratorRegFile::new(16);
+        regs.set_topk_policy((256 << 8) | 8 | (1 << 22) | (1 << 23));
+        assert_eq!(regs.topk_policy(), Some((256, 8)));
+        assert!(regs.topk_sigmoid_normalized());
+        assert!(regs.topk_uses_correction_bias());
+        assert_eq!(regs.topk_bias_base(), None);
+        regs.set_topk_bias_base(128);
+        assert_eq!(regs.topk_bias_base(), Some(128));
+        regs.set_topk_policy((64 << 8) | 6);
+        assert!(!regs.topk_sigmoid_normalized());
+        assert!(!regs.topk_uses_correction_bias());
+        assert_eq!(regs.topk_bias_base(), Some(128));
     }
 }

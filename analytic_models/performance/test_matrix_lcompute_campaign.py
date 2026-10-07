@@ -415,12 +415,18 @@ def test_uniform_bf16_weight_sensitivity_is_numerically_pinned() -> None:
     # The output RMSNorm adds 2,688 BF16 weights, 11 HBM cycles and
     # 7 Vector cycles. Correct Vector MUL+ADD pricing adds 529 cycles.
     assert phased["logical_weight_read_bytes"] == 6_455_217_664
-    assert baseline["cycles"] == 5_416_009
+    # Safe zero-fill uses V_SHFT_V instead of NaN/Inf-unsafe multiply-by-zero.
+    # One shift-register setup per128 heads, across23 Mamba layers, costs2944
+    # additional issue cycles. The affine L_TILE path is unchanged.
+    safe_zero_setup = 128 * 23
+    assert baseline["cycles"] == 5_416_009 + safe_zero_setup
+    baseline_asm = _real_compiler_evidence()["issue"]["assembly"][NEMOTRON_PACKET.compiler_key]["baseline"]
+    assert baseline_asm["opcode_census"]["V_SHFT_V"] == 128
     assert phased["cycles"] == 4_320_036
     assert (
         baseline["ideal_resource_overlap_lower_bound_cycles"] / phased["ideal_resource_overlap_lower_bound_cycles"]
     ) == 1.0
-    assert baseline["cycles"] / phased["cycles"] == pytest.approx(1.2536953395758739)
+    assert baseline["cycles"] / phased["cycles"] == pytest.approx((5_416_009 + 128 * 23) / 4_320_036)
 
 
 def test_exported_tables_identify_each_models_actual_mixed_checkpoint_policy(tmp_path: Path) -> None:

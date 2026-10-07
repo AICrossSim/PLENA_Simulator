@@ -165,11 +165,6 @@ pub(crate) struct Opts {
     pub(crate) hbm_size: Option<usize>,
 
     #[arg(long)]
-    /// Optional path for the post-run HBM image. Unlike the legacy debug dump,
-    /// this is independent of the selected log level.
-    pub(crate) hbm_dump: Option<PathBuf>,
-
-    #[arg(long)]
     /// Explicit Mamba event-model parameters. Without this option, X_MAMBA
     /// runs in functional-only mode and reports zero elapsed hardware cycles.
     pub(crate) mamba_timing_config: Option<PathBuf>,

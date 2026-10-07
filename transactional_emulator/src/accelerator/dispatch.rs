@@ -60,6 +60,17 @@ pub(super) struct LTileExecArgs {
 }
 
 impl Accelerator {
+    fn resolve_topk_policy(&self, policy: u8, pc: usize) -> (usize, usize) {
+        match policy {
+            0 => (32, 4),
+            1 => (128, 8),
+            15 => self.reg_file.topk_policy().unwrap_or_else(|| {
+                panic!("V_TOPK/C_ROUTE_BEGIN policy 15 at pc {pc} requires C_SET_TOPK_REG")
+            }),
+            _ => panic!("unsupported TopK policy {policy} at pc {pc}; expected 0, 1 or 15"),
+        }
+    }
+
     /// Resolve the V_* opcode mask.
     ///
     /// When `rmask == 0`, the opcode operates on the entire VLEN vector.
@@ -1113,41 +1124,55 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let (expert_count, topk) = match *rmask {
-                        0 => (32, 4),
-                        1 => (128, 8),
-
-                        15 => match self.reg_file.topk_policy() {
-                            Some(policy) => policy,
-                            None => {
-                                tracing::error!(pc, "V_TOPK rmask=15 with no C_SET_TOPK_REG");
-                                panic!(
-                                    "V_TOPK rmask=15 at pc {pc} requires a preceding \
-                                     C_SET_TOPK_REG; the policy register is unset"
-                                );
-                            }
-                        },
-                        other => {
-                            // Consistent with the Opcode::Invalid handler: a
-                            // malformed-but-encodable field is a bad-program error,
-                            // logged with the pc before aborting.
-                            tracing::error!(pc, rmask = other, "unsupported V_TOPK rmask policy");
+                    let (expert_count, topk) = self.resolve_topk_policy(*rmask, pc);
+                    let sigmoid = *rmask == 15 && self.reg_file.topk_sigmoid_normalized();
+                    let bias = if *rmask == 15 && self.reg_file.topk_uses_correction_bias() {
+                        Some(self.reg_file.topk_bias_base().unwrap_or_else(|| {
                             panic!(
-                                "unsupported V_TOPK rmask policy {other} at pc {pc}; \
-                                 expected 0=32/top4, 1=128/top8, or 15=C_SET_TOPK_REG"
-                            );
-                        }
+                                "V_TOPK correction bias at pc {pc} requires C_SET_TOPK_REG target 1"
+                            )
+                        }))
+                    } else {
+                        None
                     };
                     let fp_base = self.reg_file.read_gp(*rd) as usize;
                     let int_base = self.reg_file.read_gp(*rs2) as usize;
                     let (indices, weights) = self
                         .v_machine
-                        .topk_softmax(self.reg_file.read_gp(*rs1), expert_count, topk)
+                        .topk_normalized_with_bias(
+                            self.reg_file.read_gp(*rs1),
+                            expert_count,
+                            topk,
+                            sigmoid,
+                            bias,
+                        )
                         .await;
                     for (offset, (idx, weight)) in indices.iter().zip(weights.iter()).enumerate() {
                         self.scalar_sram.write_int(int_base + offset, *idx);
                         self.scalar_sram.write_fp(fp_base + offset, *weight);
                     }
+                    let stored_weights: Vec<f32> = (0..topk)
+                        .map(|offset| self.scalar_sram.read_fp(fp_base + offset))
+                        .collect();
+                    self.route_state
+                        .capture_topk(int_base, fp_base, &indices, &stored_weights);
+                }
+                op::Opcode::V_ROUTE_MUL {
+                    rd,
+                    rs1,
+                    rs2,
+                    token,
+                } => {
+                    assert_eq!(*rs2, 0, "V_ROUTE_MUL reserved rs2 field must be gp0");
+                    let (active, weight) = self.route_state.current_route(*token);
+                    self.v_machine
+                        .route_mul(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            weight,
+                            active,
+                        )
+                        .await;
                 }
                 op::Opcode::V_EXP_V {
                     rd,
@@ -1293,8 +1318,10 @@ impl Accelerator {
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
                     self.reg_file.write_fp(
                         *rd,
-                        self.scalar_sram
-                            .read_fp((self.reg_file.read_gp(*rs1) + *imm) as usize),
+                        bf16::from_f32(
+                            self.scalar_sram
+                                .read_fp((self.reg_file.read_gp(*rs1) + *imm) as usize),
+                        ),
                     );
                     cycle!(1);
                 }
@@ -1461,6 +1488,7 @@ impl Accelerator {
                         if exact { values } else { *VLEN },
                         if exact { 1 } else { values.div_ceil(*VLEN) },
                         1,
+                        self.coalesce_hbm_bursts,
                     );
                     let tensor = xfer.await.unwrap_or_else(|error| {
                         panic!("Matrix-view DMA receiver dropped: {error}")
@@ -1560,8 +1588,41 @@ impl Accelerator {
                     self.reg_file.set_v_mask(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
-                op::Opcode::C_SET_TOPK_REG { rd } => {
-                    self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
+                op::Opcode::C_SET_TOPK_REG { rd, target } => {
+                    let value = self.reg_file.read_gp(*rd);
+                    match target {
+                        0 => self.reg_file.set_topk_policy(value),
+                        1 => self.reg_file.set_topk_bias_base(value),
+                        _ => panic!("reserved C_SET_TOPK_REG target {target}"),
+                    }
+                    cycle!(1);
+                }
+                op::Opcode::C_ROUTE_BEGIN {
+                    rd,
+                    rs1,
+                    rs2,
+                    policy,
+                } => {
+                    let (expert_count, topk) = self.resolve_topk_policy(*policy, pc);
+                    self.route_state.configure(
+                        *rd,
+                        self.reg_file.read_gp(*rs1) as usize,
+                        self.reg_file.read_gp(*rs2) as usize,
+                        expert_count,
+                        topk,
+                    );
+                    cycle!(1);
+                }
+                op::Opcode::C_ROUTE_LOOP_START => {
+                    let (expert_gp, expert) = self.route_state.start_loop(pc);
+                    self.reg_file.write_gp(expert_gp, expert as u32);
+                    cycle!(1);
+                }
+                op::Opcode::C_ROUTE_LOOP_END => {
+                    if let Some((target_pc, expert_gp, expert)) = self.route_state.end_loop() {
+                        self.reg_file.write_gp(expert_gp, expert as u32);
+                        jump_pc = Some(target_pc);
+                    }
                     cycle!(1);
                 }
                 op::Opcode::L_CFG {
@@ -1849,6 +1910,20 @@ impl Accelerator {
             },
             &|| self.reg_file.topk_policy(),
         );
+        if let op::Opcode::V_TOPK { rmask: 15, .. } = op
+            && self.reg_file.topk_uses_correction_bias()
+            && let (Some(base), Some((experts, _))) =
+                (self.reg_file.topk_bias_base(), self.reg_file.topk_policy())
+        {
+            let rows = (experts as u32).div_ceil((*VLEN).max(1));
+            access
+                .reads
+                .push(access::Resource::Sram(access::SramRange::new(
+                    access::SramSpace::Vector,
+                    base,
+                    rows * *VLEN,
+                )));
+        }
         if lmask != 0 {
             access
                 .reads
@@ -1867,7 +1942,7 @@ impl Accelerator {
         for register in registers {
             if let Some(address) = self.reg_file.lstream_fp_address(lmask, register) {
                 let value = self.scalar_sram.read_fp(address as usize);
-                self.reg_file.write_fp(register, value);
+                self.reg_file.write_fp(register, bf16::from_f32(value));
             }
         }
     }
@@ -2112,6 +2187,7 @@ impl Accelerator {
                     *VLEN,
                     values.div_ceil(*VLEN),
                     1,
+                    self.coalesce_hbm_bursts,
                 );
                 let dest = self.reg_file.read_gp(*rd);
                 let (pending, service) = self
@@ -2247,6 +2323,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::V_MAX_VF { .. }
         | op::Opcode::V_MIN_VF { .. }
         | op::Opcode::V_TOPK { .. }
+        | op::Opcode::V_ROUTE_MUL { .. }
         | op::Opcode::V_EXP_V { .. }
         | op::Opcode::V_RECI_V { .. }
         | op::Opcode::V_RED_SUM { .. }
@@ -2285,6 +2362,9 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_STRIDE_REG { .. }
         | op::Opcode::C_SET_V_MASK_REG { .. }
         | op::Opcode::C_SET_TOPK_REG { .. }
+        | op::Opcode::C_ROUTE_BEGIN { .. }
+        | op::Opcode::C_ROUTE_LOOP_START
+        | op::Opcode::C_ROUTE_LOOP_END
         | op::Opcode::L_CFG { .. }
         | op::Opcode::L_TILE_CFG { .. }
         | op::Opcode::L_TILE_CCFG { .. }

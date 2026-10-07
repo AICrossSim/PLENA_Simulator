@@ -1,0 +1,64 @@
+{
+  "GPU_benchmarks_run": false,
+  "all_requested_suites_passed": true,
+  "binary": "/scratch/shared/mcl123/plena/final_artifacts/moe_native_hbm_profile_20261006_v1/payload/native/moe-dispatch-analytical-v1",
+  "binary_scope": "explicit existing binary for Python integration; fresh Rust unit build recorded separately",
+  "binary_sha256": "352bc7bfa87b1cce0888e984dbd30baf8b48dd1f620e90c71b78a679cd981b66",
+  "build_environment": {
+    "LD_LIBRARY_PATH": "/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:",
+    "LIBRARY_PATH": ":/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:/mnt/applications/altera/15.0/hld/board/nalla_pcie/linux64/lib:/mnt/applications/altera/18.1//hld/host/linux64/lib:",
+    "PATH": "/home/mcl123/.local/bin:/scratch/shared/mcl123/plena/npm-global/bin:/home/mcl123/plena/node/current/bin:/home/mcl123/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/mnt/applications/Xilinx/23.1/Vitis_HLS/2023.1/bin:/mnt/applications/Xilinx/23.1/Model_Composer/2023.1/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/microblaze/lin/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/arm/lin/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/microblaze/linux_toolchain/lin64_le/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-linux-gnueabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch64/lin/aarch64-linux/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch64/lin/aarch64-none/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/armr5/lin/gcc-arm-none-eabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/tps/lnx64/cmake-3.3.2/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/aietools/bin:/mnt/applications/Xilinx/23.1/Vivado/2023.1/bin:/mnt/data/applications/Xilinx/23.1/DocNav:/scratch/shared/mcl123/plena/npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/scratch/shared/mcl123/plena/codex_home/tmp/arg0/codex-arg0RFeSvE:/scratch/shared/mcl123/plena/npm-global/bin:/home/mcl123/plena/node/current/bin:/home/mcl123/.local/bin:/scratch/shared/mcl123/plena/npm-global/bin:/home/mcl123/plena/node/current/bin:/home/mcl123/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/mnt/applications/Xilinx/23.1/Vitis_HLS/2023.1/bin:/mnt/applications/Xilinx/23.1/Model_Composer/2023.1/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/microblaze/lin/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/arm/lin/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/microblaze/linux_toolchain/lin64_le/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-linux-gnueabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch64/lin/aarch64-linux/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch64/lin/aarch64-none/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/armr5/lin/gcc-arm-none-eabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/tps/lnx64/cmake-3.3.2/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/aietools/bin:/mnt/applications/Xilinx/23.1/Vivado/2023.1/bin:/mnt/data/applications/Xilinx/23.1/DocNav:/tmp/plena-uv:/scratch/shared/mcl123/plena/cargo/bin:/scratch/shared/mcl123/plena/npm-global/bin:/home/mcl123/plena/node/current/bin:/home/mcl123/.local/bin:/home/mcl123/bin:/usr/share/Modules/bin:/usr/condabin:/mnt/applications/Xilinx/23.1/Vitis_HLS/2023.1/bin:/mnt/applications/Xilinx/23.1/Model_Composer/2023.1/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/microblaze/lin/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/arm/lin/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/microblaze/linux_toolchain/lin64_le/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-linux-gnueabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch64/lin/aarch64-linux/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/aarch64/lin/aarch64-none/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/gnu/armr5/lin/gcc-arm-none-eabi/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/tps/lnx64/cmake-3.3.2/bin:/mnt/applications/Xilinx/23.1/Vitis/2023.1/aietools/bin:/mnt/applications/Xilinx/23.1/Vivado/2023.1/bin:/mnt/data/applications/Xilinx/23.1/DocNav:/home/mcl123/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/mnt/applications/altera/18.1//quartus/bin:/mnt/applications/altera/18.1//nios2eds/bin:/mnt/applications/altera/18.1//quartus/bin:/mnt/applications/altera/18.1//nios2eds/bin:/mnt/applications/altera/18.1//quartus/bin:/mnt/applications/altera/18.1//nios2eds/bin:",
+    "PLENA_COMPILER_ROOT": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler",
+    "PLENA_DISPATCH_COMPILER": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/research/moe_dispatch",
+    "TMPDIR": "/tmp/plena-round2-test-tmp"
+  },
+  "cargo_command": "cargo",
+  "cargo_target": "/tmp/plena-round2-cargo-target",
+  "checkpoint_inference_run": false,
+  "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "compiler_root_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler",
+  "compiler_source_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/research/moe_dispatch",
+  "main_rust_target": "/tmp/mcl123-plena-layout-async-target",
+  "package_versions": {
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "ortools": "missing",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "scipy": "missing",
+    "torch": "2.12.1"
+  },
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "python_executable": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "rustc_override": null,
+  "suites": [
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+        "-m",
+        "pytest",
+        "research/moe_dispatch",
+        "-q",
+        "--ignore=research/moe_dispatch/archive",
+        "--ignore=research/moe_dispatch/results",
+        "--ignore=research/moe_dispatch/round2/results",
+        "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T110711597904Z/research.xml"
+      ],
+      "errors": 0,
+      "failed_tests": [],
+      "failures": 0,
+      "finished_utc": "2026-10-07T11:11:43.949723+00:00",
+      "initial_classification": "passed",
+      "junit_sha256": "6d9b12af428246c845111b6a7b516b5e26351cd3122e01099e3ca60d92a122ca",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T110711597904Z/research.log",
+      "log_sha256": "5fb1bb926feef874d2403e5e4d09cb91874b526574db0606b2aebed955385694",
+      "returncode": 0,
+      "skipped": 0,
+      "started_utc": "2026-10-07T11:07:11.620041+00:00",
+      "suite": "research",
+      "tests": 281
+    }
+  ],
+  "temporary_directory": "/tmp/plena-round2-test-tmp"
+}

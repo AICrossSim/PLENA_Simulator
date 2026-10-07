@@ -664,13 +664,24 @@ def test_campaign_tables_are_flat_and_nonempty(tmp_path: Path) -> None:
     assert row["routing_source_sha256"] == "abc123"
 
 
+def _historical_compiler_evidence(paper: bool = False) -> dict:
+    # Historical result hashes bind to the compiler Git pin which generated
+    # them. The merged/current Compiler has separate live report tests above;
+    # comparing its newer ISA stream to a frozen 2026-09-05 snapshot is invalid.
+    fixture = json.loads((Path(__file__).parent / "profiles" /
+                          "historical_hybrid_compiler_evidence.json").read_text())
+    assert fixture["compiler_sha"] == "e050dcd7176b4d2a3e502f9432c95238a16dcf3d"
+    assert fixture["provenance"]["simulator_artifact_commit"] == "842dd66dbb3d07d528683084295963a9b8290eae"
+    return fixture["paper2048" if paper else "historical64"]
+
+
 def test_checked_in_long_campaign_is_self_consistent() -> None:
     path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_packet_v2/campaign.json"
     report = json.loads(path.read_text())
     claimed_hash = report.pop("report_sha256")
     assert claimed_hash == _sha256_json(report)
     assert report["schema_version"] == 4
-    assert report["compiler_report_sha256"] == _sha256_json(_compiler())
+    assert report["compiler_report_sha256"] == _sha256_json(_historical_compiler_evidence())
 
     decision = report["dse"]["base_decision"]
     assert decision["stream_addressing_earns_isa"]
@@ -692,7 +703,7 @@ def test_checked_in_paper_2048_campaign_is_self_consistent() -> None:
     claimed_hash = report.pop("report_sha256")
     assert claimed_hash == _sha256_json(report)
     assert report["schema_version"] == 4
-    assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+    assert report["compiler_report_sha256"] == _sha256_json(_historical_compiler_evidence(paper=True))
     assert report["paper_alignment"]["matched_by_this_run"]
     assert (
         report["hardware"]["blen"],
@@ -729,7 +740,7 @@ def test_checked_in_paper_2048_batch_campaign_is_self_consistent() -> None:
     claimed_hash = report.pop("report_sha256")
     assert claimed_hash == _sha256_json(report)
     assert report["schema_version"] == 4
-    assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+    assert report["compiler_report_sha256"] == _sha256_json(_historical_compiler_evidence(paper=True))
 
     batch = report["batch_dse"]
     assert batch["status"] == "complete"

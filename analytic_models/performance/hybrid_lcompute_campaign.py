@@ -1046,8 +1046,9 @@ def validate_workload_schedule(
                 "input_rms_norm",
                 "kda_qkv_projection",
                 "kda_short_conv",
-                "kda_state_decay_prediction",
-                "kda_delta_update_output",
+                *( ("kda_state_decay_prediction", "kda_delta_update_output")
+                   if report.scenario.phase == InferencePhase.DECODE
+                   else ("kda_chunk_prepare", "kda_chunk_recurrence_output") ),
                 "kda_out_projection",
                 "prefix_sum_after_mixer",
             )

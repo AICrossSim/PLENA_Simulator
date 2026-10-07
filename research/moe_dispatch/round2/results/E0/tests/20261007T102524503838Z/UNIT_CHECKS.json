@@ -1,0 +1,499 @@
+{
+  "GPU_benchmarks_run": false,
+  "all_requested_suites_passed": false,
+  "binary": "/scratch/shared/mcl123/plena/final_artifacts/moe_native_hbm_profile_20261006_v1/payload/native/moe-dispatch-analytical-v1",
+  "binary_scope": "explicit existing binary for Python integration; fresh Rust unit build recorded separately",
+  "binary_sha256": "352bc7bfa87b1cce0888e984dbd30baf8b48dd1f620e90c71b78a679cd981b66",
+  "checkpoint_inference_run": false,
+  "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "compiler_source_override": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-compiler/research/moe_dispatch",
+  "package_versions": {
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "ortools": "missing",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "scipy": "missing",
+    "torch": "2.12.1"
+  },
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "python_executable": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "suites": [
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+        "-m",
+        "pytest",
+        "research/moe_dispatch",
+        "-q",
+        "--ignore=research/moe_dispatch/archive",
+        "--ignore=research/moe_dispatch/results",
+        "--ignore=research/moe_dispatch/round2/results",
+        "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/research.xml"
+      ],
+      "errors": 0,
+      "failed_tests": [],
+      "failures": 0,
+      "finished_utc": "2026-10-07T10:30:05.084235+00:00",
+      "initial_classification": "passed",
+      "junit_sha256": "6996ddbf17be3593b869859b7b29cd0e5e8e9af317922b6d9bc913bba13003cc",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/research.log",
+      "log_sha256": "459794d43be8f0b52d53f6ba39be13b4eecea72f4f63aeb466a765a5556f7db8",
+      "returncode": 0,
+      "skipped": 0,
+      "started_utc": "2026-10-07T10:25:24.525943+00:00",
+      "suite": "research",
+      "tests": 281
+    },
+    {
+      "command": [
+        "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+        "-m",
+        "pytest",
+        "analytic_models",
+        "-q",
+        "--junitxml=research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/analytical.xml"
+      ],
+      "errors": 14,
+      "failed_tests": [
+        {
+          "class": "analytic_models.performance.test_gpu_evidence",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_profiled_nemotron_config_matches_the_full_checkpoint_campaign"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_lane_dse_recompiles_each_width_instead_of_scaling_counts"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_compiler_and_gpu_evidence_are_the_pinned_real_shapes"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_ablation_separates_arlo_stride_from_consumer_major_and_affine"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_explicit_state_tile_transfers_only_at_decode_boundaries"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_zero_fifo_is_legal_and_serializes_the_overlap_boundary"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_full_schedules_and_compressed_mla_are_validated_in_both_phases"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_full_model_uses_one_shared_hbm_timeline"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_checked_in_long_campaign_is_self_consistent"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_checked_in_paper_2048_campaign_is_self_consistent"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_lcompute_campaign",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'",
+          "name": "test_checked_in_paper_2048_batch_campaign_is_self_consistent"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "AttributeError: MXFP8",
+          "name": "test_formal_state_capacities_match_real_dtypes"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_report_contains_full_prefill_decode_dse_and_ablation"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_layout_and_state_cache_ablations_are_physical"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_mixed_precision_keeps_model_specific_weight_formats"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_decode_executes_complete_hybrid_backbones"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_multi_token_decode_grows_context_and_reports_tpot"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_prefill_uses_mamba_and_kda_chunk_algorithms"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_nemotron_prefill_routing_matches_the_requested_sequence_length"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_kimi_mla_keeps_only_compressed_cache"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_all_stage_types_share_one_hbm_and_sram_server"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_full_state_cache_removes_per_token_state_hbm[nemotron3-64]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_consumer_aware_layout_reaches_ideal_bank_service[nemotron3]"
+        },
+        {
+          "class": "analytic_models.performance.test_hybrid_system_timeline",
+          "message": "AttributeError: MXFP8",
+          "name": "test_mx_storage_contracts_keep_formats_distinct"
+        },
+        {
+          "class": "analytic_models.performance.test_ltile_execution",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_decode_kv_write_is_inside_the_attention_extent"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_compiler_evidence_uses_frozen_matrix_view_v3"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_real_lowering_service_replays_fixed_and_affine_paths"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0]"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1]"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_basic_model_records_publish_strict_and_ideal_timeline_endpoints"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_uniform_bf16_weight_sensitivity_is_numerically_pinned"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_one_mib_point_cannot_claim_unemitted_static_overlap"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_lcompute_campaign",
+          "message": "RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.",
+          "name": "test_ordinary_attention_and_moe_matrix_lines_do_not_regress"
+        },
+        {
+          "class": "analytic_models.performance.test_matrix_service",
+          "message": "ModuleNotFoundError: No module named 'compiler.aten.plena.matrix_recurrence_lowering'",
+          "name": "test_nvfp4_fixture_decoder_covers_signed_codes_and_block_global_scales"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_formal_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_formal_report_keeps_gpu_evidence_separate_from_plena_cycles"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_formal_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_decode_logical_traffic_crosschecks_complete_b200_ncu"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_formal_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_formal_dse_preserves_exact_state_and_routing_capacity_knees"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_formal_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_formal_dse_couples_cache_misses_to_expert_m_k_timeline"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_formal_dse",
+          "message": "failed on setup with \"analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete\"",
+          "name": "test_l_compute_and_amdahl_numbers_are_labeled_as_local_bounds"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_moe_event_dse",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_routing_patterns_match_the_independent_lru_replay"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_routing_dse",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_trace_preserves_all_exact_decode_topk_events"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_routing_dse",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_profile_driven_lru_reproduces_capacity_knees"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_routing_dse",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_lru_counts_every_miss_as_one_expert_weight_read"
+        },
+        {
+          "class": "analytic_models.performance.test_nemotron3_routing_dse",
+          "message": "analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete",
+          "name": "test_trace_rejects_duplicate_topk_ids"
+        },
+        {
+          "class": "analytic_models.performance.test_precision_contract",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'",
+          "name": "test_changing_weight_format_preserves_other_traffic_and_work[nemotron3]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[1]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[4]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+          "name": "test_tuning_reprices_composition_and_keeps_uniform_fallback[35-mixed]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+          "name": "test_tuning_reprices_composition_and_keeps_uniform_fallback[150-uniform]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-1]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-2]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-4]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-8]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-16]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-1]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-2]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-4]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-8]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_pipeline",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-16]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_request_grouping_exposes_weight_reloads_and_preserves_compute_count"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_cross_group_aliases_and_invalid_budget_fail_before_emission"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_larger_workspace_is_existing_capacity_not_extra_storage"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+          "name": "test_codec_workspace_cannot_be_reclaimed_for_compressed_weights"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_standalone_projection_uses_the_same_software_request_tile"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_transposed_packets_have_bounded_storage_and_no_weight_expansion"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_transposed_layer_composition_replaces_every_projection[1]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)",
+          "name": "test_transposed_layer_composition_replaces_every_projection[16]"
+        },
+        {
+          "class": "analytic_models.performance.test_projection_software",
+          "message": "FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'",
+          "name": "test_transposed_profile_rejects_unvalidated_codec_and_extra_datapaths"
+        }
+      ],
+      "failures": 67,
+      "finished_utc": "2026-10-07T10:31:05.699408+00:00",
+      "initial_classification": "missing_dependency",
+      "junit_sha256": "7a47f0fabe01a904363a497c5faaa9f23d05e15d0ef3b114e374ceb8aca39573",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/analytical.log",
+      "log_sha256": "263d3f73bc0b932f0121e2d9bffce862b68c57015c0568ffcdf7b7bf14ce4867",
+      "returncode": 1,
+      "skipped": 10,
+      "started_utc": "2026-10-07T10:30:05.086031+00:00",
+      "suite": "analytical",
+      "tests": 478
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "research/moe_dispatch/rust/Cargo.toml",
+        "--target-dir",
+        "/tmp/plena-round2-cargo-target",
+        "--",
+        "--test-threads=2"
+      ],
+      "finished_utc": "2026-10-07T10:31:05.719422+00:00",
+      "initial_classification": "unit_or_build_failure_review_required",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T102524503838Z/rust.log",
+      "log_sha256": "a96bf18474bc74aaa584873de13befcaf953650a47b6fbcb5da743d4772e15d2",
+      "returncode": 1,
+      "started_utc": "2026-10-07T10:31:05.706051+00:00",
+      "suite": "rust"
+    }
+  ]
+}

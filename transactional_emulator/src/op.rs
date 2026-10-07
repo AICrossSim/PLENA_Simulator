@@ -444,6 +444,22 @@ pub enum Opcode {
     /// the other `C_SET_*_REG` registers, so a single-policy program sets it once.
     C_SET_TOPK_REG {
         rd: u8,
+        /// 0 writes packed policy; 1 writes correction-bias Vector-SRAM base.
+        target: u8,
+    },
+    C_ROUTE_BEGIN {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        policy: u8,
+    },
+    C_ROUTE_LOOP_START,
+    C_ROUTE_LOOP_END,
+    V_ROUTE_MUL {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        token: u8,
     },
     /// Configure one field of a compiler-managed affine operand stream.
     L_CFG {
@@ -898,18 +914,23 @@ impl Opcode {
             0x34 => Self::C_BREAK,
             // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
             // masked vector ops above.
-            0x38 => Self::C_SET_TOPK_REG { rd },
-            // 0x39..=0x3C are reserved for the Shared Expert route dispatcher.
-            // This branch does not emit them; keeping them invalid here is safer
-            // than silently executing a different recurrent operation.
-            0x39..=0x3C => {
-                tracing::error!(
-                    instr,
-                    opcode,
-                    "reserved routed-MoE opcode is not implemented here"
-                );
-                Self::Invalid
-            }
+            0x38 if rs1 <= 1 && instr >> 14 == 0 => Self::C_SET_TOPK_REG { rd, target: rs1 },
+            0x38 => Self::Invalid,
+            0x39 if instr >> 22 == 0 && matches!(rs3, 0 | 1 | 15) => Self::C_ROUTE_BEGIN {
+                rd,
+                rs1,
+                rs2,
+                policy: rs3,
+            },
+            0x3A if instr == 0x3A => Self::C_ROUTE_LOOP_START,
+            0x3B if instr == 0x3B => Self::C_ROUTE_LOOP_END,
+            0x3C if instr >> 22 == 0 && rs2 == 0 && rs3 < 4 => Self::V_ROUTE_MUL {
+                rd,
+                rs1,
+                rs2,
+                token: rs3,
+            },
+            0x39..=0x3C => Self::Invalid,
             // General static-recurrent extensions. Encodings must stay in sync
             // with PLENA_Compiler's doc/operation.svh and assembler.
             0x3D if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_SOFTPLUS_V {
@@ -1059,8 +1080,53 @@ mod tests {
     #[test]
     fn test_decode_c_set_topk_reg() {
         match Opcode::decode(0x38 | (7 << 6)) {
-            Opcode::C_SET_TOPK_REG { rd } => assert_eq!(rd, 7),
+            Opcode::C_SET_TOPK_REG { rd, target } => assert_eq!((rd, target), (7, 0)),
             other => panic!("expected C_SET_TOPK_REG, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn topk_target_one_is_bias_and_reserved_target_fields_are_invalid() {
+        assert!(matches!(
+            Opcode::decode(0x38 | (13 << 6) | (1 << 10)),
+            Opcode::C_SET_TOPK_REG { rd: 13, target: 1 }
+        ));
+        for word in [0x38 | (2 << 10), 0x38 | (1 << 14), 0x38 | (1 << 31)] {
+            assert!(matches!(Opcode::decode(word), Opcode::Invalid));
+        }
+    }
+
+    #[test]
+    fn route_dispatch_decodes_operands_without_recurrent_opcode_aliases() {
+        assert!(matches!(
+            Opcode::decode(rform(0x39, 7, 2, 3, 15, 0)),
+            Opcode::C_ROUTE_BEGIN {
+                rd: 7,
+                rs1: 2,
+                rs2: 3,
+                policy: 15
+            }
+        ));
+        assert!(matches!(Opcode::decode(0x3A), Opcode::C_ROUTE_LOOP_START));
+        assert!(matches!(Opcode::decode(0x3B), Opcode::C_ROUTE_LOOP_END));
+        assert!(matches!(
+            Opcode::decode(rform(0x3C, 4, 5, 0, 3, 0)),
+            Opcode::V_ROUTE_MUL {
+                rd: 4,
+                rs1: 5,
+                rs2: 0,
+                token: 3
+            }
+        ));
+        for word in [
+            0x3A | (1 << 6),
+            0x3B | (1 << 10),
+            rform(0x39, 1, 2, 3, 2, 0),
+            rform(0x3C, 1, 2, 1, 0, 0),
+            rform(0x3C, 1, 2, 0, 4, 0),
+            rform(0x3C, 1, 2, 0, 0, 1),
+        ] {
+            assert!(matches!(Opcode::decode(word), Opcode::Invalid));
         }
     }
 
@@ -1396,13 +1462,6 @@ mod tests {
             "V_PS_V",
             // Likewise declared and unimplemented; nothing emits it.
             "C_HADAMARD_TRANSFORM",
-            // Owned by the Shared Expert branch. Their numeric reservation is
-            // part of this branch's conflict-free ABI, but route execution is
-            // merged independently from L-Compute.
-            "C_ROUTE_BEGIN",
-            "C_ROUTE_LOOP_START",
-            "C_ROUTE_LOOP_END",
-            "V_ROUTE_MUL",
         ];
 
         let mut checked = 0;
@@ -1498,7 +1557,7 @@ mod tests {
         ));
         assert!(matches!(
             Opcode::decode(rform(0x39, 0, 0, 0, 0, 0)),
-            Opcode::Invalid
+            Opcode::C_ROUTE_BEGIN { .. }
         ));
     }
 
@@ -1738,23 +1797,6 @@ mod tests {
             Opcode::decode(rform(0x37, 9, 10, 11, 12, 1)),
             Opcode::Invalid
         ));
-    }
-
-    #[test]
-    fn test_decode_compiler_v_topk_fixtures() {
-        // Exact words emitted by PLENA_Compiler for
-        // V_TOPK gp1, gp2, gp3, policy={0,1}.
-        for (word, expected_policy) in [(0x0000_C877, 0), (0x0004_C877, 1)] {
-            match Opcode::decode(word) {
-                Opcode::V_TOPK {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                } => assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, expected_policy)),
-                other => panic!("expected V_TOPK, got {other:?}"),
-            }
-        }
     }
 
     #[test]

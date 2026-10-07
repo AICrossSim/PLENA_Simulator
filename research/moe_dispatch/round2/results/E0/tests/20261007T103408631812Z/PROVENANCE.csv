@@ -1,0 +1,4 @@
+file,sha256,commit,scope
+README.md,a89fe698057ae222f1fdd71905e35a6a5cb2c31f7064c18ba51f615704d95338,6130f924c3417ffda19cd0bf4c98d6f4c10b3cae,actual unit-test attempt; no performance claim
+UNIT_CHECKS.json,119be6f605d983f70acc2362509f60373e32cce7c60e16301fc5f718f5bb04d7,6130f924c3417ffda19cd0bf4c98d6f4c10b3cae,actual unit-test attempt; no performance claim
+rust.log,af46f46ca946dafc2e11c308a91e0649e354abe9a22b67aa25658aab3830022f,6130f924c3417ffda19cd0bf4c98d6f4c10b3cae,actual unit-test attempt; no performance claim

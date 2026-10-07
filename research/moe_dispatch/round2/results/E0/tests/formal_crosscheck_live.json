@@ -1,0 +1,72 @@
+{
+  "decode_step_s2048": {
+    "layer_types": {
+      "mamba": {
+        "logical_read_bytes": 887056640,
+        "logical_write_bytes": 51340416,
+        "logical_weight_read_bytes": 836066560,
+        "b200_physical_read_bytes": 873460520,
+        "b200_physical_write_bytes": 244980,
+        "b200_duration_ns": 3865670,
+        "b200_duration_fraction": 0.35728400310547526,
+        "physical_to_logical_read_ratio": 0.9846727712900046
+      },
+      "attention": {
+        "logical_read_bytes": 293500416,
+        "logical_write_bytes": 102912,
+        "logical_weight_read_bytes": 280788480,
+        "b200_physical_read_bytes": 294475450,
+        "b200_physical_write_bytes": 0,
+        "b200_duration_ns": 423070,
+        "b200_duration_fraction": 0.039102184923657066,
+        "physical_to_logical_read_ratio": 1.0033220872845372
+      },
+      "moe": {
+        "logical_read_bytes": 1039508736,
+        "logical_write_bytes": 1236480,
+        "logical_weight_read_bytes": 1037283072,
+        "b200_physical_read_bytes": 1114920410,
+        "b200_physical_write_bytes": 5890,
+        "b200_duration_ns": 6530860,
+        "b200_duration_fraction": 0.6036138119708677,
+        "physical_to_logical_read_ratio": 1.0725454932588465
+      }
+    },
+    "interpretation": "The ratio cross-checks workload accounting against B200 physical DRAM. It is GPU-cache/runtime specific and is not applied as a PLENA bandwidth multiplier."
+  },
+  "prefill_s128": {
+    "layer_types": {
+      "mamba": {
+        "logical_read_bytes": 899374336,
+        "logical_write_bytes": 158646272,
+        "logical_weight_read_bytes": 836066560,
+        "b200_physical_read_bytes": 1509389580,
+        "b200_physical_write_bytes": 1553150,
+        "b200_duration_ns": 6204980,
+        "b200_duration_fraction": 0.30604078616977254,
+        "physical_to_logical_read_ratio": 1.6782662341834935
+      },
+      "attention": {
+        "logical_read_bytes": 297303552,
+        "logical_write_bytes": 13172736,
+        "logical_weight_read_bytes": 280788480,
+        "b200_physical_read_bytes": 314581620,
+        "b200_physical_write_bytes": 1276,
+        "b200_duration_ns": 501620,
+        "b200_duration_fraction": 0.024740801607496126,
+        "physical_to_logical_read_ratio": 1.0581159151438595
+      },
+      "moe": {
+        "logical_read_bytes": 12811045632,
+        "logical_write_bytes": 158269440,
+        "logical_weight_read_bytes": 12526160640,
+        "b200_physical_read_bytes": 13462514240,
+        "b200_physical_write_bytes": 260252300,
+        "b200_duration_ns": 13568410,
+        "b200_duration_fraction": 0.6692184122227314,
+        "physical_to_logical_read_ratio": 1.0508521026865076
+      }
+    },
+    "interpretation": "The ratio cross-checks workload accounting against B200 physical DRAM. It is GPU-cache/runtime specific and is not applied as a PLENA bandwidth multiplier."
+  }
+}

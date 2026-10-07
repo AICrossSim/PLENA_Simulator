@@ -1,0 +1,7 @@
+numpy==2.4.6
+scipy==1.17.1
+ortools==9.15.6755
+SALib==1.6.0
+cma==4.5.0
+matplotlib==3.11.2
+pytest==9.1.1

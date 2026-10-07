@@ -23,7 +23,17 @@ def test_decode_logical_traffic_crosschecks_complete_b200_ncu(report) -> None:
     layers = report["gpu_logical_traffic_crosscheck"]["decode_step_s2048"]["layer_types"]
     assert layers["mamba"]["physical_to_logical_read_ratio"] == pytest.approx(0.9846727713)
     assert layers["attention"]["physical_to_logical_read_ratio"] == pytest.approx(1.0033220873)
-    assert layers["moe"]["physical_to_logical_read_ratio"] == pytest.approx(1.0734392812)
+    # The integrated workload explicitly reads the6 routed and1 shared
+    # outputs for combine:23layers *7 *hidden2688 *BF16 2B =865536B.
+    # GPU evidence is unchanged; only the missing logical stage was added.
+    moe = layers["moe"]
+    combine_bytes = 23 * 7 * 2688 * 2
+    assert moe["logical_read_bytes"] == 1_038_643_200 + combine_bytes
+    assert moe["b200_physical_read_bytes"] == 1_114_920_410
+    assert moe["physical_to_logical_read_ratio"] == pytest.approx(
+        1_114_920_410 / (1_038_643_200 + combine_bytes)
+    )
+    assert moe["b200_physical_read_bytes"] / (moe["logical_read_bytes"] - combine_bytes) == pytest.approx(1.0734392812)
     assert (
         report["gpu_logical_traffic_crosscheck"]["prefill_s128"]["layer_types"]["mamba"][
             "physical_to_logical_read_ratio"

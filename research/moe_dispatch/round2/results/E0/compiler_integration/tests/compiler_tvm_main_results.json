@@ -1,0 +1,67 @@
+[
+  {
+    "module": "test_expr_materializer",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_expr_materializer.log"
+  },
+  {
+    "module": "test_mid_ir_async_wrap",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_async_wrap.log"
+  },
+  {
+    "module": "test_mid_ir_burn_view",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_burn_view.log"
+  },
+  {
+    "module": "test_mid_ir_distribute_cluster",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_distribute_cluster.log"
+  },
+  {
+    "module": "test_mid_ir_fold",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_fold.log"
+  },
+  {
+    "module": "test_mid_ir_fuse",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_fuse.log"
+  },
+  {
+    "module": "test_mid_ir_infer_lane_axis",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_infer_lane_axis.log"
+  },
+  {
+    "module": "test_mid_ir_mark",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_mark.log"
+  },
+  {
+    "module": "test_mid_ir_split",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_split.log"
+  },
+  {
+    "module": "test_mid_ir_to_plena",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_to_plena.log"
+  },
+  {
+    "module": "test_mid_ir_view",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_mid_ir_view.log"
+  },
+  {
+    "module": "test_narrow_mm_emitter",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_narrow_mm_emitter.log"
+  },
+  {
+    "module": "test_online_softmax_min",
+    "exit_code": 0,
+    "log": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_test_online_softmax_min.log"
+  }
+]

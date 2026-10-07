@@ -7,6 +7,7 @@ approximated as ordinary Transformer layers.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -311,34 +312,10 @@ class KimiK3KdaWorkloadModel:
                 ),
                 working_set_bytes=self._a_bytes(2 * tokens * projection),
             ),
-            StageWork(
-                layer_id,
-                "kda",
-                "kda_state_decay_prediction",
-                "state",
-                macs=tokens * kda.state_elements,
-                elementwise_ops=tokens * kda.state_elements,
-                exp_ops=tokens * kda.num_heads * kda.key_dim,
-                traffic=Traffic(
-                    state_read_bytes=self._s_bytes(recurrent_state_elements) if scenario.reads_initial_state else 0,
-                    on_chip_read_bytes=self._a_bytes(tokens * (2 * projection + kda.num_heads)),
-                ),
-                working_set_bytes=self._s_bytes(recurrent_state_elements),
-            ),
-            StageWork(
-                layer_id,
-                "kda",
-                "kda_delta_update_output",
-                "state",
-                macs=2 * tokens * kda.state_elements,
-                elementwise_ops=3 * tokens * kda.num_heads * kda.value_dim,
-                exp_ops=tokens * kda.num_heads,
-                traffic=Traffic(
-                    state_write_bytes=self._s_bytes(recurrent_state_elements),
-                    on_chip_read_bytes=self._a_bytes(tokens * (projection + kda.num_heads * kda.value_dim)),
-                    on_chip_write_bytes=self._a_bytes(output_elements),
-                ),
-                working_set_bytes=self._s_bytes(recurrent_state_elements),
+            *self._kda_core_stages(
+                layer_id, scenario,
+                recurrent_state_elements=recurrent_state_elements,
+                projection=projection, output_elements=output_elements,
             ),
             StageWork(
                 layer_id,
@@ -377,6 +354,104 @@ class KimiK3KdaWorkloadModel:
                     activation_write_bytes=self._a_bytes(tokens * arch.hidden_size),
                 ),
                 working_set_bytes=self._a_bytes(output_elements),
+            ),
+        ]
+
+
+    def _kda_core_stages(
+        self,
+        layer_id: int,
+        scenario: WorkloadScenario,
+        *,
+        recurrent_state_elements: int,
+        projection: int,
+        output_elements: int,
+    ) -> list[StageWork]:
+        """Count recurrent decode or the official two-kernel chunk-16 prefill.
+
+        FlashKDA splits prefill into token-parallel chunk preparation and a
+        head-parallel chunk recurrence. The extra preparation term counts the
+        causal within-chunk key interactions and the 16x16 triangular solve;
+        it is kept separate from the recurrent state traffic so a DSE can map
+        the two kernels to different PLENA resources.
+        """
+
+        kda = self.arch.kda
+        tokens = scenario.tokens
+        state_bytes = self._s_bytes(recurrent_state_elements)
+        state_read = state_bytes if scenario.reads_initial_state else 0
+        if scenario.phase == InferencePhase.DECODE:
+            return [
+                StageWork(
+                    layer_id,
+                    "kda",
+                    "kda_state_decay_prediction",
+                    "state",
+                    macs=tokens * kda.state_elements,
+                    elementwise_ops=tokens * kda.state_elements,
+                    exp_ops=tokens * kda.num_heads * kda.key_dim,
+                    traffic=Traffic(
+                        state_read_bytes=state_read,
+                        on_chip_read_bytes=self._a_bytes(tokens * (2 * projection + kda.num_heads)),
+                    ),
+                    working_set_bytes=state_bytes,
+                ),
+                StageWork(
+                    layer_id,
+                    "kda",
+                    "kda_delta_update_output",
+                    "state",
+                    macs=2 * tokens * kda.state_elements,
+                    elementwise_ops=3 * tokens * kda.num_heads * kda.value_dim,
+                    exp_ops=tokens * kda.num_heads,
+                    traffic=Traffic(
+                        state_write_bytes=state_bytes,
+                        on_chip_read_bytes=self._a_bytes(tokens * (projection + kda.num_heads * kda.value_dim)),
+                        on_chip_write_bytes=self._a_bytes(output_elements),
+                    ),
+                    working_set_bytes=state_bytes,
+                ),
+            ]
+
+        chunks_per_sequence = math.ceil(scenario.sequence_length / kda.chunk_size)
+        chunks = scenario.batch_size * chunks_per_sequence
+        full_pairs = kda.chunk_size * (kda.chunk_size + 1) // 2
+        tail = scenario.sequence_length % kda.chunk_size
+        pairs_per_sequence = (chunks_per_sequence - bool(tail)) * full_pairs
+        if tail:
+            pairs_per_sequence += tail * (tail + 1) // 2
+        causal_pairs = scenario.batch_size * pairs_per_sequence
+        prepare_macs = 2 * causal_pairs * kda.num_heads * kda.key_dim + chunks * kda.num_heads * kda.chunk_size**3
+        return [
+            StageWork(
+                layer_id,
+                "kda",
+                "kda_chunk_prepare",
+                "matrix_vector",
+                macs=prepare_macs,
+                elementwise_ops=4 * tokens * kda.num_heads * kda.key_dim,
+                exp_ops=tokens * kda.num_heads * kda.key_dim,
+                scan_compositions=chunks,
+                traffic=Traffic(
+                    on_chip_read_bytes=self._a_bytes(tokens * (3 * projection + kda.num_heads)),
+                    on_chip_write_bytes=self._a_bytes(tokens * (2 * projection)),
+                ),
+                working_set_bytes=self._a_bytes(chunks * kda.num_heads * kda.chunk_size * kda.chunk_size),
+            ),
+            StageWork(
+                layer_id,
+                "kda",
+                "kda_chunk_recurrence_output",
+                "state",
+                macs=3 * tokens * kda.state_elements,
+                elementwise_ops=3 * tokens * kda.num_heads * kda.value_dim,
+                traffic=Traffic(
+                    state_read_bytes=state_read,
+                    state_write_bytes=state_bytes,
+                    on_chip_read_bytes=self._a_bytes(tokens * (2 * projection)),
+                    on_chip_write_bytes=self._a_bytes(output_elements),
+                ),
+                working_set_bytes=state_bytes,
             ),
         ]
 

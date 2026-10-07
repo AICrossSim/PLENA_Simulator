@@ -1,0 +1,49 @@
+{
+  "GPU_benchmarks_run": false,
+  "all_requested_suites_passed": false,
+  "binary": null,
+  "binary_scope": "explicit existing binary for Python integration; fresh Rust unit build recorded separately",
+  "binary_sha256": null,
+  "cargo_command": "/nix/store/fk7y98mnnn9ckx1nh3pwnyqda4g2rg06-cargo-1.93.1-x86_64-unknown-linux-gnu/bin/cargo",
+  "cargo_target": "/tmp/plena-round2-cargo-target",
+  "checkpoint_inference_run": false,
+  "commit_at_end": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "commit_at_start": "6130f924c3417ffda19cd0bf4c98d6f4c10b3cae",
+  "compiler_root_override": null,
+  "compiler_source_override": null,
+  "package_versions": {
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "ortools": "missing",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "scipy": "missing",
+    "torch": "2.12.1"
+  },
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "python_executable": "/scratch/shared/mcl123/plena/venvs/plena-py311/bin/python",
+  "rustc_override": "/nix/store/zjkyswgsn63r8mgnr9hvm621jjnidqjm-rustc-1.93.1-x86_64-unknown-linux-gnu/bin/rustc",
+  "suites": [
+    {
+      "command": [
+        "/nix/store/fk7y98mnnn9ckx1nh3pwnyqda4g2rg06-cargo-1.93.1-x86_64-unknown-linux-gnu/bin/cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "research/moe_dispatch/rust/Cargo.toml",
+        "--target-dir",
+        "/tmp/plena-round2-cargo-target",
+        "--",
+        "--test-threads=2"
+      ],
+      "finished_utc": "2026-10-07T10:34:10.919924+00:00",
+      "initial_classification": "unit_or_build_failure_review_required",
+      "log": "research/moe_dispatch/round2/results/E0/tests/20261007T103408631812Z/rust.log",
+      "log_sha256": "af46f46ca946dafc2e11c308a91e0649e354abe9a22b67aa25658aab3830022f",
+      "returncode": 101,
+      "started_utc": "2026-10-07T10:34:08.647366+00:00",
+      "suite": "rust"
+    }
+  ],
+  "temporary_directory": "/tmp/plena-round2-test-tmp"
+}

@@ -1,0 +1,98 @@
+[
+  {
+    "name": "compiler_complete_tests_supported.log",
+    "bytes": 1440,
+    "sha256": "42f796770a9d0f8e1742fa1c7a87ba2fe0703782b97aea02a3ee9e3bb5c7565b",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_complete_tests_supported.log"
+  },
+  {
+    "name": "compiler_lifetime_affected_tests.log",
+    "bytes": 100,
+    "sha256": "17e8301cf68fdb8341fb6e89a18c8c4c1cc9d27cf51cb46330ed0e7ca9f7e0d0",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_lifetime_affected_tests.log"
+  },
+  {
+    "name": "compiler_moe_research_tests_final.log",
+    "bytes": 115,
+    "sha256": "6b29ff2a90a2d0541cd42dff06c0e5df45661bf691a7d26e2056427bb2575da8",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_moe_research_tests_final.log"
+  },
+  {
+    "name": "compiler_quantization_measurements.json",
+    "bytes": 346,
+    "sha256": "7d6986e11cfbc450be6160b2d887c7638939a529b892f138bdaaf50a580924b2",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_quantization_measurements.json"
+  },
+  {
+    "name": "compiler_quantization_measurements.log",
+    "bytes": 3493,
+    "sha256": "25f699a9efdf5f724d7fe98f8c6db5a5182037dc7d8e39763f3a3903d3249c1f",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_quantization_measurements.log"
+  },
+  {
+    "name": "compiler_residual_pass3.log",
+    "bytes": 204,
+    "sha256": "7d1572dcc0c65f7bafdf9133c4268683c8d2313af4e6c2776446562c6fed6215",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_residual_pass3.log"
+  },
+  {
+    "name": "compiler_resource_lifetime_final.log",
+    "bytes": 111,
+    "sha256": "a31e1b0e46c0a8f1be71c03f809ebacd54d832ce0bea4b868cc620832d0ed38d",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_resource_lifetime_final.log"
+  },
+  {
+    "name": "compiler_slow_connected_lifetime_fixed.log",
+    "bytes": 148,
+    "sha256": "c6f9e762f3a13b2994ac9b8905adedc39b6c79a547b3f39cf3822ab95918b4a2",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_slow_connected_lifetime_fixed.log"
+  },
+  {
+    "name": "compiler_slow_quantization_measured.log",
+    "bytes": 110,
+    "sha256": "d3549283470317275c6ce6a18de6ba097b67e38e08fe9d2b3539cfeaef5e5255",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_slow_quantization_measured.log"
+  },
+  {
+    "name": "compiler_syntax_final.log",
+    "bytes": 55,
+    "sha256": "efbb53000a943ebd0b0db3dea9760cca8f628fa0e50a908b683ca15a8c20bce1",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_syntax_final.log"
+  },
+  {
+    "name": "compiler_tilelang_complete.log",
+    "bytes": 204,
+    "sha256": "44e915bb73691957caf27be60dd231c0449bc68b6209ec17796fa017db4e2300",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tilelang_complete.log"
+  },
+  {
+    "name": "compiler_tilelang_complete_final.log",
+    "bytes": 204,
+    "sha256": "31bb371246c3f64ed304a516c801e85c8e8f0f37d92e1cb5a356fb167cd44814",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tilelang_complete_final.log"
+  },
+  {
+    "name": "compiler_to_plena_main_final.log",
+    "bytes": 1308,
+    "sha256": "5f3c06d3ce090c55f25d565716300ba414b82e87731695f227c0f3da622ecfe5",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_to_plena_main_final.log"
+  },
+  {
+    "name": "compiler_tvm_main_results.json",
+    "bytes": 2436,
+    "sha256": "c74b204875cbb354924a7f5d9a1dc45e2f7b6809d99699c3fa28a617aba875b8",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_tvm_main_results.json"
+  },
+  {
+    "name": "compiler_view_lower_final.log",
+    "bytes": 10152,
+    "sha256": "ed5a34d98244869f5a965e49fa790afff90bb336e70c8bcf6346ac88dc7fbf0c",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_view_lower_final.log"
+  },
+  {
+    "name": "compiler_view_main_final.log",
+    "bytes": 1250,
+    "sha256": "a4bdfeb4fe47238aaaef947df079052e80557080cb3c84f26239a951fe55ecdd",
+    "source": "/scratch/shared/mcl123/plena/outputs/round2_preflight_20261007/compiler_view_main_final.log"
+  }
+]

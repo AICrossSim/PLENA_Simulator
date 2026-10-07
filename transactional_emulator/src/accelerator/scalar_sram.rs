@@ -1,6 +1,6 @@
 //! Scalar SRAM storage plus byte-level preload/dump encoding.
 
-use half::f16;
+use half::{bf16, f16};
 use quantize::{DataType, FpType};
 
 pub(super) struct ScalarSram {
@@ -52,7 +52,7 @@ impl ScalarSram {
             "BF16 preload exceeds FP SRAM"
         );
         for (slot, bytes) in self.fpsram.iter_mut().zip(bytes.chunks_exact(2)) {
-            *slot = bf16::from_bits(u16::from_le_bytes([bytes[0], bytes[1]]));
+            *slot = f32::from(bf16::from_bits(u16::from_le_bytes([bytes[0], bytes[1]])));
         }
     }
 
@@ -65,8 +65,8 @@ impl ScalarSram {
         self.fpsram[addr]
     }
 
-    pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
-        self.fpsram[addr] = quantize_scalar(self.fp_type, value);
+    pub(super) fn write_fp<T: Into<f32>>(&mut self, addr: usize, value: T) {
+        self.fpsram[addr] = quantize_scalar(self.fp_type, value.into());
     }
 
     pub(super) fn read_int(&self, addr: usize) -> u32 {
@@ -86,14 +86,16 @@ impl ScalarSram {
     /// Panics on overrun rather than truncating: an out-of-range FP_MEM base is a
     /// compiler bug, and silently dropping the tail would corrupt a Mamba chunk's
     /// per-row decay scalars with no diagnostic.
-    pub(super) fn write_fp_window(&mut self, start: usize, values: &[bf16]) {
+    pub(super) fn write_fp_window<T: Copy + Into<f32>>(&mut self, start: usize, values: &[T]) {
         let end = start + values.len();
         assert!(
             end <= self.fpsram.len(),
             "S_MAP_FP_V would write FP_MEM[{start}..{end}) past the {}-entry file",
             self.fpsram.len()
         );
-        self.fpsram[start..end].copy_from_slice(values);
+        for (dst, value) in self.fpsram[start..end].iter_mut().zip(values) {
+            *dst = quantize_scalar(self.fp_type, (*value).into());
+        }
     }
 
     pub(super) fn log_debug_contents(&self) {
@@ -109,10 +111,6 @@ impl ScalarSram {
                 bits.to_le_bytes()
             })
             .collect()
-    }
-
-    pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
-        self.intsram.iter().flat_map(|v| v.to_le_bytes()).collect()
     }
 
     pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
@@ -150,12 +148,12 @@ mod tests {
 
     #[test]
     fn explicit_bf16_preload_preserves_bits_including_signed_zero_and_subnormals() {
-        let mut sram = ScalarSram::new();
+        let mut sram = ScalarSram::new(DataType::Fp(FpType::BF16));
         let bits = [0x3f80_u16, 0x8000, 0x0001, 0xc020];
         let bytes: Vec<u8> = bits.iter().flat_map(|b| b.to_le_bytes()).collect();
         sram.load_fpsram_from_bf16_bytes(&bytes);
         for (i, expected) in bits.into_iter().enumerate() {
-            assert_eq!(sram.read_fp(i).to_bits(), expected);
+            assert_eq!((sram.read_fp(i).to_bits() >> 16) as u16, expected);
         }
         assert_eq!(&sram.fpsram_to_le_bytes()[..bytes.len()], bytes.as_slice());
     }
@@ -163,13 +161,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "truncated BF16 preload")]
     fn explicit_bf16_preload_rejects_partial_values() {
-        ScalarSram::new().load_fpsram_from_bf16_bytes(&[0x80]);
+        ScalarSram::new(DataType::Fp(FpType::BF16)).load_fpsram_from_bf16_bytes(&[0x80]);
     }
 
     #[test]
     #[should_panic(expected = "BF16 preload exceeds FP SRAM")]
     fn explicit_bf16_preload_rejects_capacity_overflow() {
-        ScalarSram::new().load_fpsram_from_bf16_bytes(&[0; 2050]);
+        ScalarSram::new(DataType::Fp(FpType::BF16)).load_fpsram_from_bf16_bytes(&[0; 2050]);
     }
 
     #[test]
