@@ -701,7 +701,7 @@ def render_report(e, status, args):
             b = next((r for r in ss if r["policy"].startswith("threshold_fallback")), {})
             if number(a.get("geomean_ms")) and number(b.get("geomean_ms")):
                 add(10, f"{mode}/{hardware_label(name)}：纯 T=2 阈值比阈值+回退慢 {100 * (float(a['geomean_ms']) / float(b['geomean_ms']) - 1):.3f}%。")
-    add(10, "MAE=平均 |预测时长−实际时长|/实际时长；success=Next 第一权重块落在 Current 结束前 W 内的比例，W 为两个权重块的纯计算服务时间（含发射、点积管线及累加依赖，排除 HBM/端口）；late=块晚于 Current 结束；stall=暴露权重等待。oracle 为相同政策两次 profile/replay 参考，若分配改变会留残差，不能称完美先知零误差。状态 bit 只是状态量估计，没有综合面积或频率。")
+    add(10, "MAE=平均 |预测时长−实际时长|/实际时长；success=Next 第一权重块落在 Current 结束前 W 内的比例。W近似计两个块的纯计算服务：WS每块含ceil(Me/PM)个M发射，OS/IS装入后只含一个M发射；排除HBM/端口，不是精确tile时序。late=块晚于 Current 结束；stall=暴露权重等待。oracle 为相同政策两次 profile/replay 参考，若分配改变会留残差；任务书的同一实际调度真实时长oracle尚未实现，E5按部分完成交付。状态 bit 只是状态量估计，没有综合面积或频率。")
     add(10, "![预测器误差与端到端](figures/fig_predictor.png)")
 
     moe = e.rows("results/E6/moe_layer_e2e.csv")

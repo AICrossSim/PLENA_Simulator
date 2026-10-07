@@ -17,7 +17,9 @@ from matplotlib.patches import Rectangle
 MODES=('pipelined','port_tight','fixed_issue')
 BATCHES=(2,4,8,16,64,96,128)
 NAMES={'B0':'B0 original single','B1':'B1 tuned single','B2':'B2 tuned homogeneous',
-       'fixed_4+2':'Fixed 4+2','previous_asym':'Previous asymmetric','best_hetero':'Selected heterogeneous'}
+       'fixed_3+3':'Fixed 3+3','fixed_4+2':'Fixed 4+2','previous_asym':'Previous asymmetric',
+       'best_5+1':'Selected 5+1','best_4+2':'Selected 4+2','best_2+4':'Selected 2+4 (mirror)',
+       'best_hetero':'Selected heterogeneous','U1':'U1 shape diagnostic','U2':'U2 weight-read diagnostic'}
 FLOWS=('OS','WS','IS')
 COLORS=('#0072B2','#E69F00','#009E73','#CC79A7','#D55E00','#56B4E9')
 FAMILIES=('single','homogeneous','heterogeneous')
@@ -79,14 +81,16 @@ class Figures:
         self.save(fig,'fig_headroom','Analytical estimates, held-out windows; 1 cycle = 1 ns. Floors are separate lower bounds, not additive time components.')
 
     def main_bars(self):
-        rows=self.csv('E4/heldout_main_table.csv');names=('B0','B1','B2','fixed_4+2','best_hetero')
-        fig,axes=plt.subplots(1,3,figsize=(15,4.5));width=.16;x=np.arange(len(BATCHES))
+        rows=self.csv('E4/heldout_main_table.csv')
+        names=('B0','B1','B2','fixed_3+3','fixed_4+2','best_5+1','best_4+2','best_2+4','best_hetero','U1','U2')
+        fig,axes=plt.subplots(1,3,figsize=(20,5));width=.075;x=np.arange(len(BATCHES))
         for ax,mode in zip(axes,MODES):
             ss=[r for r in rows if r['onchip_mode']==mode and r['sched_type']=='runtime'];base=next(r for r in ss if r['entry']=='B1')
             for j,name in enumerate(names):
                 r=next(r for r in ss if r['entry']==name)
                 vals=[number(base[f'B{b}'])/number(r[f'B{b}']) for b in BATCHES]
-                ax.bar(x+(j-2)*width,vals,width,color=COLORS[j],label=NAMES[name])
+                ax.bar(x+(j-(len(names)-1)/2)*width,vals,width,color=COLORS[j%len(COLORS)],
+                    hatch=('//' if name.startswith('U') else '..' if j>=6 else None),label=NAMES[name])
             ax.axhline(1,color='black',lw=.8);ax.set_xticks(x,[f'B{b}' for b in BATCHES]);ax.set_ylabel('Speedup relative to B1');ax.set_title(self.title(mode));ax.grid(axis='y',alpha=.2)
         axes[0].legend(fontsize=7)
         self.save(fig,'fig_main_bars','Runtime analytical estimates on held-out windows; one development-selected design is frozen across batches. Selected designs are best-evaluated candidates when search proofs remain open; no RTL calibration.')

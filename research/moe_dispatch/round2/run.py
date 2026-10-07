@@ -219,6 +219,9 @@ def e4(args):
       for name in ('U1','U2'):
         r=next(r for r in table if r['onchip_mode']==mode and r['entry']==name and r['sched_type']=='runtime')
         summary+=f"- {mode}/{name}: 相对B1延迟降低{100*(1-r['ratio_vs_B1']):.3f}%。\n"
+      homo=next(r for r in table if r['onchip_mode']==mode and r['entry']=='B2' and r['sched_type']=='runtime')
+      single=next(r for r in table if r['onchip_mode']==mode and r['entry']=='B1' and r['sched_type']=='runtime')
+      summary+=f"- {mode} 同构拆分的逐batch延迟比B2/B1："+'；'.join(f"B{batch}={homo['B'+str(batch)]/single['B'+str(batch)]:.6f}" for batch in BATCHES)+'。\n'
     summary+='\n尚无RTL校准，不宣布架构胜出；family全局证明未闭合时，best仅指已评估候选。U1为逐专家按独占代价选形状、零切换的诊断参考，不是整层最优时延上界；U2仅去掉重复阵列权重读的诊断参考，不混入硬件最优。各忙碌量重叠，不相加成墙钟时间。'
     finalize(out,COMMAND+' --stage E4 --jobs '+str(args.jobs),summary)
 
@@ -268,12 +271,15 @@ def e5(args):
             current=t.get('current_end');ready=t.get('first_weight_ready')
             if current is not None and ready is not None:
                 nnext+=1;core=d.cores[t['core']];e=w['experts'][t['expert_index']]
-                W=2*((ceildiv(e['Me'],core.pm)-1)*p.issue_interval+p.dot_latency(core)+1)
+                uses=ceildiv(e['Me'],core.pm) if d.flows[t['core']]=='WS' else 1
+                W=2*((uses-1)*p.issue_interval+p.dot_latency(core)+1)
                 success+=current-W<=ready<=current;late+=ready>current;stall+=max(0,ready-current)
             taskrows.append({'design':name,'onchip_mode':mode,'predictor':pname,'window_id':w['id'],
                 'expert_id':t['expert_id'],'core':t['core'],'predicted_cycles':t['predicted_cycles'],
                 'actual_cycles':actual,'first_weight_ready':ready,'current_end':current,
-                'prediction_abs_error_pct':100*errors[-1]})
+                'prediction_abs_error_pct':100*errors[-1],
+                'success_window_cycles':W if current is not None and ready is not None else None,
+                'dataflow':d.flows[t['core']]})
           stats[pname]={'mae_pct':100*sum(errors)/len(errors),'success_pct':100*success/nnext if nnext else None,
             'late_pct':100*late/nnext if nnext else None,'stall_cycles':stall,'next_samples':nnext}
           states.append({'design':name,'onchip_mode':mode,'predictor':pname,'predictor_state_bits':predictor.state_bits(),
@@ -296,7 +302,7 @@ def e5(args):
       ps=[r for r in pr if r['design']==name and r['onchip_mode']==mode];best=min(ps,key=lambda r:r['geomean_ms']);worst=max(ps,key=lambda r:r['geomean_ms'])
       summary+=f"- {mode}/{name}: 纯阈值比回退慢{100*(a['geomean_ms']/b['geomean_ms']-1):.3f}%；EFT/MILP-LPT={eft['ratio_vs_milp_sched']:.5f}；预测器最好{best['predictor']}与最差{worst['predictor']}延迟相差{100*(worst['geomean_ms']/best['geomean_ms']-1):.3f}%。\n"
     finalize(out,COMMAND+' --stage E5 --jobs '+str(args.jobs),summary,
-        'MAE=平均|预测时长−实测时长|/实测时长。成功窗口为Current结束前两个权重块计算时间内；是近似模型内准时性。late=第一块晚于Current结束；stall为暴露权重等待，不与端口占用相加。oracle是profile-guided参考而非强制零误差。状态账本仅为可量化状态，不声称综合面积。')
+        'MAE=平均|预测时长−实测时长|/实测时长。成功窗口为Current结束前两个权重块的近似计算服务时间；WS每块服务ceil(Me/PM)个M发射，OS/IS每次装入服务一个M发射。排除HBM/端口，不能称精确tile时序。late=第一块晚于Current结束；stall为暴露权重等待，不与端口占用相加。oracle是profile-guided参考而非同一固定调度的完美先知；此精确oracle协议尚未完成。状态账本仅为可量化状态，不声称综合面积。')
 
 
 def e6(args):

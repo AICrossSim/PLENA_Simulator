@@ -96,6 +96,7 @@ def test_work_limited_assignment_repeat_and_budget_are_explicit():
     assert a["solver_budget"]["kind"]=="deterministic_work"
     assert a["solver_budget"]["max_deterministic_time"]==pytest.approx(.00001)
     assert a["solver_budget"]["wall_clock_timeout_seconds"] is None
+    assert a["solver_budget"]["linearization_level"]==2
     assert a["status"] in ("OPTIMAL","FEASIBLE","UNKNOWN")
     assert a["optimal"]==(a["status"]=="OPTIMAL")
 

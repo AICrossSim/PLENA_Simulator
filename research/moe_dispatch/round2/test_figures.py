@@ -21,7 +21,7 @@ def test_all_ten_readers_render_with_explicit_temporary_fixture_tables(tmp_path)
     def js(name,obj):
         dest=results/name;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(json.dumps(obj))
     write('E1/bounds_per_window.csv',[dict(design='B1',onchip_mode=m,batch=b,latency_ms=1,hbm_floor_unique=.5,hbm_floor_actual=.6,mac_floor=.1,port_floor=.2,task_floor=.2) for m,b in itertools.product(p.MODES,p.BATCHES)])
-    names=('B0','B1','B2','fixed_4+2','best_hetero')
+    names=('B0','B1','B2','fixed_3+3','fixed_4+2','best_5+1','best_4+2','best_2+4','best_hetero','U1','U2')
     write('E4/heldout_main_table.csv',[dict(entry=n,onchip_mode=m,sched_type='runtime',**{f'B{b}':1+j*.1 for b in p.BATCHES}) for m in p.MODES for j,n in enumerate(names)])
     write('E4/per_window.csv',[dict(entry=n,onchip_mode=m,sched_type='runtime',cycles=1e6,hbm_busy_frac=.6,w_port_busy=3e5,x_port_busy=1e5,acc_port_busy=1e5,core0_compute_busy=2e5,core1_compute_busy=1e5) for m,n in itertools.product(p.MODES,('B1','B2','best_hetero'))])
     for mode in p.MODES:

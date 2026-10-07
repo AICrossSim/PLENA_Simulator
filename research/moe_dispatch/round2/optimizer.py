@@ -140,7 +140,8 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
     deterministic_limit=float(max_seconds)*0.01
     solver_budget={"kind":"deterministic_work","effort_units":float(max_seconds),
                    "work_per_effort_unit":0.01,"max_deterministic_time":deterministic_limit,
-                   "wall_clock_timeout_seconds":None,"num_search_workers":1,"random_seed":20261007}
+                   "wall_clock_timeout_seconds":None,"num_search_workers":1,"random_seed":20261007,
+                   "linearization_level":2}
     n=len(workload["experts"])
     if not n:
         return {"lb_cycles":0.0,"owners":[],"status":"OPTIMAL","quantum":quantum,
@@ -187,6 +188,10 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
     solver.parameters.num_search_workers=1
     solver.parameters.random_seed=20261007
     solver.parameters.max_deterministic_time=deterministic_limit
+    # Full linearization bounds the mixed-dataflow integer resource loads.
+    # The installed default level1 can spend minutes enumerating tick-sized
+    # objective improvements, even on three expert types at unchanged work.
+    solver.parameters.linearization_level=2
     solver.parameters.cp_model_presolve=True
     status_code=solver.Solve(model)
     status=solver.StatusName(status_code)
