@@ -1,0 +1,415 @@
+# PLENA Simulator Configuration
+# Set active_mode to "analytic" or "transactional" to select which configuration to use
+
+[MODE]
+active = "analytic"  # Options: "analytic" or "transactional"
+
+# ============================================================================
+# ANALYTIC MODEL CONFIGURATION
+# ============================================================================
+
+[ANALYTIC.CONFIG.DC_EN]
+value = 1
+
+[ANALYTIC.CONFIG.MAX_LOOP_INSTRUCTIONS]
+value = 10000
+
+[ANALYTIC.CONFIG.BLEN]
+value = 128
+
+[ANALYTIC.CONFIG.HLEN]
+value = 128
+
+[ANALYTIC.CONFIG.MLEN]
+value = 2048
+
+[ANALYTIC.CONFIG.VLEN]
+value = 2048
+
+[ANALYTIC.CONFIG.BROADCAST_AMOUNT]
+value = 16
+
+[ANALYTIC.CONFIG.HBM_SIZE]
+value = 137438953472
+
+[ANALYTIC.CONFIG.HBM_WIDTH]
+value = 512
+
+[ANALYTIC.CONFIG.MATRIX_SRAM_SIZE]
+value = 256
+
+[ANALYTIC.CONFIG.VECTOR_SRAM_SIZE]
+value = 65536
+
+[ANALYTIC.CONFIG.HBM_M_Prefetch_Amount]
+value = 2048
+
+[ANALYTIC.CONFIG.HBM_V_Prefetch_Amount]
+value = 16
+
+[ANALYTIC.CONFIG.HBM_V_Writeback_Amount]
+value = 16
+
+[ANALYTIC.PRECISION.MATRIX_SRAM_TYPE]
+format = "Plain"
+[ANALYTIC.PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[ANALYTIC.PRECISION.VECTOR_SRAM_TYPE]
+format = "Plain"
+[ANALYTIC.PRECISION.VECTOR_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE]
+format = "Mx"
+block = 8
+[ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[ANALYTIC.PRECISION.HBM_M_KV_TYPE]
+format = "Mx"
+block = 8
+[ANALYTIC.PRECISION.HBM_M_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[ANALYTIC.PRECISION.HBM_M_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[ANALYTIC.PRECISION.HBM_V_ACT_TYPE]
+format = "Mx"
+block = 8
+[ANALYTIC.PRECISION.HBM_V_ACT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[ANALYTIC.PRECISION.HBM_V_ACT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[ANALYTIC.PRECISION.HBM_V_KV_TYPE]
+format = "Mx"
+block = 8
+[ANALYTIC.PRECISION.HBM_V_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[ANALYTIC.PRECISION.HBM_V_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[ANALYTIC.PRECISION.HBM_V_INT_TYPE]
+format = "Plain"
+[ANALYTIC.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
+type = "Int"
+width = 32
+
+[ANALYTIC.PRECISION.SCALAR_FP]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[ANALYTIC.LATENCY.SYSTOLIC_PROCESSING_OVERHEAD]
+dc_lib_en = 0
+dc_lib_dis = 0
+
+[ANALYTIC.LATENCY.VECTOR_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 10
+dc_lib_dis = 20
+
+[ANALYTIC.LATENCY.VECTOR_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[ANALYTIC.LATENCY.VECTOR_ADD_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[ANALYTIC.LATENCY.VECTOR_MUL_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 5
+
+[ANALYTIC.LATENCY.VECTOR_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 6
+
+[ANALYTIC.LATENCY.VECTOR_PREFIX_SCAN_CYCLES]
+dc_lib_en = 9
+dc_lib_dis = 9
+
+[ANALYTIC.LATENCY.VECTOR_SHIFT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[ANALYTIC.LATENCY.VECTOR_RECI_CYCLES]
+dc_lib_en = 2
+dc_lib_dis = 7
+
+[ANALYTIC.LATENCY.VECTOR_MAX_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[ANALYTIC.LATENCY.VECTOR_SUM_CYCLES]
+dc_lib_en = 8
+dc_lib_dis = 20
+
+[ANALYTIC.LATENCY.SCALAR_FP_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[ANALYTIC.LATENCY.SCALAR_FP_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[ANALYTIC.LATENCY.SCALAR_FP_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[ANALYTIC.LATENCY.SCALAR_FP_SQRT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[ANALYTIC.LATENCY.SCALAR_FP_RECI_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[ANALYTIC.LATENCY.SCALAR_INT_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+# ============================================================================
+# TRANSACTIONAL SIMULATOR CONFIGURATION
+# ============================================================================
+
+[TRANSACTIONAL.CONFIG.DC_EN]
+value = 1
+
+[TRANSACTIONAL.CONFIG.MAX_LOOP_INSTRUCTIONS]
+value = 100000
+
+[TRANSACTIONAL.CONFIG.BLEN]
+value = 4
+
+[TRANSACTIONAL.CONFIG.HLEN]
+value = 16
+
+[TRANSACTIONAL.CONFIG.MLEN]
+value = 64
+
+[TRANSACTIONAL.CONFIG.VLEN]
+value = 64
+
+[TRANSACTIONAL.CONFIG.BROADCAST_AMOUNT]
+value = 4
+
+[TRANSACTIONAL.CONFIG.HBM_SIZE]
+# Modeled HBM capacity. The emulator eagerly allocates and zero-fills this much
+# host RAM at startup (see lib/memory MemoryBacked), so it must fit within the
+# host/container memory budget. 16 GiB suits operator tests and the 64 GiB Docker
+# limit. Raise this (e.g. 137438953472 = 128 GiB) for large-model workloads, and
+# bump docker/docker-compose.yml's memory limit accordingly.
+value = 17179869184   # 16 GiB (was 128 GiB)
+
+[TRANSACTIONAL.CONFIG.HBM_WIDTH]
+value = 512
+
+[TRANSACTIONAL.CONFIG.MATRIX_SRAM_SIZE]
+value = 4096
+
+[TRANSACTIONAL.CONFIG.VECTOR_SRAM_SIZE]
+value = 4194304
+
+[TRANSACTIONAL.CONFIG.HBM_M_Prefetch_Amount]
+value = 64
+
+[TRANSACTIONAL.CONFIG.HBM_V_Prefetch_Amount]
+value = 4
+
+[TRANSACTIONAL.CONFIG.HBM_V_Writeback_Amount]
+value = 4
+
+[TRANSACTIONAL.PRECISION.MATRIX_SRAM_TYPE]
+format = "Plain"
+[TRANSACTIONAL.PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[TRANSACTIONAL.PRECISION.VECTOR_SRAM_TYPE]
+format = "Plain"
+[TRANSACTIONAL.PRECISION.VECTOR_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[TRANSACTIONAL.PRECISION.HBM_M_WEIGHT_TYPE]
+format = "Mx"
+block = 8
+[TRANSACTIONAL.PRECISION.HBM_M_WEIGHT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[TRANSACTIONAL.PRECISION.HBM_M_WEIGHT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[TRANSACTIONAL.PRECISION.HBM_M_KV_TYPE]
+format = "Mx"
+block = 8
+[TRANSACTIONAL.PRECISION.HBM_M_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[TRANSACTIONAL.PRECISION.HBM_M_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[TRANSACTIONAL.PRECISION.HBM_V_ACT_TYPE]
+format = "Mx"
+block = 8
+[TRANSACTIONAL.PRECISION.HBM_V_ACT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[TRANSACTIONAL.PRECISION.HBM_V_ACT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[TRANSACTIONAL.PRECISION.HBM_V_KV_TYPE]
+format = "Mx"
+block = 8
+[TRANSACTIONAL.PRECISION.HBM_V_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[TRANSACTIONAL.PRECISION.HBM_V_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+# Explicit Matrix-view state transfers are independent of activation/KV precision.
+[TRANSACTIONAL.PRECISION.HBM_STATE_TYPE]
+format = "Plain"
+[TRANSACTIONAL.PRECISION.HBM_STATE_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[TRANSACTIONAL.PRECISION.HBM_V_INT_TYPE]
+format = "Plain"
+[TRANSACTIONAL.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
+type = "Int"
+width = 32
+
+[TRANSACTIONAL.PRECISION.SCALAR_FP]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[TRANSACTIONAL.LATENCY.SYSTOLIC_PROCESSING_OVERHEAD]
+dc_lib_en = 0
+dc_lib_dis = 0
+
+[TRANSACTIONAL.LATENCY.VECTOR_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 10
+dc_lib_dis = 20
+
+[TRANSACTIONAL.LATENCY.VECTOR_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[TRANSACTIONAL.LATENCY.VECTOR_ADD_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[TRANSACTIONAL.LATENCY.VECTOR_MUL_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 5
+
+[TRANSACTIONAL.LATENCY.VECTOR_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 6
+
+[TRANSACTIONAL.LATENCY.VECTOR_PREFIX_SCAN_CYCLES]
+dc_lib_en = 9
+dc_lib_dis = 9
+
+[TRANSACTIONAL.LATENCY.VECTOR_SHIFT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[TRANSACTIONAL.LATENCY.VECTOR_RECI_CYCLES]
+dc_lib_en = 2
+dc_lib_dis = 7
+
+[TRANSACTIONAL.LATENCY.VECTOR_MAX_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[TRANSACTIONAL.LATENCY.VECTOR_SUM_CYCLES]
+dc_lib_en = 8
+dc_lib_dis = 20
+
+[TRANSACTIONAL.LATENCY.SCALAR_FP_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[TRANSACTIONAL.LATENCY.SCALAR_FP_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[TRANSACTIONAL.LATENCY.SCALAR_FP_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[TRANSACTIONAL.LATENCY.SCALAR_FP_SQRT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[TRANSACTIONAL.LATENCY.SCALAR_FP_RECI_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[TRANSACTIONAL.LATENCY.SCALAR_INT_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
