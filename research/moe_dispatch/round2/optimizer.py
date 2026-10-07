@@ -117,21 +117,32 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
     """Exact integer assignment relaxation, solved with one deterministic worker.
 
     Returns lb_cycles, owners, status, quantum, and explicit solver/gap scope.
-    A time-limited FEASIBLE result uses BestObjectiveBound for its lower bound
+    A work-limited FEASIBLE result uses BestObjectiveBound for its lower bound
     and the available assignment for executable replay. INFEASIBLE never
     fabricates an assignment. Task types with identical costs are aggregated
     into integer counts; this preserves the assignment feasible set exactly.
+
+    ``max_seconds`` is a retained compatibility name for solver effort, NOT
+    a wall-clock deadline: one effort unit maps to0.01 CP-SAT deterministic
+    work units. The default10 gives0.1 deterministic work units. Machine
+    load cannot change the stop point. The BnB traversal separately records
+    its actual wall-clock cap; a timed-out allocation remains unresolved.
     """
     if quantum<=0 or max_seconds<=0:
         raise ValueError("positive time limit and time quantum required")
+    deterministic_limit=float(max_seconds)*0.01
+    solver_budget={"kind":"deterministic_work","effort_units":float(max_seconds),
+                   "work_per_effort_unit":0.01,"max_deterministic_time":deterministic_limit,
+                   "wall_clock_timeout_seconds":None,"num_search_workers":1,"random_seed":20261007}
     n=len(workload["experts"])
     if not n:
         return {"lb_cycles":0.0,"owners":[],"status":"OPTIMAL","quantum":quantum,
-                "objective_upper_cycles":0.0,"optimal":True,"scope":"empty assignment relaxation"}
+                "objective_upper_cycles":0.0,"optimal":True,"solver_budget":solver_budget,
+                "scope":"empty assignment relaxation"}
     table=_costs(workload,design,params)
     if any(all(co is None for co in row) for row in table):
         return {"lb_cycles":None,"owners":None,"status":"INFEASIBLE","quantum":quantum,
-                "optimal":False,"scope":"an expert has no physically legal core"}
+                "optimal":False,"solver_budget":solver_budget,"scope":"an expert has no physically legal core"}
     groups=_group_tasks(workload,table)
     grouped_costs=[table[ids[0]] for _,ids in groups]
     # Bound the integer objective using a deterministic legal assignment.
@@ -168,7 +179,7 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
     solver=cp_model.CpSolver()
     solver.parameters.num_search_workers=1
     solver.parameters.random_seed=20261007
-    solver.parameters.max_time_in_seconds=max_seconds
+    solver.parameters.max_deterministic_time=deterministic_limit
     solver.parameters.cp_model_presolve=True
     status_code=solver.Solve(model)
     status=solver.StatusName(status_code)
@@ -177,7 +188,6 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
         # optimal solve is claimed when timeout occurs before a witness.
         owners=greedy
         bound=max(0.0,solver.BestObjectiveBound())*quantum
-        objective=allocation_objective(workload,design,params,owners)
     else:
         owners=[None]*n
         for g,(_,ids) in enumerate(groups):
@@ -191,13 +201,17 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
                 cursor+=count
         assert all(c is not None for c in owners)
         bound=max(0.0,solver.BestObjectiveBound())*quantum
-        objective=solver.ObjectiveValue()*quantum
+    # A FEASIBLE solver incumbent can retain slack in the objective T.
+    # Replay/gaps must use the actual physical resource load of the immutable
+    # owner witness, not that incidental solver variable value.
+    objective=allocation_objective(workload,design,params,owners)
     return {"lb_cycles":bound,"owners":owners,"status":status,"quantum":quantum,
             "objective_upper_cycles":objective,"optimal":status_code==cp_model.OPTIMAL,
             "assignment_gap_cycles":max(0.0,objective-bound),"aggregated_task_types":len(groups),
             "quantization_direction":"all resource/critical coefficients rounded down",
             "quantization_loss_bound_cycles":(n+1)*quantum,
             "storage_chunks":len(storage_chunks(workload)),"common_activation_spill_bytes":_common_spill(workload),
+            "solver_budget":solver_budget,
             "scope":"exact quantized assignment/resource relaxation; not an optimal temporal schedule"}
 
 

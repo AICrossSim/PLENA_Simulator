@@ -74,6 +74,41 @@ def test_assignment_repeat_is_bit_identical():
     assert a==b
 
 
+def test_work_limited_assignment_repeat_and_budget_are_explicit():
+    # The deliberately tiny work cap must stop identically, even without
+    # enough work to establish optimality. Wall-clock CPU load is irrelevant.
+    ww=w(tuple(range(1,25)),h=2048,f=1408);ww["batch"]=128
+    dd=o.Design((o.Core(1,6,1024),o.Core(1,6,1024)),flows=("OS","WS"))
+    a=o.solve_assignment(ww,dd,max_seconds=.001)
+    b=o.solve_assignment(ww,dd,max_seconds=.001)
+    assert a==b
+    assert a["solver_budget"]["kind"]=="deterministic_work"
+    assert a["solver_budget"]["max_deterministic_time"]==pytest.approx(.00001)
+    assert a["solver_budget"]["wall_clock_timeout_seconds"] is None
+    assert a["status"] in ("OPTIMAL","FEASIBLE","UNKNOWN")
+    assert a["optimal"]==(a["status"]=="OPTIMAL")
+
+
+def test_captured_swe_b128_timeout_is_repeated_exactly_with_real_histogram():
+    # Immutable histogram from v3_captured_mixed_development_swe_t128_l13.
+    # Its old wall-clock10s cutoff returned the same owners but different
+    # incidental objective-variable values on two consecutive solves.
+    rows=(8,4,2,15,1,3,44,3,1,5,14,21,5,2,8,11,2,3,5,65,15,8,30,5,
+          8,22,7,1,16,2,16,14,28,8,9,12,40,13,22,19,11,9,11,5,12,15,
+          12,25,5,1,8,4,33,9,38,10,8,8,12,15)
+    ww=w(rows,h=2048,f=1408)
+    ww.update(id="v3_captured_mixed_development_swe_t128_l13",batch=128,top_k=6)
+    ww["experts"].append({"id":64,"Me":128,"H":2048,"F":2816,"is_shared":True})
+    dd=o.Design((o.Core(1,6,1024),o.Core(1,6,1024)),flows=("OS","WS"))
+    a=o.evaluate_design(ww,dd)
+    b=o.evaluate_design(ww,dd)
+    assert a==b
+    sol=a["assignment"]
+    assert sol["objective_upper_cycles"]==o.allocation_objective(ww,dd,o.Parameters(),sol["owners"])
+    assert sol["solver_budget"]["max_deterministic_time"]==.1
+    assert a["lb_cycles"]<=a["milp_sched"]["cycles"]+1e-7
+
+
 def test_infeasible_task_is_reported_without_fake_owner():
     dd=o.Design((o.Core(6,4,512),),flows=("WS",))
     # A single Z row is larger than the installed384KiB pool.

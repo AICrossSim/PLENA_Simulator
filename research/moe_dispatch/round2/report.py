@@ -88,11 +88,15 @@ class Evidence:
         self.root = Path(root).resolve()
         self.errors = []
         self.files = {}
+        self._csv = {}
+        self._json = {}
 
     def path(self, relative):
         return self.root / relative
 
     def rows(self, relative):
+        if relative in self._csv:
+            return self._csv[relative]
         p = self.path(relative)
         if not p.is_file():
             return []
@@ -100,18 +104,22 @@ class Evidence:
             with p.open(newline="") as f:
                 rows = list(csv.DictReader(f))
             self.files[relative] = {"rows": len(rows), "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+            self._csv[relative] = rows
             return rows
         except (OSError, csv.Error, UnicodeError) as error:
             self.errors.append(f"{relative}: {error}")
             return []
 
     def data(self, relative):
+        if relative in self._json:
+            return self._json[relative]
         p = self.path(relative)
         if not p.is_file():
             return {}
         try:
             value = json.loads(p.read_text())
             self.files[relative] = {"sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+            self._json[relative] = value
             return value
         except (OSError, ValueError) as error:
             self.errors.append(f"{relative}: {error}")
@@ -154,9 +162,35 @@ def test_receipts(e):
             except (ET.ParseError, OSError, ValueError) as error:
                 e.errors.append(f"{path}: {error}")
     required = ("research", "analytical", "rust", "main_rust")
+    gate = e.data("results/E0/PHASE1_GATE.json")
+    receipt_hash_checks = {}
+    for relative, expected in gate.get("receipt_sha256", {}).items():
+        path = e.path("results/E0/" + relative)
+        receipt_hash_checks[relative] = path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == expected
+    source_hash_checks = {}
+    for relative, expected in gate.get("source_sha256", {}).items():
+        path = e.root.parents[2] / relative
+        source_hash_checks[relative] = path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == expected
+    gate_valid = bool(gate) and bool(receipt_hash_checks) and all(receipt_hash_checks.values()) and all(source_hash_checks.values())
+    if gate_valid and truth(gate.get("all_supported_current_tests_passed")):
+        # The gate accounts for the exact union of current analytical test
+        # node IDs. A broad historical receipt alone cannot establish that
+        # coverage, and a superseded failed attempt is not a current failure.
+        analytical = gate.get("analytical", {})
+        latest["analytical"] = {"returncode": 0 if analytical.get("remaining_failures") == 0 and analytical.get("uncovered") == 0 else 1,
+                                "tests": analytical.get("collected_current"), "passed": analytical.get("unique_passed"),
+                                "failures": analytical.get("remaining_failures"), "errors": 0,
+                                "skipped": analytical.get("optional_archive_skipped"), "skip_details": analytical.get("skipped", []),
+                                "receipt": "results/E0/PHASE1_GATE.json", "commit": gate.get("simulator_execution_commit_before_source_commit"),
+                                "aggregation": analytical.get("aggregation"), "uncovered": analytical.get("uncovered")}
     complete = all(name in latest and latest[name].get("returncode") == 0 and
                    not latest[name].get("failures", 0) and not latest[name].get("errors", 0) for name in required)
-    return {"required_suites": required, "latest_by_suite": latest, "all_required_recorded_suites_passed": complete}
+    return {"required_suites": required, "latest_by_suite": latest, "all_required_recorded_suites_passed": complete,
+            "phase1_gate_validated": gate_valid, "gate_receipt_hash_checks": receipt_hash_checks,
+            "gate_source_hash_checks": source_hash_checks,
+            "all_supported_current_tests_passed": truth(gate.get("all_supported_current_tests_passed")) and gate_valid,
+            "all_collected_tests_executed_without_skips": truth(gate.get("all_collected_tests_executed_without_skips")) and gate_valid,
+            "compiler_gate": gate.get("compiler", {}), "phase1_limitations": gate.get("limitations", [])}
 
 
 def baseline_rows(e, mode, kind="runtime"):
@@ -182,17 +216,31 @@ def hardware_label(entry, certified=False):
     return entry
 
 
+def family_certified(e, mode, entry):
+    family = {"best_hetero": "heterogeneous", "best_5+1": "5+1", "best_4+2": "4+2", "best_2+4": "2+4"}.get(entry)
+    if family is None:
+        return False
+    run = next((r.get("result", {}) for r in proof_runs(e) if r.get("onchip_mode") == mode and r.get("proof") == "B"), {})
+    data = run.get("families", {}).get(family, {})
+    return truth(data.get("proof_complete")) and number(data.get("coverage_pct")) == 100
+
+
 def resume_command(e, mode, proof, args):
-    source = f"results/E3/bnb_{mode}_{proof}.json"
-    target = f"results/E3/resumed_{mode}_{proof}.json"
-    # Keep the original certificate intact; a resumed result is a new file.
-    code = ("import json; from pathlib import Path; from research.moe_dispatch.round2.common import inputs,write_json; "
-            "from research.moe_dispatch.round2.model import Parameters; from research.moe_dispatch.round2.search import search_workloads; "
-            f"b=json.loads(Path({str(e.path(source))!r}).read_text()); "
-            f"r=search_workloads(inputs()['development'],Parameters(**b['resume']['parameters']),delta=b['delta'],time_limit_s={args.resume_seconds},"
-            "target_families=tuple(b['resume']['families']),resume_state=b); "
-            f"write_json(Path({str(e.path(target))!r}),r)")
-    return shlex.quote(args.python) + " -c " + shlex.quote(code)
+    source = e.path(f"results/E3/bnb_{mode}_{proof}.json")
+    return (shlex.quote(args.python) + " -m research.moe_dispatch.round2.resume --certificate " +
+            shlex.quote(str(source)) + f" --seconds {args.resume_seconds}")
+
+
+def point_resume_command(e, kind, args):
+    directory = e.path(f"results/E3/search_certificates/{kind}")
+    return ("for certificate in " + shlex.quote(str(directory)) + "/*.json; do\n"
+            '  [ -f "$certificate" ] || continue\n'
+            '  case "$certificate" in *_continued.json) continue;; esac\n'
+            '  while [ -f "${certificate%.json}_continued.json" ]; do\n'
+            '    certificate="${certificate%.json}_continued.json"\n'
+            '  done\n  ' + shlex.quote(args.python) +
+            ' -m research.moe_dispatch.round2.resume --certificate "$certificate"' + f" --seconds {args.resume_seconds}\n"
+            "done")
 
 
 def delivery_status(e, args):
@@ -200,8 +248,10 @@ def delivery_status(e, args):
     dev_ids = frozen.get("development_window_ids", [])
     held_ids = frozen.get("heldout_window_ids", [])
     repro = e.rows("results/E0/reproduce_check.csv")
-    receipt = e.data("results/E0/reproduction_receipt.json")
     tests = test_receipts(e)
+    gate = e.data("results/E0/PHASE1_GATE.json")
+    receipt_path = "results/E0/" + gate.get("exact_reproduction", {}).get("receipt", "reproduction_receipt.json") if tests["phase1_gate_validated"] else "results/E0/reproduction_receipt.json"
+    receipt = e.data(receipt_path)
     runs = proof_runs(e)
     lb = e.rows("results/E3/lb_validity.csv")
     micro = e.rows("results/E2/micro.csv")
@@ -232,7 +282,8 @@ def delivery_status(e, args):
             partial(section, "缺少必须文件：" + "、".join(value["missing_files"]))
     cohorts = {x.get("cohort"): x for x in receipt.get("cohorts", [])}
     zero = bool(repro) and all(number(r.get("abs_diff")) == 0 for r in repro)
-    checks["1"]["completed_scope"] = {"reproduction_rows": len(repro), "all_abs_diff_zero": zero, "cohorts": cohorts, "tests": tests}
+    checks["1"]["completed_scope"] = {"reproduction_rows": len(repro), "all_abs_diff_zero": zero, "cohorts": cohorts,
+                                         "reproduction_receipt": receipt_path, "tests": tests}
     if repro and not zero:
         fail("1", "旧设计复现存在非零差异或缺失差异值")
     elif not zero:
@@ -261,9 +312,23 @@ def delivery_status(e, args):
                                          "layer_grid_rows": len(e.rows("results/E2/layer_grid.csv"))}
     if len(micro) != 6 * 3 * 2 * 11 * 3:
         partial("4", "六形状×三数据流×两专家类型×十一 Me×三模式微实验尚未覆盖全部组合")
+    expected_micro = {(shape, flow, typ, str(me), mode)
+                      for shape in ("6x16x128", "6x4x512", "1x2x64", "5x19x128", "4x4x512", "2x4x512")
+                      for flow in ("OS", "WS", "IS") for typ in ("routed", "Shared")
+                      for me in (1, 2, 3, 4, 6, 8, 12, 16, 32, 64, 128) for mode in MODES}
+    seen_micro = {(r.get("shape"), r.get("dataflow"), r.get("expert_type"), r.get("Me"), r.get("onchip_mode")) for r in micro}
+    checks["4"]["completed_scope"]["micro_unique_keys"] = len(seen_micro)
+    if seen_micro != expected_micro:
+        partial("4", "微实验组合键不等于要求全集；不能用重复行补足行数")
     layer = e.rows("results/E2/layer_grid.csv")
     if len(layer) != 3 * (3 + 9 * 3) * 8:
         partial("4", "B1 的 1×3 与三种异构的 3×3 整层数据流网格不完整")
+    expected_layer = {(name, a, b, mode, str(batch)) for name in ("B1", "fixed_4+2", "previous_asym", "best_hetero")
+                      for a in ("OS", "WS", "IS") for b in (("",) if name == "B1" else ("OS", "WS", "IS"))
+                      for mode in MODES for batch in (*BATCHES, "all")}
+    seen_layer = {(r.get("design"), r.get("df_big"), r.get("df_small"), r.get("onchip_mode"), r.get("batch")) for r in layer}
+    if seen_layer != expected_layer:
+        partial("4", "整层数据流组合键尚未覆盖要求全集")
     audits = {(r.get("sample_index", r.get("design")), r.get("window_id")) for r in lb}
     checks["5.1"]["completed_scope"] = {"proof_runs": len(runs), "lower_bound_checks": len(lb), "lower_bound_unique_checks": len(audits),
                                            "all_lb_ok": bool(lb) and all(truth(r.get("ok")) for r in lb),
@@ -273,6 +338,8 @@ def delivery_status(e, args):
         fail("5.1", "区域下界合法性检查出现违反；须停下修正")
     if len(lb) != 2000 * 18 or len(audits) != 2000 * 18:
         partial("5.1", "尚未完成 2,000 个具体设计×全部 18 开发窗口的独立下界审计")
+    if lb and len({r.get("design") for r in lb}) != 2000:
+        partial("5.1", "下界审计的具体设计数不等于 2,000")
     if {(r.get("onchip_mode"), r.get("proof")) for r in runs} != {(m, p) for m in MODES for p in ("A", "B")}:
         partial("5.1", "六个模式×证明 A/B 运行未全部记录")
     remaining = []
@@ -300,7 +367,10 @@ def delivery_status(e, args):
                                            "solver_status_counts": dict(Counter(r.get("solver_status", "missing") for r in gaps))}
     if len(gaps) != 3 * 3 * (len(dev_ids) + len(held_ids)):
         partial("5.2", "三组织族×三模式×所有开发和留出窗口的调度差距覆盖不完整")
-    if any(r.get("solver_status") not in ("OPTIMAL", "exact_single") for r in gaps):
+    if {(r.get("design"), r.get("onchip_mode"), r.get("window_id")) for r in gaps} != {
+            (family, mode, w) for family in ("single", "homogeneous", "heterogeneous") for mode in MODES for w in dev_ids + held_ids}:
+        partial("5.2", "调度差距的窗口/组织族/模式组合键不完整")
+    if any(r.get("solver_status") != "OPTIMAL" for r in gaps):
         partial("5.2", "存在尚未由求解器证明最优的内层分配；报告是可执行候选调度")
     grid_ids = {r.get("point_index") for r in grid}
     verification = extreme.get("verification_full_domain_certificate", {})
@@ -315,13 +385,21 @@ def delivery_status(e, args):
     if not extreme or not truth(verification.get("proof_complete")):
         partial("5.3", "极端负载的 δ=0 全域复验未闭合")
     checks["5.3"]["remaining"] = {"extreme_open_lower_bound_ms": verification.get("open_lb_ms"), "extreme_gap_pct": verification.get("gap_pct"),
-                                     "grid_uncertified_points": len(grid) - certified_grid}
+                                     "grid_uncertified_points": len(grid) - certified_grid,
+                                     "pointwise_bounds_and_gaps": "results/E3/workload_map.csv: open_lb_ms, gap_pct, proof_complete; exact open frontiers in search_certificates/grid/<point_index:04d>.json"}
     checks["5.3"]["resume_commands"] = [f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage grid --jobs {args.jobs} --point-seconds {args.point_seconds}",
-                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.extreme --jobs {args.jobs} --max-evaluations 500 --point-seconds {args.point_seconds} --verify-seconds {args.resume_seconds}"]
+                                              point_resume_command(e, "grid", args),
+                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.extreme --jobs {args.jobs} --max-evaluations 500 --point-seconds {args.point_seconds} --verify-seconds {args.resume_seconds}",
+                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.resume --certificate {shlex.quote(str(e.path('results/E3/workload_extreme.json')))} --seconds {args.resume_seconds}"]
     checks["5.4"]["completed_scope"] = {"objective_rows": len(robust), "stability_rows": len(stability),
                                            "bootstrap_draw_counts": sorted({r.get("bootstrap_draws") for r in stability})}
     if not stability or any(number(r.get("bootstrap_draws")) != 200 for r in stability):
         partial("5.4", "开发窗口的 200 次 bootstrap 不完整")
+    groups = defaultdict(list)
+    for r in stability:
+        groups[(r.get("onchip_mode"), r.get("selection_family"), r.get("objective"))].append(r)
+    if not groups or any(sum(number(r.get("selected_count")) or 0 for r in rows) != 200 for rows in groups.values()):
+        partial("5.4", "至少一个目标/候选族 bootstrap 选择总计不等于 200")
     if any("full proof open" in r.get("candidate_scope", "") for r in robust) or not robust:
         partial("5.4", "稳健目标只覆盖开发集已评估近优候选，尚非经证明的各族 1% 近优集合")
     checks["5.5"]["completed_scope"] = {"Saltelli_base_N": e.data("results/E3/sobol_protocol.json").get("baseN"),
@@ -329,15 +407,22 @@ def delivery_status(e, args):
                                            "certified_samples": sum(truth(r.get("proof_complete")) for r in sobol)}
     if len(sobol) != 1792 or number(e.data("results/E3/sobol_protocol.json").get("baseN")) != 256:
         partial("5.5", "Saltelli N≥256 的五参数全局采样尚未完成")
+    if {r.get("sample_index") for r in sobol} != {str(i) for i in range(1792)}:
+        partial("5.5", "敏感性采样索引不等于要求全集")
     if not sobol or any(not truth(r.get("proof_complete")) for r in sobol):
         partial("5.5", "部分敏感性采样的硬件搜索未闭合，Sobol 是候选估计的指数")
+    checks["5.5"]["remaining"] = {"pointwise_bounds_and_gaps": "results/E3/sobol_samples.csv: open_lb_ms, gap_pct, proof_complete; exact open frontiers in search_certificates/sobol/*.json and search_certificates/flip/*.json",
+                                     "uncertified_Saltelli_samples": sum(not truth(r.get("proof_complete")) for r in sobol)}
+    checks["5.5"]["resume_commands"] = [f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage sobol --jobs {args.jobs} --point-seconds {args.point_seconds}",
+                                              f"{shlex.quote(args.python)} -m research.moe_dispatch.round2.regions --stage flip --jobs {args.jobs} --point-seconds {args.point_seconds}",
+                                              point_resume_command(e, "sobol", args), point_resume_command(e, "flip", args)]
     checks["6"]["completed_scope"] = {"main_table_rows": len(main), "modes": sorted({r.get("onchip_mode") for r in main}),
                                          "schedulers": sorted({r.get("sched_type") for r in main})}
     entries = (*BASELINES, "fixed_3+3", "fixed_4+2", "best_5+1", "best_4+2", "best_2+4", "best_hetero", "U1", "U2")
     seen = {(r.get("entry"), r.get("onchip_mode"), r.get("sched_type")) for r in main}
     if not {(name, m, s) for name in entries for m in MODES for s in ("milp", "runtime")} <= seen:
         partial("6", "E4 条目、三模式或 MILP/runtime 两调度的主表覆盖不完整")
-    if any(r.get("entry", "").startswith("best_") and not truth(r.get("search_certified")) for r in main):
+    if any(r.get("entry", "").startswith("best_") and not family_certified(e, r.get("onchip_mode"), r.get("entry")) for r in main):
         partial("6", "族最优搜索未闭合，E4 当前按冻结已评估候选交付")
     dispatch = e.rows("results/E5/dispatch_table.csv")
     predictor = e.rows("results/E5/predictor_table.csv")
@@ -345,6 +430,14 @@ def delivery_status(e, args):
                                          "state_rows": len(e.rows("results/E5/dispatcher_state_bits.csv"))}
     if len(dispatch) != 2 * 3 * 6 * 8 or len(predictor) != 2 * 3 * 6:
         partial("7", "两冻结硬件×三模式的六分派和六预测器覆盖不完整")
+    expected_predictor = {(name, mode, p) for name in ("best_hetero", "fixed_4+2") for mode in MODES
+                          for p in ("random", "static", "btb", "ema", "ours", "oracle")}
+    if {(r.get("design"), r.get("onchip_mode"), r.get("predictor")) for r in predictor} != expected_predictor:
+        partial("7", "预测器组合键不等于要求全集")
+    policies = {"threshold_2", "threshold_fallback", "adaptive", "eft", "random", "milp"}
+    seen_dispatch = {(r.get("design"), r.get("onchip_mode"), "threshold_fallback" if r.get("policy", "").startswith("threshold_fallback_") else r.get("policy"), r.get("batch")) for r in dispatch}
+    if seen_dispatch != {(name, mode, p, str(batch)) for name in ("best_hetero", "fixed_4+2") for mode in MODES for p in policies for batch in (*BATCHES, "all")}:
+        partial("7", "分派策略组合键不等于要求全集")
     checks["8"]["completed_scope"] = {"moe_rows": len(e.rows("results/E6/moe_layer_e2e.csv")), "model_rows": len(model),
                                          "model_token_timing_rows_available": sum(number(r.get("token_ms")) is not None for r in model)}
     if not model or any(number(r.get("token_ms")) is None for r in model):
@@ -356,6 +449,7 @@ def delivery_status(e, args):
                      "main_seed_flags": {mode: all(truth(r.get("repeat_identical")) for r in e.data(f"results/E3/seed_points_{mode}.json") if "invalid" not in r)
                          if isinstance(e.data(f"results/E3/seed_points_{mode}.json"), list) and e.data(f"results/E3/seed_points_{mode}.json") else None for mode in MODES},
                      "protocol": "model evaluations execute deterministic two-run assertions; certificates explicitly record incumbent repeat flags; frontier traversal is time-limited and may visit different nodes"}
+    repeat_status["all_configurations_identical_certified"] = truth(repeat.get("all_configurations_identical", repeat.get("all_repeats_identical", repeat.get("all_ok", False)))) if repeat else False
     if e.errors:
         for section in checks:
             partial(section, "存在无法读取的证据文件；详见 evidence_read_errors")
@@ -364,6 +458,9 @@ def delivery_status(e, args):
             "all_requested_sections_complete": all(x["status"] == "完成" for x in checks.values()), "sections": checks,
             "frozen_windows": {"development": len(dev_ids), "heldout": len(held_ids)}, "proof_runs": runs,
             "repeat_checks": repeat_status, "tests": tests, "evidence_read_errors": e.errors,
+            "global_requirements": {"branch_is_requested": branch == "research/moe-supply-first-v3",
+                                    "all_required_tests_recorded_passed": tests["all_required_recorded_suites_passed"],
+                                    "every_configuration_repeated_identically_receipt": repeat_status["all_configurations_identical_certified"]},
             "scientific_boundary": "BF16 phase-fluid analytical estimates; no RTL calibration or architecture-winner claim",
             "requirement": "File presence never substitutes for full scope, exact schedule solving, closed certificates, or available full-model timing"}
 
@@ -393,7 +490,7 @@ def render_report(e, status, args):
         add(1, f"- {mode}：{conclusion}。")
     for mode in MODES:
         rows = [r for r in main if r.get("onchip_mode") == mode and r.get("sched_type") == "runtime" and r.get("entry", "").startswith("best_")]
-        passing = [hardware_label(r["entry"], truth(r.get("search_certified"))) for r in rows if truth(r.get("gate_5pct_pass"))]
+        passing = [hardware_label(r["entry"], family_certified(e, mode, r["entry"])) for r in rows if truth(r.get("gate_5pct_pass"))]
         add(1, f"- {mode}{'（非等资源参考）' if mode == 'fixed_issue' else ''}：" +
             ("、".join(passing) + "达到相对 B1/B2 都快至少 5% 的进入校准门槛。" if passing else "已记录异构候选未达到进入校准门槛。" if rows else "门槛结果尚缺。"))
     valid_grid = [r for r in grid if number(r.get("delta_vs_single_pct")) is not None]
@@ -426,6 +523,11 @@ def render_report(e, status, args):
     cohorts = status["sections"]["1"]["completed_scope"].get("cohorts", {})
     add(2, "E0 实际收据：" + "；".join(f"{name}={x.get('rows', '缺失')} 行，零误差={x.get('all_exact', '缺失')}，重复={x.get('repeats', '缺失')} 次" for name, x in cohorts.items()) + "。旧来源边界见 [SOURCES.md](results/E0/SOURCES.md)，不对旧表跨模型计算加速比。")
     add(2, "单元测试最新收据：" + "；".join(f"{name}: returncode={r.get('returncode', '缺失')}, tests={r.get('tests', '见日志')}，[{Path(r['receipt']).name}]({r['receipt']})" for name, r in status["tests"]["latest_by_suite"].items()) + "。")
+    if status["tests"]["phase1_gate_validated"]:
+        gate = e.data("results/E0/PHASE1_GATE.json")
+        analytic = gate.get("analytical", {})
+        compiler = gate.get("compiler", {})
+        add(2, f"[PHASE1_GATE.json](results/E0/PHASE1_GATE.json) 的收据与源文件哈希核对通过；受支持当前测试全部通过={gate.get('all_supported_current_tests_passed')}，全部已收集测试无跳过执行={gate.get('all_collected_tests_executed_without_skips')}。解析模型当前收集 {analytic.get('collected_current', '缺失')} 个独立节点：通过 {analytic.get('unique_passed', '缺失')}、可选旧归档跳过 {analytic.get('optional_archive_skipped', '缺失')}、未覆盖 {analytic.get('uncovered', '缺失')}、残余失败 {analytic.get('remaining_failures', '缺失')}。Compiler 普通测试通过 {compiler.get('ordinary_passed', '缺失')}，退役配置跳过 {compiler.get('ordinary_retired_profile_skipped', '缺失')}；其他套件及可选跳过详见 gate 和 compiler_integration/TEST_RESULTS.md，重跑计数不相加为独立总数。")
 
     bounds = e.rows("results/E1/bounds_per_window.csv")
     head = e.rows("results/E1/headroom_by_batch.csv")
@@ -451,11 +553,11 @@ def render_report(e, status, args):
                 continue
             order = {name: i for i, name in enumerate((*BASELINES, "fixed_3+3", "fixed_4+2", "best_5+1", "best_4+2", "best_2+4", "best_hetero", "U1", "U2"))}
             rr.sort(key=lambda r: order.get(r["entry"], 99))
-            add(4, f"{kind}：各 batch 与 all 均为同一窗口集合的延迟几何平均 ms。")
+            add(4, f"{kind}{'（CP-SAT 分配见证的 LPT 可执行回放；非 OPTIMAL 状态不称最优分配）' if kind == 'milp' else ''}：各 batch 与 all 均为同一窗口集合的延迟几何平均 ms。")
             add(4, table(("条目", "冻结形状", *("B" + str(b) for b in BATCHES), "all ms"),
-                         [(hardware_label(r["entry"], truth(r.get("search_certified"))), r["design"], *(fmt(r.get("B" + str(b))) for b in BATCHES), fmt(r.get("all_geomean"))) for r in rr]))
+                         [(hardware_label(r["entry"], family_certified(e, mode, r["entry"])), r["design"], *(fmt(r.get("B" + str(b))) for b in BATCHES), fmt(r.get("all_geomean"))) for r in rr]))
             add(4, table(("条目", "候选/B1", "候选/B2", "95% 速度降低下界 vs B1 %", "vs B2 %", "进入校准 5%"),
-                         [(hardware_label(r["entry"], truth(r.get("search_certified"))), fmt(r.get("ratio_vs_B1")), fmt(r.get("ratio_vs_B2")), fmt(r.get("ci95_low_vs_B1"), 2), fmt(r.get("ci95_low_vs_B2"), 2),
+                         [(hardware_label(r["entry"], family_certified(e, mode, r["entry"])), fmt(r.get("ratio_vs_B1")), fmt(r.get("ratio_vs_B2")), fmt(r.get("ci95_low_vs_B1"), 2), fmt(r.get("ci95_low_vs_B2"), 2),
                            "诊断参考" if r["entry"] in ("U1", "U2") else "达到" if truth(r.get("gate_5pct_pass")) else "未达到") for r in rr]))
         best = selection.get("modes", {}).get(mode, {}).get("heterogeneous", {})
         cores = best.get("design", {}).get("cores", []) if isinstance(best.get("design"), dict) else []
@@ -491,11 +593,11 @@ def render_report(e, status, args):
             if r:
                 grows.append((mode, family, *baseline_context(e, mode, "milp"), fmt(gm(float(x["T_milp_sched"]) / float(x["T_lb"]) for x in r)),
                               fmt(gm(float(x["T_runtime_eft"]) / float(x["T_milp_sched"]) for x in r)), len(r)))
-    add(5, table(("模式", "调度候选族", "B0 MILP ms", "B1 MILP ms", "B2 MILP ms", "T_milp_sched/T*", "T_runtime/T_milp_sched", "留出窗口"), grows) if grows else "调度差距尚缺。")
-    add(5, "这里 T* 是 CP-SAT 专家分配的资源约束松弛下界；LPT 完整流式回放是可执行调度。该模型目标的最优性不等于任意时序调度、RTL 或实芯片最优性。B0/B1/B2 三列为 E4 冻结基线上下文，没有假造 B0 的独立求解差距。")
+    add(5, table(("模式", "调度候选族", "B0 CP-SAT/LPT ms", "B1 CP-SAT/LPT ms", "B2 CP-SAT/LPT ms", "T_milp_sched/T_lb", "T_runtime/T_milp_sched", "留出窗口"), grows) if grows else "调度差距尚缺。")
+    add(5, "T_lb 是 CP-SAT 专家分配的已证资源约束松弛下界；只有 solver_status=OPTIMAL 才取得该分配问题的最优解 T*，否则所有 CP-SAT/LPT 数字只是已知可执行分配见证，不能称最优分配。LPT 完整流式回放是可执行调度。该模型目标的最优性不等于任意时序调度、RTL 或实芯片最优性。B0/B1/B2 三列为 E4 冻结基线上下文，没有假造 B0 的独立求解差距。")
     add(5, "![剪枝覆盖与 incumbent](figures/fig_bnb_coverage.png)")
     if status["sections"]["5.1"]["resume_commands"]:
-        add(5, "继续运行保留原证书并写入新恢复结果：\n\n```sh\n" + "\n".join(status["sections"]["5.1"]["resume_commands"]) + "\n```")
+        add(5, "继续运行保留原证书并写入 *_continued.json 新恢复结果；下一次继续使用最新生成的证书。恢复会核对原始工作负载及引擎哈希。\n\n```sh\n" + "\n".join(status["sections"]["5.1"]["resume_commands"]) + "\n```")
 
     calibration = e.rows("results/E3/synthetic_calibration.csv")
     add(6, f"合成全网格已记录 {len(grid):,}/4,320 点，其中硬件证明闭合 {sum(truth(r.get('proof_complete')) for r in grid):,} 点。只在本负载区域分析使用合成路由；每点的单核/同构/异构候选重新搜索，不能把其 best_single/best_homo 偷换为真实负载冻结 B1/B2。")
@@ -510,6 +612,7 @@ def render_report(e, status, args):
         near = extreme.get("distance_from_real", {}).get("nearest_real_window", {})
         add(6, f"CMA-ES 实际评估 {extreme.get('CMA_evaluations', '缺失')} 次（上限 500）；最强已评估负载参数 `{json.dumps(extreme.get('best_evaluated_workload_parameters', {}), ensure_ascii=False)}`。δ=0 复验 Δ vs 单核={fmt(100 * extreme['delta_vs_single'], 3) if number(extreme.get('delta_vs_single')) is not None else '缺失'}%，vs 同构={fmt(100 * extreme['delta_vs_homo'], 3) if number(extreme.get('delta_vs_homo')) is not None else '缺失'}%；证明闭合={extreme.get('verification_full_domain_certificate', {}).get('proof_complete', '缺失')}。最近真实窗口 `{near.get('window_id', '缺失')}`，batch log2 距离={fmt(near.get('batch_log2_distance'))}，Me 直方图 KL={fmt(near.get('Me_hist_KL_synthetic_to_real'))}，distinct 合成/真实={near.get('distinct_synthetic', '缺失')}/{near.get('distinct_real', '缺失')}。")
     add(6, "负载点 best 与 Δ 均按各点证书解释；未闭合时只是候选估计。图中真实标记的来源与映射见图说明。\n\n![异构候选收益区域](figures/fig_workload_map.png)")
+    add(6, "网格 stage 命令只补缺失负载点；已经记录但未认证的点必须用 resume CLI 继续各自证书。各点未剪下界/差距见 workload_map.csv，完整开放区间保留在 search_certificates/grid/；具体批量继续命令见 DELIVERY_STATUS.md。")
 
     robust = e.rows("results/E3/robust_objectives.csv")
     stability = e.rows("results/E3/selection_stability.csv")
@@ -613,6 +716,7 @@ def render_report(e, status, args):
     add(12, "留出集历史上曾被访问，不称全新盲测。合成负载只用于收益区域/连续极值探索；Sobol 用真实开发窗口与参数扰动。私有容量分池、1 KiB 分辨率、正整数 vector 切分、有限任务窗为显式模型约束；任务分配 CP-SAT 松弛加 LPT 回放不是任意全时序调度最优。")
     add(12, "开放证明、未认证负载点、未认证敏感性采样和缺失整模型计时均按交付状态记录。各 batch 的胜格不拼成统一胜出；消融收益与重叠资源占用不相加。运行时间上限只终止搜索，不缩小声明域。")
     add(12, "交付状态如下；文件存在不等于完成。详细范围、残余下界、差距和继续命令见 [DELIVERY_STATUS.json](DELIVERY_STATUS.json)。")
+    add(12, "全配置两遍一致的汇总收据：" + ("已记录。" if status["repeat_checks"]["all_configurations_identical_certified"] else "尚缺；已记录的历史/候选逐点重复标志见交付 JSON，不能以这些局部标志代替全部配置完成标准。"))
     add(12, table(("用户节", "状态", "原因"), [(section, value["status"], "；".join(value["reasons"]) or "必须文件和本节范围检查通过") for section, value in status["sections"].items()]))
 
     if not status["sections"]["5.1"]["status"] == "完成":
@@ -658,7 +762,7 @@ def generate(root, destination, args):
     value = status["sections"]["9–10"]
     value["reasons"] = ["缺少必须文件：" + "、".join(value["missing_files"])] if value["missing_files"] else []
     value["status"] = "部分完成" if value["missing_files"] else "完成"
-    status["all_requested_sections_complete"] = all(x["status"] == "完成" for x in status["sections"].values())
+    status["all_requested_sections_complete"] = all(x["status"] == "完成" for x in status["sections"].values()) and all(status["global_requirements"].values())
     report = render_report(e, status, args)
     status["evidence_files"] = dict(sorted(e.files.items()))
     status["evidence_read_errors"] = list(e.errors)

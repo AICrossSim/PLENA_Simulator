@@ -59,7 +59,7 @@ class Figures:
         fig.text(.01,.008,caption,ha='left',va='bottom',fontsize=8,wrap=True)
         fig.tight_layout(rect=(0,.065,1,.98))
         for ext in ('pdf','png'):
-            p=self.out/f'{name}.{ext}';fig.savefig(p,dpi=200,bbox_inches='tight');self.outputs.append(p)
+            p=self.out/f'{name}.{ext}';meta={'CreationDate':None,'ModDate':None} if ext=='pdf' else None;fig.savefig(p,dpi=200,bbox_inches='tight',metadata=meta);self.outputs.append(p)
         plt.close(fig)
     @staticmethod
     def title(mode):return mode+(' (non-iso-resource reference)' if mode=='fixed_issue' else '')
@@ -182,8 +182,8 @@ class Figures:
             ax.imshow(np.ma.masked_invalid(a),cmap='YlOrRd',aspect='auto',vmin=min(1,np.nanmin(a)),vmax=max(1.0001,np.nanmax(a)))
             for (y,x),v in np.ndenumerate(a):
                 if np.isfinite(v):ax.text(x,y,f'{v:.3f}x',ha='center',va='center',fontsize=9)
-            ax.set_yticks(range(3),FLOWS);ax.set_xticks(range(a.shape[1]),['single'] if single else FLOWS);ax.set_ylabel('Single flow' if single else 'Dense-core flow');ax.set_xlabel('Stream-core flow' if not single else '');ax.set_title(NAMES[name]+'\n'+self.title(mode),fontsize=9)
-        self.save(fig,'fig_dataflow_grid','Held-out, all-window paired geometric latency ratio relative to the same design OS/OS (single: OS). Capacity, ports, geometry and policy stay frozen; dataflow benefits are not additive. B1 has no second core.')
+            ax.set_yticks(range(3),FLOWS);ax.set_xticks(range(a.shape[1]),['single'] if single else FLOWS);ax.set_ylabel('Single-core flow' if single else 'Large-core flow');ax.set_xlabel('Small-core flow' if not single else '');ax.set_title(NAMES[name]+'\n'+self.title(mode),fontsize=9)
+        self.save(fig,'fig_dataflow_grid','Held-out, all-window paired geometric latency ratio relative to the same design OS/OS (single: OS). Capacity, ports, geometry and policy stay frozen; dataflow benefits are not additive. Large/small labels follow multiplier counts (core 0 first on a tie); B1 has no second core.')
 
     def me_crossover(self):
         rows=self.csv('E2/micro.csv');fig,axes=plt.subplots(3,3,figsize=(14,11))
