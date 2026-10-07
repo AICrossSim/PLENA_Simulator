@@ -219,7 +219,7 @@ class Figures:
                     if winners[n]!=winners[n-1]:ax.axvspan(grid[n-1],grid[n],color='black',alpha=.08)
             ax.set_xscale('log',base=2);ax.set_yscale('log');ax.set_xlabel('Tokens per routed expert Me');ax.set_ylabel('Isolated expert latency (cycles)');ax.set_title(flow+' / '+self.title(mode),fontsize=9);ax.grid(alpha=.2)
         axes[0,0].legend(fontsize=6)
-        self.save(fig,'fig_me_crossover','Micro-only: each individual core receives full declared private quotas; shapes have different multiplier counts, so this is not an iso-resource layer comparison. Shaded intervals bracket changes in the fastest sampled core; no exact crossover is inferred between discrete Me samples.')
+        self.save(fig,'fig_me_crossover','Micro-only latency includes finite HBM, private SRAM ports, compute and cold-start/phase service. Each individual core receives full declared private quotas; shapes have different multiplier counts, so this is not an iso-resource layer comparison or a compute-only timing experiment. Shaded intervals bracket changes in the fastest sampled core; no exact crossover is inferred between discrete Me samples.')
 
     def predictor(self):
         rows=self.csv('E5/predictor_table.csv');designs=('best_hetero','fixed_4+2');order=('random','static','btb','ema','ours','oracle');fig,axes=plt.subplots(4,3,figsize=(14,11))
@@ -229,7 +229,7 @@ class Figures:
             ax=axes[2*di,mi];ax.bar(x,[number(r['mae_pct']) for r in rr],color=COLORS);ax.set_ylabel('Mean absolute relative error (%)');ax.set_title(NAMES[name]+' / '+self.title(mode),fontsize=9);ax.grid(axis='y',alpha=.2)
             ax2=axes[2*di+1,mi];ax2.bar(x,[number(r['e2e_ratio_vs_oracle']) for r in rr],color=COLORS);ax2.axhline(1,color='black',lw=.8);ax2.set_ylabel('MoE latency / frozen-ours timing reference');ax2.grid(axis='y',alpha=.2)
             for target in (ax,ax2):target.set_xticks(x,order,rotation=25,ha='right')
-        self.save(fig,'fig_predictor','Same development warmup and held-out sequence, repeated with fresh initial states. MAE measures task duration prediction; latency is post-router MoE only. Oracle is a two-pass profile-guided reference, not a provably optimal or zero-error predictor; no circuit area claims.')
+        self.save(fig,'fig_predictor','Same development warmup and held-out sequence, repeated with fresh initial states. MAE measures task duration prediction; latency is post-router MoE only. Primary oracle physically replays the frozen actual ours owners, binding, prefetch and phase-release plan, so its latency equals that same plan. It measures conditional timing accuracy, not perfect-prediction dispatch performance or an optimal-scheduling upper bound; floating replay residuals are retained. No circuit area claims.')
 
     def manifest(self):
         if not self.outputs:return

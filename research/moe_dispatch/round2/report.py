@@ -376,6 +376,8 @@ def delivery_status(e, args):
         if not truth(result.get("proof_complete")):
             checks["5.1"]["resume_commands"].append(resume_command(e, run.get("onchip_mode"), run.get("proof"), args))
     checks["5.1"]["remaining"] = {"family_frontiers": remaining}
+    single_receipt = e.data("results/E3/single_exhaustion_receipt.json")
+    checks["5.1"]["completed_scope"]["direct_single_exhaustion"] = single_receipt
     gaps = e.rows("results/E3/schedule_gaps.csv")
     checks["5.2"]["completed_scope"] = {"rows": len(gaps), "expected_rows": 3 * 3 * (len(dev_ids) + len(held_ids)),
                                            "solver_status_counts": dict(Counter(r.get("solver_status", "missing") for r in gaps))}
@@ -386,6 +388,20 @@ def delivery_status(e, args):
         partial("5.2", "调度差距的窗口/组织族/模式组合键不完整")
     if any(r.get("solver_status") != "OPTIMAL" for r in gaps):
         partial("5.2", "存在尚未由求解器证明最优的内层分配；报告是可执行候选调度")
+    seed_assignment_counts = {}
+    for mode in MODES:
+        points = e.data(f"results/E3/seed_points_{mode}.json")
+        counts = Counter(s for p in points if "invalid" not in p for s in p.get("allocation_statuses", [])) if isinstance(points, list) else Counter()
+        seed_assignment_counts[mode] = dict(counts)
+        if any(s != "OPTIMAL" and n for s, n in counts.items()):
+            partial("5.2", f"{mode} 已评估搜索种子仍含未证最优内层分配；不能把全部叶子称为精确最优分配")
+    checks["5.2"]["completed_scope"]["visited_seed_assignment_statuses"] = seed_assignment_counts
+    leaves = e.rows("results/E3/bnb_leaves.csv")
+    leaf_counts = Counter((r.get("status", "missing"), str(truth(r.get("allocations_optimal")))) for r in leaves)
+    checks["5.2"]["completed_scope"]["visited_leaf_statuses"] = {"/".join(k): v for k, v in leaf_counts.items()}
+    if any(r.get("status") == "evaluated" and not truth(r.get("allocations_optimal")) for r in leaves):
+        partial("5.2", "完整评估 BnB 叶子仍有内层分配未证最优，已保留在开放前沿")
+    checks["5.2"]["remaining"] = {"scope": "冻结三组织族的 1,377 个调度差距行与主搜索所有访问叶子的内层求解是两个范围；后者未证分配保留可行见证和资源下界。"}
     grid_ids = {r.get("point_index") for r in grid}
     verification = extreme.get("verification_full_domain_certificate", {})
     certified_grid = sum(truth(r.get("proof_complete")) for r in grid)
@@ -612,6 +628,13 @@ def render_report(e, status, args):
     add(5, table(("模式", "证明", "组织族", "总格点", "闭合格点", "覆盖 %", "候选 ms", "未剪 LB ms", "族全局 LB ms", "差距 %", "开放区域", "族证明"),
                  [(r["onchip_mode"], r["proof"], r["family"], r["declared_lattice_points"], r["covered_lattice_points"], fmt(r["coverage_pct"], 8), fmt(r["incumbent_ms"]), fmt(r["remaining_lower_bound_ms"]), fmt(r["certified_global_lower_bound_ms"]), fmt(r["gap_pct"], 3), r["open_frontiers"], "闭合" if r["proof_complete"] else "未完成") for r in frontiers]) if frontiers else "分族证明收据尚缺。")
     add(5, "上表的覆盖率为已剪/已完整评估格点占声明域的比例。未剪区域仍保留完整区间、下界和恢复状态；所有格点被账本追踪并不等于证明覆盖率 100%。即使全局 incumbent/资源下界已经给出 δ 证书，也不能把 B2 或某个异构比例族称为全局最优。4+2 与 2+4 在可互换角色与独立资源切分的物理域中是镜像别名。")
+    add(5, "搜索族 5+1、4+2 表示两核乘法器预算比例，允许各核自行选择 PM/PN/PK；不要求 PM 必须是 5/1 或 4/2。固定 4+2 条目才专指 4x4x512+2x4x512。")
+    direct = status["sections"]["5.1"]["completed_scope"].get("direct_single_exhaustion", {})
+    if direct:
+        add(5, "单核另有完整直接枚举收据 [single_exhaustion_receipt.json](results/E3/single_exhaustion_receipt.json)：每模式 44 几何×3 数据流=132 点，其中 129 合法、3 个模板放不下输入；129×18 个内层分配均 OPTIMAL，两次回放一致。该收据证明的是声明单核几何/循环模板及固定资源分池内的最优可执行候选；不证明任意编译器循环或时序调度最优。通用 B 证书的单核前沿仍开放，但直接枚举已经独立完成这一有限单核域，两项证据不应混淆。")
+        add(5, table(("模式", "合法单核点", "精确分配窗口", "全部分配 OPTIMAL", "单核族枚举闭合", "单核最优形状", "开发 GM ms"),
+                     [(mode, row.get("legal_points"), row.get("exact_allocation_windows"), row.get("all_allocations_OPTIMAL"), row.get("single_family_proof_complete"), row.get("best", {}).get("geometry"), fmt(row.get("best", {}).get("geomean_ms")))
+                      for mode, row in direct.get("modes", {}).items()]))
     audit = status["sections"]["5.1"]["completed_scope"]
     add(5, f"下界合法性实际审计 {audit['lower_bound_checks']:,} 行、独立键 {audit['lower_bound_unique_checks']:,}，全部 ok={audit['all_lb_ok']}；要求 2,000 个具体设计×18 开发窗口。随机检查支持实现可信度，不能替代理论下界证明。")
     gaps = e.rows("results/E3/schedule_gaps.csv")
@@ -627,6 +650,8 @@ def render_report(e, status, args):
                               fmt(gm(float(x["T_runtime_eft"]) / float(x["T_milp_sched"]) for x in r)), len(r)))
     add(5, table(("模式", "调度候选族", "B0 CP-SAT/LPT ms", "B1 CP-SAT/LPT ms", "B2 CP-SAT/LPT ms", "T_milp_sched/T_lb", "T_runtime/T_milp_sched", "留出窗口"), grows) if grows else "调度差距尚缺。")
     add(5, "T_lb 是 CP-SAT 专家分配的已证资源约束松弛下界；只有 solver_status=OPTIMAL 才取得该分配问题的最优解 T*，否则所有 CP-SAT/LPT 数字只是已知可执行分配见证，不能称最优分配。LPT 完整流式回放是可执行调度。该模型目标的最优性不等于任意时序调度、RTL 或实芯片最优性。B0/B1/B2 三列为 E4 冻结基线上下文，没有假造 B0 的独立求解差距。")
+    add(5, "冻结三族×三模式×153 窗口的调度差距共 1,377 行，最优性状态见 CSV；主搜索访问种子的内层状态另列：`" + json.dumps(status["sections"]["5.2"]["completed_scope"].get("visited_seed_assignment_statuses", {}), ensure_ascii=False, sort_keys=True) + "`。即使最终冻结点全部精确求解，也不能由此把有 FEASIBLE 状态的全部搜索叶子写成精确解；任务书 5.2 的全叶子精确性据此仍标部分完成。")
+    add(5, "BnB 实际叶子状态与内层最优性标记：`" + json.dumps(status["sections"]["5.2"]["completed_scope"].get("visited_leaf_statuses", {}), ensure_ascii=False, sort_keys=True) + "`。invalid_or_unresolved 含不可行模板，不能一概计作可行未证解。未证叶子不会凭可行见证被标为完整最优性证明。")
     add(5, "![剪枝覆盖与 incumbent](figures/fig_bnb_coverage.png)")
     if status["sections"]["5.1"]["resume_commands"]:
         add(5, "继续运行保留原证书并写入 *_continued.json 新恢复结果；下一次继续使用最新生成的证书。恢复会核对原始工作负载及引擎哈希。\n\n```sh\n" + "\n".join(status["sections"]["5.1"]["resume_commands"]) + "\n```")
@@ -727,7 +752,7 @@ def render_report(e, status, args):
         shared = [float(r["WS"]["cycles"]) / float(r["OS"]["cycles"]) for k, r in pairs.items() if k[3] == mode and k[1] == "Shared" and int(k[2]) > int(k[0].split("x")[0]) and "OS" in r and "WS" in r]
         hot = [float(r["WS"]["cycles"]) / float(r["OS"]["cycles"]) for k, r in pairs.items() if k[3] == mode and k[1] == "routed" and int(k[2]) > int(k[0].split("x")[0]) and "OS" in r and "WS" in r]
         add(9, f"{mode}：Me≤PM 的 OS/WS 周期及全部记录流量均相同 {equal}/{len(wave)} 组；Me>PM 的 Shared WS/OS 范围 " + (f"[{min(shared):.5f}, {max(shared):.5f}]" if shared else "缺失") + "，热 routed WS/OS 范围 " + (f"[{min(hot):.5f}, {max(hot):.5f}]" if hot else "缺失") + "。小于 1 表示 WS 更快；每形状/Me 的细值保留在 micro.csv，不能把范围当所有大核同等收益。")
-    add(9, "微实验是独立单专家流量与周期诊断；不把发射次数当总周期，不把单核完整私有预算映射为等资源整层收益。\n\n![数据流网格](figures/fig_dataflow_grid.png)\n\n![Me 交叉点](figures/fig_me_crossover.png)")
+    add(9, "微实验是带有限 HBM 与片上端口的独立单专家流量和周期诊断，非纯计算波次实验；不把发射次数当总周期，不把单核完整私有预算映射为等资源整层收益。\n\n![数据流网格](figures/fig_dataflow_grid.png)\n\n![Me 交叉点](figures/fig_me_crossover.png)")
 
     dispatch = e.rows("results/E5/dispatch_table.csv")
     predictors = e.rows("results/E5/predictor_table.csv")
