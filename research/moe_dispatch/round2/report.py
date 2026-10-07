@@ -606,6 +606,7 @@ def render_report(e, status, args):
 
     summary = e.data("results/E3/bnb_summary.json")
     add(5, "完整声明域：PM=1..16、PN=1..192、PK∈{32,64,128,256,512,1024}；44 单核、41 同构双核、16,678 异构双核，共 16,763 个几何点。单核×三数据流为 132 个具体点；双核容量、bank 与 vector 独立切分形成远大于几何点数的联合格点域。枚举几何不等于穷举联合资源域。")
+    add(5, "本轮同构指两核 PM×PN×PK 计算几何相同；按任务书，两核的循环数据流、私有容量、bank 和 vector 分配仍可分别选择，所以 B2 可能使用 OS/WS 等组合。表中同时列出形状和数据流，不能把它理解成所有控制与存储参数必须镜像。")
     add(5, "记录的枚举计数：`" + json.dumps(summary.get("geometry_counts", {}), ensure_ascii=False, sort_keys=True) + "`。证明 A 用因子 1.05 剪枝；这相当于延迟降低约 4.762%，与留出集进入校准要求的降低至少 5% 是两个判据。证明 B 用 δ=0。")
     frontiers = status["sections"]["5.1"]["remaining"].get("family_frontiers", [])
     add(5, table(("模式", "证明", "组织族", "总格点", "闭合格点", "覆盖 %", "候选 ms", "未剪 LB ms", "族全局 LB ms", "差距 %", "开放区域", "族证明"),
