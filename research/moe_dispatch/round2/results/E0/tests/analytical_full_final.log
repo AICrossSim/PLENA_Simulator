@@ -1,0 +1,14 @@
+................ss...........................s.......................... [ 15%]
+...F
+=================================== FAILURES ===================================
+_______________ test_checked_in_long_campaign_is_self_consistent _______________
+analytic_models/performance/test_hybrid_lcompute_campaign.py:673: in test_checked_in_long_campaign_is_self_consistent
+    assert report["compiler_report_sha256"] == _sha256_json(_compiler())
+E   AssertionError: assert '5ddd650a025e...6801299be2cbe' == '87d0a8aba2cb...38afb86d9277b'
+E     
+E     - 87d0a8aba2cbbc551cb11324c1aef0dabc73ba2d573de1ec16338afb86d9277b
+E     + 5ddd650a025e57e438d6060bec4ed2518628306e1885c2fba2e6801299be2cbe
+=========================== short test summary info ============================
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_long_campaign_is_self_consistent
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 72 passed, 3 skipped in 313.18s (0:05:13)

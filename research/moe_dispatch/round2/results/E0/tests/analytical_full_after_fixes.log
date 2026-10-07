@@ -1,0 +1,26 @@
+................ss...........................s.......................F
+=================================== FAILURES ===================================
+_____ test_full_schedules_and_compressed_mla_are_validated_in_both_phases ______
+analytic_models/performance/hybrid_lcompute_campaign.py:999: in require_subsequence
+    cursor = actual.index(name, cursor) + 1
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ValueError: 'kda_state_decay_prediction' is not in list
+
+The above exception was the direct cause of the following exception:
+analytic_models/performance/test_hybrid_lcompute_campaign.py:406: in test_full_schedules_and_compressed_mla_are_validated_in_both_phases
+    result = run_ablation(
+analytic_models/performance/hybrid_lcompute_campaign.py:1202: in run_ablation
+    schedule_validations = [validate_workload_schedule(report, model_name, compiler_evidence) for report in reports]
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:1202: in <listcomp>
+    schedule_validations = [validate_workload_schedule(report, model_name, compiler_evidence) for report in reports]
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:1076: in validate_workload_schedule
+    require_subsequence(layer_id, (*mixer_names, *ffn_names))
+analytic_models/performance/hybrid_lcompute_campaign.py:1001: in require_subsequence
+    raise ValueError(f"{model_name} layer {layer_id + 1} misses ordered stage {name}") from error
+E   ValueError: kimi_k3 layer 1 misses ordered stage kda_state_decay_prediction
+=========================== short test summary info ============================
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_full_schedules_and_compressed_mla_are_validated_in_both_phases
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 66 passed, 3 skipped in 282.05s (0:04:42)

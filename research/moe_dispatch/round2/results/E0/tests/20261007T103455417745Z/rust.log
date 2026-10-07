@@ -1,0 +1,164 @@
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.19
+   Compiling serde_core v1.0.226
+   Compiling serde v1.0.226
+   Compiling serde_json v1.0.145
+   Compiling itoa v1.0.15
+   Compiling memchr v2.7.5
+   Compiling ryu v1.0.20
+   Compiling quote v1.0.40
+   Compiling syn v2.0.106
+   Compiling serde_derive v1.0.226
+   Compiling moe-dispatch-analytical-v1 v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/rust)
+warning: variable does not need to be mutable
+    --> src/v3/mod.rs:3110:109
+     |
+3110 | ...   for lanes in [vec![6],vec![3,3],vec![4,2]]{for precision in ["P0","P1","P2"]{let nc=lanes.len();let mut q=json!({"workload":{"id":"...
+     |                                                                                                           ----^
+     |                                                                                                           |
+     |                                                                                                           help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `max_tile` is never read
+   --> src/v3/mod.rs:396:5
+    |
+363 | struct Task {
+    |        ---- field in this struct
+...
+396 |     max_tile: usize,
+    |     ^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `transfer` is never used
+   --> src/v3/memory.rs:130:12
+    |
+ 80 | impl BankPort {
+    | ------------- method in this implementation
+...
+130 |     pub fn transfer(
+    |            ^^^^^^^^
+
+warning: fields `input_width` and `accum_key` are never read
+  --> src/v3/plan.rs:29:9
+   |
+22 | pub struct Group {
+   |            ----- fields in this struct
+...
+29 |     pub input_width: usize,
+   |         ^^^^^^^^^^^
+30 |     pub passes: usize,
+31 |     pub accum_key: usize,
+   |         ^^^^^^^^^
+   |
+   = note: `Group` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: field `baseline_bytes` is never read
+  --> src/v3/plan.rs:62:9
+   |
+52 | pub struct Plan {
+   |            ---- field in this struct
+...
+62 |     pub baseline_bytes: usize,
+   |         ^^^^^^^^^^^^^^
+   |
+   = note: `Plan` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `moe-dispatch-analytical-v1` (bin "moe-dispatch-analytical-v1" test) generated 5 warnings (run `cargo fix --bin "moe-dispatch-analytical-v1" -p moe-dispatch-analytical-v1 --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.98s
+     Running unittests src/main.rs (/tmp/plena-round2-cargo-target/debug/deps/moe_dispatch_analytical_v1-9c54793c9eba1845)
+
+running 89 tests
+test joint::tests::aged_descriptor_anchors_charged_scan ... ok
+test compute::tests::tails_and_overlap_are_counted_separately ... ok
+test joint::tests::failed_resource_revalidation_cannot_bind_or_start_dma ... ok
+test joint::tests::initial_fill_paid_scan_and_atomic_slot_reservation ... ok
+test joint::tests::no_prefetch_reserves_slot_but_requests_wait_for_promotion ... ok
+test joint::tests::pairing_and_feedback_are_independent_switches ... ok
+test joint::tests::wait_for_preferred_core_does_not_force_hot_task_to_idle_small ... ok
+test legacy_chunks::tests::additive_counters_and_peak_extrema_are_distinct ... ok
+test legacy_chunks::tests::physical_dma_ready_pattern_keeps_the_global_clock ... ok
+test live_profile::tests::union_does_not_double_count_concurrent_tiles_or_cores ... ok
+test plan::tests::counts_all_three_physical_tail_dimensions_without_changing_useful_math ... ok
+test plan::tests::ffn_shapes_preserve_hidden_and_intermediate_axes ... ok
+test plan::tests::group_traversal_reuses_x_and_preserves_every_outputs_k_order ... ok
+test plan::tests::grouping_changes_x_fills_but_never_weight_bytes_or_math ... ok
+test plan::tests::native_weight_padding_is_per_row_and_each_tile_loads_once ... ok
+test plan::tests::rejects_invalid_or_overflowed_geometry_and_skips_empty_experts ... ok
+test plan::tests::scalar_replay_matches_reference_for_m_n_and_k_tails ... ok
+test runtime::tests::bounded_stock_matches_unissued_consumers_including_tails ... ok
+test runtime::tests::completed_promotion_is_not_delayed_by_a_later_control_service ... ok
+test runtime::tests::credit_held_until_landing_then_same_cycle_reusable ... ok
+test runtime::tests::duplicate_return_is_rejected ... ok
+test runtime::tests::gate_and_up_exhaustion_do_not_enable_successor_prefetch ... ok
+test runtime::tests::in_flight_next_response_survives_promotion_and_input_gather ... ok
+test runtime::tests::inventory_includes_inflight_without_double_counting_landing ... ok
+test runtime::tests::next_reserves_one_tile_only_even_with_many_free_slots ... ok
+test runtime::tests::next_stage_cannot_borrow_current_group_slots_during_gather ... ok
+test runtime::tests::stalled_machine_reports_wait_graph_instead_of_hanging - should panic ... ok
+test runtime::tests::urgent_without_legal_request_has_no_grant ... ok
+test runtime::tests::valid_under_backpressure_is_stable_and_not_charged ... ok
+test tests::all_organizations_drain ... ok
+test tests::repeat_is_exact ... ok
+test tests::whole_and_split_preserve_work_and_bytes ... ok
+test v3::joint_policy::tests::critical_anchor_is_distinct_from_earliest_finish ... ok
+test v3::joint_policy::tests::legal_pair_has_distinct_cores_and_preserves_aged_anchor ... ok
+test v3::joint_policy::tests::potential_is_not_irrevocable_eligibility ... ok
+test v3::joint_policy::tests::single_core_uses_critical_anchor_and_empty_window_has_no_grant ... ok
+test v3::memory::tests::finite_pool ... ok
+test v3::memory::tests::private_slot_partitions_do_not_borrow_each_others_free_bytes ... ok
+test v3::memory::tests::shared_read_write ... ok
+test v3::plan::tests::exact_default_bytes ... ok
+test v3::plan::tests::is_hard_bound ... ok
+test v3::replay::tests::bf16_round_even ... ok
+test v3::replay::tests::zero_compensator ... ok
+test v3::tests::all_orgs_and_precisions ... ok
+test v3::tests::carried_lambda_survives_exact_json_roundtrip ... ok
+test v3::tests::contracted_quota_cannot_block_current_behind_held_next_head ... ok
+test v3::tests::deferred_silu_has_real_fp32_spill_write_and_read_in_fixed_arena ... ok
+test v3::tests::deterministic_and_drained ... ok
+test v3::tests::disabled_w_reuse_refills_after_each_real_m_block ... ok
+test joint::tests::joint_whole_ffn_drains_repeats_and_preserves_bytes ... ok
+test v3::tests::fixed_slot_pool_is_same_capacity_with_real_private_fragmentation ... ok
+test v3::tests::drained_helper_does_not_pin_full_stream_accumulator ... ok
+test v3::tests::full_z_down_finishes_tail_before_each_bounded_band_combine ... ok
+test v3::tests::gate_score_alias_float_byte_lut_and_lambda_reset_are_charged ... ok
+test v3::tests::group_resume_requires_all_weights_before_parking_quota_owner ... ok
+test v3::tests::helper_delta_has_finite_source_and_owner_rmw_inside_installed_arena ... ok
+test v3::tests::illegal_precision_is_error ... ok
+test v3::tests::joint_snapshot_keeps_pair_and_differs_from_greedy_finish ... ok
+test v3::tests::nonpipelined_reads_wait_real_accumulator_completion ... ok
+test v3::tests::only_byte_compression_preserves_native_granularity ... ok
+test v3::tests::packed_u_rank_mapping_matches_written_and_read_words ... ok
+test v3::tests::parked_partial_wor_is_not_a_free_operand_context ... ok
+test v3::tests::private_next_head_is_atomic_when_static_slots_are_insufficient ... ok
+test v3::tests::quota_off_is_current_group_only_and_fixed_policy_is_real ... ok
+test v3::tests::rank_feedback_uses_routed_budget_and_keeps_shared_fixed_cost_separate ... ok
+test v3::tests::steal_drains_prefetched_old_response_leases_and_counts_retake ... ok
+test v3::tests::streamed_down_uses_partial_combine_and_charged_ud_backing ... ok
+test v3::tests::forward_zero_all_supply_switches_off_drains_every_organization_and_precision ... ok
+test v3::tests::two_contexts_alternate_without_extra_accumulator ... ok
+test v3::tests_extra::alternate_context_waits_for_real_contiguous_reservations ... ok
+test v3::tests_extra::bounded_wor_and_ordered_feedback_all_complete ... ok
+test v3::tests_extra::candidate_context_metadata_matches_exact_plans ... ok
+test v3::tests_extra::equal_payload_compensation_is_real_dma_not_posthoc_time ... ok
+test v3::tests_extra::failed_steal_preserves_source_context_and_accepted_response_leases ... ok
+test v3::tests_extra::fragmented_context_cannot_install_a_helper_current ... ok
+test v3::tests_extra::fragmented_current_eligibility_keeps_other_window_candidates_available ... ok
+test v3::tests_extra::fragmented_full_frame_admission_has_no_partial_side_effects ... ok
+test v3::tests_extra::fragmented_helper_next_waits_through_completion_and_run_promotion ... ok
+test v3::tests_extra::frozen_physical_capacity_does_not_shrink_with_batch ... ok
+test v3::tests_extra::joint_revalidates_contiguous_current_eligibility_without_changing_anchor_policy ... ok
+test v3::tests_extra::mxint8_split_prepass_counts_both_passes_and_drains ... ok
+test v3::tests_extra::nonadjacent_routed_rows_use_actual_gather_strides ... ok
+test v3::tests_extra::offload_frame_cannot_pin_a_busy_helpers_progress ... ok
+test v3::tests_extra::parked_offload_next_preserves_the_future_owners_helper_accumulator ... ok
+test v3::tests_extra::physical_mac_latency_remains_with_ideal_supply ... ok
+test v3::tests_extra::prefetched_next_reserves_current_and_next_activation_arenas_together ... ok
+test v3::tests_extra::refill_admission_keeps_the_entire_current_group_progress_space ... ok
+test v3::tests_extra::shared_byte_pool_blocked_head_can_resume_a_ready_parked_frame ... ok
+test v3::tests::two_context_progress_under_undersized_head_quota_and_off_modes ... ok
+
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.24s
+

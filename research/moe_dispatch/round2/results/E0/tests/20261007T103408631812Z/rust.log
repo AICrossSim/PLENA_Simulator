@@ -1,0 +1,28 @@
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.19
+   Compiling serde_core v1.0.226
+   Compiling serde v1.0.226
+   Compiling serde_json v1.0.145
+   Compiling ryu v1.0.20
+   Compiling memchr v2.7.5
+   Compiling itoa v1.0.15
+error[E0463]: can't find crate for `std`
+  |
+  = note: the `x86_64-unknown-linux-gnu` target may not be installed
+  = help: consider downloading the target with `rustup target add x86_64-unknown-linux-gnu`
+
+For more information about this error, try `rustc --explain E0463`.
+error: could not compile `serde_json` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `proc-macro2` (build script) due to 1 previous error
+error: could not compile `serde_core` (build script) due to 1 previous error
+error: could not compile `serde` (build script) due to 1 previous error
+error[E0463]: can't find crate for `core`
+  |
+  = note: the `x86_64-unknown-linux-gnu` target may not be installed
+  = help: consider downloading the target with `rustup target add x86_64-unknown-linux-gnu`
+
+error: could not compile `unicode-ident` (lib) due to 1 previous error
+error: could not compile `itoa` (lib) due to 1 previous error
+error: could not compile `ryu` (lib) due to 1 previous error
+error: could not compile `memchr` (lib) due to 1 previous error

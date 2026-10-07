@@ -1,0 +1,1001 @@
+   Compiling memory v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator/lib/memory)
+   Compiling tch v0.20.0
+   Compiling torch-sys v0.20.0
+   Compiling ramulator v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator/lib/ramulator)
+   Compiling quantize v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator/lib/quantize)
+   Compiling sram v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator/lib/sram)
+   Compiling transactional_emulator v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator)
+error[E0255]: the name `tensor_from_f32_slice` is defined multiple times
+  --> src/dma.rs:26:1
+   |
+21 | use quantize::{DataType, MxDataType, QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
+   |                                                   --------------------- previous import of the value `tensor_from_f32_slice` here
+...
+26 | fn tensor_from_f32_slice(data: &[f32]) -> tch::Tensor {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `tensor_from_f32_slice` redefined here
+   |
+   = note: `tensor_from_f32_slice` must be defined only once in the value namespace of this module
+help: you can use `as` to change the binding name of the import
+   |
+21 | use quantize::{DataType, MxDataType, QuantTensor, tensor_from_f32_slice as other_tensor_from_f32_slice, tensor_to_f32_vec};
+   |                                                                         ++++++++++++++++++++++++++++++
+
+error[E0428]: the name `test_decode_compiler_v_topk_fixtures` is defined multiple times
+    --> src/op.rs:1820:5
+     |
+1803 |     fn test_decode_compiler_v_topk_fixtures() {
+     |     ----------------------------------------- previous definition of the value `test_decode_compiler_v_topk_fixtures` here
+...
+1820 |     fn test_decode_compiler_v_topk_fixtures() {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `test_decode_compiler_v_topk_fixtures` redefined here
+     |
+     = note: `test_decode_compiler_v_topk_fixtures` must be defined only once in the value namespace of this module
+
+error[E0428]: the name `VectorBinaryOp` is defined multiple times
+   --> src/vector_machine.rs:151:1
+    |
+ 68 | pub(crate) enum VectorBinaryOp {
+    | ------------------------------ previous definition of the type `VectorBinaryOp` here
+...
+151 | pub(crate) enum VectorBinaryOp {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `VectorBinaryOp` redefined here
+    |
+    = note: `VectorBinaryOp` must be defined only once in the type namespace of this module
+
+error[E0428]: the name `TileScaleLayout` is defined multiple times
+   --> src/vector_machine.rs:161:1
+    |
+ 78 | pub(crate) enum TileScaleLayout {
+    | ------------------------------- previous definition of the type `TileScaleLayout` here
+...
+161 | pub(crate) enum TileScaleLayout {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `TileScaleLayout` redefined here
+    |
+    = note: `TileScaleLayout` must be defined only once in the type namespace of this module
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `bf16`
+  --> src/accelerator/scalar_sram.rs:55:21
+   |
+55 |             *slot = bf16::from_bits(u16::from_le_bytes([bytes[0], bytes[1]]));
+   |                     ^^^^ use of unresolved module or unlinked crate `bf16`
+   |
+   = help: if you wanted to use a crate named `bf16`, use `cargo add bf16` to add it to your `Cargo.toml`
+   = note: struct `crate::vector_machine::tests::bf16` exists but is inaccessible
+help: a struct with a similar name exists
+   |
+55 -             *slot = bf16::from_bits(u16::from_le_bytes([bytes[0], bytes[1]]));
+55 +             *slot = f16::from_bits(u16::from_le_bytes([bytes[0], bytes[1]]));
+   |
+help: consider importing one of these structs
+   |
+ 3 + use std::arch::x86_64::bf16;
+   |
+ 3 + use half::bf16;
+   |
+
+error[E0425]: cannot find type `bf16` in this scope
+  --> src/accelerator/scalar_sram.rs:89:70
+   |
+89 |     pub(super) fn write_fp_window(&mut self, start: usize, values: &[bf16]) {
+   |                                                                      ^^^^
+   |
+  ::: /home/mcl123/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/half-2.6.0/src/binary16.rs:50:1
+   |
+50 | pub struct f16(u16);
+   | -------------- similarly named struct `f16` defined here
+   |
+   = note: struct `crate::vector_machine::tests::bf16` exists but is inaccessible
+help: a struct with a similar name exists
+   |
+89 -     pub(super) fn write_fp_window(&mut self, start: usize, values: &[bf16]) {
+89 +     pub(super) fn write_fp_window(&mut self, start: usize, values: &[f16]) {
+   |
+help: consider importing one of these structs
+   |
+ 3 + use std::arch::x86_64::bf16;
+   |
+ 3 + use half::bf16;
+   |
+
+warning: unused import: `tensor_from_f32_slice`
+  --> src/dma.rs:21:51
+   |
+21 | use quantize::{DataType, MxDataType, QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
+   |                                                   ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0124]: field `hbm_dump` is already declared
+   --> src/cli.rs:189:5
+    |
+170 |     pub(crate) hbm_dump: Option<PathBuf>,
+    |     ------------------------------------ `hbm_dump` first declared here
+...
+189 |     pub(crate) hbm_dump: Option<PathBuf>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field already declared
+
+error[E0119]: conflicting implementations of trait `Clone` for type `vector_machine::VectorBinaryOp`
+   --> src/vector_machine.rs:150:10
+    |
+ 67 | #[derive(Clone, Copy, Debug)]
+    |          ----- first implementation here
+...
+150 | #[derive(Clone, Copy, Debug)]
+    |          ^^^^^ conflicting implementation for `vector_machine::VectorBinaryOp`
+
+error[E0119]: conflicting implementations of trait `Clone` for type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:160:10
+    |
+ 77 | #[derive(Clone, Copy, Debug)]
+    |          ----- first implementation here
+...
+160 | #[derive(Clone, Copy, Debug)]
+    |          ^^^^^ conflicting implementation for `vector_machine::TileScaleLayout`
+
+error[E0119]: conflicting implementations of trait `std::marker::Copy` for type `vector_machine::VectorBinaryOp`
+   --> src/vector_machine.rs:150:17
+    |
+ 67 | #[derive(Clone, Copy, Debug)]
+    |                 ---- first implementation here
+...
+150 | #[derive(Clone, Copy, Debug)]
+    |                 ^^^^ conflicting implementation for `vector_machine::VectorBinaryOp`
+
+error[E0119]: conflicting implementations of trait `std::marker::Copy` for type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:160:17
+    |
+ 77 | #[derive(Clone, Copy, Debug)]
+    |                 ---- first implementation here
+...
+160 | #[derive(Clone, Copy, Debug)]
+    |                 ^^^^ conflicting implementation for `vector_machine::TileScaleLayout`
+
+error[E0119]: conflicting implementations of trait `Debug` for type `vector_machine::VectorBinaryOp`
+   --> src/vector_machine.rs:150:23
+    |
+ 67 | #[derive(Clone, Copy, Debug)]
+    |                       ----- first implementation here
+...
+150 | #[derive(Clone, Copy, Debug)]
+    |                       ^^^^^ conflicting implementation for `vector_machine::VectorBinaryOp`
+
+error[E0119]: conflicting implementations of trait `Debug` for type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:160:23
+    |
+ 77 | #[derive(Clone, Copy, Debug)]
+    |                       ----- first implementation here
+...
+160 | #[derive(Clone, Copy, Debug)]
+    |                       ^^^^^ conflicting implementation for `vector_machine::TileScaleLayout`
+
+error[E0382]: use of moved value: `scale_layout`
+   --> src/accelerator/dispatch.rs:474:33
+    |
+431 |                     let scale_layout = if scales.shape.tile_count == 1 {
+    |                         ------------ move occurs because `scale_layout` has type `vector_machine::TileScaleLayout`, which does not implement the `Copy` trait
+...
+447 |                     for row in 0..source_line_count {
+    |                     ------------------------------- inside of this loop
+...
+474 |                                 scale_layout,
+    |                                 ^^^^^^^^^^^^ value moved here, in previous iteration of loop
+    |
+note: these 2 reinitializations might get skipped
+   --> src/accelerator/dispatch.rs:432:25
+    |
+432 |                         TileScaleLayout::Compact { first_tile }
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+433 |                     } else {
+434 |                         TileScaleLayout::Expanded
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^
+note: consider changing this parameter type in method `tile_dot_accumulate` to borrow instead if owning the value isn't necessary
+   --> src/vector_machine.rs:843:23
+    |
+836 |     pub(crate) async fn tile_dot_accumulate(
+    |                         ------------------- in this method
+...
+843 |         scale_layout: TileScaleLayout,
+    |                       ^^^^^^^^^^^^^^^ this parameter takes ownership of the value
+note: verify that your loop breaking logic is correct
+   --> src/accelerator/dispatch.rs:459:63
+    |
+429 |                   for first_tile in (0..source.shape.tile_count).step_by(tiles_per_packet as usize) {
+    |                   ---------------------------------------------------------------------------------
+...
+447 |                       for row in 0..source_line_count {
+    |                       -------------------------------
+...
+459 |                           let (source_packet, source_service) = self
+    |  _______________________________________________________________^
+460 | |                             .read_l_tile_lines(src_base, source, source_axis, &source_lines)
+461 | |                             .await;
+    | |__________________________________^ this `break` exits the loop at line 461
+462 |                           timing::charge_bank_cycles(source_service.service_cycles.max(1)).await;
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this `break` exits the loop at line 462
+463 |                           let (scale_packet, scale_service) = self
+    |  _____________________________________________________________^
+464 | |                             .read_l_tile_lines(scale_base, scales, scale_axis, &scale_lines)
+465 | |                             .await;
+    | |__________________________________^ this `break` exits the loop at line 465
+466 |                           timing::charge_bank_cycles(scale_service.service_cycles.max(1)).await;
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this `break` exits the loop at line 466
+467 | /                         self.v_machine
+468 | |                             .tile_dot_accumulate(
+469 | |                                 &mut accumulator,
+470 | |                                 source_packet,
+...   |
+476 | |                             .await;
+    | |__________________________________^ this `break` exits the loop at line 476
+note: if `vector_machine::TileScaleLayout` implemented `Clone`, you could clone the value
+   --> src/vector_machine.rs:78:1
+    |
+ 78 | pub(crate) enum TileScaleLayout {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ consider implementing `Clone` for this type
+    |
+   ::: src/accelerator/dispatch.rs:474:33
+    |
+474 | ...                   scale_layout,
+    |                       ------------ you could clone this value
+help: consider moving the expression out of the loop so it is only moved once
+    |
+447 ~                     let mut value = self.v_machine
+448 +                             .tile_dot_accumulate(
+449 +                                 &mut accumulator,
+450 +                                 source_packet,
+451 +                                 scale_packet,
+452 +                                 source_line_width,
+453 +                                 scale_line_width,
+454 +                                 scale_layout,
+455 +                             );
+456 ~                     for row in 0..source_line_count {
+457 |                         let source_lines = (first_tile..first_tile + tile_count)
+...
+475 |                         timing::charge_bank_cycles(scale_service.service_cycles.max(1)).await;
+476 ~                         value
+    |
+
+error[E0308]: mismatched types
+    --> src/accelerator/dispatch.rs:1152:69
+     |
+1152 |                         self.scalar_sram.write_fp(fp_base + offset, *weight);
+     |                                          --------                   ^^^^^^^ expected `f32`, found `bf16`
+     |                                          |
+     |                                          arguments to this method are incorrect
+     |
+note: method defined here
+    --> src/accelerator/scalar_sram.rs:68:19
+     |
+  68 |     pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
+     |                   ^^^^^^^^                         ----------
+help: call `Into::into` on this expression to convert `half::bf16` into `f32`
+     |
+1152 |                         self.scalar_sram.write_fp(fp_base + offset, (*weight).into());
+     |                                                                     +       ++++++++
+
+error[E0308]: mismatched types
+    --> src/accelerator/dispatch.rs:1321:25
+     |
+1319 |                       self.reg_file.write_fp(
+     |                                     -------- arguments to this method are incorrect
+1320 |                           *rd,
+1321 | /                         self.scalar_sram
+1322 | |                             .read_fp((self.reg_file.read_gp(*rs1) + *imm) as usize),
+     | |___________________________________________________________________________________^ expected `bf16`, found `f32`
+     |
+note: method defined here
+    --> src/accelerator/registers.rs:86:19
+     |
+  86 |     pub(super) fn write_fp(&mut self, r: u8, v: bf16) {
+     |                   ^^^^^^^^                   -------
+
+error[E0308]: mismatched types
+    --> src/accelerator/dispatch.rs:1329:25
+     |
+1327 |                     self.scalar_sram.write_fp(
+     |                                      -------- arguments to this method are incorrect
+1328 |                         (self.reg_file.read_gp(*rs1) + *imm) as usize,
+1329 |                         self.reg_file.read_fp(*rd),
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `f32`, found `bf16`
+     |
+note: method defined here
+    --> src/accelerator/scalar_sram.rs:68:19
+     |
+  68 |     pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
+     |                   ^^^^^^^^                         ----------
+help: call `Into::into` on this expression to convert `half::bf16` into `f32`
+     |
+1329 |                         self.reg_file.read_fp(*rd).into(),
+     |                                                   +++++++
+
+error[E0308]: mismatched types
+    --> src/accelerator/dispatch.rs:1337:73
+     |
+1337 |                         .vector_transfer_fp(self.reg_file.read_gp(*rd), f)
+     |                          ------------------                             ^ expected `&[bf16]`, found `&[f32]`
+     |                          |
+     |                          arguments to this method are incorrect
+     |
+     = note: expected reference `&[half::bf16]`
+                found reference `&[f32]`
+note: method defined here
+    --> src/vector_machine.rs:1060:25
+     |
+1060 |     pub(crate) async fn vector_transfer_fp(&self, vd: u32, f: &[bf16]) {
+     |                         ^^^^^^^^^^^^^^^^^^                 ----------
+
+error[E0609]: no field `coalesce_hbm_bursts` on type `&mut Accelerator`
+    --> src/accelerator/dispatch.rs:1413:30
+     |
+1413 |                         self.coalesce_hbm_bursts,
+     |                              ^^^^^^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `m_machine`, `v_machine`, `hbm`, `reg_file`, `scalar_sram` ... and 4 others
+
+error[E0609]: no field `coalesce_hbm_bursts` on type `&mut Accelerator`
+    --> src/accelerator/dispatch.rs:1449:30
+     |
+1449 |                         self.coalesce_hbm_bursts,
+     |                              ^^^^^^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `m_machine`, `v_machine`, `hbm`, `reg_file`, `scalar_sram` ... and 4 others
+
+error[E0061]: this function takes 7 arguments but 6 arguments were supplied
+    --> src/accelerator/dispatch.rs:1482:32
+     |
+1482 |                       let xfer = dma::transfer_mx_from_hbm(
+     |  ________________________________^^^^^^^^^^^^^^^^^^^^^^^^^-
+1483 | |                         &self.hbm,
+1484 | |                         region,
+1485 | |                         self.m_machine.mram.ty(),
+...    |
+1488 | |                         1,
+1489 | |                     );
+     | |_____________________- argument #7 of type `bool` is missing
+     |
+note: function defined here
+    --> src/dma.rs:150:15
+     |
+ 150 | pub(crate) fn transfer_mx_from_hbm(
+     |               ^^^^^^^^^^^^^^^^^^^^
+...
+ 157 |     coalesce_hbm_bursts: bool,
+     |     -------------------------
+help: provide the argument
+     |
+1482 |                     let xfer = dma::transfer_mx_from_hbm(
+ ...
+1488 |                         1,
+1489 ~                         /* bool */,
+1490 ~                     );
+     |
+
+error[E0609]: no field `coalesce_hbm_bursts` on type `&mut Accelerator`
+    --> src/accelerator/dispatch.rs:2104:26
+     |
+2104 |                     self.coalesce_hbm_bursts,
+     |                          ^^^^^^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `m_machine`, `v_machine`, `hbm`, `reg_file`, `scalar_sram` ... and 4 others
+
+error[E0609]: no field `coalesce_hbm_bursts` on type `&mut Accelerator`
+    --> src/accelerator/dispatch.rs:2140:26
+     |
+2140 |                     self.coalesce_hbm_bursts,
+     |                          ^^^^^^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `m_machine`, `v_machine`, `hbm`, `reg_file`, `scalar_sram` ... and 4 others
+
+error[E0061]: this function takes 7 arguments but 6 arguments were supplied
+    --> src/accelerator/dispatch.rs:2180:28
+     |
+2180 |                   let xfer = dma::transfer_mx_from_hbm(
+     |  ____________________________^^^^^^^^^^^^^^^^^^^^^^^^^-
+2181 | |                     &self.hbm,
+2182 | |                     region,
+2183 | |                     self.m_machine.mram.ty(),
+...    |
+2186 | |                     1,
+2187 | |                 );
+     | |_________________- argument #7 of type `bool` is missing
+     |
+note: function defined here
+    --> src/dma.rs:150:15
+     |
+ 150 | pub(crate) fn transfer_mx_from_hbm(
+     |               ^^^^^^^^^^^^^^^^^^^^
+...
+ 157 |     coalesce_hbm_bursts: bool,
+     |     -------------------------
+help: provide the argument
+     |
+2180 |                 let xfer = dma::transfer_mx_from_hbm(
+ ...
+2186 |                     1,
+2187 ~                     /* bool */,
+2188 ~                 );
+     |
+
+error[E0308]: mismatched types
+   --> src/accelerator/pipeline_tests.rs:463:37
+    |
+463 |             .write_fp(row as usize, bf16::from_f32((row + 1) as f32));
+    |              --------               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `f32`, found `bf16`
+    |              |
+    |              arguments to this method are incorrect
+    |
+note: method defined here
+   --> src/accelerator/scalar_sram.rs:68:19
+    |
+ 68 |     pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
+    |                   ^^^^^^^^                         ----------
+help: call `Into::into` on this expression to convert `half::bf16` into `f32`
+    |
+463 |             .write_fp(row as usize, bf16::from_f32((row + 1) as f32).into());
+    |                                                                     +++++++
+
+error[E0308]: mismatched types
+   --> src/accelerator/pipeline_tests.rs:470:48
+    |
+470 |                 .write_fp(rows as usize + row, bf16::from_f32(*decay));
+    |                  --------                      ^^^^^^^^^^^^^^^^^^^^^^ expected `f32`, found `bf16`
+    |                  |
+    |                  arguments to this method are incorrect
+    |
+note: method defined here
+   --> src/accelerator/scalar_sram.rs:68:19
+    |
+ 68 |     pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
+    |                   ^^^^^^^^                         ----------
+help: call `Into::into` on this expression to convert `half::bf16` into `f32`
+    |
+470 |                 .write_fp(rows as usize + row, bf16::from_f32(*decay).into());
+    |                                                                      +++++++
+
+error[E0308]: mismatched types
+   --> src/accelerator/pipeline_tests.rs:725:37
+    |
+725 |             .write_fp(row as usize, bf16::from_f32((row + 1) as f32 / 32.0));
+    |              --------               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `f32`, found `bf16`
+    |              |
+    |              arguments to this method are incorrect
+    |
+note: method defined here
+   --> src/accelerator/scalar_sram.rs:68:19
+    |
+ 68 |     pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
+    |                   ^^^^^^^^                         ----------
+help: call `Into::into` on this expression to convert `half::bf16` into `f32`
+    |
+725 |             .write_fp(row as usize, bf16::from_f32((row + 1) as f32 / 32.0).into());
+    |                                                                            +++++++
+
+error[E0599]: no method named `set_coalesce_hbm_bursts` found for struct `Accelerator` in the current scope
+   --> src/runner.rs:188:17
+    |
+188 |     accelerator.set_coalesce_hbm_bursts(opts.coalesce_hbm_bursts);
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^ method not found in `Accelerator`
+    |
+   ::: src/accelerator/mod.rs:47:1
+    |
+ 47 | pub(crate) struct Accelerator {
+    | ----------------------------- method `set_coalesce_hbm_bursts` not found for this struct
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:756:22
+    |
+756 |         scale_layout.validate(coeff.len(), rows, scale_width, 2);
+    |                      ^^^^^^^^ multiple `validate` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:84:5
+    |
+ 84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:167:5
+    |
+167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:760:44
+    |
+760 |             let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+    |                                            ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:98:5
+    |
+ 98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:181:5
+    |
+181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:804:22
+    |
+804 |         scale_layout.validate(coeff.len(), rows, scale_width, 2);
+    |                      ^^^^^^^^ multiple `validate` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:84:5
+    |
+ 84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:167:5
+    |
+167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:810:48
+    |
+810 |                 let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+    |                                                ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:98:5
+    |
+ 98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:181:5
+    |
+181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:851:22
+    |
+851 |         scale_layout.validate(coeff.len(), row_count, scale_width, 1);
+    |                      ^^^^^^^^ multiple `validate` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:84:5
+    |
+ 84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:167:5
+    |
+167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:854:44
+    |
+854 |             let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+    |                                            ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:98:5
+    |
+ 98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:181:5
+    |
+181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:881:22
+    |
+881 |         scale_layout.validate(coeff.len(), rows, scale_width, 1);
+    |                      ^^^^^^^^ multiple `validate` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:84:5
+    |
+ 84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:167:5
+    |
+167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+   --> src/vector_machine.rs:884:44
+    |
+884 |             let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+    |                                            ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+    |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:98:5
+    |
+ 98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+   --> src/vector_machine.rs:181:5
+    |
+181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+    --> src/vector_machine.rs:1336:22
+     |
+1336 |         scale_layout.validate(coeff.len(), rows, scale_width, 2);
+     |                      ^^^^^^^^ multiple `validate` found
+     |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:84:5
+     |
+  84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:167:5
+     |
+ 167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+    --> src/vector_machine.rs:1340:44
+     |
+1340 |             let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+     |                                            ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+     |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:98:5
+     |
+  98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:181:5
+     |
+ 181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+    --> src/vector_machine.rs:1372:22
+     |
+1372 |         scale_layout.validate(coeff.len(), row_count, scale_width, 1);
+     |                      ^^^^^^^^ multiple `validate` found
+     |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:84:5
+     |
+  84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:167:5
+     |
+ 167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+    --> src/vector_machine.rs:1375:44
+     |
+1375 |             let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+     |                                            ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+     |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:98:5
+     |
+  98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:181:5
+     |
+ 181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+    --> src/vector_machine.rs:1401:22
+     |
+1401 |         scale_layout.validate(coeff.len(), rows, scale_width, 1);
+     |                      ^^^^^^^^ multiple `validate` found
+     |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:84:5
+     |
+  84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:167:5
+     |
+ 167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0034]: multiple applicable items in scope
+    --> src/vector_machine.rs:1404:44
+     |
+1404 |             let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+     |                                            ^^^^^^^^^^^^^^^^^ multiple `coefficient_index` found
+     |
+note: candidate #1 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:98:5
+     |
+  98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: candidate #2 is defined in an impl for the type `vector_machine::TileScaleLayout`
+    --> src/vector_machine.rs:181:5
+     |
+ 181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0592]: duplicate definitions with name `intsram_to_le_bytes`
+   --> src/accelerator/scalar_sram.rs:118:5
+    |
+114 |     pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
+    |     --------------------------------------------------- other definition for `intsram_to_le_bytes`
+...
+118 |     pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ duplicate definitions for `intsram_to_le_bytes`
+
+error[E0592]: duplicate definitions with name `tile_size`
+    --> src/vector_machine.rs:1276:5
+     |
+ 235 |     pub(crate) fn tile_size(&self) -> u32 {
+     |     ------------------------------------- other definition for `tile_size`
+...
+1276 |     pub(crate) fn tile_size(&self) -> u32 {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ duplicate definitions for `tile_size`
+
+error[E0592]: duplicate definitions with name `binary_packet`
+    --> src/vector_machine.rs:1280:5
+     |
+ 699 | /     pub(crate) async fn binary_packet(
+ 700 | |         &self,
+ 701 | |         op: VectorBinaryOp,
+ 702 | |         a: QuantTensor,
+...    |
+ 705 | |         mask: u32,
+ 706 | |     ) -> QuantTensor {
+     | |____________________- other definition for `binary_packet`
+...
+1280 | /     pub(crate) async fn binary_packet(
+1281 | |         &self,
+1282 | |         op: VectorBinaryOp,
+1283 | |         a: QuantTensor,
+...    |
+1286 | |         mask: u32,
+1287 | |     ) -> QuantTensor {
+     | |____________________^ duplicate definitions for `binary_packet`
+
+error[E0592]: duplicate definitions with name `tile_scale_accum`
+    --> src/vector_machine.rs:1321:5
+     |
+ 741 | /     pub(crate) async fn tile_scale_accum(
+ 742 | |         &self,
+ 743 | |         destination: QuantTensor,
+ 744 | |         source: QuantTensor,
+...    |
+ 748 | |         scale_layout: TileScaleLayout,
+ 749 | |     ) -> QuantTensor {
+     | |____________________- other definition for `tile_scale_accum`
+...
+1321 | /     pub(crate) async fn tile_scale_accum(
+1322 | |         &self,
+1323 | |         destination: QuantTensor,
+1324 | |         source: QuantTensor,
+...    |
+1328 | |         scale_layout: TileScaleLayout,
+1329 | |     ) -> QuantTensor {
+     | |____________________^ duplicate definitions for `tile_scale_accum`
+
+error[E0592]: duplicate definitions with name `tile_dot_accumulate`
+    --> src/vector_machine.rs:1357:5
+     |
+ 836 | /     pub(crate) async fn tile_dot_accumulate(
+ 837 | |         &self,
+ 838 | |         accumulator: &mut [f32],
+ 839 | |         rows: QuantTensor,
+...    |
+ 843 | |         scale_layout: TileScaleLayout,
+ 844 | |     ) {
+     | |_____- other definition for `tile_dot_accumulate`
+...
+1357 | /     pub(crate) async fn tile_dot_accumulate(
+1358 | |         &self,
+1359 | |         accumulator: &mut [f32],
+1360 | |         rows: QuantTensor,
+...    |
+1364 | |         scale_layout: TileScaleLayout,
+1365 | |     ) {
+     | |_____^ duplicate definitions for `tile_dot_accumulate`
+
+error[E0592]: duplicate definitions with name `tile_outer_update`
+    --> src/vector_machine.rs:1384:5
+     |
+ 864 | /     pub(crate) async fn tile_outer_update(
+ 865 | |         &self,
+ 866 | |         destination: QuantTensor,
+ 867 | |         vector: QuantTensor,
+...    |
+ 871 | |         scale_layout: TileScaleLayout,
+ 872 | |     ) -> QuantTensor {
+     | |____________________- other definition for `tile_outer_update`
+...
+1384 | /     pub(crate) async fn tile_outer_update(
+1385 | |         &self,
+1386 | |         destination: QuantTensor,
+1387 | |         vector: QuantTensor,
+...    |
+1391 | |         scale_layout: TileScaleLayout,
+1392 | |     ) -> QuantTensor {
+     | |____________________^ duplicate definitions for `tile_outer_update`
+
+error[E0592]: duplicate definitions with name `validate`
+   --> src/vector_machine.rs:84:5
+    |
+ 84 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ duplicate definitions for `validate`
+...
+167 |     fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+    |     --------------------------------------------------------------------------- other definition for `validate`
+
+error[E0592]: duplicate definitions with name `coefficient_index`
+   --> src/vector_machine.rs:98:5
+    |
+ 98 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ duplicate definitions for `coefficient_index`
+...
+181 |     fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+    |     ----------------------------------------------------------------------------- other definition for `coefficient_index`
+
+error[E0308]: mismatched types
+    --> src/accelerator/dispatch.rs:1942:50
+     |
+1942 |                 self.reg_file.write_fp(register, value);
+     |                               --------           ^^^^^ expected `bf16`, found `f32`
+     |                               |
+     |                               arguments to this method are incorrect
+     |
+note: method defined here
+    --> src/accelerator/registers.rs:86:19
+     |
+  86 |     pub(super) fn write_fp(&mut self, r: u8, v: bf16) {
+     |                   ^^^^^^^^                   -------
+
+error[E0308]: mismatched types
+   --> src/accelerator/pipeline_tests.rs:909:41
+    |
+909 |                 .write_fp(row as usize, bf16::from_f32((row + 1) as f32 / 64.0));
+    |                  --------               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `f32`, found `bf16`
+    |                  |
+    |                  arguments to this method are incorrect
+    |
+note: method defined here
+   --> src/accelerator/scalar_sram.rs:68:19
+    |
+ 68 |     pub(super) fn write_fp(&mut self, addr: usize, value: f32) {
+    |                   ^^^^^^^^                         ----------
+help: call `Into::into` on this expression to convert `half::bf16` into `f32`
+    |
+909 |                 .write_fp(row as usize, bf16::from_f32((row + 1) as f32 / 64.0).into());
+    |                                                                                +++++++
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+   --> src/accelerator/scalar_sram.rs:153:24
+    |
+153 |         let mut sram = ScalarSram::new();
+    |                        ^^^^^^^^^^^^^^^-- argument #1 of type `quantize::DataType` is missing
+    |
+note: associated function defined here
+   --> src/accelerator/scalar_sram.rs:13:19
+    |
+ 13 |     pub(super) fn new(fp_type: DataType) -> Self {
+    |                   ^^^ -----------------
+help: provide the argument
+    |
+153 |         let mut sram = ScalarSram::new(/* quantize::DataType */);
+    |                                        ++++++++++++++++++++++++
+
+error[E0308]: mismatched types
+   --> src/accelerator/scalar_sram.rs:158:13
+    |
+158 |             assert_eq!(sram.read_fp(i).to_bits(), expected);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `u32`, found `u16`
+    |
+    = note: this error originates in the macro `assert_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: can't compare `u32` with `u16`
+    --> src/accelerator/scalar_sram.rs:158:13
+     |
+ 158 |             assert_eq!(sram.read_fp(i).to_bits(), expected);
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `u32 == u16`
+     |
+     = help: the trait `PartialEq<u16>` is not implemented for `u32`
+help: the following other types implement trait `PartialEq<Rhs>`
+    --> /nix/store/qqq4l5xqxm4s009vcdm1p6kic2jga311-rust-default-1.93.1/lib/rustlib/src/rust/library/core/src/cmp.rs:1885:5
+     |
+1885 | /     partial_eq_impl! {
+1886 | |         bool char usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 f16 f32 f64 f128
+1887 | |     }
+     | |_____^ `u32` implements `PartialEq`
+     |
+    ::: /home/mcl123/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.145/src/value/partial_eq.rs:97:1
+     |
+  97 | / partialeq_numeric! {
+  98 | |     eq_i64[i8 i16 i32 i64 isize]
+  99 | |     eq_u64[u8 u16 u32 u64 usize]
+ 100 | |     eq_f32[f32]
+ 101 | |     eq_f64[f64]
+ 102 | |     eq_bool[bool]
+ 103 | | }
+     | |_^ `u32` implements `PartialEq<serde_json::Value>`
+     = note: this error originates in the macro `assert_eq` which comes from the expansion of the macro `partialeq_numeric` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+   --> src/accelerator/scalar_sram.rs:166:9
+    |
+166 |         ScalarSram::new().load_fpsram_from_bf16_bytes(&[0x80]);
+    |         ^^^^^^^^^^^^^^^-- argument #1 of type `quantize::DataType` is missing
+    |
+note: associated function defined here
+   --> src/accelerator/scalar_sram.rs:13:19
+    |
+ 13 |     pub(super) fn new(fp_type: DataType) -> Self {
+    |                   ^^^ -----------------
+help: provide the argument
+    |
+166 |         ScalarSram::new(/* quantize::DataType */).load_fpsram_from_bf16_bytes(&[0x80]);
+    |                         ++++++++++++++++++++++++
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+   --> src/accelerator/scalar_sram.rs:172:9
+    |
+172 |         ScalarSram::new().load_fpsram_from_bf16_bytes(&[0; 2050]);
+    |         ^^^^^^^^^^^^^^^-- argument #1 of type `quantize::DataType` is missing
+    |
+note: associated function defined here
+   --> src/accelerator/scalar_sram.rs:13:19
+    |
+ 13 |     pub(super) fn new(fp_type: DataType) -> Self {
+    |                   ^^^ -----------------
+help: provide the argument
+    |
+172 |         ScalarSram::new(/* quantize::DataType */).load_fpsram_from_bf16_bytes(&[0; 2050]);
+    |                         ++++++++++++++++++++++++
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+  --> src/accelerator/mod.rs:77:26
+   |
+77 |             scalar_sram: ScalarSram::new(),
+   |                          ^^^^^^^^^^^^^^^-- argument #1 of type `quantize::DataType` is missing
+   |
+note: associated function defined here
+  --> src/accelerator/scalar_sram.rs:13:19
+   |
+13 |     pub(super) fn new(fp_type: DataType) -> Self {
+   |                   ^^^ -----------------
+help: provide the argument
+   |
+77 |             scalar_sram: ScalarSram::new(/* quantize::DataType */),
+   |                                          ++++++++++++++++++++++++
+
+error[E0599]: no method named `load_fpsram_from_f16_bytes` found for struct `ScalarSram` in the current scope
+  --> src/accelerator/mod.rs:90:26
+   |
+90 |         self.scalar_sram.load_fpsram_from_f16_bytes(bytes);
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+  ::: src/accelerator/scalar_sram.rs:6:1
+   |
+ 6 | pub(super) struct ScalarSram {
+   | ---------------------------- method `load_fpsram_from_f16_bytes` not found for this struct
+   |
+help: there is a method `load_fpsram_from_bf16_bytes` with a similar name
+   |
+90 |         self.scalar_sram.load_fpsram_from_bf16_bytes(bytes);
+   |                                           +
+
+error[E0062]: field `hbm_dump` specified more than once
+   --> src/cli.rs:189:16
+    |
+109 | #[derive(Parser)]
+    |          ------ first use of `hbm_dump`
+...
+189 |     pub(crate) hbm_dump: Option<PathBuf>,
+    |                ^^^^^^^^ used more than once
+
+Some errors have detailed explanations: E0034, E0061, E0062, E0119, E0124, E0255, E0277, E0308, E0382...
+For more information about an error, try `rustc --explain E0034`.
+warning: `transactional_emulator` (bin "transactional_emulator" test) generated 1 warning
+error: could not compile `transactional_emulator` (bin "transactional_emulator" test) due to 60 previous errors; 1 warning emitted
+warning: build failed, waiting for other jobs to finish...

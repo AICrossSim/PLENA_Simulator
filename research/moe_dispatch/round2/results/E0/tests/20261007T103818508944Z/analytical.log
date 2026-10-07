@@ -1,0 +1,1827 @@
+................ss........................F.Fs..........FFF.FFFFFF.FFFFF [ 15%]
+FF.FFF.............FEEEE.....F.......F.................................. [ 30%]
+..................................ssssss.......F.....F.....FFFFF
+==================================== ERRORS ====================================
+_ ERROR at setup of test_report_contains_full_prefill_decode_dse_and_ablation __
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:674: in build_report
+    precision = formal_precision(model)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_dse.py:47: in formal_precision
+    activation=Precision.MXFP8,
+               ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+_____ ERROR at setup of test_layout_and_state_cache_ablations_are_physical _____
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:674: in build_report
+    precision = formal_precision(model)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_dse.py:47: in formal_precision
+    activation=Precision.MXFP8,
+               ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+__ ERROR at setup of test_mixed_precision_keeps_model_specific_weight_formats __
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:674: in build_report
+    precision = formal_precision(model)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_dse.py:47: in formal_precision
+    activation=Precision.MXFP8,
+               ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+_ ERROR at setup of test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured _
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:674: in build_report
+    precision = formal_precision(model)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_dse.py:47: in formal_precision
+    activation=Precision.MXFP8,
+               ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+=================================== FAILURES ===================================
+_________ test_gpu_evidence_pins_real_shapes_bottlenecks_and_precision _________
+
+    def test_gpu_evidence_pins_real_shapes_bottlenecks_and_precision() -> None:
+>       report = build_report()
+                 ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_gpu_evidence.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+______ test_profiled_nemotron_config_matches_the_full_checkpoint_campaign ______
+
+    def test_profiled_nemotron_config_matches_the_full_checkpoint_campaign() -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        config_path = repo_root / "PLENA_Compiler" / "doc" / "Model_Lib" / "nemotron-3-nano-30b-a3b.json"
+        config = json.loads(config_path.read_text())
+        plan = layer_plan(config)
+>       report = build_report()["b200_formal"]["nemotron"]
+                 ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_gpu_evidence.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+_ test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True] _
+
+phase = <InferencePhase.DECODE: 'decode'>, batch = 1, sequence_length = 1
+include_lm_head = True
+
+    @pytest.mark.parametrize(
+        "phase,batch,sequence_length,include_lm_head",
+        [
+            (InferencePhase.DECODE, 1, 1, True),
+            (InferencePhase.DECODE, 16, 1, False),
+            (InferencePhase.PREFILL, 2, 128, True),
+        ],
+    )
+    def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+        phase, batch, sequence_length, include_lm_head
+    ) -> None:
+>       model = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:947: in _model
+    _cached_gpu_report()["b200_formal"]["nemotron"]["checkpoint_quantization"],
+    ^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:53: in _cached_gpu_report
+    return build_gpu_report()
+           ^^^^^^^^^^^^^^^^^^
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+_ test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False] _
+
+phase = <InferencePhase.DECODE: 'decode'>, batch = 16, sequence_length = 1
+include_lm_head = False
+
+    @pytest.mark.parametrize(
+        "phase,batch,sequence_length,include_lm_head",
+        [
+            (InferencePhase.DECODE, 1, 1, True),
+            (InferencePhase.DECODE, 16, 1, False),
+            (InferencePhase.PREFILL, 2, 128, True),
+        ],
+    )
+    def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+        phase, batch, sequence_length, include_lm_head
+    ) -> None:
+>       model = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:947: in _model
+    _cached_gpu_report()["b200_formal"]["nemotron"]["checkpoint_quantization"],
+    ^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:53: in _cached_gpu_report
+    return build_gpu_report()
+           ^^^^^^^^^^^^^^^^^^
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+_ test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True] _
+
+phase = <InferencePhase.PREFILL: 'prefill'>, batch = 2, sequence_length = 128
+include_lm_head = True
+
+    @pytest.mark.parametrize(
+        "phase,batch,sequence_length,include_lm_head",
+        [
+            (InferencePhase.DECODE, 1, 1, True),
+            (InferencePhase.DECODE, 16, 1, False),
+            (InferencePhase.PREFILL, 2, 128, True),
+        ],
+    )
+    def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+        phase, batch, sequence_length, include_lm_head
+    ) -> None:
+>       model = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:947: in _model
+    _cached_gpu_report()["b200_formal"]["nemotron"]["checkpoint_quantization"],
+    ^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:53: in _cached_gpu_report
+    return build_gpu_report()
+           ^^^^^^^^^^^^^^^^^^
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+_ test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets _
+
+    def test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets() -> None:
+        hardware = paper_2048_hardware_point()
+        assert (hardware.blen, hardware.mlen, hardware.vector_lanes) == (32, 2048, 2048)
+        assert (hardware.banks, hardware.bank_width) == (32, 64)
+        assert hardware.ordinary_row_read_cycles == 1
+        assert hardware.binary_row_operand_cycles == 1
+        assert not hardware.regular_vector_regression
+        proxies = hardware.resource_proxies()
+        assert proxies["row_major_short_row_physical_rows_per_packet"] == 32
+        assert proxies["affine_compact_physical_rows_per_packet"] == 1
+        assert proxies["affine_packet_footprint_reduction"] == 32
+    
+>       compiler = _paper_compiler()
+                   ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6671e3da10>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_ test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts _
+
+    def test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts() -> None:
+        hardware = paper_2048_hardware_point()
+>       compiler = _paper_compiler()
+                   ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6671e0fe10>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+________ test_lane_dse_recompiles_each_width_instead_of_scaling_counts _________
+
+    def test_lane_dse_recompiles_each_width_instead_of_scaling_counts() -> None:
+        hardware = paper_2048_hardware_point()
+        dse = run_lane_dse(
+            hardware,
+            compiler_root=COMPILER_ROOT,
+>           base_compiler_evidence=_paper_compiler(),
+                                   ^^^^^^^^^^^^^^^^^
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f66712bea10>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+__________ test_compiler_and_gpu_evidence_are_the_pinned_real_shapes ___________
+
+    def test_compiler_and_gpu_evidence_are_the_pinned_real_shapes() -> None:
+>       compiler = _compiler()
+                   ^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6670fd85d0>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+__ test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision ___
+
+    def test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision() -> None:
+>       nemotron = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.FP32,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:947: in _model
+    _cached_gpu_report()["b200_formal"]["nemotron"]["checkpoint_quantization"],
+    ^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:53: in _cached_gpu_report
+    return build_gpu_report()
+           ^^^^^^^^^^^^^^^^^^
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+______ test_ablation_separates_arlo_stride_from_consumer_major_and_affine ______
+
+    def test_ablation_separates_arlo_stride_from_consumer_major_and_affine() -> None:
+        hardware = HardwarePoint()
+        result = run_ablation(
+            "nemotron3",
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=1,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            layout_evidence=_layout(hardware),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6671e0fa10>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_________ test_explicit_state_tile_transfers_only_at_decode_boundaries _________
+
+    def test_explicit_state_tile_transfers_only_at_decode_boundaries() -> None:
+        hardware = HardwarePoint(explicit_state_resident_bytes=3 * 1024 * 1024)
+        result = run_ablation(
+            "nemotron3",
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=4,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            layout_evidence=_layout(hardware),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:362: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f667130cd90>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_________ test_zero_fifo_is_legal_and_serializes_the_overlap_boundary __________
+
+    def test_zero_fifo_is_legal_and_serializes_the_overlap_boundary() -> None:
+        no_fifo = HardwarePoint(fifo_values=0)
+        full_packet_fifo = HardwarePoint(fifo_values=64)
+        common = {
+            "model_name": "nemotron3",
+            "phase": InferencePhase.DECODE,
+            "tokens": 1,
+            "context_length": 2048,
+            "decode_tokens": 1,
+            "compiler_root": COMPILER_ROOT,
+>           "compiler_evidence": _compiler(),
+                                 ^^^^^^^^^^^
+        }
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:381: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6670e95ed0>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_____ test_full_schedules_and_compressed_mla_are_validated_in_both_phases ______
+
+    def test_full_schedules_and_compressed_mla_are_validated_in_both_phases() -> None:
+        hardware = HardwarePoint()
+        for model_name, layers in (("nemotron3", 52), ("kimi_k3", 93)):
+            for phase, tokens in (
+                (InferencePhase.PREFILL, 16),
+                (InferencePhase.DECODE, 1),
+            ):
+                result = run_ablation(
+                    model_name,
+                    phase=phase,
+                    tokens=tokens,
+                    context_length=2048,
+                    decode_tokens=1,
+                    hardware=hardware,
+                    compiler_root=COMPILER_ROOT,
+>                   compiler_evidence=_compiler(),
+                                      ^^^^^^^^^^^
+                    layout_evidence=_layout(hardware),
+                )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:414: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6671e0cb50>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_________________ test_full_model_uses_one_shared_hbm_timeline _________________
+
+    def test_full_model_uses_one_shared_hbm_timeline() -> None:
+        hardware = HardwarePoint()
+        result = run_ablation(
+            "nemotron3",
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=1,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            layout_evidence=_layout(hardware),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:447: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f667134b190>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_ test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights _
+
+    def test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights() -> None:
+        hardware = paper_2048_hardware_point()
+>       compiler = _paper_compiler()
+                   ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:459: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f66710093d0>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_____ test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor ______
+
+    def test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor() -> None:
+        hardware = paper_2048_hardware_point()
+        report = run_batch_dse(
+            hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_paper_compiler(),
+                              ^^^^^^^^^^^^^^^^^
+            batch_sizes=(1, 2),
+            decode_tokens=1,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:532: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6671480210>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+____ test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds _____
+
+    def test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds() -> None:
+        hardware = HardwarePoint()
+        report = run_measured_routing_dse(
+            hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            routing_profile=load_pinned_nemotron_profile(),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:569: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6671e0e8d0>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_______________ test_checked_in_long_campaign_is_self_consistent _______________
+
+    def test_checked_in_long_campaign_is_self_consistent() -> None:
+        path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_packet_v2/campaign.json"
+        report = json.loads(path.read_text())
+        claimed_hash = report.pop("report_sha256")
+        assert claimed_hash == _sha256_json(report)
+        assert report["schema_version"] == 4
+>       assert report["compiler_report_sha256"] == _sha256_json(_compiler())
+                                                                ^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:673: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f66712bacd0>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+____________ test_checked_in_paper_2048_campaign_is_self_consistent ____________
+
+    def test_checked_in_paper_2048_campaign_is_self_consistent() -> None:
+        path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_paper2048_v1/campaign.json"
+        report = json.loads(path.read_text())
+        claimed_hash = report.pop("report_sha256")
+        assert claimed_hash == _sha256_json(report)
+        assert report["schema_version"] == 4
+>       assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+                                                                ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:695: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6672073590>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_________ test_checked_in_paper_2048_batch_campaign_is_self_consistent _________
+
+    def test_checked_in_paper_2048_batch_campaign_is_self_consistent() -> None:
+        path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_paper2048_batch_v1/campaign.json"
+        report = json.loads(path.read_text())
+        claimed_hash = report.pop("report_sha256")
+        assert claimed_hash == _sha256_json(report)
+        assert report["schema_version"] == 4
+>       assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+                                                                ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:732: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:344: in load_compiler_evidence
+    report = modules["build_report"](
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f66712d1110>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+________________ test_formal_state_capacities_match_real_dtypes ________________
+
+    def test_formal_state_capacities_match_real_dtypes() -> None:
+        assert persistent_state_bytes(ModelFamily.NEMOTRON3, formal_precision(ModelFamily.NEMOTRON3)) == 50_495_488
+>       assert persistent_state_bytes(ModelFamily.KIMI_K3, formal_precision(ModelFamily.KIMI_K3)) == 454_459_392
+                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_system_dse.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:47: in formal_precision
+    activation=Precision.MXFP8,
+               ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+_______________ test_prefill_uses_mamba_and_kda_chunk_algorithms _______________
+
+prefill_reports = {<ModelFamily.NEMOTRON3: 'nemotron3'>: SystemTimelineReport(model=<ModelFamily.NEMOTRON3: 'nemotron3'>, phase=<Inferen...t weights.', 'Kimi routing uses deterministic sensitivity traffic until an empirical Kimi top-16 trace is supplied.'))}
+
+    def test_prefill_uses_mamba_and_kda_chunk_algorithms(prefill_reports) -> None:
+        nemotron_names = Counter(stage.name for stage in prefill_reports[ModelFamily.NEMOTRON3].stages)
+        assert nemotron_names["mamba_chunk_intra_cb"] == 23
+        assert nemotron_names["mamba_chunk_scan_compose"] == 23
+    
+        kimi_names = Counter(stage.name for stage in prefill_reports[ModelFamily.KIMI_K3].stages)
+>       assert kimi_names["kda_chunk_prepare"] == 69
+E       assert 0 == 69
+
+analytic_models/performance/test_hybrid_system_timeline.py:83: AssertionError
+_______________ test_mx_storage_contracts_keep_formats_distinct ________________
+
+    def test_mx_storage_contracts_keep_formats_distinct() -> None:
+        assert storage_bytes(128, Precision.MX8) == 129
+>       assert storage_bytes(128, Precision.MXFP8) == 132
+                                  ^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_system_timeline.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+_____________ test_decode_kv_write_is_inside_the_attention_extent ______________
+
+    def test_decode_kv_write_is_inside_the_attention_extent():
+        from pathlib import Path
+        import os
+        from .ltile_decode import workloads
+        from .ltile_model import compose_peripheral
+        from .nemotron3_workload import WorkloadScenario, InferencePhase
+    
+        root = Path(os.environ.get("PLENA_COMPILER_ROOT", Path(__file__).resolve().parents[2] / "PLENA_Compiler"))
+>       w = workloads(root)["nemotron3"]
+            ^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_ltile_execution.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_decode.py:112: in workloads
+    models[name] = _model(
+analytic_models/performance/hybrid_lcompute_campaign.py:947: in _model
+    _cached_gpu_report()["b200_formal"]["nemotron"]["checkpoint_quantization"],
+    ^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:53: in _cached_gpu_report
+    return build_gpu_report()
+           ^^^^^^^^^^^^^^^^^^
+analytic_models/performance/gpu_evidence.py:292: in build_report
+    manifest = _validate_manifest()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _validate_manifest() -> dict[str, Any]:
+        manifest = _load_json(SOURCE_MANIFEST)
+        if manifest.get("schema_version") != 1:
+            raise GpuEvidenceError("unexpected GPU source-manifest schema")
+        expected_archives = {
+            "rtx5090_mamba",
+            "b200_formal",
+            "b200_kda_stage2",
+            "b200_supplemental",
+        }
+        if set(manifest.get("archives", {})) != expected_archives:
+            raise GpuEvidenceError("GPU source manifest does not cover all four archives")
+        for relative, metadata in manifest.get("imported_files", {}).items():
+            path = PROFILE_DIR / relative
+            if not path.is_file():
+                raise GpuEvidenceError(f"missing imported GPU evidence: {relative}")
+            if _sha256(path) != metadata.get("sha256"):
+>               raise GpuEvidenceError(f"GPU evidence hash mismatch: {relative}")
+E               analytic_models.performance.gpu_evidence.GpuEvidenceError: GPU evidence hash mismatch: nemotron3_decode_routing_trace.json
+
+analytic_models/performance/gpu_evidence.py:82: GpuEvidenceError
+______________ test_compiler_evidence_uses_frozen_matrix_view_v3 _______________
+
+    def test_compiler_evidence_uses_frozen_matrix_view_v3() -> None:
+>       assert _real_compiler_evidence()["matrix_view_contract_version"] == 3
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:60: in _real_compiler_evidence
+    return load_compiler_evidence(str(COMPILER_ROOT))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/matrix_lcompute_campaign.py:995: in load_compiler_evidence
+    issue = build_issue_report(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6670fda410>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+__________ test_real_lowering_service_replays_fixed_and_affine_paths ___________
+
+    def test_real_lowering_service_replays_fixed_and_affine_paths() -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/matrix_lcompute_campaign.py:995: in load_compiler_evidence
+    issue = build_issue_report(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f6670ba4a90>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+___ test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls ___
+
+    def test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls() -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:247: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/matrix_lcompute_campaign.py:995: in load_compiler_evidence
+    issue = build_issue_report(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f66700c6d90>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_ test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0] _
+
+spec = RecurrentPacketSpec(model='nemotron3', compiler_key='nemotron_mamba_decode_recurrence', layer_type='mamba', layers=23, heads=64, packet_heads=32, elements_per_head=64, recurrence_rows=128, passes=1, bf16_field_loads_per_row_pass=3)
+
+    @pytest.mark.parametrize("spec", [NEMOTRON_PACKET, KIMI_PACKET])
+    def test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch(spec) -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/matrix_lcompute_campaign.py:995: in load_compiler_evidence
+    issue = build_issue_report(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f666bfe1550>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_ test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1] _
+
+spec = RecurrentPacketSpec(model='kimi_k3', compiler_key='kimi_k3_decode_recurrence', layer_type='kda', layers=69, heads=96, packet_heads=16, elements_per_head=128, recurrence_rows=128, passes=2, bf16_field_loads_per_row_pass=2)
+
+    @pytest.mark.parametrize("spec", [NEMOTRON_PACKET, KIMI_PACKET])
+    def test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch(spec) -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/matrix_lcompute_campaign.py:995: in load_compiler_evidence
+    issue = build_issue_report(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f666be32b10>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # VRAM matrices are column-block-major. Build one known-zero FPRAM row,
+        # then map it over every requested row and column block. A multiply by
+        # zero is not a clear because NaN * 0 remains NaN.
+>       self._scratch_serial += 1
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+_ test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical _
+
+    def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical() -> None:
+        hardware = MatrixHardwarePoint()
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:319: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/matrix_lcompute_campaign.py:995: in load_compiler_evidence
+    issue = build_issue_report(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:589: in build_report
+    "nemotron_mamba_decode_recurrence": _pair(
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:429: in _pair
+    baseline = AssemblyMetrics.from_assembly(builder(stream=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:513: in <lambda>
+    return lambda **kwargs: builder(**kwargs, **builder_kwargs, **fixed_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../moe-supply-first-v3-compiler/aten/plena/hybrid_compile_report.py:377: in nemotron3_mamba_decode_assembly
+    program.ssm_decode_step_v0(
+../moe-supply-first-v3-compiler/aten/plena/program_ssm_recurrent.py:276: in ssm_decode_step_v0
+    self.mamba_row_copy(scratch, 0, x, h)
+../moe-supply-first-v3-compiler/aten/plena/program_mamba_common.py:343: in mamba_row_copy
+    self.vram_fill_zero(dst, rows=[dst_row])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <compiler.aten.plena.compiler.PlenaCompiler object at 0x7f667111a510>
+matrix = VRAMMatrixVar('scratch_group0', shape=(64, 64)), rows = [0]
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Iterable[int] | None = None,
+    ):
+        resolved_rows = self._default_rows(rows, total_rows=matrix.shape[0])
+        total_rows, cols = matrix.shape
+        if any(row < 0 or row >= total_rows for row in resolved_rows):
+            raise ValueError(
+                f"vram_fill_zero rows out of bounds for {matrix.name}: shape={matrix.shape}, rows={resolved_rows}"
+            )
+    
+        # A real zero copy must clear NaNs as well. Initialize one private,
+        # counted FPRAM row per program and reuse it; do not rebuild it for
+        # every scratch clear inside an unrolled kernel.
+>       zero_row = getattr(self, "_vram_zero_fpram_row", None)
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PlenaCompiler' object has no attribute '_scratch_serial'
+
+../moe-supply-first-v3-compiler/aten/plena/program_fp_tile_ops.py:637: AttributeError
+=========================== short test summary info ============================
+FAILED analytic_models/performance/test_gpu_evidence.py::test_gpu_evidence_pins_real_shapes_bottlenecks_and_precision
+FAILED analytic_models/performance/test_gpu_evidence.py::test_profiled_nemotron_config_matches_the_full_checkpoint_campaign
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True]
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False]
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True]
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_lane_dse_recompiles_each_width_instead_of_scaling_counts
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_compiler_and_gpu_evidence_are_the_pinned_real_shapes
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_ablation_separates_arlo_stride_from_consumer_major_and_affine
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_explicit_state_tile_transfers_only_at_decode_boundaries
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_zero_fifo_is_legal_and_serializes_the_overlap_boundary
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_full_schedules_and_compressed_mla_are_validated_in_both_phases
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_full_model_uses_one_shared_hbm_timeline
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_long_campaign_is_self_consistent
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_paper_2048_campaign_is_self_consistent
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_paper_2048_batch_campaign_is_self_consistent
+FAILED analytic_models/performance/test_hybrid_system_dse.py::test_formal_state_capacities_match_real_dtypes
+FAILED analytic_models/performance/test_hybrid_system_timeline.py::test_prefill_uses_mamba_and_kda_chunk_algorithms
+FAILED analytic_models/performance/test_hybrid_system_timeline.py::test_mx_storage_contracts_keep_formats_distinct
+FAILED analytic_models/performance/test_ltile_execution.py::test_decode_kv_write_is_inside_the_attention_extent
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_compiler_evidence_uses_frozen_matrix_view_v3
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_real_lowering_service_replays_fixed_and_affine_paths
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0]
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1]
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_report_contains_full_prefill_decode_dse_and_ablation
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_layout_and_state_cache_ablations_are_physical
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_mixed_precision_keeps_model_specific_weight_formats
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+<string>:2: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+31 failed, 164 passed, 9 skipped, 4 errors in 761.26s (0:12:41)

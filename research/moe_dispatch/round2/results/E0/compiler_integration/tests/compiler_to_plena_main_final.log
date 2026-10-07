@@ -1,0 +1,42 @@
+test_scope_basic_mapping
+  [OK]   Q_hbm scope: 'hbm'
+  [OK]   Q_sh scope: 'vram'
+  [OK]   M scope (lane-expanded fragment.fpram): 'fpram'
+  [OK]   S scope (2D fragment): 'vram'
+test_gemm_b_override_mram
+  [OK]   Q scope: 'vram'
+  [OK]   K scope (B operand): 'mram'
+  [OK]   S scope: 'vram'
+test_dma_to_mram_picks_h2m
+  [OK]   K_sh scope (MRAM via override): 'mram'
+  [OK]   dma op kind: 'dma_h2m'
+test_multi_lane_dma_to_op
+  [OK]   top is for: 'for'
+  [OK]   dma kind: 'dma_h2v'
+  [OK]   dma lane_count: 4
+test_multi_lane_btmm_to_op
+  [OK]   kind: 'btmm'
+  [OK]   operand role count: 3
+  [OK]   A roles: ('_', 'M', '_', 'K')
+  [OK]   B roles: ('_', 'N', '_', 'K')
+  [OK]   C roles: ('_', 'M', '_', 'N')
+test_bare_reduce_lowers_to_nested_fors
+  [OK]   lane for: 'for'
+  [OK]   lane extent: 4
+  [OK]   row for: 'for'
+  [OK]   row extent: 64
+  [OK]   row_reduce_max_at: 'row_reduce_max_at'
+test_parallel_axis_block_idx_to_for
+  [OK]   by_number for kind: 'for'
+  [OK]   by_number loop_var: 'by_number'
+  [OK]   inner kind != for: True
+test_for_kind_preserved
+  [OK]   kind: 'for'
+  [OK]   loop_kind: 'unroll'
+test_auto_dump_creates_midir_file
+  [OK]   contains func name: True
+  [OK]   contains buffer: True
+test_no_dump_when_build_dir_none
+  [OK]   returns HLIRModule: True
+
+PASS — all mid_ir.to_plena tests

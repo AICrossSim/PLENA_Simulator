@@ -1,0 +1,12 @@
+................ss...........................s.......................... [ 15%]
+........................................................................ [ 30%]
+..................................ssssss.........................F
+=================================== FAILURES ===================================
+__________ test_uniform_bf16_weight_sensitivity_is_numerically_pinned __________
+analytic_models/performance/test_matrix_lcompute_campaign.py:418: in test_uniform_bf16_weight_sensitivity_is_numerically_pinned
+    assert baseline["cycles"] == 5_416_009
+E   assert 5418953 == 5416009
+=========================== short test summary info ============================
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_uniform_bf16_weight_sensitivity_is_numerically_pinned
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 200 passed, 9 skipped in 500.03s (0:08:20)

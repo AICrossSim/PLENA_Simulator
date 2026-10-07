@@ -1,0 +1,118 @@
+.....................                                                    [100%]
+=============================== warnings summary ===============================
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_dma_lane_ref_bshd
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_dma_lane_ref_bshd returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_btmm_output_bhsd
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_btmm_output_bhsd returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_per_head_matmul_lhs_bhsd
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_per_head_matmul_lhs_bhsd returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_hbm_ref_lane_var_subst
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_hbm_ref_lane_var_subst returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_broadcast_dims_shift
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_broadcast_dims_shift returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_global_consistency_conflict
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_global_consistency_conflict returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_skip_when_no_lane_axes
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_skip_when_no_lane_axes returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_skip_when_d_ge_mlen
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_skip_when_d_ge_mlen returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_outside_cluster_untouched
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_view.py::test_outside_cluster_untouched returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_scope_basic_mapping
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_scope_basic_mapping returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_gemm_b_override_mram
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_gemm_b_override_mram returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_dma_to_mram_picks_h2m
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_dma_to_mram_picks_h2m returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_multi_lane_dma_to_op
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_multi_lane_dma_to_op returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_multi_lane_btmm_to_op
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_multi_lane_btmm_to_op returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_bare_reduce_lowers_to_nested_fors
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_bare_reduce_lowers_to_nested_fors returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_parallel_axis_block_idx_to_for
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_parallel_axis_block_idx_to_for returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_for_kind_preserved
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_for_kind_preserved returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_auto_dump_creates_midir_file
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_auto_dump_creates_midir_file returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_no_dump_when_build_dir_none
+  /scratch/shared/mcl123/plena/venvs/plena-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tilelang_tvm_compiler/tests/test_mid_ir_to_plena.py::test_no_dump_when_build_dir_none returned <class 'int'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+21 passed, 19 warnings in 2.29s

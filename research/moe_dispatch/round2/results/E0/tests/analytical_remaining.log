@@ -1,0 +1,18 @@
+................ss...........................s.......................... [ 16%]
+........................................................................ [ 33%]
+......ssssss............................................................ [ 50%]
+..........................................F............................. [ 67%]
+........................................................................ [ 84%]
+...................................................................      [100%]
+=================================== FAILURES ===================================
+__________ test_decode_logical_traffic_crosschecks_complete_b200_ncu ___________
+analytic_models/performance/test_nemotron3_formal_dse.py:26: in test_decode_logical_traffic_crosschecks_complete_b200_ncu
+    assert layers["moe"]["physical_to_logical_read_ratio"] == pytest.approx(1.0734392812)
+E   assert 1.0725454932588465 == 1.0734392812 ± 1.1e-06
+E     
+E     comparison failed
+E     Obtained: 1.0725454932588465
+E     Expected: 1.0734392812 ± 1.1e-06
+=========================== short test summary info ============================
+FAILED analytic_models/performance/test_nemotron3_formal_dse.py::test_decode_logical_traffic_crosschecks_complete_b200_ncu
+1 failed, 417 passed, 9 skipped in 105.01s (0:01:45)

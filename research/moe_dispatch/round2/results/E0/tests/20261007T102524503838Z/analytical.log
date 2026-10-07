@@ -1,0 +1,3420 @@
+................ss..........................Fs..........FFF.FFFFFF.FFFFF [ 15%]
+FF.FFF.............FEEEE...EEEFEEF.F.F...........................s...... [ 30%]
+..................................ssssss.......F.....F.....FFFFFFF..F..F [ 45%]
+.F.......F.............................................................. [ 60%]
+....................EEEEE...............F.............FFFF.............F [ 75%]
+...........................FFFF.FFFFFFFFFF...............FFFFFFFFF...... [ 90%]
+..............................................                           [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_report_contains_full_prefill_decode_dse_and_ablation __
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:686: in build_report
+    _simulate(
+analytic_models/performance/hybrid_system_dse.py:126: in _simulate
+    return HybridSystemTimelineModel(
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_____ ERROR at setup of test_layout_and_state_cache_ablations_are_physical _____
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:686: in build_report
+    _simulate(
+analytic_models/performance/hybrid_system_dse.py:126: in _simulate
+    return HybridSystemTimelineModel(
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+__ ERROR at setup of test_mixed_precision_keeps_model_specific_weight_formats __
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:686: in build_report
+    _simulate(
+analytic_models/performance/hybrid_system_dse.py:126: in _simulate
+    return HybridSystemTimelineModel(
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_ ERROR at setup of test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured _
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report(
+            context_length=16,
+            decode_tokens=2,
+            prefill_tokens=16,
+        )
+
+analytic_models/performance/test_hybrid_system_dse.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:686: in build_report
+    _simulate(
+analytic_models/performance/hybrid_system_dse.py:126: in _simulate
+    return HybridSystemTimelineModel(
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_______ ERROR at setup of test_decode_executes_complete_hybrid_backbones _______
+
+    @pytest.fixture(scope="module")
+    def decode_reports():
+        design = SystemDesign()
+>       return {
+            model: HybridSystemTimelineModel(model, design).simulate(
+                InferencePhase.DECODE,
+                context_length=16,
+                decode_tokens=2,
+                include_embedding=False,
+                include_lm_head=False,
+            )
+            for model in ModelFamily
+        }
+
+analytic_models/performance/test_hybrid_system_timeline.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_system_timeline.py:23: in <dictcomp>
+    model: HybridSystemTimelineModel(model, design).simulate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+___ ERROR at setup of test_multi_token_decode_grows_context_and_reports_tpot ___
+
+    @pytest.fixture(scope="module")
+    def decode_reports():
+        design = SystemDesign()
+>       return {
+            model: HybridSystemTimelineModel(model, design).simulate(
+                InferencePhase.DECODE,
+                context_length=16,
+                decode_tokens=2,
+                include_embedding=False,
+                include_lm_head=False,
+            )
+            for model in ModelFamily
+        }
+
+analytic_models/performance/test_hybrid_system_timeline.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_system_timeline.py:23: in <dictcomp>
+    model: HybridSystemTimelineModel(model, design).simulate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+______ ERROR at setup of test_prefill_uses_mamba_and_kda_chunk_algorithms ______
+
+    @pytest.fixture(scope="module")
+    def prefill_reports():
+        design = SystemDesign()
+>       return {
+            model: HybridSystemTimelineModel(model, design).simulate(
+                InferencePhase.PREFILL,
+                sequence_length=16,
+                include_embedding=False,
+                include_lm_head=False,
+            )
+            for model in ModelFamily
+        }
+
+analytic_models/performance/test_hybrid_system_timeline.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_system_timeline.py:38: in <dictcomp>
+    model: HybridSystemTimelineModel(model, design).simulate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_________ ERROR at setup of test_kimi_mla_keeps_only_compressed_cache __________
+
+    @pytest.fixture(scope="module")
+    def decode_reports():
+        design = SystemDesign()
+>       return {
+            model: HybridSystemTimelineModel(model, design).simulate(
+                InferencePhase.DECODE,
+                context_length=16,
+                decode_tokens=2,
+                include_embedding=False,
+                include_lm_head=False,
+            )
+            for model in ModelFamily
+        }
+
+analytic_models/performance/test_hybrid_system_timeline.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_system_timeline.py:23: in <dictcomp>
+    model: HybridSystemTimelineModel(model, design).simulate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_____ ERROR at setup of test_all_stage_types_share_one_hbm_and_sram_server _____
+
+    @pytest.fixture(scope="module")
+    def decode_reports():
+        design = SystemDesign()
+>       return {
+            model: HybridSystemTimelineModel(model, design).simulate(
+                InferencePhase.DECODE,
+                context_length=16,
+                decode_tokens=2,
+                include_embedding=False,
+                include_lm_head=False,
+            )
+            for model in ModelFamily
+        }
+
+analytic_models/performance/test_hybrid_system_timeline.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_system_timeline.py:23: in <dictcomp>
+    model: HybridSystemTimelineModel(model, design).simulate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_ ERROR at setup of test_formal_report_keeps_gpu_evidence_separate_from_plena_cycles _
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report()
+               ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_formal_dse.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/nemotron3_formal_dse.py:305: in build_report
+    moe_event_dse = build_moe_event_report(arch, routing_trace_path)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/nemotron3_moe_event_dse.py:1023: in build_report
+    trace = load_routing_trace(trace_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_ ERROR at setup of test_decode_logical_traffic_crosschecks_complete_b200_ncu __
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report()
+               ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_formal_dse.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/nemotron3_formal_dse.py:305: in build_report
+    moe_event_dse = build_moe_event_report(arch, routing_trace_path)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/nemotron3_moe_event_dse.py:1023: in build_report
+    trace = load_routing_trace(trace_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_ ERROR at setup of test_formal_dse_preserves_exact_state_and_routing_capacity_knees _
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report()
+               ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_formal_dse.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/nemotron3_formal_dse.py:305: in build_report
+    moe_event_dse = build_moe_event_report(arch, routing_trace_path)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/nemotron3_moe_event_dse.py:1023: in build_report
+    trace = load_routing_trace(trace_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_ ERROR at setup of test_formal_dse_couples_cache_misses_to_expert_m_k_timeline _
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report()
+               ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_formal_dse.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/nemotron3_formal_dse.py:305: in build_report
+    moe_event_dse = build_moe_event_report(arch, routing_trace_path)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/nemotron3_moe_event_dse.py:1023: in build_report
+    trace = load_routing_trace(trace_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_ ERROR at setup of test_l_compute_and_amdahl_numbers_are_labeled_as_local_bounds _
+
+    @pytest.fixture(scope="module")
+    def report():
+>       return build_report()
+               ^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_formal_dse.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/nemotron3_formal_dse.py:305: in build_report
+    moe_event_dse = build_moe_event_report(arch, routing_trace_path)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/nemotron3_moe_event_dse.py:1023: in build_report
+    trace = load_routing_trace(trace_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+=================================== FAILURES ===================================
+______ test_profiled_nemotron_config_matches_the_full_checkpoint_campaign ______
+
+    def test_profiled_nemotron_config_matches_the_full_checkpoint_campaign() -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        config_path = repo_root / "PLENA_Compiler" / "doc" / "Model_Lib" / "nemotron-3-nano-30b-a3b.json"
+>       config = json.loads(config_path.read_text())
+                            ^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_gpu_evidence.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+_ test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True] _
+
+phase = <InferencePhase.DECODE: 'decode'>, batch = 1, sequence_length = 1
+include_lm_head = True
+
+    @pytest.mark.parametrize(
+        "phase,batch,sequence_length,include_lm_head",
+        [
+            (InferencePhase.DECODE, 1, 1, True),
+            (InferencePhase.DECODE, 16, 1, False),
+            (InferencePhase.PREFILL, 2, 128, True),
+        ],
+    )
+    def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+        phase, batch, sequence_length, include_lm_head
+    ) -> None:
+>       model = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:942: in _model
+    arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+_ test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False] _
+
+phase = <InferencePhase.DECODE: 'decode'>, batch = 16, sequence_length = 1
+include_lm_head = False
+
+    @pytest.mark.parametrize(
+        "phase,batch,sequence_length,include_lm_head",
+        [
+            (InferencePhase.DECODE, 1, 1, True),
+            (InferencePhase.DECODE, 16, 1, False),
+            (InferencePhase.PREFILL, 2, 128, True),
+        ],
+    )
+    def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+        phase, batch, sequence_length, include_lm_head
+    ) -> None:
+>       model = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:942: in _model
+    arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+_ test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True] _
+
+phase = <InferencePhase.PREFILL: 'prefill'>, batch = 2, sequence_length = 128
+include_lm_head = True
+
+    @pytest.mark.parametrize(
+        "phase,batch,sequence_length,include_lm_head",
+        [
+            (InferencePhase.DECODE, 1, 1, True),
+            (InferencePhase.DECODE, 16, 1, False),
+            (InferencePhase.PREFILL, 2, 128, True),
+        ],
+    )
+    def test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights(
+        phase, batch, sequence_length, include_lm_head
+    ) -> None:
+>       model = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:942: in _model
+    arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+_ test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets _
+
+    def test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets() -> None:
+        hardware = paper_2048_hardware_point()
+        assert (hardware.blen, hardware.mlen, hardware.vector_lanes) == (32, 2048, 2048)
+        assert (hardware.banks, hardware.bank_width) == (32, 64)
+        assert hardware.ordinary_row_read_cycles == 1
+        assert hardware.binary_row_operand_cycles == 1
+        assert not hardware.regular_vector_regression
+        proxies = hardware.resource_proxies()
+        assert proxies["row_major_short_row_physical_rows_per_packet"] == 32
+        assert proxies["affine_compact_physical_rows_per_packet"] == 1
+        assert proxies["affine_packet_footprint_reduction"] == 32
+    
+>       compiler = _paper_compiler()
+                   ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_ test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts _
+
+    def test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts() -> None:
+        hardware = paper_2048_hardware_point()
+>       compiler = _paper_compiler()
+                   ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+________ test_lane_dse_recompiles_each_width_instead_of_scaling_counts _________
+
+    def test_lane_dse_recompiles_each_width_instead_of_scaling_counts() -> None:
+        hardware = paper_2048_hardware_point()
+        dse = run_lane_dse(
+            hardware,
+            compiler_root=COMPILER_ROOT,
+>           base_compiler_evidence=_paper_compiler(),
+                                   ^^^^^^^^^^^^^^^^^
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+__________ test_compiler_and_gpu_evidence_are_the_pinned_real_shapes ___________
+
+    def test_compiler_and_gpu_evidence_are_the_pinned_real_shapes() -> None:
+>       compiler = _compiler()
+                   ^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+__ test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision ___
+
+    def test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision() -> None:
+>       nemotron = _model(
+            "nemotron3",
+            COMPILER_ROOT,
+            activation_precision=Precision.BF16,
+            weight_precision=None,
+            state_precision=Precision.FP32,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_lcompute_campaign.py:942: in _model
+    arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+______ test_ablation_separates_arlo_stride_from_consumer_major_and_affine ______
+
+    def test_ablation_separates_arlo_stride_from_consumer_major_and_affine() -> None:
+        hardware = HardwarePoint()
+        result = run_ablation(
+            "nemotron3",
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=1,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            layout_evidence=_layout(hardware),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_________ test_explicit_state_tile_transfers_only_at_decode_boundaries _________
+
+    def test_explicit_state_tile_transfers_only_at_decode_boundaries() -> None:
+        hardware = HardwarePoint(explicit_state_resident_bytes=3 * 1024 * 1024)
+        result = run_ablation(
+            "nemotron3",
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=4,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            layout_evidence=_layout(hardware),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:362: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_________ test_zero_fifo_is_legal_and_serializes_the_overlap_boundary __________
+
+    def test_zero_fifo_is_legal_and_serializes_the_overlap_boundary() -> None:
+        no_fifo = HardwarePoint(fifo_values=0)
+        full_packet_fifo = HardwarePoint(fifo_values=64)
+        common = {
+            "model_name": "nemotron3",
+            "phase": InferencePhase.DECODE,
+            "tokens": 1,
+            "context_length": 2048,
+            "decode_tokens": 1,
+            "compiler_root": COMPILER_ROOT,
+>           "compiler_evidence": _compiler(),
+                                 ^^^^^^^^^^^
+        }
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:381: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_____ test_full_schedules_and_compressed_mla_are_validated_in_both_phases ______
+
+    def test_full_schedules_and_compressed_mla_are_validated_in_both_phases() -> None:
+        hardware = HardwarePoint()
+        for model_name, layers in (("nemotron3", 52), ("kimi_k3", 93)):
+            for phase, tokens in (
+                (InferencePhase.PREFILL, 16),
+                (InferencePhase.DECODE, 1),
+            ):
+                result = run_ablation(
+                    model_name,
+                    phase=phase,
+                    tokens=tokens,
+                    context_length=2048,
+                    decode_tokens=1,
+                    hardware=hardware,
+                    compiler_root=COMPILER_ROOT,
+>                   compiler_evidence=_compiler(),
+                                      ^^^^^^^^^^^
+                    layout_evidence=_layout(hardware),
+                )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:414: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_________________ test_full_model_uses_one_shared_hbm_timeline _________________
+
+    def test_full_model_uses_one_shared_hbm_timeline() -> None:
+        hardware = HardwarePoint()
+        result = run_ablation(
+            "nemotron3",
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=1,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            layout_evidence=_layout(hardware),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:447: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_ test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights _
+
+    def test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights() -> None:
+        hardware = paper_2048_hardware_point()
+>       compiler = _paper_compiler()
+                   ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:459: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_____ test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor ______
+
+    def test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor() -> None:
+        hardware = paper_2048_hardware_point()
+        report = run_batch_dse(
+            hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_paper_compiler(),
+                              ^^^^^^^^^^^^^^^^^
+            batch_sizes=(1, 2),
+            decode_tokens=1,
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:532: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+____ test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds _____
+
+    def test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds() -> None:
+        hardware = HardwarePoint()
+        report = run_measured_routing_dse(
+            hardware,
+            compiler_root=COMPILER_ROOT,
+>           compiler_evidence=_compiler(),
+                              ^^^^^^^^^^^
+            routing_profile=load_pinned_nemotron_profile(),
+        )
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:569: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_______________ test_checked_in_long_campaign_is_self_consistent _______________
+
+    def test_checked_in_long_campaign_is_self_consistent() -> None:
+        path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_packet_v2/campaign.json"
+        report = json.loads(path.read_text())
+        claimed_hash = report.pop("report_sha256")
+        assert claimed_hash == _sha256_json(report)
+        assert report["schema_version"] == 4
+>       assert report["compiler_report_sha256"] == _sha256_json(_compiler())
+                                                                ^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:673: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:49: in _compiler
+    return load_compiler_evidence(COMPILER_ROOT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+____________ test_checked_in_paper_2048_campaign_is_self_consistent ____________
+
+    def test_checked_in_paper_2048_campaign_is_self_consistent() -> None:
+        path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_paper2048_v1/campaign.json"
+        report = json.loads(path.read_text())
+        claimed_hash = report.pop("report_sha256")
+        assert claimed_hash == _sha256_json(report)
+        assert report["schema_version"] == 4
+>       assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+                                                                ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:695: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+_________ test_checked_in_paper_2048_batch_campaign_is_self_consistent _________
+
+    def test_checked_in_paper_2048_batch_campaign_is_self_consistent() -> None:
+        path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_paper2048_batch_v1/campaign.json"
+        report = json.loads(path.read_text())
+        claimed_hash = report.pop("report_sha256")
+        assert claimed_hash == _sha256_json(report)
+        assert report["schema_version"] == 4
+>       assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+                                                                ^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_lcompute_campaign.py:732: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_hybrid_lcompute_campaign.py:59: in _paper_compiler
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_lcompute_campaign.py:343: in load_compiler_evidence
+    modules = _compiler_modules(compiler_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def _compiler_modules(compiler_root: Path):
+        root = str(compiler_root.resolve())
+        inserted = root not in sys.path
+        if inserted:
+            sys.path.insert(0, root)
+        try:
+>           from compiler.aten.plena.affine_layout import BankGeometry
+E           ModuleNotFoundError: No module named 'compiler.aten.plena.affine_layout'
+
+analytic_models/performance/hybrid_lcompute_campaign.py:312: ModuleNotFoundError
+________________ test_formal_state_capacities_match_real_dtypes ________________
+
+    def test_formal_state_capacities_match_real_dtypes() -> None:
+        assert persistent_state_bytes(ModelFamily.NEMOTRON3, formal_precision(ModelFamily.NEMOTRON3)) == 50_495_488
+>       assert persistent_state_bytes(ModelFamily.KIMI_K3, formal_precision(ModelFamily.KIMI_K3)) == 454_459_392
+                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_system_dse.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_dse.py:47: in formal_precision
+    activation=Precision.MXFP8,
+               ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+_____ test_nemotron_prefill_routing_matches_the_requested_sequence_length ______
+
+    def test_nemotron_prefill_routing_matches_the_requested_sequence_length() -> None:
+>       model = HybridSystemTimelineModel(ModelFamily.NEMOTRON3, SystemDesign())
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_system_timeline.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_______ test_full_state_cache_removes_per_token_state_hbm[nemotron3-64] ________
+
+model = <ModelFamily.NEMOTRON3: 'nemotron3'>, cache_mib = 64
+
+    @pytest.mark.parametrize("model,cache_mib", [(ModelFamily.NEMOTRON3, 64), (ModelFamily.KIMI_K3, 512)])
+    def test_full_state_cache_removes_per_token_state_hbm(model, cache_mib) -> None:
+        base = SystemDesign()
+        cached = replace(
+            base,
+            state_cache_bytes=cache_mib * 1024 * 1024,
+            state_cache_policy=StateCachePolicy.PINNED,
+        )
+>       no_cache_report = HybridSystemTimelineModel(model, base).simulate(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            InferencePhase.DECODE,
+            context_length=16,
+            decode_tokens=2,
+            include_embedding=False,
+            include_lm_head=False,
+        )
+
+analytic_models/performance/test_hybrid_system_timeline.py:141: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_______ test_consumer_aware_layout_reaches_ideal_bank_service[nemotron3] _______
+
+model = <ModelFamily.NEMOTRON3: 'nemotron3'>
+
+    @pytest.mark.parametrize("model", list(ModelFamily))
+    def test_consumer_aware_layout_reaches_ideal_bank_service(model) -> None:
+        row = SystemDesign(projection_layout=ProjectionLayout.ROW_MAJOR)
+        skew = replace(row, projection_layout=ProjectionLayout.GROUP_MAJOR_SKEWED)
+>       row_report = HybridSystemTimelineModel(model, row).simulate(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            InferencePhase.DECODE,
+            context_length=16,
+            decode_tokens=1,
+            include_embedding=False,
+            include_lm_head=False,
+        )
+
+analytic_models/performance/test_hybrid_system_timeline.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_system_timeline.py:642: in __init__
+    self.routing_trace = load_routing_trace(routing_trace_path) if model == ModelFamily.NEMOTRON3 else None
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_______________ test_mx_storage_contracts_keep_formats_distinct ________________
+
+    def test_mx_storage_contracts_keep_formats_distinct() -> None:
+        assert storage_bytes(128, Precision.MX8) == 129
+>       assert storage_bytes(128, Precision.MXFP8) == 132
+                                  ^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_hybrid_system_timeline.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'Precision'>, name = 'MXFP8'
+
+    def __getattr__(cls, name):
+        """
+        Return the enum member matching `name`
+    
+        We use __getattr__ instead of descriptors or inserting into the enum
+        class' __dict__ in order to support `name` and `value` being both
+        properties for enum members (which live in the class' __dict__) and
+        enum members themselves.
+        """
+        if _is_dunder(name):
+            raise AttributeError(name)
+        try:
+            return cls._member_map_[name]
+        except KeyError:
+>           raise AttributeError(name) from None
+E           AttributeError: MXFP8
+
+/usr/lib64/python3.11/enum.py:786: AttributeError
+_____________ test_decode_kv_write_is_inside_the_attention_extent ______________
+
+    def test_decode_kv_write_is_inside_the_attention_extent():
+        from pathlib import Path
+        import os
+        from .ltile_decode import workloads
+        from .ltile_model import compose_peripheral
+        from .nemotron3_workload import WorkloadScenario, InferencePhase
+    
+        root = Path(os.environ.get("PLENA_COMPILER_ROOT", Path(__file__).resolve().parents[2] / "PLENA_Compiler"))
+>       w = workloads(root)["nemotron3"]
+            ^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_ltile_execution.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_decode.py:112: in workloads
+    models[name] = _model(
+analytic_models/performance/hybrid_lcompute_campaign.py:942: in _model
+    arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+______________ test_compiler_evidence_uses_frozen_matrix_view_v3 _______________
+
+    def test_compiler_evidence_uses_frozen_matrix_view_v3() -> None:
+>       assert _real_compiler_evidence()["matrix_view_contract_version"] == 3
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:60: in _real_compiler_evidence
+    return load_compiler_evidence(str(COMPILER_ROOT))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+__________ test_real_lowering_service_replays_fixed_and_affine_paths ___________
+
+    def test_real_lowering_service_replays_fixed_and_affine_paths() -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+___ test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls ___
+
+    def test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls() -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:247: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+_ test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0] _
+
+spec = RecurrentPacketSpec(model='nemotron3', compiler_key='nemotron_mamba_decode_recurrence', layer_type='mamba', layers=23, heads=64, packet_heads=32, elements_per_head=64, recurrence_rows=128, passes=1, bf16_field_loads_per_row_pass=3)
+
+    @pytest.mark.parametrize("spec", [NEMOTRON_PACKET, KIMI_PACKET])
+    def test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch(spec) -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+_ test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1] _
+
+spec = RecurrentPacketSpec(model='kimi_k3', compiler_key='kimi_k3_decode_recurrence', layer_type='kda', layers=69, heads=96, packet_heads=16, elements_per_head=128, recurrence_rows=128, passes=2, bf16_field_loads_per_row_pass=2)
+
+    @pytest.mark.parametrize("spec", [NEMOTRON_PACKET, KIMI_PACKET])
+    def test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch(spec) -> None:
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+_ test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical _
+
+    def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical() -> None:
+        hardware = MatrixHardwarePoint()
+>       physical = _real_physical_evidence()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:319: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:48: in _real_physical_evidence
+    compiler = load_compiler_evidence(str(COMPILER_ROOT))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+_____ test_basic_model_records_publish_strict_and_ideal_timeline_endpoints _____
+
+    def test_basic_model_records_publish_strict_and_ideal_timeline_endpoints() -> None:
+        result = run_ablation(
+            model="nemotron3",
+            phase=InferencePhase.DECODE,
+            batch_size=1,
+            tokens=1,
+            context_length=2048,
+            state_mode=StateMode.PLENA_BF16,
+            hardware=MatrixHardwarePoint(),
+            compiler_root=COMPILER_ROOT,
+>           compiler=_real_compiler_evidence(),
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+            physical=_real_physical_evidence(),
+        )
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:377: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:60: in _real_compiler_evidence
+    return load_compiler_evidence(str(COMPILER_ROOT))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+__________ test_uniform_bf16_weight_sensitivity_is_numerically_pinned __________
+
+    def test_uniform_bf16_weight_sensitivity_is_numerically_pinned() -> None:
+        result = run_ablation(
+            model="nemotron3",
+            phase=InferencePhase.DECODE,
+            batch_size=1,
+            tokens=1,
+            context_length=2048,
+            state_mode=StateMode.PLENA_BF16,
+            hardware=MatrixHardwarePoint(),
+            compiler_root=COMPILER_ROOT,
+>           compiler=_real_compiler_evidence(),
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+            physical=_real_physical_evidence(),
+            weight_precision=Precision.BF16,
+        )
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:408: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:60: in _real_compiler_evidence
+    return load_compiler_evidence(str(COMPILER_ROOT))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+___ test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop ____
+
+    def test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop() -> None:
+        hardware = MatrixHardwarePoint()
+        physical = build_physical_evidence(hardware)
+        for model in ("nemotron3", "kimi_k3"):
+>           result = run_ablation(
+                model=model,
+                phase=InferencePhase.PREFILL,
+                batch_size=1,
+                tokens=16,
+                context_length=16,
+                state_mode=StateMode.PLENA_BF16,
+                hardware=hardware,
+                compiler_root=COMPILER_ROOT,
+                compiler=_compiler_fixture(),
+                physical=physical,
+            )
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:475: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/matrix_lcompute_campaign.py:1792: in run_ablation
+    reports = build_reports(
+analytic_models/performance/matrix_lcompute_campaign.py:1719: in build_reports
+    workload = _model(
+analytic_models/performance/hybrid_lcompute_campaign.py:942: in _model
+    arch = load_nemotron3_arch(compiler_root / "doc/Model_Lib/nemotron-3-nano-30b-a3b.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+___________ test_one_mib_point_cannot_claim_unemitted_static_overlap ___________
+
+    def test_one_mib_point_cannot_claim_unemitted_static_overlap() -> None:
+        feasibility = build_static_overlap_feasibility(
+>           compiler=_real_compiler_evidence(),
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+            hardware=MatrixHardwarePoint(),
+        )
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:572: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_matrix_lcompute_campaign.py:60: in _real_compiler_evidence
+    return load_compiler_evidence(str(COMPILER_ROOT))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+_________ test_ordinary_attention_and_moe_matrix_lines_do_not_regress __________
+
+    def test_ordinary_attention_and_moe_matrix_lines_do_not_regress() -> None:
+        hardware = MatrixHardwarePoint()
+>       compiler = load_compiler_evidence(str(COMPILER_ROOT))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_matrix_lcompute_campaign.py:607: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+compiler_root = '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler'
+
+    @functools.lru_cache(maxsize=1)
+    def load_compiler_evidence(compiler_root: str) -> dict[str, Any]:
+        root = Path(compiler_root).resolve()
+        settings = Path(__file__).resolve().parents[2] / "plena_settings.toml"
+        loaded = sys.modules.get("compiler")
+        if loaded is not None:
+            loaded_file = Path(getattr(loaded, "__file__", "")).resolve()
+            if not loaded_file.is_relative_to(root):
+>               raise RuntimeError(
+                    "another PLENA Compiler checkout is already loaded in this Python "
+                    f"process ({loaded_file}); requested {root}. Start a fresh process "
+                    "with PLENA_COMPILER_ROOT set before pytest collection."
+                )
+E               RuntimeError: another PLENA Compiler checkout is already loaded in this Python process (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/compiler/__init__.py); requested /scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler. Start a fresh process with PLENA_COMPILER_ROOT set before pytest collection.
+
+analytic_models/performance/matrix_lcompute_campaign.py:973: RuntimeError
+____ test_nvfp4_fixture_decoder_covers_signed_codes_and_block_global_scales ____
+
+    def test_nvfp4_fixture_decoder_covers_signed_codes_and_block_global_scales():
+        import numpy as np
+>       from transactional_emulator.testbench.models.recurrent_layer_test import decode_nvfp4
+
+analytic_models/performance/test_matrix_service.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../venvs/plena-py311/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+transactional_emulator/testbench/models/recurrent_layer_test.py:18: in <module>
+    from transactional_emulator.testbench.aten.recurrent_gate_test import (
+../../venvs/plena-py311/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+transactional_emulator/testbench/aten/recurrent_gate_test.py:24: in <module>
+    from transactional_emulator.testbench.aten.matrix_lcompute_recurrence_test import (
+../../venvs/plena-py311/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Compiler-to-Rust BF16 L-Compute recurrence verification at official shapes.
+    
+    This is deliberately not a hand-written Opcode unit test.  The active Compiler
+    emits four complete token programs, its assembler produces the machine words,
+    and the Rust transactional emulator decodes and executes those words.  State
+    and every token result are read back from HBM and compared with an independent
+    BF16 reference.  No cache or private state memory is involved.
+    """
+    
+    from __future__ import annotations
+    
+    import argparse
+    from collections.abc import Iterator
+    from contextlib import contextmanager
+    from dataclasses import dataclass
+    import hashlib
+    import json
+    import os
+    from pathlib import Path
+    import shutil
+    import sys
+    
+    import numpy as np
+    import tomlkit
+    import torch
+    
+    
+    REPO_ROOT = Path(__file__).resolve().parents[3]
+    COMPILER_ROOT = Path(os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")).resolve()
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    if str(COMPILER_ROOT) not in sys.path:
+        sys.path.insert(0, str(COMPILER_ROOT))
+    
+    from compiler.assembler.assembly_to_binary import AssemblyToBinary  # noqa: E402
+>   from compiler.aten.plena.matrix_recurrence_lowering import (  # noqa: E402
+        BF16_BYTES,
+        KIMI_KDA,
+        NEMOTRON_MAMBA,
+        MatrixRecurrenceSpec,
+        MatrixSramPoint,
+        RecurrenceFieldManifest,
+        RecurrenceFieldPacket,
+        RecurrenceKind,
+        RecurrenceLayout,
+        RecurrenceWorkingSet,
+        build_recurrence_field_manifest,
+        build_recurrence_working_set,
+        lower_matrix_recurrence,
+        validate_recurrence_output_stores,
+    )
+E   ModuleNotFoundError: No module named 'compiler.aten.plena.matrix_recurrence_lowering'
+
+transactional_emulator/testbench/aten/matrix_lcompute_recurrence_test.py:36: ModuleNotFoundError
+____________ test_routing_patterns_match_the_independent_lru_replay ____________
+
+    def test_routing_patterns_match_the_independent_lru_replay() -> None:
+>       trace = load_routing_trace()
+                ^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_moe_event_dse.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+______________ test_trace_preserves_all_exact_decode_topk_events _______________
+
+    def test_trace_preserves_all_exact_decode_topk_events() -> None:
+>       trace = load_routing_trace()
+                ^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_routing_dse.py:21: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+______________ test_profile_driven_lru_reproduces_capacity_knees _______________
+
+    def test_profile_driven_lru_reproduces_capacity_knees() -> None:
+>       report = build_report(_arch(), capacity_entries=(23, 92, 138, 2944))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_routing_dse.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/nemotron3_routing_dse.py:190: in build_report
+    trace = load_routing_trace(trace_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+_____________ test_lru_counts_every_miss_as_one_expert_weight_read _____________
+
+    def test_lru_counts_every_miss_as_one_expert_weight_read() -> None:
+>       trace = load_routing_trace()
+                ^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_routing_dse.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+____________________ test_trace_rejects_duplicate_topk_ids _____________________
+
+tmp_path = PosixPath('/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-843/test_trace_rejects_duplicate_t0')
+
+    def test_trace_rejects_duplicate_topk_ids(tmp_path) -> None:
+>       trace = copy.deepcopy(load_routing_trace(PINNED_TRACE))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_nemotron3_routing_dse.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/profiles/nemotron3_decode_routing_trace.json')
+
+    def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
+        try:
+            trace = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise RoutingTraceError(f"cannot read routing trace {path}: {error}") from error
+        if trace.get("schema_version") != 1 or trace.get("contract") != "nemotron3-decode-routing-v1":
+            raise RoutingTraceError("unsupported routing trace contract")
+        shape = trace.get("shape", {})
+        expected = {
+            "context_tokens": 2048,
+            "generated_tokens": 128,
+            "recurrent_decode_steps": 127,
+            "layers": 23,
+            "experts": 128,
+            "top_k": 6,
+        }
+        if shape != expected:
+            raise RoutingTraceError("unexpected routing trace shape")
+        layer_names = trace.get("layer_names")
+        prefill = trace.get("prefill_active_experts_by_layer")
+        prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
+        decode = trace.get("decode_topk_by_step")
+        if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
+            raise RoutingTraceError("routing trace layer names are incomplete")
+        if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
+            raise RoutingTraceError("routing trace prefill state is incomplete")
+        if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+            "128",
+            "2048",
+            "8192",
+        }:
+>           raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
+E           analytic_models.performance.nemotron3_routing_dse.RoutingTraceError: routing trace prefill sequence-length coverage is incomplete
+
+analytic_models/performance/nemotron3_routing_dse.py:80: RoutingTraceError
+___ test_changing_weight_format_preserves_other_traffic_and_work[nemotron3] ____
+
+name = 'nemotron3'
+
+    @pytest.mark.parametrize("name", ["nemotron3", "kimi_k3"])
+    def test_changing_weight_format_preserves_other_traffic_and_work(name):
+        if name == "nemotron3":
+>           arch = load_nemotron3_arch(
+                Path(__file__).resolve().parents[2] / "PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json"
+            )
+
+analytic_models/performance/test_precision_contract.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/hybrid_arch.py:82: in load_nemotron3_arch
+    raw = json.loads(Path(path).read_text())
+                     ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/doc/Model_Lib/nemotron-3-nano-30b-a3b.json'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+_ test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[1] _
+
+batch = 1
+
+    @pytest.mark.parametrize("batch", [1, 4])
+    def test_mixed_projection_lowering_preserves_other_stages_and_private_allocations(batch):
+        from dataclasses import asdict
+        from .ltile_layers import build_batch
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+        kwargs = dict(control="fsm", gather="cached", projection_schedule="batch", native_coefficients=True)
+>       original = build_batch("mamba", batch, root, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:176: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_layers.py:354: in build_batch
+    plans = [
+analytic_models/performance/ltile_layers.py:355: in <listcomp>
+    build_layer(
+analytic_models/performance/ltile_layers.py:170: in build_layer
+    p = LayerPlan(
+analytic_models/performance/ltile_layers.py:51: in __init__
+    self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
+                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[4] _
+
+batch = 4
+
+    @pytest.mark.parametrize("batch", [1, 4])
+    def test_mixed_projection_lowering_preserves_other_stages_and_private_allocations(batch):
+        from dataclasses import asdict
+        from .ltile_layers import build_batch
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+        kwargs = dict(control="fsm", gather="cached", projection_schedule="batch", native_coefficients=True)
+>       original = build_batch("mamba", batch, root, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:176: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_layers.py:354: in build_batch
+    plans = [
+analytic_models/performance/ltile_layers.py:355: in <listcomp>
+    build_layer(
+analytic_models/performance/ltile_layers.py:170: in build_layer
+    p = LayerPlan(
+analytic_models/performance/ltile_layers.py:51: in __init__
+    self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
+                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+____ test_tuning_reprices_composition_and_keeps_uniform_fallback[35-mixed] _____
+
+tmp_path = PosixPath('/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-843/test_tuning_reprices_compositi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fee531b5dd0>
+mixed_total = 35, chosen = 'mixed'
+
+    @pytest.mark.parametrize("mixed_total,chosen", [(35, "mixed"), (150, "uniform")])
+    def test_tuning_reprices_composition_and_keeps_uniform_fallback(tmp_path, monkeypatch, mixed_total, chosen):
+        from types import SimpleNamespace
+        from .ltile_services import Services
+    
+        costs = {1: (50, 80), 2: (10, 100), 4: (90, 20), 8: (25, 50)}
+        stages = [{"name": "a", "matrix_shape": [1, 32, 256]},
+                  {"name": "b", "matrix_shape": [1, 32, 256]},
+                  {"name": "recurrence", "matrix_shape": []}]
+        def evaluate(service, *args, **kwargs):
+            overrides = dict(service.profile.projection_panel_overrides)
+            if overrides:
+                assert overrides == {"a": 2, "b": 4}
+                total, values = mixed_total, (10, 20)
+            else:
+                values = costs[service.profile.projection_n_panel_tile]
+                total = sum(values) + 5
+            return dict(metadata={"stages": stages},
+                        sections=[{"name": n, "total": v} for n, v in zip(("a", "b", "recurrence"), (*values, 5))],
+                        components={"total": total}, assembly_sha256=str(service.profile.projection_panel_overrides))
+        monkeypatch.setattr(Services, "layer", evaluate)
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       service = Services(root, ExecutionProfile(projection_schedule="batch"), SimpleNamespace(identity={}), tmp_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:214: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_services.py:72: in __init__
+    self.sources = {str(p): sha(p) for p in paths}
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/ltile_services.py:72: in <dictcomp>
+    self.sources = {str(p): sha(p) for p in paths}
+                            ^^^^^^
+analytic_models/performance/ltile_dma.py:48: in sha
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1050: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+___ test_tuning_reprices_composition_and_keeps_uniform_fallback[150-uniform] ___
+
+tmp_path = PosixPath('/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-843/test_tuning_reprices_compositi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fee52230810>
+mixed_total = 150, chosen = 'uniform'
+
+    @pytest.mark.parametrize("mixed_total,chosen", [(35, "mixed"), (150, "uniform")])
+    def test_tuning_reprices_composition_and_keeps_uniform_fallback(tmp_path, monkeypatch, mixed_total, chosen):
+        from types import SimpleNamespace
+        from .ltile_services import Services
+    
+        costs = {1: (50, 80), 2: (10, 100), 4: (90, 20), 8: (25, 50)}
+        stages = [{"name": "a", "matrix_shape": [1, 32, 256]},
+                  {"name": "b", "matrix_shape": [1, 32, 256]},
+                  {"name": "recurrence", "matrix_shape": []}]
+        def evaluate(service, *args, **kwargs):
+            overrides = dict(service.profile.projection_panel_overrides)
+            if overrides:
+                assert overrides == {"a": 2, "b": 4}
+                total, values = mixed_total, (10, 20)
+            else:
+                values = costs[service.profile.projection_n_panel_tile]
+                total = sum(values) + 5
+            return dict(metadata={"stages": stages},
+                        sections=[{"name": n, "total": v} for n, v in zip(("a", "b", "recurrence"), (*values, 5))],
+                        components={"total": total}, assembly_sha256=str(service.profile.projection_panel_overrides))
+        monkeypatch.setattr(Services, "layer", evaluate)
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       service = Services(root, ExecutionProfile(projection_schedule="batch"), SimpleNamespace(identity={}), tmp_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:214: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_services.py:72: in __init__
+    self.sources = {str(p): sha(p) for p in paths}
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/ltile_services.py:72: in <dictcomp>
+    self.sources = {str(p): sha(p) for p in paths}
+                            ^^^^^^
+analytic_models/performance/ltile_dma.py:48: in sha
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1050: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-1] _
+
+batch = 1, batch_tile = 1
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-2] _
+
+batch = 2, batch_tile = 1
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-4] _
+
+batch = 4, batch_tile = 1
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-8] _
+
+batch = 8, batch_tile = 1
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-16] _
+
+batch = 16, batch_tile = 1
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-1] _
+
+batch = 1, batch_tile = 4
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-2] _
+
+batch = 2, batch_tile = 4
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-4] _
+
+batch = 4, batch_tile = 4
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-8] _
+
+batch = 8, batch_tile = 4
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_ test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-16] _
+
+batch = 16, batch_tile = 4
+
+    @pytest.mark.parametrize("batch", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("batch_tile", [1, 4])
+    def test_compiler_shares_weight_panels_and_charges_real_private_request_work(batch, batch_tile):
+        from .ltile_layers import compiler_api
+        from .ltile_program import ShapeArena
+    
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       _, Projection, _, _, _ = compiler_api(root)
+                                 ^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_pipeline.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+___ test_request_grouping_exposes_weight_reloads_and_preserves_compute_count ___
+
+    def test_request_grouping_exposes_weight_reloads_and_preserves_compute_count():
+>       p, xs, ys, lower = fixture()
+                           ^^^^^^^^^
+
+analytic_models/performance/test_projection_software.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_projection_software.py:19: in fixture
+    compiler_api(root)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_______ test_cross_group_aliases_and_invalid_budget_fail_before_emission _______
+
+    def test_cross_group_aliases_and_invalid_budget_fail_before_emission():
+>       p, xs, ys, lower = fixture()
+                           ^^^^^^^^^
+
+analytic_models/performance/test_projection_software.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_projection_software.py:19: in fixture
+    compiler_api(root)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_________ test_larger_workspace_is_existing_capacity_not_extra_storage _________
+
+    def test_larger_workspace_is_existing_capacity_not_extra_storage():
+>       p, xs, ys, lower = fixture()
+                           ^^^^^^^^^
+
+analytic_models/performance/test_projection_software.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_projection_software.py:19: in fixture
+    compiler_api(root)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_______ test_codec_workspace_cannot_be_reclaimed_for_compressed_weights ________
+
+tmp_path = PosixPath('/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-843/test_codec_workspace_cannot_be0')
+
+    def test_codec_workspace_cannot_be_reclaimed_for_compressed_weights(tmp_path):
+        h = software_profile(16, 2, 64)
+        assert not h.matrix.weight_replay and h.matrix.projection_segments == 1
+        assert h.matrix.resources() == ExecutionProfile().matrix.resources()
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       s = Services(root, h, SimpleNamespace(identity={}), tmp_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_software.py:73: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_services.py:72: in __init__
+    self.sources = {str(p): sha(p) for p in paths}
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/ltile_services.py:72: in <dictcomp>
+    self.sources = {str(p): sha(p) for p in paths}
+                            ^^^^^^
+analytic_models/performance/ltile_dma.py:48: in sha
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1050: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+________ test_standalone_projection_uses_the_same_software_request_tile ________
+
+tmp_path = PosixPath('/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-843/test_standalone_projection_use0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fee5152f4d0>
+
+    def test_standalone_projection_uses_the_same_software_request_tile(tmp_path, monkeypatch):
+        """A changed profile must affect emission, not only the cache label."""
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       compiler_api(root)
+
+analytic_models/performance/test_projection_software.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_____ test_transposed_packets_have_bounded_storage_and_no_weight_expansion _____
+
+    def test_transposed_packets_have_bounded_storage_and_no_weight_expansion():
+>       p, xs, ys, _ = fixture()
+                       ^^^^^^^^^
+
+analytic_models/performance/test_projection_software.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/test_projection_software.py:19: in fixture
+    compiler_api(root)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+________ test_transposed_layer_composition_replaces_every_projection[1] ________
+
+batch = 1
+
+    @pytest.mark.parametrize("batch", [1, 16])
+    def test_transposed_layer_composition_replaces_every_projection(batch):
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       plan = build_batch("mamba", batch, root, gather="cached", native_coefficients=True,
+                           projection_schedule="transposed", projection_k_tile=1024)
+
+analytic_models/performance/test_projection_software.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_layers.py:354: in build_batch
+    plans = [
+analytic_models/performance/ltile_layers.py:355: in <listcomp>
+    build_layer(
+analytic_models/performance/ltile_layers.py:170: in build_layer
+    p = LayerPlan(
+analytic_models/performance/ltile_layers.py:51: in __init__
+    self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
+                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+_______ test_transposed_layer_composition_replaces_every_projection[16] ________
+
+batch = 16
+
+    @pytest.mark.parametrize("batch", [1, 16])
+    def test_transposed_layer_composition_replaces_every_projection(batch):
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+>       plan = build_batch("mamba", batch, root, gather="cached", native_coefficients=True,
+                           projection_schedule="transposed", projection_k_tile=1024)
+
+analytic_models/performance/test_projection_software.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_layers.py:354: in build_batch
+    plans = [
+analytic_models/performance/ltile_layers.py:355: in <listcomp>
+    build_layer(
+analytic_models/performance/ltile_layers.py:170: in build_layer
+    p = LayerPlan(
+analytic_models/performance/ltile_layers.py:51: in __init__
+    self.c, self.Projection, self.lower_projection, self.Options, self.lower_group = compiler_api(compiler_root)
+                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler')
+
+    def compiler_api(root):
+        root = Path(root).resolve()
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+>       from compiler.aten.plena import recurrent_coefficients as c
+E       ImportError: cannot import name 'recurrent_coefficients' from 'compiler.aten.plena' (/scratch/shared/mcl123/plena/repos/PLENA_RTL/PLENA_Compiler/aten/plena/__init__.py)
+
+analytic_models/performance/ltile_layers.py:19: ImportError
+____ test_transposed_profile_rejects_unvalidated_codec_and_extra_datapaths _____
+
+tmp_path = PosixPath('/scratch/shared/mcl123/plena/tmp/pytest-of-mcl123/pytest-843/test_transposed_profile_reject0')
+
+    def test_transposed_profile_rejects_unvalidated_codec_and_extra_datapaths(tmp_path):
+        root = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+        h = ExecutionProfile(projection_schedule="transposed", projection_k_tile=1024)
+        assert h.matrix.resources() == ExecutionProfile().matrix.resources()
+>       service = Services(root, h, SimpleNamespace(identity={}), tmp_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+analytic_models/performance/test_projection_software.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+analytic_models/performance/ltile_services.py:72: in __init__
+    self.sources = {str(p): sha(p) for p in paths}
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+analytic_models/performance/ltile_services.py:72: in <dictcomp>
+    self.sources = {str(p): sha(p) for p in paths}
+                            ^^^^^^
+analytic_models/performance/ltile_dma.py:48: in sha
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/pathlib.py:1050: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/PLENA_Compiler/aten/plena/ltile_v2.py'
+
+/usr/lib64/python3.11/pathlib.py:1044: FileNotFoundError
+=========================== short test summary info ============================
+FAILED analytic_models/performance/test_gpu_evidence.py::test_profiled_nemotron_config_matches_the_full_checkpoint_campaign
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-1-1-True]
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[decode-16-1-False]
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_nemotron_final_norm_follows_all_blocks_with_bf16_checkpoint_weights[prefill-2-128-True]
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_lane_dse_recompiles_each_width_instead_of_scaling_counts
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_compiler_and_gpu_evidence_are_the_pinned_real_shapes
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_default_full_model_runs_use_pinned_checkpoint_mixed_weight_precision
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_ablation_separates_arlo_stride_from_consumer_major_and_affine
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_explicit_state_tile_transfers_only_at_decode_boundaries
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_zero_fifo_is_legal_and_serializes_the_overlap_boundary
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_full_schedules_and_compressed_mla_are_validated_in_both_phases
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_full_model_uses_one_shared_hbm_timeline
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_long_campaign_is_self_consistent
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_paper_2048_campaign_is_self_consistent
+FAILED analytic_models/performance/test_hybrid_lcompute_campaign.py::test_checked_in_paper_2048_batch_campaign_is_self_consistent
+FAILED analytic_models/performance/test_hybrid_system_dse.py::test_formal_state_capacities_match_real_dtypes
+FAILED analytic_models/performance/test_hybrid_system_timeline.py::test_nemotron_prefill_routing_matches_the_requested_sequence_length
+FAILED analytic_models/performance/test_hybrid_system_timeline.py::test_full_state_cache_removes_per_token_state_hbm[nemotron3-64]
+FAILED analytic_models/performance/test_hybrid_system_timeline.py::test_consumer_aware_layout_reaches_ideal_bank_service[nemotron3]
+FAILED analytic_models/performance/test_hybrid_system_timeline.py::test_mx_storage_contracts_keep_formats_distinct
+FAILED analytic_models/performance/test_ltile_execution.py::test_decode_kv_write_is_inside_the_attention_extent
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_compiler_evidence_uses_frozen_matrix_view_v3
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_real_lowering_service_replays_fixed_and_affine_paths
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_c_and_d_keep_the_same_math_while_affine_removes_chunking_and_stalls
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec0]
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_all_recurrent_lowerings_scale_the_same_math_and_private_state_with_batch[spec1]
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_basic_model_records_publish_strict_and_ideal_timeline_endpoints
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_uniform_bf16_weight_sensitivity_is_numerically_pinned
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_one_mib_point_cannot_claim_unemitted_static_overlap
+FAILED analytic_models/performance/test_matrix_lcompute_campaign.py::test_ordinary_attention_and_moe_matrix_lines_do_not_regress
+FAILED analytic_models/performance/test_matrix_service.py::test_nvfp4_fixture_decoder_covers_signed_codes_and_block_global_scales
+FAILED analytic_models/performance/test_nemotron3_moe_event_dse.py::test_routing_patterns_match_the_independent_lru_replay
+FAILED analytic_models/performance/test_nemotron3_routing_dse.py::test_trace_preserves_all_exact_decode_topk_events
+FAILED analytic_models/performance/test_nemotron3_routing_dse.py::test_profile_driven_lru_reproduces_capacity_knees
+FAILED analytic_models/performance/test_nemotron3_routing_dse.py::test_lru_counts_every_miss_as_one_expert_weight_read
+FAILED analytic_models/performance/test_nemotron3_routing_dse.py::test_trace_rejects_duplicate_topk_ids
+FAILED analytic_models/performance/test_precision_contract.py::test_changing_weight_format_preserves_other_traffic_and_work[nemotron3]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[1]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_mixed_projection_lowering_preserves_other_stages_and_private_allocations[4]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_tuning_reprices_composition_and_keeps_uniform_fallback[35-mixed]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_tuning_reprices_composition_and_keeps_uniform_fallback[150-uniform]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-1]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-2]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-4]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-8]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[1-16]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-1]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-2]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-4]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-8]
+FAILED analytic_models/performance/test_projection_pipeline.py::test_compiler_shares_weight_panels_and_charges_real_private_request_work[4-16]
+FAILED analytic_models/performance/test_projection_software.py::test_request_grouping_exposes_weight_reloads_and_preserves_compute_count
+FAILED analytic_models/performance/test_projection_software.py::test_cross_group_aliases_and_invalid_budget_fail_before_emission
+FAILED analytic_models/performance/test_projection_software.py::test_larger_workspace_is_existing_capacity_not_extra_storage
+FAILED analytic_models/performance/test_projection_software.py::test_codec_workspace_cannot_be_reclaimed_for_compressed_weights
+FAILED analytic_models/performance/test_projection_software.py::test_standalone_projection_uses_the_same_software_request_tile
+FAILED analytic_models/performance/test_projection_software.py::test_transposed_packets_have_bounded_storage_and_no_weight_expansion
+FAILED analytic_models/performance/test_projection_software.py::test_transposed_layer_composition_replaces_every_projection[1]
+FAILED analytic_models/performance/test_projection_software.py::test_transposed_layer_composition_replaces_every_projection[16]
+FAILED analytic_models/performance/test_projection_software.py::test_transposed_profile_rejects_unvalidated_codec_and_extra_datapaths
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_report_contains_full_prefill_decode_dse_and_ablation
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_layout_and_state_cache_ablations_are_physical
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_mixed_precision_keeps_model_specific_weight_formats
+ERROR analytic_models/performance/test_hybrid_system_dse.py::test_data_coverage_does_not_present_synthetic_kimi_routing_as_measured
+ERROR analytic_models/performance/test_hybrid_system_timeline.py::test_decode_executes_complete_hybrid_backbones
+ERROR analytic_models/performance/test_hybrid_system_timeline.py::test_multi_token_decode_grows_context_and_reports_tpot
+ERROR analytic_models/performance/test_hybrid_system_timeline.py::test_prefill_uses_mamba_and_kda_chunk_algorithms
+ERROR analytic_models/performance/test_hybrid_system_timeline.py::test_kimi_mla_keeps_only_compressed_cache
+ERROR analytic_models/performance/test_hybrid_system_timeline.py::test_all_stage_types_share_one_hbm_and_sram_server
+ERROR analytic_models/performance/test_nemotron3_formal_dse.py::test_formal_report_keeps_gpu_evidence_separate_from_plena_cycles
+ERROR analytic_models/performance/test_nemotron3_formal_dse.py::test_decode_logical_traffic_crosschecks_complete_b200_ncu
+ERROR analytic_models/performance/test_nemotron3_formal_dse.py::test_formal_dse_preserves_exact_state_and_routing_capacity_knees
+ERROR analytic_models/performance/test_nemotron3_formal_dse.py::test_formal_dse_couples_cache_misses_to_expert_m_k_timeline
+ERROR analytic_models/performance/test_nemotron3_formal_dse.py::test_l_compute_and_amdahl_numbers_are_labeled_as_local_bounds
+67 failed, 387 passed, 10 skipped, 14 errors in 59.64s

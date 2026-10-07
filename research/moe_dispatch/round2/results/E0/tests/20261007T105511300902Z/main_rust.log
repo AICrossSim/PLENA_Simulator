@@ -1,0 +1,500 @@
+   Compiling transactional_emulator v0.1.0 (/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.55s
+     Running unittests src/lib.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/buddy-402554fcefc6e1e0)
+
+running 13 tests
+test tests::test_alloc_drains_in_increasing_address_order ... ok
+test tests::test_can_grow_then_grow_in_place ... ok
+test tests::test_cannot_grow_when_buddy_busy ... ok
+test tests::test_dealloc_coalesces_buddies ... ok
+test tests::test_no_coalesce_while_buddy_busy ... ok
+test tests::test_range_accessors_and_shifts ... ok
+test tests::test_range_checked_new_overflow ... ok
+test tests::test_shrink_frees_the_tail ... ok
+test tests::test_size_from_bytes_rounds_up_to_pow2 ... ok
+test tests::test_size_in_bytes ... ok
+test tests::test_size_log2_roundtrip ... ok
+test tests::test_size_next_size ... ok
+test tests::prop_live_allocations_never_overlap ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running unittests src/lib.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/memory-ee0c2853d12c0626)
+
+running 20 tests
+test chunked::tests::bounded_gather_limits_responses_and_preserves_destination_tags ... ok
+test chunked::tests::burst_write_preserves_edges_without_reading_full_blocks ... ok
+test chunked::tests::test_gather_clamps_read_to_block_end ... ok
+test chunked::tests::test_gather_coalesced_reads_shared_block_once_and_scatters_slices ... ok
+test chunked::tests::test_gather_issues_reads_in_input_order ... ok
+test chunked::tests::test_gather_places_each_read_at_its_offset ... ok
+test chunked::tests::test_gather_single_aligned_block ... ok
+test chunked::tests::test_gather_unaligned_slice_within_block ... ok
+test chunked::tests::test_write_aligned_zero_pads_short_payload ... ok
+test chunked::tests::test_write_unaligned_rmw_preserves_neighbors ... ok
+test chunked::tests::test_write_unaligned_stops_when_src_exhausted ... ok
+test naive::tests::test_naive_sequential_read_latency ... ok
+test simple::tests::test_simple_single_read_latency ... ok
+test tests::functional_access_bypasses_stats_but_preserves_data ... ok
+test tests::priority_alias_survives_erasure_timing_and_statistics_wrappers ... ok
+test tests::test_memory_backed_roundtrip ... ok
+test tests::test_nodata_discards_writes ... ok
+test tests::test_with_stats_counts_bytes_and_delegates ... ok
+test tests::test_with_timing_delegates_data ... ok
+test chunked::tests::prop_gather_matches_naive_assembly ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src/lib.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/quantize-2c3e02306f1c858d)
+
+running 28 tests
+test dtype::test_e4m3_subnormal ... ok
+test dtype::test_e6m5_bias_conversion_from_f32 ... ok
+test dtype::test_e8m0_scale_decode ... ok
+test dtype::test_f16 ... ok
+test dtype::test_f32 ... ok
+test dtype::test_mxfp8_round_trip_with_scale ... ok
+test dtype::tests::test_datatype_bytes_roundtrip_32bit_words ... ok
+test dtype::tests::test_datatype_bytes_roundtrip_4bit_packing ... ok
+test dtype::tests::test_datatype_dispatch_size ... ok
+test dtype::tests::test_datatype_size_in_bytes_current_behavior ... ok
+test dtype::tests::test_datatype_size_in_bytes_panics_for_sub_byte - should panic ... ok
+test dtype::tests::test_f32_cast_is_identity ... ok
+test dtype::tests::test_fptype_size_in_bits ... ok
+test dtype::tests::test_from_impls ... ok
+test dtype::tests::test_inttype_truncates_and_masks ... ok
+test dtype::tests::test_mxdatatype_element_scale_ratio ... ok
+test dtype::tests::test_mxdatatype_element_type_and_size ... ok
+test dtype::tests::test_mxint8_uses_sign_magnitude_with_seven_fractional_bits ... ok
+test tensor::tests::test_from_bytes_plain_then_into_bytes_roundtrip ... ok
+test tensor::tests::test_into_bytes_mx_block_scale ... ok
+test tensor::tests::test_into_bytes_mx_packs_sub_byte_elements_without_truncation ... ok
+test tensor::tests::test_into_bytes_plain_packs_elements_and_no_scale_stream ... ok
+test tensor::tests::test_minifloat_quantize_hardware_rounds_fractional_mantissa ... ok
+test tensor::tests::test_minifloat_quantize_known_values ... ok
+test dtype::tests::prop_f32_cast_identity ... ok
+test tensor_conv::tests::from_slice_handles_empty ... ok
+test tensor_conv::tests::round_trips_values ... ok
+test tensor_conv::tests::to_f32_vec_casts_non_float_kind ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/ramulator-758b5e91e4f47875)
+
+running 14 tests
+test config::hbm2::diagnostic_tests::column_service_does_not_change_geometry_clock_or_return_latency ... ok
+test config::hbm2::diagnostic_tests::combined_profile_composes_and_all_timing_preserves_refresh_interval ... ok
+test config::hbm2::diagnostic_tests::return_latency_profile_changes_only_return_delay ... ok
+test model::calibration_tests::native_granularity_mapping_and_read_accounting ... ok
+test model::demand_tests::cancelled_caller_cannot_release_a_queued_native_tracker ... ok
+test model::demand_tests::live_promotion_age_and_retry_cooldown_change_pending_selection ... ok
+test model::calibration_tests::blocked_channel_does_not_hold_an_independent_channel ... ok
+test model::demand_tests::pending_native_request_observes_late_demand_promotion ... ok
+test model::ticker_tests::concurrent_writes_to_distinct_addresses_keep_a_single_ticker ... ok
+test model::ticker_tests::concurrent_writes_to_one_address_keep_a_single_ticker ... ok
+test model::ticker_tests::reads_forwarded_from_a_buffered_write_keep_a_single_ticker ... ok
+test model::ticker_tests::rejected_accesses_do_not_leak_the_outstanding_count ... ok
+test preset::diagnostic_probes::native_diagnostic_profiles_change_service_without_changing_transactions ... ok
+test model::demand_tests::native_retries_keep_finite_trackers_until_response_and_drain ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s
+
+     Running unittests src/lib.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/runtime-d5ef62f5c028b9a8)
+
+running 17 tests
+test executor::tests::test_empty_executor_completes_at_init ... ok
+test executor::tests::test_events_fire_in_time_order ... ok
+test executor::tests::test_same_instant_events_all_fire ... ok
+test executor::tests::test_same_instant_events_fire_in_schedule_order ... ok
+test executor::tests::test_schedule_is_deterministic ... ok
+test executor::tests::test_scheduled_event_advances_time ... ok
+test executor::tests::test_spawned_task_runs_at_init ... ok
+test executor::tests::test_timeout_after_event_lets_it_fire ... ok
+test time::tests::test_deadline_relative_vs_absolute ... ok
+test executor::tests::test_timeout_excludes_event_at_deadline ... ok
+test time::tests::test_duration_arithmetic ... ok
+test time::tests::test_duration_debug_is_nanos_with_pico_fraction ... ok
+test time::tests::test_duration_unit_constructors_agree ... ok
+test time::tests::test_instant_add_sub_roundtrip ... ok
+test time::tests::test_instant_debug_and_eternity_ordering ... ok
+test time::tests::test_instant_sub_underflow_panics - should panic ... ok
+test time::tests::test_instant_to_secs ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/sram-8fb03c4d09d827c7)
+
+running 45 tests
+test matrix::tests::colocated_view_validator_rejects_cross_tensor_aliases ... ok
+test matrix::tests::bank_word_aligned_base_supplies_a_constant_field_phase ... ok
+test matrix::tests::column_reads_restore_every_lane_for_real_bank_widths ... ok
+test matrix::tests::diagonal_placement_serves_rows_and_columns_at_the_bank_floor ... ok
+test matrix::tests::default_constructor_supports_paper_mlen ... ok
+test matrix::tests::f32_matrix_words_roundtrip_with_multiple_lanes ... ok
+test matrix::tests::fixed_phased_kimi_state_matches_affine_without_programmable_skew ... ok
+test matrix::tests::fixed_phased_nemotron_state_matches_affine_without_programmable_skew ... ok
+test matrix::tests::kda_prefill_state_becomes_decode_state_by_column_view_not_transpose_copy ... ok
+test matrix::tests::legacy_write_rejects_a_mismatched_element_type - should panic ... ok
+test matrix::tests::non_identity_skew_moves_physical_banks_and_roundtrips ... ok
+test matrix::tests::official_kda_chunk_and_all_live_fields_share_one_matrix_sram ... ok
+test matrix::tests::official_kimi_state_group_fits_and_reads_16_heads_without_conflict ... ok
+test matrix::tests::official_mamba_chunk_and_all_live_fields_share_one_matrix_sram ... ok
+test matrix::tests::paper_depth_is_mlen_wide_rows_and_supports_compact_views ... ok
+test matrix::tests::paper_kimi_packet_is_two_cycles_global_and_one_cycle_per_view ... ok
+test matrix::tests::official_nemotron_state_group_fits_and_reads_32_heads_without_conflict ... ok
+test matrix::tests::paper_kimi_projection_fragments_fill_true_head_tiles ... ok
+test matrix::tests::paper_nemotron_packet_is_one_cycle_for_global_and_per_view_maps ... ok
+test matrix::tests::paper_kimi_two_source_read_reaches_two_cycle_floor ... ok
+test matrix::tests::paper_nemotron_projection_fragments_fill_true_head_tiles ... ok
+test matrix::tests::pending_dma_fills_multiple_tiles ... ok
+test matrix::tests::pending_dma_fills_physical_words ... ok
+test matrix::tests::per_view_skew_removes_cross_tile_bank_conflict_with_same_values ... ok
+test matrix::tests::paper_nemotron_two_source_read_reaches_two_cycle_floor ... ok
+test matrix::tests::test_matrix_new_dimensions ... ok
+test matrix::tests::test_matrix_write_delayed_preserves_legacy_address_divisor ... ok
+test matrix::tests::test_matrix_write_read_roundtrip ... ok
+test matrix::tests::wrong_skew_returns_wrong_values_not_only_extra_cycles ... ok
+test tests::test_addr_to_cell_ok ... ok
+test tests::test_addr_to_cell_out_of_bounds_panics - should panic ... ok
+test tests::test_addr_to_cell_unaligned_panics - should panic ... ok
+test tests::test_assert_multiple_of ... ok
+test tests::test_assert_multiple_of_panics - should panic ... ok
+test tests::test_cell_pending_resolves_via_channel ... ok
+test tests::test_cell_ready_skips_conversion ... ok
+test tests::test_multiple_and_offset ... ok
+test vector::tests::affine_bank_placement_round_trips_and_moves_physical_words ... ok
+test vector::tests::banking_changes_no_capacity_or_identity_access ... ok
+test vector::tests::test_vector_addresses_distinct_rows ... ok
+test vector::tests::test_vector_as_bytes_of_fresh_sram_is_zeroed ... ok
+test vector::tests::test_vector_int_roundtrip_pads_to_vlen ... ok
+test vector::tests::test_vector_tile_size_is_vlen_and_size_in_bytes ... ok
+test vector::tests::test_vector_write_delayed_resolves_pending_cell ... ok
+test matrix::tests::phased_descriptor_equals_ordinary_bases_on_fixed_diagonal_wiring ... ok
+
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running unittests src/bin/matrix_service_probe.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/matrix_service_probe-1444727bf83df0c3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/moe_dual_normal.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/moe_dual_normal-5842c1f908ffd58d)
+
+running 46 tests
+test moe_normal::dma_credits::tests::idle_reservation_is_borrowed_and_waiting_core_recovers_first_credit ... ok
+test moe_normal::dma_credits::tests::cancelled_waiter_does_not_reserve_forever ... ok
+test moe_normal::engine::dma_lifetime_tests::tile_promotion_covers_already_queued_and_future_fragments ... ok
+test moe_normal::matrix_view::tests::non_square_bank_mapping_has_no_aliases_and_charges_padding ... ok
+test moe_normal::matrix_view::tests::normal_unaligned_tail_uses_two_scales_and_ignores_padding ... ok
+test moe_normal::matrix_view::tests::rejects_invalid_extents_strides_overlaps_and_address_overflow ... ok
+test moe_normal::matrix_view::tests::repeated_reads_share_ports_and_wider_ports_reduce_cycles ... ok
+test moe_normal::matrix_view::tests::transpose_matches_source_view_after_finite_write_latency ... ok
+test moe_normal::matrix_view::tests::transposed_crop_preserves_original_scale_ownership ... ok
+test moe_normal::engine::dma_lifetime_tests::late_join_fetches_missing_sector_and_completed_entries_are_released ... ok
+test moe_normal::output_pool_tests::legacy_three_n_control_is_numerical_and_charges_three_latches ... ok
+test moe_normal::output_pool_tests::pool_capacity_boundary_includes_control_pending_and_packed_scales ... ok
+test moe_normal::output_pool_tests::pool_larger_output_ring_keeps_operand_and_weight_budgets_fixed ... ok
+test moe_normal::output_pool_tests::diagnostic_factors_preserve_values_work_and_frozen_job_ownership ... ok
+test moe_normal::output_pool_tests::pool_one_context_one_stage_one_slot_has_an_independent_writeback_path ... ok
+test moe_normal::output_pool_tests::pool_projection_service_records_reconcile_without_adding_overlapping_waits ... ok
+test moe_normal::output_pool_tests::pool_rejects_an_incomplete_m_cohort_before_execution ... ok
+test moe_normal::output_pool_tests::pool_reuses_each_weight_tile_across_the_complete_m_cohort ... ok
+test moe_normal::output_pool_tests::pool_scheduler_and_operand_stages_have_finite_positive_costs ... ok
+test moe_normal::output_pool_tests::pool_two_stages_drain_with_slow_feedback_and_one_accumulator_port ... ok
+test moe_normal::tests::activation_supply_bounds_compute_without_changing_values_or_work ... ok
+test moe_normal::tests::baseline_has_same_numerical_path_and_multiplies_and_streaming_service ... ok
+test moe_normal::tests::dma_metadata_and_prefetch_slots_fail_closed ... ok
+test moe_normal::tests::duplicate_expert_routes_shared_expert_and_input_order_are_deterministic ... ok
+test moe_normal::tests::extreme_clock_and_invalid_square_mapping_fail_before_timers ... ok
+test moe_normal::output_pool_tests::pool_nonsquare_m_n_k_tails_match_independent_bf16_reference ... ok
+test moe_normal::tests::finite_capacity_shortages_fail_before_execution ... ok
+test moe_normal::tests::finite_cache_reuses_real_bytes_and_charges_one_serial_port ... ok
+test moe_normal::tests::global_credit_limit_is_shared_and_hbm_byte_counters_are_real ... ok
+test moe_normal::tests::malformed_routes_geometry_and_hbm_ranges_are_rejected ... ok
+test moe_normal::tests::heterogeneous_nonzero_full_moe_and_tail_masks_match_scalar_reference ... ok
+test moe_normal::tests::out_of_order_completion_preserves_route_reduction_order ... ok
+test moe_normal::tests::pipelined_dma_lookup_accounts_port_occupancy_and_preserves_numerics ... ok
+test moe_normal::tests::ready_dispatch_steals_small_jobs_and_preserves_numerics ... ok
+test moe_normal::tests::refined_finite_ports_are_serviced_and_backpressure_preserves_output ... ok
+test moe_normal::tests::refined_latches_contexts_and_schema_are_not_free ... ok
+test moe_normal::tests::refined_nonsquare_shapes_and_interleave_preserve_global_k_reference ... ok
+test moe_normal::tests::refined_tail_policy_changes_padding_work_without_changing_hbm_or_values ... ok
+test moe_normal::tests::refined_two_slot_window_progresses_under_long_feedback_without_reordering_k ... ok
+test moe_normal::tests::serde_contract_rejects_misspelled_fields ... ok
+test moe_normal::tests::serialized_instruction_sensitivity_preserves_values_and_counts ... ok
+test moe_normal::tests::unselected_experts_do_not_read_hbm_and_empty_routes_return_zero ... ok
+test moe_normal::weight_bank::tests::rejects_aliasing_even_when_catalog_and_identity_agree ... ok
+test moe_normal::weight_bank::tests::rejects_noncanonical_catalogs_even_when_window_hashes_are_rebound ... ok
+test moe_normal::weight_bank::tests::verifies_identity_and_rejects_repacking_or_unsupported_scales ... ok
+test moe_normal::tests::native_dma_variants_preserve_moe_and_shared_expert_with_tail_masks ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running unittests src/main.rs (/tmp/mcl123-plena-layout-async-target/debug/deps/transactional_emulator-c9b03b26a5615fc4)
+
+running 225 tests
+test accelerator::access::tests::batched_write_outs_write_their_rows_without_reading_them ... ok
+test accelerator::access::tests::config_setters_write_their_sticky_registers ... ok
+test accelerator::access::tests::loop_ops_carry_their_counter_register_and_break_is_a_barrier ... ok
+test accelerator::access::tests::map_v_fp_bridges_scalar_fp_sram_into_vram ... ok
+test accelerator::access::tests::matrix_multiply_reads_regs_tile_batch_and_accumulator ... ok
+test accelerator::access::tests::matrix_write_out_reads_and_writes_its_destination_rows ... ok
+test accelerator::access::tests::prefetch_reads_its_address_registers_and_writes_the_sram_fill ... ok
+test accelerator::access::tests::range_overlap_is_per_space_and_half_open ... ok
+test accelerator::access::tests::reductions_read_and_write_their_fp_register ... ok
+test accelerator::access::tests::route_transitions_are_barriers_and_route_multiply_tracks_its_operands ... ok
+test accelerator::access::tests::scalar_ops_track_register_flow ... ok
+test accelerator::access::tests::store_reads_the_region_it_drains ... ok
+test accelerator::access::tests::strided_write_out_reads_its_stride_register ... ok
+test accelerator::access::tests::topk_writes_scalar_srams_and_reads_every_logit_row ... ok
+test accelerator::access::tests::vector_binary_op_reads_sources_and_writes_destination ... ok
+test accelerator::dispatch::tests::fma_is_billed_to_the_vector_unit ... ok
+test accelerator::dispatch::tests::l_tile_execution_is_billed_to_the_vector_unit ... ok
+test accelerator::loop_state::tests::loop_state_breaks_innermost_loop ... ok
+test accelerator::loop_state::tests::loop_state_tracks_iterations_and_jump_targets ... ok
+test accelerator::lstream::tests::configuration_alone_does_not_rebind_the_gp_pointer ... ok
+test accelerator::lstream::tests::enabled_stream_revalidates_updates_without_poisoning_the_slot ... ok
+test accelerator::lstream::tests::gp_and_fp_targets_resolve_and_advance_once ... ok
+test accelerator::lstream::tests::major_packed_rejects_a_rotation_that_does_not_permute_all_banks ... ok
+test accelerator::lstream::tests::matrix_writeback_uses_only_the_reserved_producer_slot ... ok
+test accelerator::lstream::tests::nonpacket_affine_stream_rejects_an_aliasing_bank_row_pitch ... ok
+test accelerator::lstream::tests::affine_map_is_bijective_and_spreads_multirow_words ... ok
+test accelerator::lstream::tests::packet_cursor_covers_field_and_group_extents ... ok
+test accelerator::lstream::tests::packet_cursor_walks_minor_atoms_then_the_next_row_block ... ok
+test accelerator::lstream::tests::packetization_does_not_implicitly_select_major_packed_placement ... ok
+test accelerator::lstream::tests::reset_defaults_form_a_valid_scalar_stream_and_target_change_fails ... ok
+test accelerator::lstream::tests::skewed_multirow_packet_reaches_the_bandwidth_floor ... ok
+test accelerator::lstream::tests::strict_bounds_trap_before_an_extra_packet_is_consumed - should panic ... ok
+test accelerator::lstream::tests::two_enabled_slots_cannot_ambiguously_bind_the_same_target ... ok
+test accelerator::lstream::tests::unknown_flag_is_rejected_without_poisoning_the_slot ... ok
+test accelerator::lstream::tests::vector_view_mask_rejects_the_matrix_producer_slot ... ok
+test accelerator::lstream::tests::view_mask_rejects_a_slot_that_is_not_an_operand ... ok
+test accelerator::lstream::tests::view_mask_rejects_an_unconfigured_slot ... ok
+test accelerator::lstream::tests::physical_buffer_roundtrips_values_and_detects_bad_accesses ... ok
+test accelerator::mview::tests::configuration_matches_the_python_contract ... ok
+test accelerator::mview::tests::v3_mapping_words_match_the_python_contract ... ok
+test accelerator::mview::tests::rejects_aliasing_pitch_and_reserved_mapping_bits ... ok
+test accelerator::mview::tests::zero_pitch_is_legal_only_when_tile_phase_prevents_aliasing ... ok
+test accelerator::mview_recurrence_tests::dot_reduce_accumulates_across_two_state_chunks ... ok
+test accelerator::mview_recurrence_tests::full_mamba_recurrence_uses_four_ltile_execs_across_four_tokens ... ok
+test accelerator::mview_recurrence_tests::full_kda_recurrence_uses_five_ltile_execs_across_four_tokens ... ok
+test accelerator::mview_recurrence_tests::kda_recurrence_uses_fixed_diagonal_pitch_without_bank_stalls ... ok
+test accelerator::mview_recurrence_tests::l_tile_delta_update_preserves_coefficient_layout_across_packets ... ok
+test accelerator::mview_recurrence_tests::l_tile_dot_reduce_preserves_coefficient_layout_across_packets ... ok
+test accelerator::mview_recurrence_tests::l_tile_exec_runs_row_and_column_primitives_through_the_same_banks ... ok
+test accelerator::mview_recurrence_tests::l_tile_outer_update_preserves_coefficient_layout_across_packets ... ok
+test accelerator::mview_recurrence_tests::l_tile_scale_accum_preserves_coefficient_layout_across_packets ... ok
+test accelerator::mview_recurrence_tests::kda_hbm_to_affine_matrix_to_hbm_is_numerically_connected ... ok
+test accelerator::mview_recurrence_tests::mamba_recurrence_uses_fixed_diagonal_pitch_without_bank_stalls ... ok
+test accelerator::native_coeff::tests::offset_shared_and_strided_addresses ... ok
+test accelerator::native_coeff::tests::out_of_extent_is_not_silently_wrapped - should panic ... ok
+test accelerator::native_coeff::tests::reserved_bits_rejected - should panic ... ok
+test accelerator::mview_recurrence_tests::mamba_hbm_to_affine_matrix_to_hbm_is_numerically_connected ... ok
+test accelerator::pipeline_tests::back_to_back_matrix_ops_serialize_on_the_matrix_unit ... ok
+test accelerator::pipeline_tests::async_store_overlaps_and_snapshots_against_war ... ok
+test accelerator::pipeline_tests::dependent_scalar_chain_does_not_pipeline ... ok
+test accelerator::pipeline_tests::dependent_read_waits_for_the_prefetch_it_consumes ... ok
+test accelerator::pipeline_tests::l_cfg_dispatches_conflict_free_affine_packets_into_existing_fma ... ok
+test accelerator::pipeline_tests::l_mview_dispatch_roundtrips_values_and_removes_real_matrix_bank_conflicts ... ok
+test accelerator::pipeline_tests::lstream_executes_a_loop_without_explicit_pointer_or_scalar_loads ... ok
+test accelerator::pipeline_tests::independent_scalar_work_hides_under_a_matrix_op ... ok
+test accelerator::pipeline_tests::matrix_accumulator_writes_skewed_tiles_consumed_without_bank_conflicts ... ok
+test accelerator::pipeline_tests::matrix_affine_writeback_roundtrips_through_streamed_vector_consumption ... ok
+test accelerator::pipeline_tests::mamba_and_kda_state_steps_execute_through_conflict_free_packets ... ok
+test accelerator::pipeline_tests::paper_2048_kda_packets_advance_scalars_across_two_atom_rows ... ok
+test accelerator::pipeline_tests::paper_2048_l_cfg_dispatches_short_rows_without_conflicts ... ok
+test accelerator::pipeline_tests::prefetch_hides_under_independent_vector_work_and_stalls_dependents ... ok
+test accelerator::registers::tests::new_register_file_uses_isa_defaults ... ok
+test accelerator::registers::tests::register_file_reads_writes_and_binary_ops_use_isa_indices ... ok
+test accelerator::registers::tests::topk_normalization_flags_do_not_expand_expert_count ... ok
+test accelerator::registers::tests::topk_policy_is_none_until_c_set_topk_reg_runs ... ok
+test accelerator::registers::tests::topk_policy_unpacks_every_supported_moe_shape ... ok
+test accelerator::route_dispatch_tests::dispatch_topk_honors_sigmoid_and_bias_without_changing_route_weights ... ok
+test accelerator::route_dispatch_tests::route_opcodes_execute_all_unique_experts_and_preserve_each_tokens_weight_sum ... ok
+test accelerator::route_state::tests::groups_four_tokens_in_ascending_expert_order ... ok
+test accelerator::route_state::tests::registered_policy_supports_expert_255 ... ok
+test accelerator::route_state::tests::rejects_duplicate_expert_within_token - should panic ... ok
+test accelerator::route_state::tests::rejects_route_mul_token_outside_batch - should panic ... ok
+test accelerator::route_state::tests::supports_qwen_full_capacity ... ok
+test accelerator::scalar_sram::tests::explicit_bf16_preload_preserves_bits_including_signed_zero_and_subnormals ... ok
+test accelerator::scalar_sram::tests::explicit_bf16_preload_rejects_capacity_overflow - should panic ... ok
+test accelerator::scalar_sram::tests::explicit_bf16_preload_rejects_partial_values - should panic ... ok
+test accelerator::scalar_sram::tests::scalar_sram_decodes_preloads_and_ignores_trailing_bytes ... ok
+test accelerator::scalar_sram::tests::scalar_sram_honors_fp12_raw_words_and_rounding ... ok
+test accelerator::scalar_sram::tests::scalar_sram_supports_scalar_reads_writes_windows_and_dump_bytes ... ok
+test accelerator::scoreboard::tests::barrier_waits_for_everything_in_flight ... ok
+test accelerator::scoreboard::tests::independent_ops_on_different_units_overlap ... ok
+test accelerator::scoreboard::tests::pending_dma_is_taken_only_by_overlapping_accesses ... ok
+test accelerator::scoreboard::tests::pending_stores_are_drained_by_prefetches_but_not_by_compute ... ok
+test accelerator::scoreboard::tests::range_tracker_coarsening_is_conservative ... ok
+test accelerator::scoreboard::tests::range_tracker_splits_and_max_merges ... ok
+test accelerator::scoreboard::tests::raw_register_dependency_stalls_the_reader ... ok
+test accelerator::scoreboard::tests::retired_dma_feeds_the_range_tracker ... ok
+test accelerator::scoreboard::tests::same_unit_ops_serialize_structurally ... ok
+test accelerator::scoreboard::tests::serialize_mode_reproduces_the_serial_sum ... ok
+test accelerator::scoreboard::tests::sram_range_dependency_uses_overlap_not_equality ... ok
+test accelerator::scoreboard::tests::waw_keeps_the_latest_stable_instant ... ok
+test dma::tests::test_contiguous_stride_is_measured_in_bytes_for_wide_elements ... ok
+test dma::tests::test_layout_16bit_element_doubles_byte_length ... ok
+test dma::tests::test_layout_len_scales_with_dim ... ok
+test dma::tests::test_layout_mx_block_scale_stream ... ok
+test dma::tests::test_layout_plain_has_no_scale_stream ... ok
+test dma::tests::test_split_packet_rows_pads_only_the_final_physical_row ... ok
+test load_config::tests::test_data_type_config_conversion ... ok
+test load_config::tests::test_default_config_scalar_values ... ok
+test load_config::tests::test_default_precision_types_convert ... ok
+test load_config::tests::test_fp_type_config_conversion ... ok
+test load_config::tests::test_int_type_config_conversion ... ok
+test load_config::tests::test_mx_data_type_config_mx_conversion ... ok
+test load_config::tests::test_mx_data_type_config_plain_conversion ... ok
+test load_config::tests::test_mxint_type_config_conversion ... ok
+test ltile_v2::tests::lane_zero_matches_mode3_lfsr_stream ... ok
+test ltile_v2::tests::preserves_small_decay_until_final_store ... ok
+test ltile_v2::tests::sr_is_unbiased_over_every_threshold_for_both_signs ... ok
+test matrix_core::tests::independent_matrix_cores_overlap_in_sim_time ... ok
+test matrix_core::tests::tail_core_pe_area_fraction_is_explicit ... ok
+test matrix_machine::tests::independent_matrix_machines_overlap_actual_gemm_work ... ok
+test matrix_machine::tests::mm_row_granular_offset_selects_column_block ... ok
+test matrix_machine::tests::projection_panel_preserves_private_inputs_tails_and_output_row_neighbors ... ok
+test matrix_machine::tests::replay_reads_bank_words_once_and_matches_legacy_accumulation ... ok
+test matrix_machine::tests::transposed_matrix_ops_match_mathematical_transpose_with_wide_banks ... ok
+test matrix_service::tests::feedback_latency_limits_launches ... ok
+test matrix_service::tests::projection_config_decodes_units_and_rejects_reserved_or_zero_stride ... ok
+test matrix_service::tests::segmented_projection_retains_full_numerical_tree_and_serial_collection ... ok
+test matrix_service::tests::tails_and_cross_instruction_accumulation ... ok
+test op::tests::every_compiler_opcode_decodes_to_something ... ok
+test op::tests::experimental_dot_encodings_and_matrix_view_marker ... ok
+test op::tests::l_cfg_accepts_field_15_and_rejects_high_bits_and_slots ... ok
+test op::tests::l_mview_rejects_reserved_bits_forms_and_consumer_slots ... ok
+test op::tests::l_tile_forms_and_explicit_matrix_consumer_match_compiler_words ... ok
+test op::tests::ordinary_state_dma_does_not_inherit_kv_precision ... ok
+test op::tests::projection_form_preserves_all_registers_and_rejects_other_subfunctions ... ok
+test op::tests::route_dispatch_decodes_operands_without_recurrent_opcode_aliases ... ok
+test op::tests::test_decode_break_is_unit ... ok
+test op::tests::test_decode_c_set_topk_reg ... ok
+test op::tests::test_decode_compiler_v_topk_fixtures ... ok
+test op::tests::test_decode_control_set_addr_reg ... ok
+test op::tests::test_decode_imm18_field ... ok
+test op::tests::test_decode_imm22_field ... ok
+test op::tests::test_decode_invalid_and_unknown_are_invalid ... ok
+test op::tests::test_decode_lmask_does_not_bleed_into_rmask ... ok
+test op::tests::test_decode_loop_start_imm22 ... ok
+test op::tests::test_decode_m_bmm_rd_nonzero_panics - should panic ... ok
+test op::tests::test_decode_m_bmm_rd_zero_ok ... ok
+test op::tests::test_decode_m_bmv_carries_rd ... ok
+test op::tests::test_decode_m_btmv_carries_rd ... ok
+test op::tests::test_decode_m_mm_wo_carries_rstride_and_imm2 ... ok
+test op::tests::test_decode_matrix_precision_from_funct1 ... ok
+test op::tests::test_decode_operand_fields_are_masked_to_4_bits ... ok
+test op::tests::test_decode_prefetch_v_precision_from_funct1 ... ok
+test op::tests::test_decode_register_fields ... ok
+test op::tests::test_decode_s_map_fp_v_imm2 ... ok
+test op::tests::test_decode_s_map_v_fp_imm2 ... ok
+test op::tests::test_decode_scalar_fp_three_register ... ok
+test op::tests::test_decode_scalar_fp_two_register ... ok
+test op::tests::test_decode_scalar_int_three_register ... ok
+test op::tests::test_decode_scalar_ld_fp_imm2 ... ok
+test op::tests::test_decode_scalar_st_int_imm2 ... ok
+test op::tests::test_decode_store_v_precision_and_fields ... ok
+test op::tests::test_decode_two_register_matrix_op ... ok
+test op::tests::test_decode_v_shft_v ... ok
+test op::tests::test_decode_v_softplus_v_reads_rmask_from_rs3 ... ok
+test op::tests::test_decode_vector_dma_matrix_view_form_and_reject_reserved_high_bits ... ok
+test op::tests::test_decode_vector_order_from_funct1 ... ok
+test op::tests::test_decode_vector_scalar_minmax ... ok
+test op::tests::test_mamba_opcodes_do_not_collide_with_existing_encodings ... ok
+test op::tests::topk_target_one_is_bias_and_reserved_target_fields_are_invalid ... ok
+test op::tests::v_fma_vf_decodes_like_v_mul_vf ... ok
+test projection_handoff_probe::bounded_handoff_fast_consumer_has_no_early_read_or_alias ... ok
+test accelerator::pipeline_tests::serialize_mode_reproduces_serial_cycle_counts ... ok
+test stage_profile::tests::a_marker_less_program_reports_no_trailing_run ... ok
+test stage_profile::tests::add_runtime_merges_every_bucket ... ok
+test stage_profile::tests::an_unterminated_region_is_reported_as_such ... ok
+test stage_profile::tests::classify_comment_pins_the_stage_vocabulary ... ok
+test stage_profile::tests::compiler_stage_vocabulary_parses_to_the_expected_shape ... ok
+test stage_profile::tests::every_stage_name_round_trips_through_from_tag ... ok
+test stage_profile::tests::json_preserves_logical_stage_and_numeric_pair_order ... ok
+test stage_profile::tests::moe_stages_extractor_handles_adversarial_literal_shapes ... ok
+test projection_handoff_probe::bounded_handoff_numeric_backpressure_and_sector_lifetime ... ok
+test stage_profile::tests::picos_to_cycles_rounds_up_to_period ... ok
+test stage_profile::tests::picosecond_accumulation_does_not_round_per_opcode ... ok
+test stage_profile::tests::profile_json_always_carries_the_shared_vs_routed_caveat ... ok
+test stage_profile::tests::re_entering_a_moe_region_after_terminating_reports_it_as_open ... ok
+test stage_profile::tests::resource_buckets_are_disjoint_and_sum_to_the_total ... ok
+test stage_profile::tests::shared_expert_stages_are_distinct_buckets ... ok
+test stage_profile::tests::shared_stages_do_not_inherit_the_previous_pair_label ... ok
+test stage_profile::tests::shared_vs_routed_note_matches_the_compiler ... ok
+test stage_profile::tests::moe_stages_extractor_rejects_shapes_it_cannot_prove ... ok
+test stage_profile::tests::stage_tags_parse_with_and_without_trailing_detail ... ok
+test stage_profile::tests::stage_vocabulary_lists_every_literal_classify_comment_matches ... ok
+test stage_profile::tests::stage_marker_names_match_the_compiler_vocabulary ... ok
+test stage_profile::tests::sub_period_opcodes_accumulate_before_rounding ... ok
+test stage_profile::tests::the_region_terminator_resolves_and_is_not_the_unclassified_bucket ... ok
+test stage_profile::tests::trailing_attribution_shows_an_unterminated_moe_region ... ok
+test stage_profile::tests::trailing_labels_counts_from_the_final_marker_not_from_the_start ... ok
+test stage_profile::tests::unprofiled_time_is_reported_when_the_profile_does_not_cover_the_run ... ok
+test stage_profile::tests::vocabulary_terms_are_lowercase_and_unique ... ok
+test timing::tests::controlled_serial_components_are_additive_and_opt_in ... ok
+test timing::tests::scoreboard_mode_accumulates_without_sleeping ... ok
+test timing::tests::serial_mode_sleeps_the_calling_task ... ok
+test v2_timing::tests::feedback_uses_active_slots_and_ports_cannot_double_book ... ok
+test v2_timing::tests::six_cycle_pipeline_accepts_every_two_cycles ... ok
+test vector_machine::tests::affine_multirow_packet_eliminates_conflicts_and_preserves_rank_update_values ... ok
+test vector_machine::tests::experimental_dot_preserves_cancellation_and_reset_isolation ... ok
+test vector_machine::tests::fma_scalar_accumulates_into_the_destination ... ok
+test vector_machine::tests::fma_scalar_leaves_masked_off_heads_holding_the_destination ... ok
+test vector_machine::tests::ordinary_attention_and_moe_rows_do_not_pay_packet_cycles ... ok
+test vector_machine::tests::ordinary_bank_service_waits_for_source_data ... ok
+test vector_machine::tests::paper_2048_ordinary_wide_rows_do_not_enter_the_packet_path ... ok
+test vector_machine::tests::paper_2048_packet_coalesces_32_short_rows_without_bank_conflicts ... ok
+test vector_machine::tests::route_mul_forces_inactive_nan_rows_to_exact_zero ... ok
+test vector_machine::tests::test_softplus_honors_the_per_head_mask ... ok
+test vector_machine::tests::test_softplus_matches_reference_including_the_large_magnitude_tails ... ok
+test vector_machine::tests::test_topk_correction_bias_changes_selection_but_not_route_weights ... ok
+test vector_machine::tests::test_topk_sigmoid_normalized_matches_kimi_router_contract ... ok
+test vector_machine::tests::test_topk_softmax_all_nan_row_yields_zero_weights_not_nan ... ok
+test vector_machine::tests::test_topk_softmax_scans_contiguous_vector_rows_for_qwen128 ... ok
+test vector_machine::tests::test_topk_softmax_uses_descending_logits_and_low_index_ties ... ok
+test vector_machine::tests::test_vector_read_fp_round_trips_with_vector_transfer_fp ... ok
+test vector_machine::tests::test_vector_scalar_minmax_clamps_bf16_boundary_values ... ok
+test stage_profile::tests::string_constant_extractor_rejects_what_it_cannot_read ... ok
+
+test result: ok. 225 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.54s
+
+   Doc-tests buddy
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests memory
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests quantize
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ramulator
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests runtime
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sram
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,31 @@
+test_dma_lane_ref_bshd — DMA dst gets BSHD view + prepend
+  [OK]   Q_sh indices: [VarRef('by_phase'), Slice(), Slice()]
+  [OK]   Q_sh view_perm (BSHD): [1, 0, 2]
+test_btmm_output_bhsd
+  [OK]   a (Q_sh) BSHD: [1, 0, 2]
+  [OK]   b (K_sh) BSHD: [1, 0, 2]
+  [OK]   c (S_loc) BHSD identity: [0, 1, 2]
+test_per_head_matmul_lhs_bhsd
+  [OK]   a (S) BHSD identity: [0, 1, 2]
+  [OK]   b (V) BSHD: [1, 0, 2]
+  [OK]   c (P) BSHD: [1, 0, 2]
+test_hbm_ref_lane_var_subst
+  [OK]   HBM rank unchanged: 4
+  [OK]   HBM view_perm None: None
+  [OK]   HBM[2] composite: {'op': 'add', 'args': [VarRef('by_phase'), {'op': 'mul', 'args': [VarRef('by_number'), 4]}]}
+test_broadcast_dims_shift
+  [OK]   dst[0] prepended: VarRef('by_phase')
+  [OK]   dst view_perm sub-MLEN BSHD: [1, 0, 2]
+  [OK]   Broadcast preserved: 'Broadcast'
+  [OK]   broadcast_dims shifted: [2]
+  [OK]   M ref BHSD identity: [0, 1]
+test_global_consistency_conflict
+  [OK]   raised ViewConflictError: buffer 'X' has conflicting view perms: [1, 0, 2] (from Gemm[btmm].a) vs [0, 1, 2...
+test_skip_when_no_lane_axes
+  [OK]   body unchanged: None
+test_skip_when_d_ge_mlen
+  [OK]   view_perm not set (skipped): None
+test_outside_cluster_untouched
+  [OK]   view_perm None: None
+
+PASS — all mid_ir.view tests

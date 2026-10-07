@@ -1,0 +1,98 @@
+================================================================================
+Model Compiler - llama (5 layers)
+  decoder: hidden=384, inter=1408, heads=6/2, head_dim=64
+  compile: batch_size=1, seq_len=64, mlen=64, blen=4, mram_tile_capacity=4, total_q_dim=384
+================================================================================
+
+Extracting weights from layers 0..4...
+attn_scale: 0.125000
+
+Computing CPU golden reference (MXFP8 weights + BF16 intermediates, backend=scheduled)
+  golden_out: torch.Size([64, 384])
+
+Computing HF reference (float32, 5 layers, no quantization)
+  hf_ground_truth: torch.Size([64, 384])
+
+--- PLENA Backend (ISA generation) ---
+
+Generated 754487 lines of ISA code
+
+Compilation complete: 754487 ISA lines, 5 layers, output at VRAM row 6976
+================================================================================
+Model Compiler - llama (5 layers)
+  decoder: hidden=384, inter=1408, heads=6/2, head_dim=64
+  compile: batch_size=1, seq_len=64, mlen=64, blen=4, mram_tile_capacity=4, total_q_dim=384
+================================================================================
+
+Extracting weights from layers 0..4...
+attn_scale: 0.125000
+
+Computing CPU golden reference (float32 weights + BF16 intermediates, backend=scheduled)
+  golden_out: torch.Size([64, 384])
+
+Computing HF reference (float32, 5 layers, no quantization)
+  hf_ground_truth: torch.Size([64, 384])
+
+--- PLENA Backend (ISA generation) ---
+
+Generated 754487 lines of ISA code
+
+Compilation complete: 754487 ISA lines, 5 layers, output at VRAM row 6976
+================================================================================
+Model Compiler - llama (5 layers)
+  decoder: hidden=384, inter=1408, heads=6/2, head_dim=64
+  compile: batch_size=1, seq_len=64, mlen=64, blen=4, mram_tile_capacity=4, total_q_dim=384
+================================================================================
+
+Extracting weights from layers 0..4...
+attn_scale: 0.125000
+
+Computing CPU golden reference (MXFP8 weights + float32 intermediates, backend=scheduled)
+  golden_out: torch.Size([64, 384])
+
+Computing HF reference (float32, 5 layers, no quantization)
+  hf_ground_truth: torch.Size([64, 384])
+
+--- PLENA Backend (ISA generation) ---
+
+Generated 754487 lines of ISA code
+
+Compilation complete: 754487 ISA lines, 5 layers, output at VRAM row 6976
+================================================================================
+Model Compiler - llama (5 layers)
+  decoder: hidden=384, inter=1408, heads=6/2, head_dim=64
+  compile: batch_size=1, seq_len=64, mlen=64, blen=4, mram_tile_capacity=4, total_q_dim=384
+================================================================================
+
+Extracting weights from layers 0..4...
+attn_scale: 0.125000
+
+Computing CPU golden reference (float32 weights + float32 intermediates, backend=scheduled)
+  golden_out: torch.Size([64, 384])
+
+Computing HF reference (float32, 5 layers, no quantization)
+  hf_ground_truth: torch.Size([64, 384])
+
+--- PLENA Backend (ISA generation) ---
+
+Generated 754487 lines of ISA code
+
+Compilation complete: 754487 ISA lines, 5 layers, output at VRAM row 6976
+{
+  "hardware": {
+    "allclose": 34.40755307674408,
+    "mse": 0.000972442387137562
+  },
+  "no_weight_quant": {
+    "allclose": 89.77457880973816,
+    "mse": 4.140784221817739e-05
+  },
+  "no_bf16": {
+    "allclose": 34.63948667049408,
+    "mse": 0.0009313133195973933
+  },
+  "fp32": {
+    "allclose": 100.0,
+    "mse": 2.48856633078276e-08
+  }
+}
