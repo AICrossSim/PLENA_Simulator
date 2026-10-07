@@ -27,9 +27,11 @@ def test_all_ten_readers_render_with_explicit_temporary_fixture_tables(tmp_path)
     for mode in p.MODES:
         js(f'E3/bnb_{mode}_A.json',dict(families={f:dict(declared_lattice_points=1000) for f in p.FAMILIES},certificate=[dict(family=f,status='lower_bound_pruned',depth=2,lattice_points=100) for f in p.FAMILIES],leaves=[dict(family=f,geomean_ms=.9) for f in p.FAMILIES]))
         js(f'E3/seed_points_{mode}.json',[dict(family=f,geomean_ms=1) for f in p.FAMILIES])
+        history=results/f'E3/seed_points_{mode}_partial.jsonl'
+        history.write_text(''.join(json.dumps(dict(family=f,geomean_ms=1))+'\n' for f in p.FAMILIES))
     write('E3/workload_map.csv',[dict(E=64,topk=6,F=1408,shared_units=2,bw_or_mac_scale=bw,batch=b,concentration=c,delta_vs_single_pct=-c,proof_complete=False) for bw,b,c in itertools.product((126.030769,252.061538,504.123077),(2,4,8,16,32,64,128,256),range(5))])
     write('E3/synthetic_calibration.csv',[dict(window_id=f'fixtureB{b}',batch=b,concentration_level=2,me_hist_KL_real_to_synthetic=.1) for b in p.BATCHES])
-    params=('tile_issue_cycles','bank_Bpc','dotstagecycles','credits','vector_scale')
+    params=('weight_tile_service_cycles','bank_Bpc','dotstagecycles','credits','vector_scale')
     write('E3/sobol.csv',[dict(param=k,S1=.1,ST=.2,S1_ci=.01,ST_ci=.02,all_searches_certified=False) for k in params])
     write('E3/flip_samples.csv',[dict(param=k,value=x,delta=.1-.1*x,proof_complete=False) for k,x in itertools.product(params,(0,1,2))])
     write('E3/flip_boundary.csv',[dict(param=k,value=1) for k in params])

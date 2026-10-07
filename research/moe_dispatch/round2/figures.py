@@ -112,7 +112,17 @@ class Figures:
     def bnb_coverage(self):
         fig,axes=plt.subplots(3,2,figsize=(12,10))
         for k,mode in enumerate(MODES):
-            obj=self.js(f'E3/bnb_{mode}_A.json');cert=obj['certificate'];seeds=self.js(f'E3/seed_points_{mode}.json')
+            obj=self.js(f'E3/bnb_{mode}_A.json');cert=obj['certificate']
+            history=self.root/'results/E3'/f'seed_points_{mode}_partial.jsonl'
+            if not history.exists():
+                raise FileNotFoundError('Actual completed seed history missing: '+str(history))
+            self.inputs[str(history)]=hashlib.sha256(history.read_bytes()).hexdigest()
+            expected_hash=obj.get('resume',{}).get('engine_sha256')
+            seeds=[json.loads(line) for line in history.read_text().splitlines() if line.strip()]
+            seeds=[r for r in seeds if r.get('engine_sha256')==expected_hash]
+            extra=self.root/'results/E3'/f'bnb_{mode}_B.json'
+            leaves=list(obj['leaves'])
+            if extra.exists():leaves+=self.js(f'E3/bnb_{mode}_B.json')['leaves']
             for j,family in enumerate(FAMILIES):
                 per=defaultdict(int);total=obj['families'][family]['declared_lattice_points']
                 for r in cert:
@@ -120,13 +130,13 @@ class Figures:
                 depths=sorted(per);vals=np.cumsum([per[d] for d in depths])/total*100 if depths else []
                 axes[k,0].step(depths,vals,where='post',color=COLORS[j],label=family)
                 points=[number(r['geomean_ms']) for r in seeds if r.get('family')==family and 'invalid' not in r]
-                points += [number(r['geomean_ms']) for r in obj['leaves'] if r.get('family')==family and r.get('geomean_ms') is not None]
+                points += [number(r['geomean_ms']) for r in leaves if r.get('family')==family and r.get('geomean_ms') is not None]
                 if points:axes[k,1].plot(np.arange(1,len(points)+1),np.minimum.accumulate(points),color=COLORS[j],label=family)
             for ax in axes[k]:ax.set_title(self.title(mode));ax.grid(alpha=.2)
             axes[k,0].set_ylabel('Declared lattice pruned by bounds (%)');axes[k,0].set_xlabel('Region depth');axes[k,0].set_ylim(0,100)
-            axes[k,1].set_ylabel('Best recorded concrete score (ms)');axes[k,1].set_xlabel('Recorded seed / leaf evaluation order');axes[k,1].set_yscale('log')
+            axes[k,1].set_ylabel('Incumbent concrete score (ms)');axes[k,1].set_xlabel('Completed evaluations: seeds, proof A, proof B');axes[k,1].set_yscale('log')
         axes[0,0].legend();axes[0,1].legend()
-        self.save(fig,'fig_bnb_coverage','Proof-A traversal (delta = 5%). Pruned lattice coverage is not geometry sampling coverage. Right: best among recorded seeds and evaluated leaves, not a timestamped incumbent history; open regions remain unless explicitly certified.')
+        self.save(fig,'fig_bnb_coverage','Left: proof-A bound-pruned lattice by region depth. Right: incumbent history from actual seed completion log then A/B leaf evaluation order, separately for each family; open regions remain unless certified.')
 
     def workload_map(self):
         rows=self.csv('E3/workload_map.csv');cal=self.csv('E3/synthetic_calibration.csv')

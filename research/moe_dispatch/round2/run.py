@@ -6,7 +6,7 @@ from dataclasses import replace,asdict
 from concurrent.futures import ProcessPoolExecutor
 from .common import *
 from .predictors import Predictor
-from .model import shape_oracle
+from .model import shape_oracle, _task_cached
 from .optimizer import solve_assignment,evaluate_design
 
 COMMAND='/tmp/plena-round2-venv/bin/python -m research.moe_dispatch.round2.run'
@@ -83,7 +83,10 @@ def e2micro(args):
        for typ,f in (('routed',1408),('Shared',2816)):
         for m in (1,2,3,4,6,8,12,16,32,64,128):
          for mode in MODES:
-            p=Parameters(onchip_mode=mode);a=micro_cost(shape,m,f=f,flow=flow,params=p)
+            p=Parameters(onchip_mode=mode)
+            _task_cached.cache_clear()
+            a=micro_cost(shape,m,f=f,flow=flow,params=p)
+            _task_cached.cache_clear()
             b=micro_cost(shape,m,f=f,flow=flow,params=p);assert a==b
             rows.append({'shape':f'{shape.pm}x{shape.pn}x{shape.pk}','dataflow':flow,'expert_type':typ,
                 'Me':m,'onchip_mode':mode,'cycles':a.isolated_cycles,'issues':a.issues,

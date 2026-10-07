@@ -86,7 +86,7 @@ def bounds(w,d,p,result=None):
             co.w_sram_bytes/p.w_bandwidth(d,c),co.x_sram_bytes/(d.x_banks[c]*p.bank_Bpc),
             co.acc_sram_bytes/(d.acc_banks[c]*p.bank_Bpc),co.vector_elements/(d.vector_lanes[c]*p.vector_scale)) for c,co in cs)
     task=max((fastest(cs) for cs in allcost),default=0)
-    fs={'hbm_floor_unique':unique,'hbm_floor_actual':actual,'mac_floor':useful_macs(w)*p.issue_interval/d.total_macs,
+    fs={'hbm_floor_unique':unique,'hbm_floor_actual':actual,'mac_floor':useful_macs(w)/d.total_macs,
         'port_floor':port,'task_floor':task}
     term=max(fs,key=fs.get);bound=fs[term]
     if result and bound>result['cycles']+1e-5:raise AssertionError(('bound invalid',w['id'],d.geometry,term,bound,result['cycles']))

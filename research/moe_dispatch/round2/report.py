@@ -438,6 +438,8 @@ def delivery_status(e, args):
     seen_dispatch = {(r.get("design"), r.get("onchip_mode"), "threshold_fallback" if r.get("policy", "").startswith("threshold_fallback_") else r.get("policy"), r.get("batch")) for r in dispatch}
     if seen_dispatch != {(name, mode, p, str(batch)) for name in ("best_hetero", "fixed_4+2") for mode in MODES for p in policies for batch in (*BATCHES, "all")}:
         partial("7", "分派策略组合键不等于要求全集")
+    if predictor and any(r.get('predictor') == 'oracle' and 'profile-guided' in r.get('oracle_caveat', '') for r in predictor):
+        partial("7", "oracle 是同政策 profile/replay 参考，归属或预取动作可能改变；尚非任务书要求的同一实际调度真实时长 oracle")
     checks["8"]["completed_scope"] = {"moe_rows": len(e.rows("results/E6/moe_layer_e2e.csv")), "model_rows": len(model),
                                          "model_token_timing_rows_available": sum(number(r.get("token_ms")) is not None for r in model)}
     if not model or any(number(r.get("token_ms")) is None for r in model):
