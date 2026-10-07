@@ -1,6 +1,7 @@
 """Assignment relaxation and regional-bound legality checks."""
 import importlib.util
 import itertools
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 import random
@@ -158,6 +159,33 @@ def test_down_keeps_exact_integer_coefficients_and_floors_exact_binary_ratio():
         k=o._down(value,quantum)
         v=Fraction.from_float(value);q=Fraction.from_float(quantum)
         assert k*q<=v<(k+1)*q
+
+
+def test_solver_work_is_canonical_and_conservative_without_physical_rounding():
+    # Actual captured repeated-query diagnostics differed only at their
+    # native floating summation ULP; all physical result fields matched.
+    pair=(7.99561000000003e-05,7.995610000000028e-05)
+    assert o._work_upper(pair[0])==o._work_upper(pair[1])
+    rng=random.Random(92701)
+    values=[0.,*pair,1e-20,.1,9.999999999995e-4,1.00000000000001e-4]+[
+        rng.random()*10**rng.randint(-20,4) for _ in range(1000)]
+    for raw in values:
+        assert o._work_upper(raw)>=Decimal.from_float(raw)
+    assert o._down(25088.,1e-6)==25088000000
+    with pytest.raises(ValueError):o._work_upper(-1.)
+    with pytest.raises(ValueError):o._work_upper(float("nan"))
+
+
+def test_full_development_pass_repeats_complete_solver_and_replay_objects():
+    from research.moe_dispatch.round2.common import inputs
+    ww=inputs()["development"]
+    dd=o.Design((o.Core(1,6,1024),o.Core(1,6,1024)),flows=("OS","WS"))
+    pp=o.Parameters()
+    # Match the main driver's actual order: finish every window before the
+    # second pass, rather than repeat consecutive isolated solver calls.
+    first=[o.evaluate_design(x,dd,pp,detail=False) for x in ww]
+    second=[o.evaluate_design(x,dd,pp,detail=False) for x in ww]
+    assert first==second
 
 
 def test_work_limited_assignment_repeat_and_budget_are_explicit():

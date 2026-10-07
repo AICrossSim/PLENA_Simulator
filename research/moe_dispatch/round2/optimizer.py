@@ -9,7 +9,9 @@ remains a conservative continuous-time lower bound.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from functools import lru_cache
+import logging
 import math
 from typing import Iterable
 
@@ -44,6 +46,23 @@ def _down(value: float, quantum: float) -> int:
     vn,vd=float(value).as_integer_ratio()
     qn,qd=float(quantum).as_integer_ratio()
     return max(0,(vn*qd)//(vd*qn))
+
+
+def _work_upper(value: float) -> Decimal:
+    """Canonical conservative accounting for native solver work diagnostics.
+
+    CP-SAT occasionally reports the same work with floating summation noise
+    at its final binary ULP. Round to twelve decimal significant digits and
+    add one reporting unit, which upper-bounds the native value. These units
+    govern only the solver effort ledger; physical service coefficients,
+    integer objectives, and the time quantum retain their full precision.
+    """
+    if not math.isfinite(value) or value < 0:
+        raise ValueError("native deterministic work must be finite and nonnegative")
+    if value == 0:
+        return Decimal(0)
+    rounded = Decimal(format(value, ".12g"))
+    return rounded + Decimal(1).scaleb(rounded.adjusted() - 11)
 
 
 def _group_tasks(workload: dict,table):
@@ -231,10 +250,10 @@ def _solve_fixed_t(w,d,p,quantum=1e-6,queries=64,total_work=.1, *, table=None, g
     for kind in ('compute','W','X','acc','vector'):
         total=sum(min(v.get((kind,c),0) for c,v in enumerate(row) if v is not None) for row in coeffs)
         lows.append((total+len(d.cores)-1)//len(d.cores))
-    lower=max(lows);trace=[];spent=0.0
+    lower=max(lows);trace=[];spent=Decimal(0);work_budget=Decimal(str(total_work))
     assert lower<=upper
     for qi in range(queries):
-        if lower==upper or spent>=total_work:break
+        if lower==upper or spent>=work_budget:break
         target=(lower+upper)//2;model=cp_model.CpModel();ns={};resources={}
         for g,(_,ids) in enumerate(groups):
             count=len(ids);i=ids[0];choices=[]
@@ -246,9 +265,10 @@ def _solve_fixed_t(w,d,p,quantum=1e-6,queries=64,total_work=.1, *, table=None, g
                 model.AddHint(var,sum(owner[j]==c for j in ids))
             model.Add(sum(choices)==count)
         for r,terms in resources.items():model.Add(sum(terms)+(constant if r=='hbm' else 0)<=target)
-        solver=cp_model.CpSolver();solver.parameters.num_search_workers=1;solver.parameters.random_seed=20261007;solver.parameters.linearization_level=2;solver.parameters.use_sat_inprocessing=False;solver.parameters.cp_model_presolve=True;solver.parameters.stop_after_first_solution=True;solver.parameters.max_deterministic_time=min(total_work/16,max(1e-12,total_work-spent))
-        status=solver.Solve(model);s=solver.StatusName(status);used=solver.ResponseProto().deterministic_time;spent+=used
-        row={'target':target,'status':('SAT' if status in (cp_model.OPTIMAL,cp_model.FEASIBLE) else 'UNSAT' if status==cp_model.INFEASIBLE else s),'cp_status':s,'lower_before':lower,'upper_before':upper,'deterministic_work':used}
+        solver=cp_model.CpSolver();solver.parameters.num_search_workers=1;solver.parameters.random_seed=20261007;solver.parameters.linearization_level=2;solver.parameters.use_sat_inprocessing=False;solver.parameters.cp_model_presolve=True;solver.parameters.stop_after_first_solution=True;solver.parameters.max_deterministic_time=float(min(work_budget/16,max(Decimal("1e-12"),work_budget-spent)))
+        status=solver.Solve(model);s=solver.StatusName(status);raw_used=solver.ResponseProto().deterministic_time;used=_work_upper(raw_used);spent+=used
+        logging.getLogger(__name__).debug("fixed-T query %s native deterministic work=%r canonical upper=%s", qi, raw_used, used)
+        row={'target':target,'status':('SAT' if status in (cp_model.OPTIMAL,cp_model.FEASIBLE) else 'UNSAT' if status==cp_model.INFEASIBLE else s),'cp_status':s,'lower_before':lower,'upper_before':upper,'deterministic_work':float(used)}
         if status in (cp_model.OPTIMAL,cp_model.FEASIBLE):
             witness=[None]*len(table)
             for g,(_,ids) in enumerate(groups):
@@ -263,7 +283,7 @@ def _solve_fixed_t(w,d,p,quantum=1e-6,queries=64,total_work=.1, *, table=None, g
         else:
             row.update(lower_after=lower,upper_after=upper);trace.append(row);break
         row.update(lower_after=lower,upper_after=upper);trace.append(row)
-    return {'owners':owner,'lower_ticks':lower,'upper_ticks':upper,'optimal':lower==upper,'status':'OPTIMAL' if lower==upper else 'FEASIBLE','trace':trace,'quantum':quantum,'total_work':total_work,'actual_deterministic_work':spent}
+    return {'owners':owner,'lower_ticks':lower,'upper_ticks':upper,'optimal':lower==upper,'status':'OPTIMAL' if lower==upper else 'FEASIBLE','trace':trace,'quantum':quantum,'total_work':total_work,'actual_deterministic_work':float(spent)}
 
 
 def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters(),
@@ -328,6 +348,7 @@ def solve_assignment(workload: dict,design: Design,params: Parameters=Parameters
             "query_policy":"at most64 fixed-T satisfaction queries; SATtightensUB, UNSATraisesLB; UNKNOWNkeepsopen",
             "query_limit":64,"per_query_work_max":deterministic_limit/16,
             "use_sat_inprocessing":False,"stop_after_first_solution":True,
+            "work_accounting":"conservative Decimal:12 significant digits plus one reporting unit; physical quantities unchanged",
             "actual_deterministic_work":bracket["actual_deterministic_work"]}
     return {"lb_cycles":bound,"owners":bracket["owners"],"status":bracket["status"],"quantum":quantum,
             "objective_upper_cycles":objective,"optimal":bracket["optimal"],
