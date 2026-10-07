@@ -577,6 +577,8 @@ def compare_emulator_output(build_dir: Path) -> tuple:
     Returns:
         (results dict, params dict)
     """
+    from verification.check_mem import compare_vram_with_golden
+
     # Prefer build-dir copy (isolated), fall back to global emulator output.
     vram_file = build_dir / "vram_dump.bin"
     if not vram_file.exists():
@@ -665,6 +667,8 @@ def run_and_assert(
         )
 
     print("\n--- Comparing emulator output vs golden ---")
+    from verification.check_mem import print_comparison_results
+
     results, params = compare_emulator_output(build_dir)
     print_comparison_results(results, verbose=True, comparison_params=params)
 

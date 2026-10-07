@@ -1756,4 +1756,21 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_decode_compiler_v_topk_fixtures() {
+        // Exact words emitted by PLENA_Compiler for
+        // V_TOPK gp1, gp2, gp3, policy={0,1}.
+        for (word, expected_policy) in [(0x0000_C877, 0), (0x0004_C877, 1)] {
+            match Opcode::decode(word) {
+                Opcode::V_TOPK {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, expected_policy)),
+                other => panic!("expected V_TOPK, got {other:?}"),
+            }
+        }
+    }
 }
