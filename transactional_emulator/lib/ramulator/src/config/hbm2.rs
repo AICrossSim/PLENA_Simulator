@@ -124,6 +124,20 @@ const _: () = {
 pub struct HBM2 {
     pub timing: HBM2Timing,
     pub org: HBM2Org,
+    pub diagnostic: HbmDiagnostic,
+}
+
+/// Counterfactual service constraints, not JEDEC speed bins or new HBM devices.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HbmDiagnostic {
+    #[default]
+    Native,
+    ColumnX2,
+    ReturnLatencyX2,
+    ColumnAndReturnX2,
+    AllTimingX2,
+    ClockX2,
 }
 
 impl serde::Serialize for HBM2 {
@@ -258,7 +272,7 @@ impl HBM2 {
             [BANK, [PRE_PB], [REF_PB], n_rp],
         ]);
 
-        serde_json::json!({
+        let mut resolved = serde_json::json!({
             "channel_width": 64,
             "org": {
                 "dq": self.org.dq,
@@ -267,6 +281,98 @@ impl HBM2 {
             "timing": timing_params,
             "read_latency": n_cl + n_bl,
             "timing_constraints": timing_constraints,
+        });
+        self.diagnostic.apply(&mut resolved);
+        resolved
+    }
+}
+
+impl HbmDiagnostic {
+    fn apply(self, resolved: &mut serde_json::Value) {
+        if self == Self::ClockX2 {
+            // Scale only the memory domain: core clock and DMA ingress stay fixed.
+            resolved["timing"][23] = (resolved["timing"][23].as_f64().unwrap() / 2.0).into();
+            return;
+        }
+        let column = matches!(self, Self::ColumnX2 | Self::ColumnAndReturnX2);
+        let all = self == Self::AllTimingX2;
+        if column || all {
+            for constraint in resolved["timing_constraints"].as_array_mut().unwrap() {
+                let reads = constraint[1] == serde_json::json!([3, 5])
+                    && constraint[2] == serde_json::json!([3, 5]);
+                let writes = constraint[1] == serde_json::json!([4, 6])
+                    && constraint[2] == serde_json::json!([4, 6]);
+                if all || reads || writes {
+                    constraint[3] = constraint[3].as_u64().unwrap().div_ceil(2).into();
+                }
+            }
+            let timings = resolved["timing"].as_array_mut().unwrap();
+            for (index, value) in timings.iter_mut().enumerate() {
+                // Preserve rate label, refresh intervals and physical tick.
+                if (all && (1..=20).contains(&index)) || (column && [1, 11, 12].contains(&index)) {
+                    *value = value.as_u64().unwrap().div_ceil(2).into();
+                }
+            }
+        }
+        if matches!(
+            self,
+            Self::ReturnLatencyX2 | Self::ColumnAndReturnX2 | Self::AllTimingX2
+        ) {
+            resolved["read_latency"] = resolved["read_latency"]
+                .as_u64()
+                .unwrap()
+                .div_ceil(2)
+                .into();
+        }
+        // Column profiles preserve read-command-to-return latency explicitly.
+        // Geometry, prefetch payload, tCK, mapping, queues and frontend are fixed.
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    fn config(profile: HbmDiagnostic) -> serde_json::Value {
+        serde_json::to_value(HBM2 {
+            timing: HBM2Timing::HBM2_2000MBPS,
+            org: HBM2Org::HBM2_8GB,
+            diagnostic: profile,
         })
+        .unwrap()
+    }
+
+    #[test]
+    fn column_service_does_not_change_geometry_clock_or_return_latency() {
+        let base = config(HbmDiagnostic::Native);
+        let fast = config(HbmDiagnostic::ColumnX2);
+        assert_eq!(base["org"], fast["org"]);
+        assert_eq!(base["channel_width"], fast["channel_width"]);
+        assert_eq!(base["timing"][23], fast["timing"][23]);
+        assert_eq!(base["read_latency"], fast["read_latency"]);
+        assert_eq!(fast["timing_constraints"][0][3], 1);
+        assert_eq!(base["timing"][3], fast["timing"][3]);
+    }
+
+    #[test]
+    fn return_latency_profile_changes_only_return_delay() {
+        let mut base = config(HbmDiagnostic::Native);
+        let fast = config(HbmDiagnostic::ReturnLatencyX2);
+        assert_eq!(base["read_latency"], 16);
+        base["read_latency"] = 8.into();
+        assert_eq!(base, fast);
+    }
+
+    #[test]
+    fn combined_profile_composes_and_all_timing_preserves_refresh_interval() {
+        let mut column = config(HbmDiagnostic::ColumnX2);
+        column["read_latency"] = 8.into();
+        assert_eq!(column, config(HbmDiagnostic::ColumnAndReturnX2));
+        let all = config(HbmDiagnostic::AllTimingX2);
+        assert_eq!(all["timing"][3], 7);
+        assert_eq!(
+            all["timing"][21],
+            config(HbmDiagnostic::Native)["timing"][21]
+        );
     }
 }

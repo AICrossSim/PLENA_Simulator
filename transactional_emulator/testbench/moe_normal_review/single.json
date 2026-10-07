@@ -1,0 +1,37 @@
+{
+  "clock_period_ps": 1000,
+  "combine_sram_bytes": 4194304,
+  "cores": [
+    {
+      "accumulator_bytes": 1048576,
+      "activation_elements_per_cycle": 1024,
+      "blen": 8,
+      "id": "core0",
+      "mlen": 512,
+      "read_cache_bytes": 0,
+      "vector_sram_bytes": 4194304,
+      "weight_slots": 4,
+      "weight_sram_bytes": 65536
+    }
+  ],
+  "dispatch_cycles": 1,
+  "dispatch_policy": "work_conserving",
+  "dispatch_queue_bytes": 16384,
+  "dispatch_threshold": 8,
+  "dma": {
+    "coalesce": true,
+    "fair_credits": false,
+    "frontend_sram_bytes": 45056,
+    "issue_policy": "per_channel",
+    "lookup_ii_cycles": 2,
+    "sector_reads": true
+  },
+  "global_dma_credits": 128,
+  "global_dma_staging_bytes": 8192,
+  "large_core": 0,
+  "mac_pipeline_cycles": 16,
+  "name": "p0034",
+  "schema_version": 1,
+  "small_core": 0,
+  "vector_elements_per_cycle": 512
+}
