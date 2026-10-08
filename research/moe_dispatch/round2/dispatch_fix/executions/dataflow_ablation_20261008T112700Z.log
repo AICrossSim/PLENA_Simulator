@@ -1,0 +1,21 @@
+{'done': ['pipelined', 'B1', ['OS']], 'windows': 135, 'geomean_ms': 6.005997600757293}
+{'done': ['pipelined', 'B1', ['WS']], 'windows': 135, 'geomean_ms': 3.795787520978372}
+{'done': ['pipelined', 'B2', ['OS', 'OS']], 'windows': 135, 'geomean_ms': 7.036856886089587}
+{'done': ['pipelined', 'B2', ['OS', 'WS']], 'windows': 135, 'geomean_ms': 3.9919360584431374}
+{'done': ['pipelined', 'B2', ['WS', 'OS']], 'windows': 135, 'geomean_ms': 3.9919360584431374}
+{'done': ['pipelined', 'B2', ['WS', 'WS']], 'windows': 135, 'geomean_ms': 3.8137955444185443}
+{'done': ['pipelined', 'best_hetero', ['OS', 'OS']], 'windows': 135, 'geomean_ms': 8.17488662731237}
+{'done': ['pipelined', 'best_hetero', ['OS', 'WS']], 'windows': 135, 'geomean_ms': 3.868235639402246}
+{'done': ['pipelined', 'best_hetero', ['WS', 'OS']], 'windows': 135, 'geomean_ms': 5.001173214653436}
+{'done': ['pipelined', 'best_hetero', ['WS', 'WS']], 'windows': 135, 'geomean_ms': 3.8235850707198935}
+{'done': ['port_tight', 'B1', ['OS']], 'windows': 135, 'geomean_ms': 16.847199211351548}
+{'done': ['port_tight', 'B1', ['WS']], 'windows': 135, 'geomean_ms': 10.611953423289952}
+{'done': ['port_tight', 'B2', ['OS', 'OS']], 'windows': 135, 'geomean_ms': 17.12127080458766}
+{'done': ['port_tight', 'B2', ['OS', 'WS']], 'windows': 135, 'geomean_ms': 11.959367313548139}
+{'done': ['port_tight', 'B2', ['WS', 'OS']], 'windows': 135, 'geomean_ms': 11.959367313548139}
+{'done': ['port_tight', 'B2', ['WS', 'WS']], 'windows': 135, 'geomean_ms': 10.895904377402521}
+{'done': ['port_tight', 'best_hetero', ['OS', 'OS']], 'windows': 135, 'geomean_ms': 23.287946989415047}
+{'done': ['port_tight', 'best_hetero', ['OS', 'WS']], 'windows': 135, 'geomean_ms': 13.101050021923147}
+{'done': ['port_tight', 'best_hetero', ['WS', 'OS']], 'windows': 135, 'geomean_ms': 14.744574614573642}
+{'done': ['port_tight', 'best_hetero', ['WS', 'WS']], 'windows': 135, 'geomean_ms': 10.917479818173122}
+{'completed': 20, 'rows': 2700, 'elapsed_seconds': 104.34417340531945}

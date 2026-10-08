@@ -1,0 +1,1772 @@
+{
+  "checks": 432,
+  "checks_detail": [
+    {
+      "name": "135 heldout IDs and seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "2700 unique window rows",
+      "passed": true
+    },
+    {
+      "name": "160 unique aggregate rows",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS') canonical heldout order",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS') hardware frozen except flow",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS') parameter freeze",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS') two fresh state full repeats",
+      "passed": true
+    },
+    {
+      "name": "Every row full result repeat digest exact",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'OS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'WS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'OS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'WS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'OS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'WS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'OS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/OS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '2') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '2') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '4') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '4') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '8') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '8') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '16') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '16') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '64') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '64') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '96') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '96') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '128') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', '128') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', 'all') batch count",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'WS/WS', 'all') aggregates independently recomputed",
+      "passed": true
+    },
+    {
+      "name": "810 original-flow result digests exact",
+      "passed": true
+    },
+    {
+      "name": "810 baseline reproduction CSV checks",
+      "passed": true
+    },
+    {
+      "name": "Per-window cycles/ms units and useful MACs",
+      "passed": true
+    },
+    {
+      "name": "Per-window positive finite latency, traffic, MAC slot conservation",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash common.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash dispatch_fix/dataflow_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash dispatch_fix/frozen_designs.json",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash dispatch_fix/run.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash dispatch_fix/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash dispatch_fix/selection.json",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash model.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash optimizer.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash predictors.py",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash results/E0/frozen_inputs.json",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash results/E3/FROZEN_SELECTION.json",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash results/E4/heldout_main_table.csv",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash results/E4/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Frozen/executed source hash run.py",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash TABLES_ZH.md",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash baseline_reproduction.csv",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash compare.csv",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "Delivered artifact hash run.py",
+      "passed": true
+    },
+    {
+      "name": "Actual execution return code zero",
+      "passed": true
+    },
+    {
+      "name": "Dispatch common frozen parameters",
+      "passed": true
+    },
+    {
+      "name": "20points 6120simulations accounting",
+      "passed": true
+    }
+  ],
+  "failed": [],
+  "heldout_counts": {
+    "2": 27,
+    "4": 27,
+    "8": 27,
+    "16": 27,
+    "64": 9,
+    "96": 9,
+    "128": 9
+  },
+  "key_results": [
+    {
+      "B1_WS_ms": 3.795787520978372,
+      "B2_WS_WS_ms": 3.8137955444185443,
+      "hetero_WS_WS_ms": 3.8235850707198935,
+      "hetero_over_B1": 1.0073232628506974,
+      "hetero_over_B2_WS_WS": 1.0025668723420886,
+      "mode": "pipelined"
+    },
+    {
+      "B1_WS_ms": 10.611953423289952,
+      "B2_WS_WS_ms": 10.895904377402521,
+      "hetero_WS_WS_ms": 10.917479818173122,
+      "hetero_over_B1": 1.0287907779742638,
+      "hetero_over_B2_WS_WS": 1.0019801422647712,
+      "mode": "port_tight"
+    }
+  ],
+  "passed": 432,
+  "scope": "Independent read-only output, frozen-source, input and aggregation audit; no numerical simulator rerun or native timing calibration",
+  "source_sha256": {
+    "METADATA.json": "9e97d7ba8bb88e4b572a9272fc8211ea8ab9e155100ca513dc80c838f20a8fdc",
+    "PROVENANCE.csv": "9236660b96779bc5fe325cf9864e40f2c1d360066c5872d2f43cff66d06ce7b5",
+    "baseline_reproduction.csv": "16fa96071ada348f7b3417bf940f9f7e981941ce440890601a896dcf1e28ca75",
+    "compare.csv": "c9a2de639519063268fb42180a58e11e64fc26063eac3ca49c603e5e08239dab",
+    "per_window.csv": "91a9013c483bcf6c3f5b064be3b3f94b990d48aceb1acc2c3d7385fd5d7d294b",
+    "repeat_checks.json": "ad4d9828352b702fb1a988bfdb68d5397a0abaade4b5f7e088ebb0e7ec57d741",
+    "run.py": "bfc0fd60645e8da1d325c2b97c775847b26ccbd32b499dba54c7da6ec6d63fed"
+  }
+}
