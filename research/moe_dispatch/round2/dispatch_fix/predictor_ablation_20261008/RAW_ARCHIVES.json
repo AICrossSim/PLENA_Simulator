@@ -1,0 +1,29 @@
+[
+  {
+    "raw_file": "task_predictions.csv",
+    "raw_sha256": "e9c362f776bd9d5666dd957dfaf88ff5c18162df9b282c971a4af20db035ea57",
+    "raw_bytes": 32813343,
+    "archive_file": "task_predictions.csv.gz",
+    "archive_sha256": "1d4714ef4f457543b3a63c968b6cdb53079612c67a88530427bd18491c693634",
+    "archive_bytes": 7096546,
+    "decompression_exact": true
+  },
+  {
+    "raw_file": "nominal_control/task_predictions.csv",
+    "raw_sha256": "fe24dc44f13d30f759e248d314c0dcf0b1e14415b9491f5c5492fb76c1b53bf8",
+    "raw_bytes": 5444107,
+    "archive_file": "nominal_control/task_predictions.csv.gz",
+    "archive_sha256": "e9bc3fc59a7a6aa11df865ba6f0b108c5eb60557946517121088756c82598f5c",
+    "archive_bytes": 872436,
+    "decompression_exact": true
+  },
+  {
+    "raw_file": "nominal_control_attempt1/task_predictions.csv",
+    "raw_sha256": "bc8cc86557195edb9ed0e31cf0a7cb8b129da2fd56b9173850d2ffe0687020c2",
+    "raw_bytes": 5444648,
+    "archive_file": "nominal_control_attempt1/task_predictions.csv.gz",
+    "archive_sha256": "8a94c9613ddad883f85a6921a543a8fcbd210691cccccb0c55803cf242492ee4",
+    "archive_bytes": 872844,
+    "decompression_exact": true
+  }
+]

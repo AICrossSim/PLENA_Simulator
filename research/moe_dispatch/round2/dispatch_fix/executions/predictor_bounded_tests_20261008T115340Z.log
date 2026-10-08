@@ -1,0 +1,8 @@
+test_original_dispatcher_source_and_callable_unchanged (research.moe_dispatch.round2.dispatch_fix.predictor_ablation_20261008.test_bounded_runtime.BoundedTimerTests.test_original_dispatcher_source_and_callable_unchanged) ... ok
+test_random_prediction_storm_case_has_finite_pending_state (research.moe_dispatch.round2.dispatch_fix.predictor_ablation_20261008.test_bounded_runtime.BoundedTimerTests.test_random_prediction_storm_case_has_finite_pending_state) ... ok
+test_single_result_remains_byte_exact (research.moe_dispatch.round2.dispatch_fix.predictor_ablation_20261008.test_bounded_runtime.BoundedTimerTests.test_single_result_remains_byte_exact) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 13.896s
+
+OK

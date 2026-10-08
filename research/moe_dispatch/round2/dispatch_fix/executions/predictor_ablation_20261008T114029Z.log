@@ -1,0 +1,34 @@
+{'done': ('pipelined', 'B1', 'none'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.795787520978372}
+{'done': ('pipelined', 'B1', 'random'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.7958688847455657}
+{'done': ('pipelined', 'B1', 'static'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.7965890845855914}
+{'done': ('pipelined', 'B1', 'btb'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.7954069581549303}
+{'done': ('pipelined', 'B1', 'ema'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.7951784579435994}
+{'done': ('pipelined', 'B1', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.795094267210405}
+{'done': ('pipelined', 'B2', 'none'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.8137156573967976}
+{'done': ('pipelined', 'B2', 'random'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.813464951949201}
+{'done': ('pipelined', 'B2', 'static'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.81755021362125}
+{'done': ('pipelined', 'B2', 'btb'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.8122776528693474}
+{'done': ('pipelined', 'B2', 'ema'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.8123461175528974}
+{'done': ('pipelined', 'B2', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.8137955444185443}
+{'done': ('pipelined', 'best_hetero', 'none'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 3.8061942563508224}
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/dispatch_fix/predictor_ablation_20261008/run.py", line 163, in <module>
+    main()
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/dispatch_fix/predictor_ablation_20261008/run.py", line 118, in main
+    for spec, (rs, ts, receipt) in zip(specs, pool.map(job, specs)):
+  File "/usr/lib64/python3.11/concurrent/futures/process.py", line 620, in _chain_from_iterable_of_lists
+    for element in iterable:
+  File "/usr/lib64/python3.11/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/concurrent/futures/_base.py", line 456, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+concurrent.futures.process.BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.

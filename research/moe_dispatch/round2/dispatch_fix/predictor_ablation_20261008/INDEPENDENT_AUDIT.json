@@ -1,0 +1,3590 @@
+{
+  "anchor_full_digest_exact_count": 272,
+  "anchor_hbm_all_exact": true,
+  "anchor_max_absolute_cycle_delta": 1.4528632164001465e-07,
+  "archives_exact": true,
+  "artifact_sha256": {
+    "METADATA.json": "8c2a8f5a0b15b764daf67c497a451c6c5feb8b6ba1cf46bd61aaac942a4d18ce",
+    "RAW_ARCHIVES.json": "c6a2ad7374b9ea585f2e6c29999e890435cd0f31c6941805174aa40ea969dcaf",
+    "REPORT_CHECKS.json": "e343f7ed146b8ed5531caaecd56db17cd7b77ae48e8d620e98cfa94a97c519ed",
+    "REPORT_PROVENANCE.csv": "96f0308da5a05f2d45449a416eec26973589c0c7164f004cd015cfc3413ad1ad",
+    "TABLES_ZH.md": "7bfbe4b803daa2103b2d8d995892e34782309d5d81d386d9923e0c8afb355e05",
+    "baseline_reproduction.csv": "d55dbb7589d5b0a84c56c1e7d6540d8705410f0e31806babda48bdb2f1ee68de",
+    "bounded_runtime.py": "427725864e5d4818bf0e63f4971d3aad59d83e37e7ef593a1958f1cb411eded9",
+    "compare.csv": "d2579059ae967e273e87a21c05a3a94b2425279cae966199c8b17790ead09d0c",
+    "nominal_control.py": "45140876415d32dfc882f267d4cb6047c66c2ad0f0867e511822596e8326ff38",
+    "nominal_control/METADATA.json": "5ce6c2a3af728eeae747e19c3bed62995a568d25af269f5c053b4ce6705e8cca",
+    "nominal_control/per_window.csv": "0035247cbcead57f282e426005712107aa8ae423708896a1308acec030391959",
+    "nominal_control/repeat_checks.json": "7b5b1b076a16874629db200b3f07f9b02272e00bdc95f61adf69153143d3cb61",
+    "nominal_control/task_predictions.csv": "fe24dc44f13d30f759e248d314c0dcf0b1e14415b9491f5c5492fb76c1b53bf8",
+    "nominal_control/task_predictions.csv.gz": "e9bc3fc59a7a6aa11df865ba6f0b108c5eb60557946517121088756c82598f5c",
+    "nominal_control_attempt1/task_predictions.csv.gz": "8a94c9613ddad883f85a6921a543a8fcbd210691cccccb0c55803cf242492ee4",
+    "per_window.csv": "e66af86e10228127399c968ca09757a968ba82065e8c4c06d8229268d1409f9e",
+    "repeat_checks.json": "d2abb9efbe749048b7dbcd5140bc4c8738ee12cc0395c18912f811f835db0914",
+    "report.py": "5cd2c4dbb5c5ccf7d607e7104517e7cc9becc8d10d87707c36ee667288f3804f",
+    "run.py": "6190cc8e6f895e60a263bc34fb77a00097c017d61514f027824f547bbb7f9b57",
+    "task_predictions.csv": "e9c362f776bd9d5666dd957dfaf88ff5c18162df9b282c971a4af20db035ea57",
+    "task_predictions.csv.gz": "1d4714ef4f457543b3a63c968b6cdb53079612c67a88530427bd18491c693634"
+  },
+  "bootstrap_all_window_checks": 84,
+  "checks": 777,
+  "checks_detail": [
+    {
+      "name": "42 complete configuration groups, 5670 unique windows, 176988 task predictions",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') unchanged hardware except common WS",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') frozen params and T_big/large_first",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') exact fresh repeats",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') order and all seven batch counts",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') 135 full-result repeated hashes",
+      "passed": true
+    },
+    {
+      "name": "336 complete aggregate keys",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'none') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'nominal') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'random') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'static') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'btb') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ema') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B1', 'ours') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'none') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'nominal') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'random') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'static') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'btb') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ema') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'B2', 'ours') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'none') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'nominal') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'random') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'static') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'btb') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ema') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('pipelined', 'best_hetero', 'ours') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'none') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'nominal') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'random') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'static') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'btb') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ema') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B1', 'ours') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'none') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'nominal') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'random') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'static') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'btb') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ema') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'B2', 'ours') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'none') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'nominal') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'random') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'static') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'btb') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ema') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '2') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '4') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '8') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '16') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '64') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '96') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', '128') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours', 'all') independent window/task/ratio aggregates",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') none independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "('port_tight', 'best_hetero', 'ours') nominal independent 2000-bootstrap CI",
+      "passed": true
+    },
+    {
+      "name": "176988 task source addresses/core assignment exact",
+      "passed": true
+    },
+    {
+      "name": "176988 actual starts after binding and exact durations",
+      "passed": true
+    },
+    {
+      "name": "5670 HBM bytes equal independent frozen task-cost sum",
+      "passed": true
+    },
+    {
+      "name": "5670 bandwidth limits and cycles/ms conversion",
+      "passed": true
+    },
+    {
+      "name": "810 anchor CSV actual comparison exact",
+      "passed": true
+    },
+    {
+      "name": "810 anchors HBM exact and latency roundoff only",
+      "passed": true
+    },
+    {
+      "name": "270 single none anchors full result exact",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA common.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA dispatch_fix/dataflow_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA dispatch_fix/frozen_designs.json",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA dispatch_fix/predictor_ablation_20261008/bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA dispatch_fix/predictor_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA dispatch_fix/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA dispatch_fix/selection.json",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA model.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA optimizer.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA predictors.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA results/E0/frozen_inputs.json",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA results/E3/FROZEN_SELECTION.json",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA results/E4/heldout_main_table.csv",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA results/E4/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json current frozen/executed SHA run.py",
+      "passed": true
+    },
+    {
+      "name": "METADATA.json bounded patch exactly one guard addition",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA common.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA dispatch_fix/dataflow_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA dispatch_fix/predictor_ablation_20261008/bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA dispatch_fix/predictor_ablation_20261008/nominal_control.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA dispatch_fix/predictor_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA dispatch_fix/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA dispatch_fix/selection.json",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA model.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA optimizer.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA predictors.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA results/E0/frozen_inputs.json",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA results/E3/FROZEN_SELECTION.json",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA results/E4/heldout_main_table.csv",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA results/E4/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json current frozen/executed SHA run.py",
+      "passed": true
+    },
+    {
+      "name": "nominal_control/METADATA.json bounded patch exactly one guard addition",
+      "passed": true
+    },
+    {
+      "name": "actual receipt predictor_ablation_bounded_20261008T115137Z.json",
+      "passed": true
+    },
+    {
+      "name": "actual receipt predictor_nominal_bounded_20261008T115138Z.json",
+      "passed": true
+    },
+    {
+      "name": "actual receipt predictor_report_20261008T115407Z.json",
+      "passed": true
+    },
+    {
+      "name": "actual receipt predictor_bounded_tests_20261008T115340Z.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact .gitignore",
+      "passed": true
+    },
+    {
+      "name": "report artifact DIAGNOSTIC.md",
+      "passed": true
+    },
+    {
+      "name": "report artifact METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact RAW_ARCHIVES.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact REPORT_CHECKS.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact TABLES_ZH.md",
+      "passed": true
+    },
+    {
+      "name": "report artifact attempt1_nominal_control.py",
+      "passed": true
+    },
+    {
+      "name": "report artifact attempt1_run.py",
+      "passed": true
+    },
+    {
+      "name": "report artifact baseline_reproduction.csv",
+      "passed": true
+    },
+    {
+      "name": "report artifact bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "report artifact compare.csv",
+      "passed": true
+    },
+    {
+      "name": "report artifact nominal_control/METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact nominal_control/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "report artifact nominal_control/repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact nominal_control/task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "report artifact nominal_control.py",
+      "passed": true
+    },
+    {
+      "name": "report artifact per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "report artifact repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "report artifact report.py",
+      "passed": true
+    },
+    {
+      "name": "report artifact run.py",
+      "passed": true
+    },
+    {
+      "name": "report artifact task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "report artifact test_bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "failed attempt kept honest",
+      "passed": true
+    },
+    {
+      "name": "Final report numerical compare CSV byte-exact to original independent audit",
+      "passed": true
+    },
+    {
+      "name": "raw bytes unchanged since initial audit per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "raw bytes unchanged since initial audit nominal_control/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "raw bytes unchanged since initial audit task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "raw bytes unchanged since initial audit nominal_control/task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Exact archived compressed bytes task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Exact archive restoration task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Compressed CSV row count task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Exact archived compressed bytes nominal_control/task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Exact archive restoration nominal_control/task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Compressed CSV row count nominal_control/task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Exact archived compressed bytes nominal_control_attempt1/task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Exact archive restoration nominal_control_attempt1/task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Compressed CSV row count nominal_control_attempt1/task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA nominal_control/METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA nominal_control/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA nominal_control/repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA nominal_control/task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS raw SHA task_predictions.csv",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS archive SHA nominal_control/task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Final REPORT_CHECKS archive SHA task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Final report source SHA",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index .gitignore",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index DIAGNOSTIC.md",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index RAW_ARCHIVES.json",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index REPORT_CHECKS.json",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index TABLES_ZH.md",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index attempt1_nominal_control.py",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index attempt1_run.py",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index baseline_reproduction.csv",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index compare.csv",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index nominal_control/METADATA.json",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index nominal_control/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index nominal_control/repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index nominal_control/task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index nominal_control.py",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index repeat_checks.json",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index report.py",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index run.py",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index task_predictions.csv.gz",
+      "passed": true
+    },
+    {
+      "name": "Final report artifact index test_bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Report provenance excludes independent audit and outer index",
+      "passed": true
+    },
+    {
+      "name": "Final report successful actual execution and log SHA",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:common.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:dispatch_fix/dataflow_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:dispatch_fix/frozen_designs.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:dispatch_fix/predictor_ablation_20261008/bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:dispatch_fix/predictor_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:dispatch_fix/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:dispatch_fix/selection.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:model.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:optimizer.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:predictors.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:results/E0/frozen_inputs.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:results/E3/FROZEN_SELECTION.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:results/E4/heldout_main_table.csv",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:results/E4/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source METADATA.json:run.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:common.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:dispatch_fix/dataflow_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:dispatch_fix/predictor_ablation_20261008/bounded_runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:dispatch_fix/predictor_ablation_20261008/nominal_control.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:dispatch_fix/predictor_ablation_20261008/run.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:dispatch_fix/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:dispatch_fix/selection.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:model.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:optimizer.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:predictors.py",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:results/E0/frozen_inputs.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:results/E3/FROZEN_SELECTION.json",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:results/E4/heldout_main_table.csv",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:results/E4/per_window.csv",
+      "passed": true
+    },
+    {
+      "name": "Final unchanged numerical/source nominal_control/METADATA.json:run.py",
+      "passed": true
+    }
+  ],
+  "configuration_count": 42,
+  "failed": [],
+  "final_report_receipt": "dispatch_fix/executions/predictor_report_final_20261008T120053Z.json",
+  "final_report_receipt_sha256": "a93490f33e8f535ca2658b565547758fb8882bda9521d4cd7ebec8b8b28ccf94",
+  "final_report_refresh_utc": "2026-10-08T12:02:28.952451+00:00",
+  "key_results": [
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.795787520978372",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "pipelined",
+      "predictor": "none",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.06527219934863861"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.795787520978372",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "pipelined",
+      "predictor": "nominal",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.06527219934863873"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.7958688847455657",
+      "nominal_speedup_CI95_lower_pct": "-0.0029029656655732428",
+      "nominal_speedup_CI95_upper_pct": "-0.001417011852134499",
+      "onchip_mode": "pipelined",
+      "predictor": "random",
+      "speedup_vs_nominal_pct": "-0.00214352797001105",
+      "task_duration_mean_abs_pct": "51.75570207754397"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.7965890845855914",
+      "nominal_speedup_CI95_lower_pct": "-0.021479798217913793",
+      "nominal_speedup_CI95_upper_pct": "-0.02075991518967535",
+      "onchip_mode": "pipelined",
+      "predictor": "static",
+      "speedup_vs_nominal_pct": "-0.021117188535679787",
+      "task_duration_mean_abs_pct": "6.118455959045052"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.7954069581549303",
+      "nominal_speedup_CI95_lower_pct": "0.00935764077693274",
+      "nominal_speedup_CI95_upper_pct": "0.010678265894057681",
+      "onchip_mode": "pipelined",
+      "predictor": "btb",
+      "speedup_vs_nominal_pct": "0.010025925353795984",
+      "task_duration_mean_abs_pct": "0.43084862817331954"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.7951784579435994",
+      "nominal_speedup_CI95_lower_pct": "0.015274139849423274",
+      "nominal_speedup_CI95_upper_pct": "0.01677121982497226",
+      "onchip_mode": "pipelined",
+      "predictor": "ema",
+      "speedup_vs_nominal_pct": "0.01604576208247277",
+      "task_duration_mean_abs_pct": "0.3800942637074235"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "3.795094267210405",
+      "nominal_speedup_CI95_lower_pct": "0.01786075274456761",
+      "nominal_speedup_CI95_upper_pct": "0.018637863111962694",
+      "onchip_mode": "pipelined",
+      "predictor": "ours",
+      "speedup_vs_nominal_pct": "0.01826376645518435",
+      "task_duration_mean_abs_pct": "0.016979408843826784"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.8137156573967976",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "pipelined",
+      "predictor": "none",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "48.29772539740348"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.8137156573967976",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "pipelined",
+      "predictor": "nominal",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "48.29772539740348"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.8124458531007437",
+      "nominal_speedup_CI95_lower_pct": "0.013403314601834193",
+      "nominal_speedup_CI95_upper_pct": "0.059395161173917126",
+      "onchip_mode": "pipelined",
+      "predictor": "random",
+      "speedup_vs_nominal_pct": "0.03329572548468329",
+      "task_duration_mean_abs_pct": "53.61555681361282"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.81755021362125",
+      "nominal_speedup_CI95_lower_pct": "-0.22437965135562177",
+      "nominal_speedup_CI95_upper_pct": "0.007486132151581434",
+      "onchip_mode": "pipelined",
+      "predictor": "static",
+      "speedup_vs_nominal_pct": "-0.10054646357848807",
+      "task_duration_mean_abs_pct": "7.668872821929386"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.812246174367478",
+      "nominal_speedup_CI95_lower_pct": "0.016830418108436662",
+      "nominal_speedup_CI95_upper_pct": "0.06816528682901778",
+      "onchip_mode": "pipelined",
+      "predictor": "btb",
+      "speedup_vs_nominal_pct": "0.03853153096166073",
+      "task_duration_mean_abs_pct": "2.902232799661126"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.8123461175528965",
+      "nominal_speedup_CI95_lower_pct": "0.015592721722589298",
+      "nominal_speedup_CI95_upper_pct": "0.06704369518709008",
+      "onchip_mode": "pipelined",
+      "predictor": "ema",
+      "speedup_vs_nominal_pct": "0.03591090597548918",
+      "task_duration_mean_abs_pct": "2.5349063263055394"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "3.8137955444185443",
+      "nominal_speedup_CI95_lower_pct": "-0.005243794540973901",
+      "nominal_speedup_CI95_upper_pct": "6.646788497627106e-05",
+      "onchip_mode": "pipelined",
+      "predictor": "ours",
+      "speedup_vs_nominal_pct": "-0.0020947293643214238",
+      "task_duration_mean_abs_pct": "2.7712808263908166"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "3.8061942563508224",
+      "nominal_speedup_CI95_lower_pct": "-2.220446049250313e-14",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "pipelined",
+      "predictor": "none",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "47.73121016318009"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "3.8061942563508224",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "pipelined",
+      "predictor": "nominal",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "47.73121016318009"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "4.04442822457014",
+      "nominal_speedup_CI95_lower_pct": "-8.574302837353837",
+      "nominal_speedup_CI95_upper_pct": "-4.337582500430016",
+      "onchip_mode": "pipelined",
+      "predictor": "random",
+      "speedup_vs_nominal_pct": "-6.2591121780453784",
+      "task_duration_mean_abs_pct": "61.69916550886258"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "4.025264353157643",
+      "nominal_speedup_CI95_lower_pct": "-8.557139337024877",
+      "nominal_speedup_CI95_upper_pct": "-3.2081277421496908",
+      "onchip_mode": "pipelined",
+      "predictor": "static",
+      "speedup_vs_nominal_pct": "-5.755620497857961",
+      "task_duration_mean_abs_pct": "19.84137393141621"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "3.854649125771014",
+      "nominal_speedup_CI95_lower_pct": "-1.7515755634711299",
+      "nominal_speedup_CI95_upper_pct": "-0.8335607769529945",
+      "onchip_mode": "pipelined",
+      "predictor": "btb",
+      "speedup_vs_nominal_pct": "-1.27305298039746",
+      "task_duration_mean_abs_pct": "8.674931979255806"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "3.835908288231276",
+      "nominal_speedup_CI95_lower_pct": "-1.27157119378764",
+      "nominal_speedup_CI95_upper_pct": "-0.36444106862803216",
+      "onchip_mode": "pipelined",
+      "predictor": "ema",
+      "speedup_vs_nominal_pct": "-0.7806756534003645",
+      "task_duration_mean_abs_pct": "5.199017402920926"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "3.8235850707198935",
+      "nominal_speedup_CI95_lower_pct": "-0.7672146213824271",
+      "nominal_speedup_CI95_upper_pct": "-0.1859845185162247",
+      "onchip_mode": "pipelined",
+      "predictor": "ours",
+      "speedup_vs_nominal_pct": "-0.45690821849289076",
+      "task_duration_mean_abs_pct": "3.6663429540559442"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.611953423289952",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "1.1102230246251565e-14",
+      "onchip_mode": "port_tight",
+      "predictor": "none",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.01505193609890088"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.611953423289952",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "port_tight",
+      "predictor": "nominal",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.015051936098905684"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.612513630413892",
+      "nominal_speedup_CI95_lower_pct": "-0.005615260903905628",
+      "nominal_speedup_CI95_upper_pct": "-0.004946040395775175",
+      "onchip_mode": "port_tight",
+      "predictor": "random",
+      "speedup_vs_nominal_pct": "-0.005279019814641295",
+      "task_duration_mean_abs_pct": "51.46429710942337"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.613240206021713",
+      "nominal_speedup_CI95_lower_pct": "-0.012425812420310822",
+      "nominal_speedup_CI95_upper_pct": "-0.011809863559177902",
+      "onchip_mode": "port_tight",
+      "predictor": "static",
+      "speedup_vs_nominal_pct": "-0.012125785710015435",
+      "task_duration_mean_abs_pct": "5.627658235240631"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.612100615375777",
+      "nominal_speedup_CI95_lower_pct": "-0.001702040827381568",
+      "nominal_speedup_CI95_upper_pct": "-0.0010531881500353002",
+      "onchip_mode": "port_tight",
+      "predictor": "btb",
+      "speedup_vs_nominal_pct": "-0.0013870404434346284",
+      "task_duration_mean_abs_pct": "0.3482059396432541"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.611805960931658",
+      "nominal_speedup_CI95_lower_pct": "0.0012703513260056698",
+      "nominal_speedup_CI95_upper_pct": "0.0015050431798815933",
+      "onchip_mode": "port_tight",
+      "predictor": "ema",
+      "speedup_vs_nominal_pct": "0.0013895873117175661",
+      "task_duration_mean_abs_pct": "0.30080704377962275"
+    },
+    {
+      "design": "B1",
+      "latency_geomean_ms": "10.611738249843206",
+      "nominal_speedup_CI95_lower_pct": "0.0019405740116903991",
+      "nominal_speedup_CI95_upper_pct": "0.002114975065142244",
+      "onchip_mode": "port_tight",
+      "predictor": "ours",
+      "speedup_vs_nominal_pct": "0.0020276516317196958",
+      "task_duration_mean_abs_pct": "0.00543009696610019"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.89608710214452",
+      "nominal_speedup_CI95_lower_pct": "-2.220446049250313e-14",
+      "nominal_speedup_CI95_upper_pct": "1.1102230246251565e-14",
+      "onchip_mode": "port_tight",
+      "predictor": "none",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.005578868255597275"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.89608710214452",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "port_tight",
+      "predictor": "nominal",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.005578868255595463"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.902713236550628",
+      "nominal_speedup_CI95_lower_pct": "-0.17965989503060276",
+      "nominal_speedup_CI95_upper_pct": "-0.0013186379129270789",
+      "onchip_mode": "port_tight",
+      "predictor": "random",
+      "speedup_vs_nominal_pct": "-0.06081205430894521",
+      "task_duration_mean_abs_pct": "52.944247790972334"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.927633444546945",
+      "nominal_speedup_CI95_lower_pct": "-0.5263741834906266",
+      "nominal_speedup_CI95_upper_pct": "-0.0870372657041413",
+      "onchip_mode": "port_tight",
+      "predictor": "static",
+      "speedup_vs_nominal_pct": "-0.28951991762449225",
+      "task_duration_mean_abs_pct": "6.791825427245218"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.896093424564992",
+      "nominal_speedup_CI95_lower_pct": "-0.00021992335137221986",
+      "nominal_speedup_CI95_upper_pct": "0.00011963339495935079",
+      "onchip_mode": "port_tight",
+      "predictor": "btb",
+      "speedup_vs_nominal_pct": "-5.8024687277224984e-05",
+      "task_duration_mean_abs_pct": "0.409611412275125"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.89596333034643",
+      "nominal_speedup_CI95_lower_pct": "0.001023310826485102",
+      "nominal_speedup_CI95_upper_pct": "0.0012434421828053097",
+      "onchip_mode": "port_tight",
+      "predictor": "ema",
+      "speedup_vs_nominal_pct": "0.0011359288608292495",
+      "task_duration_mean_abs_pct": "0.30002738815358093"
+    },
+    {
+      "design": "B2",
+      "latency_geomean_ms": "10.895904377402521",
+      "nominal_speedup_CI95_lower_pct": "0.0015856578797177057",
+      "nominal_speedup_CI95_upper_pct": "0.0017602234717195575",
+      "onchip_mode": "port_tight",
+      "predictor": "ours",
+      "speedup_vs_nominal_pct": "0.0016769757830492615",
+      "task_duration_mean_abs_pct": "0.002892131166583627"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "10.882540885938543",
+      "nominal_speedup_CI95_lower_pct": "1.1102230246251565e-14",
+      "nominal_speedup_CI95_upper_pct": "4.440892098500626e-14",
+      "onchip_mode": "port_tight",
+      "predictor": "none",
+      "speedup_vs_nominal_pct": "3.3306690738754696e-14",
+      "task_duration_mean_abs_pct": "0.007508377472104968"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "10.882540885938548",
+      "nominal_speedup_CI95_lower_pct": "0.0",
+      "nominal_speedup_CI95_upper_pct": "0.0",
+      "onchip_mode": "port_tight",
+      "predictor": "nominal",
+      "speedup_vs_nominal_pct": "0.0",
+      "task_duration_mean_abs_pct": "0.007508377472087592"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "11.483596214363512",
+      "nominal_speedup_CI95_lower_pct": "-7.819338654950948",
+      "nominal_speedup_CI95_upper_pct": "-3.563403099614418",
+      "onchip_mode": "port_tight",
+      "predictor": "random",
+      "speedup_vs_nominal_pct": "-5.523115738545892",
+      "task_duration_mean_abs_pct": "56.442184526022984"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "11.879708632831969",
+      "nominal_speedup_CI95_lower_pct": "-13.681780186502698",
+      "nominal_speedup_CI95_upper_pct": "-5.130233902861293",
+      "onchip_mode": "port_tight",
+      "predictor": "static",
+      "speedup_vs_nominal_pct": "-9.163004828972209",
+      "task_duration_mean_abs_pct": "18.722666499827486"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "11.050776799613205",
+      "nominal_speedup_CI95_lower_pct": "-2.1750291548085583",
+      "nominal_speedup_CI95_upper_pct": "-0.9639723303341481",
+      "onchip_mode": "port_tight",
+      "predictor": "btb",
+      "speedup_vs_nominal_pct": "-1.5459249401216013",
+      "task_duration_mean_abs_pct": "5.226228786375168"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "11.05633114769376",
+      "nominal_speedup_CI95_lower_pct": "-2.197889055241154",
+      "nominal_speedup_CI95_upper_pct": "-1.0155116189326476",
+      "onchip_mode": "port_tight",
+      "predictor": "ema",
+      "speedup_vs_nominal_pct": "-1.5969640139810393",
+      "task_duration_mean_abs_pct": "3.3763267366369205"
+    },
+    {
+      "design": "best_hetero",
+      "latency_geomean_ms": "10.917479818173122",
+      "nominal_speedup_CI95_lower_pct": "-0.6069488564111974",
+      "nominal_speedup_CI95_upper_pct": "-0.035951419272344985",
+      "onchip_mode": "port_tight",
+      "predictor": "ours",
+      "speedup_vs_nominal_pct": "-0.3210549135608698",
+      "task_duration_mean_abs_pct": "0.0025533067317744036"
+    }
+  ],
+  "original_artifact_sha256": {
+    "METADATA.json": "8c2a8f5a0b15b764daf67c497a451c6c5feb8b6ba1cf46bd61aaac942a4d18ce",
+    "baseline_reproduction.csv": "d55dbb7589d5b0a84c56c1e7d6540d8705410f0e31806babda48bdb2f1ee68de",
+    "bounded_runtime.py": "427725864e5d4818bf0e63f4971d3aad59d83e37e7ef593a1958f1cb411eded9",
+    "compare.csv": "d2579059ae967e273e87a21c05a3a94b2425279cae966199c8b17790ead09d0c",
+    "nominal_control.py": "45140876415d32dfc882f267d4cb6047c66c2ad0f0867e511822596e8326ff38",
+    "nominal_control/METADATA.json": "5ce6c2a3af728eeae747e19c3bed62995a568d25af269f5c053b4ce6705e8cca",
+    "nominal_control/per_window.csv": "0035247cbcead57f282e426005712107aa8ae423708896a1308acec030391959",
+    "nominal_control/repeat_checks.json": "7b5b1b076a16874629db200b3f07f9b02272e00bdc95f61adf69153143d3cb61",
+    "nominal_control/task_predictions.csv": "fe24dc44f13d30f759e248d314c0dcf0b1e14415b9491f5c5492fb76c1b53bf8",
+    "per_window.csv": "e66af86e10228127399c968ca09757a968ba82065e8c4c06d8229268d1409f9e",
+    "repeat_checks.json": "d2abb9efbe749048b7dbcd5140bc4c8738ee12cc0395c18912f811f835db0914",
+    "report.py": "0b3fd443245bf7f2a434303f2fcb9e197cb31b641cccfc4909bf2ddc902c3325",
+    "run.py": "6190cc8e6f895e60a263bc34fb77a00097c017d61514f027824f547bbb7f9b57",
+    "task_predictions.csv": "e9c362f776bd9d5666dd957dfaf88ff5c18162df9b282c971a4af20db035ea57"
+  },
+  "passed": 777,
+  "refresh_scope": "No numerical rerun; compare CSV byte-exact, prior independent aggregates/84 CI checks remain applicable; final gzip-only evidence and final reporting source/index independently rechecked",
+  "scope": "Independent frozen source, input, complete grid, two-repeat digests, per-task conservation, statistics and bootstrap audit; no simulator or native timing rerun",
+  "summary_rows": 336,
+  "task_rows": 176988,
+  "window_rows": 5670
+}

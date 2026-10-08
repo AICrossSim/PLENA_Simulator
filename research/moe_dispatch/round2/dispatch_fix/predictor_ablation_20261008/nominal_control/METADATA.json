@@ -1,0 +1,65 @@
+{
+  "bounded_runtime_patch": {
+    "from": "if outstanding and earliest-at>params.binding_lead_cycles+1e-7:",
+    "original_source_mutated": false,
+    "original_source_sha256": "ee7b9638cc5715442e43339621ecc7aa8f7fcb640c1243f6a5c59e25bf536b05",
+    "patched_source_sha256": "710d9b070bbc55f277a8d324d6e9c9792717f4c7047bfe51a793038ee1fc705d",
+    "resource_wakeup": "existing actual completion, phase transition and progress events",
+    "scope": "all predictors/organizations; no ETA wakeups when physical capacity_to_bind is false",
+    "to": "if can_bind and outstanding and earliest-at>params.binding_lead_cycles+1e-7:"
+  },
+  "command": [
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/dispatch_fix/predictor_ablation_20261008/nominal_control.py",
+    "--jobs",
+    "6"
+  ],
+  "configurations": 6,
+  "development_windows": 18,
+  "dispatch_parameters": {
+    "large_first": true,
+    "t_big": 3
+  },
+  "elapsed_seconds": 23.536654917523265,
+  "execution_commit": "4fe2f6713e3854d68748d56f19614e606e4cb313",
+  "finished_utc": "2026-10-08T11:52:02.897815+00:00",
+  "heldout_windows": 135,
+  "none_difference": "None skips predictor progress rechecks; nominal keeps them without any learned estimate or progress ETA correction",
+  "repeats_per_configuration": 2,
+  "scope": "no-learning nominal estimator; existing quarter-progress rechecks enabled; same common WS fixed runtime",
+  "simulation_calls": 1836,
+  "source_sha256": {
+    "common.py": "3342422c57757019415473f3af15a2bb67b6398d165c767254e860858eb31d61",
+    "dispatch_fix/dataflow_ablation_20261008/run.py": "bfc0fd60645e8da1d325c2b97c775847b26ccbd32b499dba54c7da6ec6d63fed",
+    "dispatch_fix/predictor_ablation_20261008/bounded_runtime.py": "427725864e5d4818bf0e63f4971d3aad59d83e37e7ef593a1958f1cb411eded9",
+    "dispatch_fix/predictor_ablation_20261008/nominal_control.py": "45140876415d32dfc882f267d4cb6047c66c2ad0f0867e511822596e8326ff38",
+    "dispatch_fix/predictor_ablation_20261008/run.py": "6190cc8e6f895e60a263bc34fb77a00097c017d61514f027824f547bbb7f9b57",
+    "dispatch_fix/runtime.py": "ee7b9638cc5715442e43339621ecc7aa8f7fcb640c1243f6a5c59e25bf536b05",
+    "dispatch_fix/selection.json": "7820facae14329f42f69c1f0566a8e62daa7aae719f2b35791bacb354a21ad6b",
+    "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+    "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+    "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+    "results/E0/frozen_inputs.json": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+    "results/E3/FROZEN_SELECTION.json": "f461deaba2fce1d86aeaaefe205d8e4ab502ba69ff6a3b890b8dbad7360d0373",
+    "results/E4/heldout_main_table.csv": "eff0da1f1bb91ca6cdeda686a158085dde54f294adc81057552865f853f66471",
+    "results/E4/per_window.csv": "27f2d69e8488af496f1f646932906c8c20fb358c1400be594101cebba4827ef7",
+    "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622"
+  },
+  "source_unchanged": {
+    "common.py": true,
+    "dispatch_fix/dataflow_ablation_20261008/run.py": true,
+    "dispatch_fix/predictor_ablation_20261008/bounded_runtime.py": true,
+    "dispatch_fix/predictor_ablation_20261008/nominal_control.py": true,
+    "dispatch_fix/predictor_ablation_20261008/run.py": true,
+    "dispatch_fix/runtime.py": true,
+    "dispatch_fix/selection.json": true,
+    "model.py": true,
+    "optimizer.py": true,
+    "predictors.py": true,
+    "results/E0/frozen_inputs.json": true,
+    "results/E3/FROZEN_SELECTION.json": true,
+    "results/E4/heldout_main_table.csv": true,
+    "results/E4/per_window.csv": true,
+    "run.py": true
+  },
+  "started_utc": "2026-10-08T11:51:39.361149+00:00"
+}

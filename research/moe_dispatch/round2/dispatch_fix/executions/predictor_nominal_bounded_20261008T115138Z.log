@@ -1,0 +1,7 @@
+{'done': ('pipelined', 'B1', 'nominal'), 'geomean_ms': 3.795787520978372}
+{'done': ('pipelined', 'B2', 'nominal'), 'geomean_ms': 3.8137156573967976}
+{'done': ('pipelined', 'best_hetero', 'nominal'), 'geomean_ms': 3.8061942563508224}
+{'done': ('port_tight', 'B1', 'nominal'), 'geomean_ms': 10.611953423289952}
+{'done': ('port_tight', 'B2', 'nominal'), 'geomean_ms': 10.89608710214452}
+{'done': ('port_tight', 'best_hetero', 'nominal'), 'geomean_ms': 10.882540885938548}
+{'completed': 6, 'window_rows': 810, 'task_rows': 25284}
