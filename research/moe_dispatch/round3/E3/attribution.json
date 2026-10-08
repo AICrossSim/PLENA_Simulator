@@ -1,0 +1,23 @@
+{
+  "H2_cost_validation": "\u5168\u90e818\u5f00\u53d1\uff0b135\u7559\u51fa\u7a97\u53e3\uff0c\u6bcf\u4e2a\u539f\u53ef\u884c\u4efb\u52a1/\u6838\u7684HBM\u5b57\u8282\u4e0d\u589e\u52a0\uff1b\u539f\u53ef\u884c\u6838\u4fdd\u6301\u53ef\u884c",
+  "H2_explanation": "acc_bytes[1] \u221216 KiB",
+  "H2_feasible": true,
+  "Hinf_actual_hbm_floor_over_S0": 0.9879064740231029,
+  "Hinf_extra_hbm_windows": 17,
+  "Hinf_hbm_bytes_over_S0": 1.0068562732297426,
+  "Hinf_over_S0": 1.0114917303317226,
+  "Hinf_refetch_tasks": 42,
+  "S0_refetch_tasks": 18,
+  "conclusion": "W\u69fd\u4e0d\u8db3\u672a\u8fbe\u5230\u4e3b\u56e0\u6807\u51c6",
+  "iso_configs": [
+    "S0",
+    "H0",
+    "H1",
+    "H2",
+    "H3",
+    "M0",
+    "M3"
+  ],
+  "recovery_formula": "(GM(H0/S0)\u2212GM(Hinf/S0))/(GM(H0/S0)\u22121)",
+  "recovery_fraction": 0.6101569977609662
+}

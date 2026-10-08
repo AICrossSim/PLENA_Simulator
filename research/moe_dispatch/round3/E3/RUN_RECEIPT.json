@@ -1,0 +1,945 @@
+{
+  "H2_cost_validation": "\u5168\u90e818\u5f00\u53d1\uff0b135\u7559\u51fa\u7a97\u53e3\uff0c\u6bcf\u4e2a\u539f\u53ef\u884c\u4efb\u52a1/\u6838\u7684HBM\u5b57\u8282\u4e0d\u589e\u52a0\uff1b\u539f\u53ef\u884c\u6838\u4fdd\u6301\u53ef\u884c",
+  "H2_explanation": "acc_bytes[1] \u221216 KiB",
+  "H2_feasible": true,
+  "command": [
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/ablation.py",
+    "--jobs",
+    "3"
+  ],
+  "conclusion": "W\u69fd\u4e0d\u8db3\u672a\u8fbe\u5230\u4e3b\u56e0\u6807\u51c6",
+  "configurations": 10,
+  "elapsed_seconds": 153.7274781037122,
+  "execution_commit": "a82abc6c64b7dd0f420d1b0a8f8b27fdaec6eed7",
+  "finished_utc": "2026-10-08T14:50:38.289852+00:00",
+  "input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+  "iso_configs": [
+    "S0",
+    "H0",
+    "H1",
+    "H2",
+    "H3",
+    "M0",
+    "M3"
+  ],
+  "recovery_formula": "(GM(H0/S0)\u2212GM(Hinf/S0))/(GM(H0/S0)\u22121)",
+  "recovery_fraction": 0.6101569977609662,
+  "repeat_checks": [
+    {
+      "change": "\u51bb\u7ed3\u5355\u6838",
+      "config": "S0",
+      "design": "single",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          98304
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          64
+        ],
+        "w_banks": [
+          64
+        ],
+        "w_bytes": [
+          40960
+        ],
+        "x_banks": [
+          24
+        ],
+        "x_bytes": [
+          12288
+        ],
+        "z_bytes": [
+          393216
+        ]
+      },
+      "heldout_digest": "a97ec208566a62815c603548a0bbfb2403b9c568e38ccbafb541e40e6ba2e8f1",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/S0.json.gz",
+      "raw_sha256": "2d1ff20d502aeb779a26dd678b82cb3663559f4cf200bd2f46f948ec6b6899ae",
+      "repeat_heldout_digest": "a97ec208566a62815c603548a0bbfb2403b9c568e38ccbafb541e40e6ba2e8f1",
+      "repeat_state_digest": "d1a1ce50110f8dbf858a86e7736e8909f7f010cd6d0c490312a63daf21b2c2fe",
+      "repeat_warmup_digest": "7bef0309fc0566879d39b2ec4a62fb6d5f81abed97af55540776a807ad2e6e4e",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "d1a1ce50110f8dbf858a86e7736e8909f7f010cd6d0c490312a63daf21b2c2fe",
+      "warmup_digest": "7bef0309fc0566879d39b2ec4a62fb6d5f81abed97af55540776a807ad2e6e4e"
+    },
+    {
+      "change": "W\u524d\u77bb\u65e0\u9650\uff08\u8bca\u65ad\uff1b\u975e\u7b49\u8d44\u6e90\uff09",
+      "config": "Sinf",
+      "design": "single",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          98304
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": true,
+        "flows": [
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          64
+        ],
+        "w_banks": [
+          64
+        ],
+        "w_bytes": [
+          40960
+        ],
+        "x_banks": [
+          24
+        ],
+        "x_bytes": [
+          12288
+        ],
+        "z_bytes": [
+          393216
+        ]
+      },
+      "heldout_digest": "5cd73468446505919877af9bc5dfe7d0f561187abd98cf5587116e414c4b3442",
+      "iso": false,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/Sinf.json.gz",
+      "raw_sha256": "10d7c89581c43d08f318d86cdff99378a786bed958cd1125941e642a4222a24c",
+      "repeat_heldout_digest": "5cd73468446505919877af9bc5dfe7d0f561187abd98cf5587116e414c4b3442",
+      "repeat_state_digest": "d1a1ce50110f8dbf858a86e7736e8909f7f010cd6d0c490312a63daf21b2c2fe",
+      "repeat_warmup_digest": "f94532c9cbccb500525132a08f451902e47f2cffa1d4be4eabf60d05dabbb025",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "d1a1ce50110f8dbf858a86e7736e8909f7f010cd6d0c490312a63daf21b2c2fe",
+      "warmup_digest": "f94532c9cbccb500525132a08f451902e47f2cffa1d4be4eabf60d05dabbb025"
+    },
+    {
+      "change": "\u51bb\u7ed3\u5f02\u6784\uff1a\u5927\u683816\uff0f\u5c0f\u683824 KiB",
+      "config": "H0",
+      "design": "hetero",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          81920
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          24576,
+          16384
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "heldout_digest": "dfafcf01fefc61e30e039d6a13d17d23427342e99ec100aae8d40d19ed23350f",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/H0.json.gz",
+      "raw_sha256": "ce62973111e929aaddb5ec2e38d72543055fa5c5894cc37cfbaa13c1880f5ddb",
+      "repeat_heldout_digest": "dfafcf01fefc61e30e039d6a13d17d23427342e99ec100aae8d40d19ed23350f",
+      "repeat_state_digest": "af5524283f293bd2b59aa54df94c0bd5adbd7011ab771b83e6ed8e81217efc8b",
+      "repeat_warmup_digest": "4619c1ed0e23020774500ef2d381b68e230c7963d863067671777efd85d881d9",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "af5524283f293bd2b59aa54df94c0bd5adbd7011ab771b83e6ed8e81217efc8b",
+      "warmup_digest": "4619c1ed0e23020774500ef2d381b68e230c7963d863067671777efd85d881d9"
+    },
+    {
+      "change": "\u5927\u683824\uff0f\u5c0f\u683816 KiB",
+      "config": "H1",
+      "design": "hetero",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          81920
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          16384,
+          24576
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "heldout_digest": "5d28eee52b39ff2c7ab9b93066a0a5c926043e2a3dfd0320c8336babd9721ef7",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/H1.json.gz",
+      "raw_sha256": "1c3fd21bd4d57cefd34bc56d926201c7c97a8813757e454742674dc1034cd9d9",
+      "repeat_heldout_digest": "5d28eee52b39ff2c7ab9b93066a0a5c926043e2a3dfd0320c8336babd9721ef7",
+      "repeat_state_digest": "341452b67d95223e609d0c1a97cf5da9ae1337510674219d09470f40cbb930cd",
+      "repeat_warmup_digest": "198b5eaafa7eba32395850c02daafb548bb9afeb6e0b1385990741721d45b250",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "341452b67d95223e609d0c1a97cf5da9ae1337510674219d09470f40cbb930cd",
+      "warmup_digest": "198b5eaafa7eba32395850c02daafb548bb9afeb6e0b1385990741721d45b250"
+    },
+    {
+      "change": "\u5171\u4eab40 KiB\u843d\u5730\u6c60\uff1b\u79c1\u6709W\u4e3a0",
+      "config": "H3",
+      "design": "hetero",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          81920
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "shared",
+        "landing_pool_bytes": 40960,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          0,
+          0
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "heldout_digest": "ff9108cb3f2d63af102277e0e0cf3ffb121051eb2f7b12541cd06d9ff297fe10",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/H3.json.gz",
+      "raw_sha256": "ac40f9144aed85f1bd66d7f7ac6f1143d78b811f405c6b13d4d478741cec62da",
+      "repeat_heldout_digest": "ff9108cb3f2d63af102277e0e0cf3ffb121051eb2f7b12541cd06d9ff297fe10",
+      "repeat_state_digest": "7b6b7ca980d248b9b2a47e5e235978eb626057ca32327a9091771df96e77daa1",
+      "repeat_warmup_digest": "5ae2ff8ca1054ccd90ca8710f8b61300e667f4a973fe0b3ea6df85753c08461c",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "7b6b7ca980d248b9b2a47e5e235978eb626057ca32327a9091771df96e77daa1",
+      "warmup_digest": "5ae2ff8ca1054ccd90ca8710f8b61300e667f4a973fe0b3ea6df85753c08461c"
+    },
+    {
+      "change": "\u4e24\u6838W\u524d\u77bb\u65e0\u9650\uff08\u8bca\u65ad\uff1b\u975e\u7b49\u8d44\u6e90\uff09",
+      "config": "Hinf",
+      "design": "hetero",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          81920
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": true,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          24576,
+          16384
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "heldout_digest": "587ee88ea885d7e758d1c4faca3dcb3396976908eee6d475196ce6983599ce1e",
+      "iso": false,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/Hinf.json.gz",
+      "raw_sha256": "0946a84ef9d51a4cfc4bdbe97a6827eba4148a8249ea3b409d71c0130add4098",
+      "repeat_heldout_digest": "587ee88ea885d7e758d1c4faca3dcb3396976908eee6d475196ce6983599ce1e",
+      "repeat_state_digest": "321f7d9fc3f9fe45500d5f5a3f39f22a93a221ddc8cbf626efebf8079685b577",
+      "repeat_warmup_digest": "663424eb7981bcee7c921a76f1c0a3e13790ac130745f23e7e807f8f12fb60b2",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "321f7d9fc3f9fe45500d5f5a3f39f22a93a221ddc8cbf626efebf8079685b577",
+      "warmup_digest": "663424eb7981bcee7c921a76f1c0a3e13790ac130745f23e7e807f8f12fb60b2"
+    },
+    {
+      "change": "\u51bb\u7ed3\u540c\u6784",
+      "config": "M0",
+      "design": "uniform",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          20480,
+          20480
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "heldout_digest": "30891c27ca89d4b8805aff331f27bf99b320c5549368bc76bfe52ed50fa9c0e8",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/M0.json.gz",
+      "raw_sha256": "0c516e22223c0cb0f68826ada478f80cb92692a39a55f1b248c09463cf7e79a2",
+      "repeat_heldout_digest": "30891c27ca89d4b8805aff331f27bf99b320c5549368bc76bfe52ed50fa9c0e8",
+      "repeat_state_digest": "820c5543a179feb0ce1899ef779b832cc4bc68d832efdd83453fbdb3a0d9caac",
+      "repeat_warmup_digest": "73b4c12aa8940863da0470833d8e3a179386c29958feafd5f3e674fe15fd53af",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "820c5543a179feb0ce1899ef779b832cc4bc68d832efdd83453fbdb3a0d9caac",
+      "warmup_digest": "73b4c12aa8940863da0470833d8e3a179386c29958feafd5f3e674fe15fd53af"
+    },
+    {
+      "change": "\u5171\u4eab40 KiB\u843d\u5730\u6c60\uff1b\u79c1\u6709W\u4e3a0",
+      "config": "M3",
+      "design": "uniform",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "shared",
+        "landing_pool_bytes": 40960,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          0,
+          0
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "heldout_digest": "5d5ffb535697f9ed772de225626766d5f0b6a0ea888ce3517fb8b0d75d06b5eb",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/M3.json.gz",
+      "raw_sha256": "79a90c34cef11d01b24d0698e9705a8d6189473463274f430be7f849ad981b69",
+      "repeat_heldout_digest": "5d5ffb535697f9ed772de225626766d5f0b6a0ea888ce3517fb8b0d75d06b5eb",
+      "repeat_state_digest": "0d8adda409f4b0173fb8dad1a087250f9c711492bf6aad78e51f6347ccc31e3b",
+      "repeat_warmup_digest": "3f256a06ee579040da84bbb5073fcfbd989e142acc13a5b7eae2f44a404aca01",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "0d8adda409f4b0173fb8dad1a087250f9c711492bf6aad78e51f6347ccc31e3b",
+      "warmup_digest": "3f256a06ee579040da84bbb5073fcfbd989e142acc13a5b7eae2f44a404aca01"
+    },
+    {
+      "change": "\u4e24\u6838W\u524d\u77bb\u65e0\u9650\uff08\u8bca\u65ad\uff1b\u975e\u7b49\u8d44\u6e90\uff09",
+      "config": "Minf",
+      "design": "uniform",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          }
+        ],
+        "diagnostic_unbounded_w": true,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          20480,
+          20480
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "heldout_digest": "1c07e42072b3c75fc7f23252ab59ecab47992594f8ac570a7a185fe4cd56eb6d",
+      "iso": false,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/Minf.json.gz",
+      "raw_sha256": "6c4b7a74320e3e61624bdbbbf41bfcd987aa5b51fbe9cc79aa60fa78c050dcf0",
+      "repeat_heldout_digest": "1c07e42072b3c75fc7f23252ab59ecab47992594f8ac570a7a185fe4cd56eb6d",
+      "repeat_state_digest": "4f7a448b670d994dbb20dd5eed9a80757cdc37f7ab9e9f851b0f72ee7e2368fd",
+      "repeat_warmup_digest": "41138fdb5dea8da0dea24eaab2763a2f6824eff69713ae9a4a565fdf9e2cf37c",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "4f7a448b670d994dbb20dd5eed9a80757cdc37f7ab9e9f851b0f72ee7e2368fd",
+      "warmup_digest": "41138fdb5dea8da0dea24eaab2763a2f6824eff69713ae9a4a565fdf9e2cf37c"
+    },
+    {
+      "change": "\u5927\u683832\uff0f\u5c0f\u683824 KiB\uff1bacc_bytes[1] \u221216 KiB",
+      "config": "H2",
+      "design": "hetero",
+      "dispatch": "fixed_legacy",
+      "exact_repeat": true,
+      "hardware": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          65536
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          24576,
+          32768
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "heldout_digest": "5a9e6555ca6a55983779076b1113a3d18d90a125176a51e0c6669cb8845623ec",
+      "iso": true,
+      "parameters": {
+        "bank_Bpc": 16.0,
+        "binding_lead_cycles": 512.0,
+        "charge_control": true,
+        "credits": 520,
+        "dotstagecycles": 2.0,
+        "hbm_Bpc": 256.0,
+        "hbm_latency": 64.0,
+        "onchip_mode": "pipelined",
+        "prefetch": true,
+        "request_bytes": 32,
+        "seed": 20261007,
+        "sram_weight_read_once_oracle": false,
+        "tile_issue_cycles": 1.0,
+        "vector_scale": 1.0
+      },
+      "predictor": "ours",
+      "raw_file": "E3/raw/H2.json.gz",
+      "raw_sha256": "b6656ac686d41563b17978853bb0247113afd0162c017720d10ce201a5008895",
+      "repeat_heldout_digest": "5a9e6555ca6a55983779076b1113a3d18d90a125176a51e0c6669cb8845623ec",
+      "repeat_state_digest": "b4fb0b3d73ff74dde6858849f1f82dab789576d8747a9f95390842ef341ddedc",
+      "repeat_warmup_digest": "679b9168b1421dd0493165b8154f3f14ef7b542513ab59ee5dc92b92c89ebb57",
+      "runtime_settings": {
+        "large_first": true,
+        "t_big": 3
+      },
+      "state_digest": "b4fb0b3d73ff74dde6858849f1f82dab789576d8747a9f95390842ef341ddedc",
+      "warmup_digest": "679b9168b1421dd0493165b8154f3f14ef7b542513ab59ee5dc92b92c89ebb57"
+    }
+  ],
+  "scope": "BF16 \u8def\u7531\u540e MoE phase-fluid \u89e3\u6790\u4f30\u8ba1\uff1b\u975e\u539f\u751f HBM\u3001RTL \u6216\u5168\u6a21\u578b\u8ba1\u65f6",
+  "source_sha256": {
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/common.py": "3342422c57757019415473f3af15a2bb67b6398d165c767254e860858eb31d61",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/dispatch_fix/frozen_designs.json": "615e494ae3ebf88d1ee9869423df3a59a91cea1d571bf6294bd9d5d0674a22c2",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/results/E0/frozen_inputs.json": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/ablation.py": "33603d204173c88b502e3ad02baaab555889ac844c7772de4894f06568062342",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/config.py": "86b4075d9e86d8f41f40f796cf283bda492408ab2c159f0e71dc497c3d6da3dc",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/evaluations.py": "0ab43d15eb327dfeb206ee666f854045a6919849deb539674ce686f5c42ac338",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py": "423f98540a1480d65965826445ce7d86cc2097584c42c7d03c154e5ce209b814",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py": "22eef9b01145b8f089ca218005c625a532b7c35200d271760d1ac8a8da591734",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py": "f2170e6923788228b99cdc166bef912aeae41148fa5bf2d02c6ba7302af1831b"
+  },
+  "source_unchanged": true
+}
