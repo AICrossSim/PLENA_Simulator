@@ -1,0 +1,46 @@
+{
+  "command": [
+    "/tmp/plena-round2-venv/bin/python",
+    "-m",
+    "pytest",
+    "research/moe_dispatch/round2",
+    "-q",
+    "--ignore=research/moe_dispatch/round2/results",
+    "--ignore=research/moe_dispatch/round2/archive"
+  ],
+  "elapsed_seconds": 39.153395703062415,
+  "execution_commit": "c6ed0ea03a7fba159d7e9f417e160164edd502b3",
+  "finished_utc": "2026-10-08T04:59:38.020491+00:00",
+  "input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+  "label": "unit_suite",
+  "log": "executions/unit_suite_20261008T045858Z.log",
+  "log_sha256": "3548565392b3578c8f909f9aad7b2898a4d8df5ebdc47d624a190f0f7661c234",
+  "returncode": 0,
+  "source_sha256": {
+    "dispatch_fix/__init__.py": "9627f40042eb27e7ac52972e0bf50ec8ba010e7b338e603ade5d7da1e661fc9f",
+    "dispatch_fix/execute.py": "e6cf092bca39d8b3c0190c092adfb5259a51b2071fc3ec3dfa66d6101cdf2320",
+    "dispatch_fix/report.py": "02921c3eca6d19bfa2fe27915eb0d5ac1415b5a052c58bf4b82c91a0e9a2b33b",
+    "dispatch_fix/run.py": "2d3bdd2c05d3c65b3dd8520ecb7fed44ae196eb8734e885cec0e62529a827162",
+    "dispatch_fix/runtime.py": "ee7b9638cc5715442e43339621ecc7aa8f7fcb640c1243f6a5c59e25bf536b05",
+    "dispatch_fix/test_campaign.py": "1dfe1d9f63188b1a948979c25ff8f4fd809cd14432872fbc63f7728cb7867eb1",
+    "dispatch_fix/test_report.py": "21d1768c801fbf0278a855a3bf1a52bbd536ff407dc0e04b4aa4b215e85dc0f8",
+    "dispatch_fix/test_runtime.py": "d4a33bbfe2cd1aa740885bb2d07f1ec685bc14dcb56d7c39f962c7775b994210",
+    "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+    "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+    "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2"
+  },
+  "source_unchanged_during_execution": {
+    "dispatch_fix/__init__.py": true,
+    "dispatch_fix/execute.py": true,
+    "dispatch_fix/report.py": true,
+    "dispatch_fix/run.py": true,
+    "dispatch_fix/runtime.py": true,
+    "dispatch_fix/test_campaign.py": true,
+    "dispatch_fix/test_report.py": true,
+    "dispatch_fix/test_runtime.py": true,
+    "model.py": true,
+    "optimizer.py": true,
+    "predictors.py": true
+  },
+  "started_utc": "2026-10-08T04:58:58.863183+00:00"
+}

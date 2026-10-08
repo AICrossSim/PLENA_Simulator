@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/tmp/plena-round2-venv/bin/python",
+    "-m",
+    "research.moe_dispatch.round2.dispatch_fix.run",
+    "--stage",
+    "all",
+    "--jobs",
+    "6"
+  ],
+  "elapsed_seconds": 206.36162697337568,
+  "execution_commit": "c6ed0ea03a7fba159d7e9f417e160164edd502b3",
+  "finished_utc": "2026-10-08T04:55:50.193505+00:00",
+  "input_manifest_sha256": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+  "label": "campaign",
+  "log": "executions/campaign_20261008T045223Z.log",
+  "log_sha256": "15c61b4d95274bf7800b726ac3c5f9008ea1d3ee3ca19fa66e9d42b50c09a8c7",
+  "returncode": 0,
+  "source_sha256": {
+    "dispatch_fix/__init__.py": "9627f40042eb27e7ac52972e0bf50ec8ba010e7b338e603ade5d7da1e661fc9f",
+    "dispatch_fix/execute.py": "e6cf092bca39d8b3c0190c092adfb5259a51b2071fc3ec3dfa66d6101cdf2320",
+    "dispatch_fix/run.py": "2d3bdd2c05d3c65b3dd8520ecb7fed44ae196eb8734e885cec0e62529a827162",
+    "dispatch_fix/runtime.py": "ee7b9638cc5715442e43339621ecc7aa8f7fcb640c1243f6a5c59e25bf536b05",
+    "dispatch_fix/test_runtime.py": "d4a33bbfe2cd1aa740885bb2d07f1ec685bc14dcb56d7c39f962c7775b994210",
+    "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+    "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+    "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2"
+  },
+  "source_unchanged_during_execution": {
+    "dispatch_fix/__init__.py": true,
+    "dispatch_fix/execute.py": true,
+    "dispatch_fix/run.py": true,
+    "dispatch_fix/runtime.py": true,
+    "dispatch_fix/test_runtime.py": true,
+    "model.py": true,
+    "optimizer.py": true,
+    "predictors.py": true
+  },
+  "started_utc": "2026-10-08T04:52:23.826768+00:00"
+}

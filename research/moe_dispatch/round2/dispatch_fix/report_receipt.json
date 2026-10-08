@@ -1,0 +1,25 @@
+{
+  "inputs": {
+    "frozen_designs.json": "615e494ae3ebf88d1ee9869423df3a59a91cea1d571bf6294bd9d5d0674a22c2",
+    "per_window.json": "179849823618f5e1dc0bb82d399c5a7241e77dc50f89105b97744272b1bfe8fd",
+    "selection.json": "7820facae14329f42f69c1f0566a8e62daa7aae719f2b35791bacb354a21ad6b"
+  },
+  "row_counts": {
+    "compare.csv": 30,
+    "compare_predictor_control.csv": 10,
+    "excess_hbm_predictor_control.csv": 306,
+    "excess_hbm_windows.csv": 571,
+    "hbm_bytes.csv": 4050,
+    "hbm_predictor_control.csv": 1350,
+    "paired_improvement.csv": 50,
+    "regression.csv": 540,
+    "task_hbm_deltas.csv": 1562
+  },
+  "scope": "analytical post-router BF16 layer; not RTL/full-model inference",
+  "source_sha256": "f08d4fa6bbbe181e44db7cd230a99ed3ecf6d90071f5f029ec78e7d134af0ca1",
+  "units": {
+    "MiB_bytes": 1048576,
+    "cycle_ns": 1,
+    "ms_per_cycle": 1e-06
+  }
+}

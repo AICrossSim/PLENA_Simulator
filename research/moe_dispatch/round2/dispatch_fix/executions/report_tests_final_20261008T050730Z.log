@@ -1,0 +1,12 @@
+test_all_outputs_and_compressed_fresh_checkout (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_all_outputs_and_compressed_fresh_checkout) ... ok
+test_case_two_percent_gate_is_distinct_from_aggregate_one_percent_gate (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_case_two_percent_gate_is_distinct_from_aggregate_one_percent_gate) ... ok
+test_hbm_exception_uses_milp_and_keeps_all_core_ownership_evidence (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_hbm_exception_uses_milp_and_keeps_all_core_ownership_evidence) ... ok
+test_matching_cycles_without_matching_full_result_is_not_bit_exact (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_matching_cycles_without_matching_full_result_is_not_bit_exact) ... ok
+test_task_deltas_reconstruct_clean_side_and_preserve_reductions (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_task_deltas_reconstruct_clean_side_and_preserve_reductions) ... ok
+test_task_layer_byte_mismatch_blocks_report (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_task_layer_byte_mismatch_blocks_report) ... ok
+test_unpaired_windows_are_rejected (research.moe_dispatch.round2.dispatch_fix.test_report.ReportTests.test_unpaired_windows_are_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.196s
+
+OK

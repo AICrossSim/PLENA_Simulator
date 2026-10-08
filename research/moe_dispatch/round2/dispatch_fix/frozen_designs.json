@@ -1,0 +1,536 @@
+{
+  "base_commit": "c6ed0ea03a7fba159d7e9f417e160164edd502b3",
+  "mode_B2_choice": "user selected per-mode E4 frozen hardware; port_tight B2=3x16x128 pair",
+  "modes": {
+    "pipelined": {
+      "B0": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          98304
+        ],
+        "cores": [
+          {
+            "pk": 512,
+            "pm": 6,
+            "pn": 4
+          }
+        ],
+        "flows": [
+          "OS"
+        ],
+        "label": "B0",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          64
+        ],
+        "w_banks": [
+          64
+        ],
+        "w_bytes": [
+          40960
+        ],
+        "x_banks": [
+          24
+        ],
+        "x_bytes": [
+          12288
+        ],
+        "z_bytes": [
+          393216
+        ]
+      },
+      "B1": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          98304
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 32
+          }
+        ],
+        "flows": [
+          "WS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          64
+        ],
+        "w_banks": [
+          64
+        ],
+        "w_bytes": [
+          40960
+        ],
+        "x_banks": [
+          24
+        ],
+        "x_bytes": [
+          12288
+        ],
+        "z_bytes": [
+          393216
+        ]
+      },
+      "B2": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 24
+          }
+        ],
+        "flows": [
+          "OS",
+          "WS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          20480,
+          20480
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "best_hetero": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          81920
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          24576,
+          16384
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "fixed_4+2": {
+        "acc_banks": [
+          8,
+          4
+        ],
+        "acc_bytes": [
+          65536,
+          32768
+        ],
+        "cores": [
+          {
+            "pk": 512,
+            "pm": 4,
+            "pn": 4
+          },
+          {
+            "pk": 512,
+            "pm": 2,
+            "pn": 4
+          }
+        ],
+        "flows": [
+          "OS",
+          "OS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          42,
+          22
+        ],
+        "w_banks": [
+          42,
+          22
+        ],
+        "w_bytes": [
+          26624,
+          14336
+        ],
+        "x_banks": [
+          16,
+          8
+        ],
+        "x_bytes": [
+          8192,
+          4096
+        ],
+        "z_bytes": [
+          262144,
+          131072
+        ]
+      }
+    },
+    "port_tight": {
+      "B0": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          98304
+        ],
+        "cores": [
+          {
+            "pk": 512,
+            "pm": 6,
+            "pn": 4
+          }
+        ],
+        "flows": [
+          "OS"
+        ],
+        "label": "B0",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          64
+        ],
+        "w_banks": [
+          64
+        ],
+        "w_bytes": [
+          40960
+        ],
+        "x_banks": [
+          24
+        ],
+        "x_bytes": [
+          12288
+        ],
+        "z_bytes": [
+          393216
+        ]
+      },
+      "B1": {
+        "acc_banks": [
+          12
+        ],
+        "acc_bytes": [
+          98304
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 32
+          }
+        ],
+        "flows": [
+          "WS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          64
+        ],
+        "w_banks": [
+          64
+        ],
+        "w_bytes": [
+          40960
+        ],
+        "x_banks": [
+          24
+        ],
+        "x_bytes": [
+          12288
+        ],
+        "z_bytes": [
+          393216
+        ]
+      },
+      "B2": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 16
+          },
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 16
+          }
+        ],
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          20480,
+          20480
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "best_hetero": {
+        "acc_banks": [
+          4,
+          8
+        ],
+        "acc_bytes": [
+          16384,
+          81920
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 32
+          },
+          {
+            "pk": 128,
+            "pm": 2,
+            "pn": 32
+          }
+        ],
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          8,
+          56
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          24576,
+          16384
+        ],
+        "x_banks": [
+          4,
+          20
+        ],
+        "x_bytes": [
+          2048,
+          10240
+        ],
+        "z_bytes": [
+          32768,
+          360448
+        ]
+      },
+      "fixed_4+2": {
+        "acc_banks": [
+          8,
+          4
+        ],
+        "acc_bytes": [
+          65536,
+          32768
+        ],
+        "cores": [
+          {
+            "pk": 512,
+            "pm": 4,
+            "pn": 4
+          },
+          {
+            "pk": 512,
+            "pm": 2,
+            "pn": 4
+          }
+        ],
+        "flows": [
+          "OS",
+          "OS"
+        ],
+        "label": "",
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          42,
+          22
+        ],
+        "w_banks": [
+          42,
+          22
+        ],
+        "w_bytes": [
+          26624,
+          14336
+        ],
+        "x_banks": [
+          16,
+          8
+        ],
+        "x_bytes": [
+          8192,
+          4096
+        ],
+        "z_bytes": [
+          262144,
+          131072
+        ]
+      }
+    }
+  },
+  "parameters": {
+    "pipelined": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 256,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "port_tight": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 256,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    }
+  },
+  "predictor_control": "E4 old baseline has no predictor; separate EFT+ours rows isolate predictor effect",
+  "scope": "post-router BF16 MoE phase-fluid estimate; no hardware/cost/input change",
+  "single_compatibility": "direct delegation to original E4 EFT without learned predictor",
+  "source_hashes": {
+    "common.py": "3342422c57757019415473f3af15a2bb67b6398d165c767254e860858eb31d61",
+    "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+    "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+    "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2",
+    "results/E0/frozen_inputs.json": "bda4dbefd52c997cac8c638581d698b57b6c12d359a004c14726e01b7430df64",
+    "results/E3/FROZEN_SELECTION.json": "f461deaba2fce1d86aeaaefe205d8e4ab502ba69ff6a3b890b8dbad7360d0373",
+    "results/E4/heldout_main_table.csv": "eff0da1f1bb91ca6cdeda686a158085dde54f294adc81057552865f853f66471",
+    "results/E4/per_window.csv": "27f2d69e8488af496f1f646932906c8c20fb358c1400be594101cebba4827ef7",
+    "run.py": "970ac171f86afd66c644ae80c7dededae32539f8087b78cafbeb4ffeb3806622"
+  },
+  "window_counts": {
+    "development": 18,
+    "heldout": 135
+  }
+}

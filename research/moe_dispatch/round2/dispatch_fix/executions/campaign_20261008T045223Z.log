@@ -1,0 +1,42 @@
+baseline 270 rows
+baseline 540 rows
+baseline 810 rows
+baseline 1080 rows
+baseline 1350 rows
+baseline 1620 rows
+baseline 1890 rows
+baseline 2160 rows
+baseline 2430 rows
+baseline 2700 rows
+development 10 / 100
+development 20 / 100
+development 30 / 100
+development 40 / 100
+development 50 / 100
+development 60 / 100
+development 70 / 100
+development 80 / 100
+development 90 / 100
+development 100 / 100
+selected {'t_big': 3, 'large_first': True} ratio 0.9364736648527736
+heldout 1 / 20
+heldout 2 / 20
+heldout 3 / 20
+heldout 4 / 20
+heldout 5 / 20
+heldout 6 / 20
+heldout 7 / 20
+heldout 8 / 20
+heldout 9 / 20
+heldout 10 / 20
+heldout 11 / 20
+heldout 12 / 20
+heldout 13 / 20
+heldout 14 / 20
+heldout 15 / 20
+heldout 16 / 20
+heldout 17 / 20
+heldout 18 / 20
+heldout 19 / 20
+heldout 20 / 20
+done all

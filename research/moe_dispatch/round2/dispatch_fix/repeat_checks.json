@@ -1,0 +1,21 @@
+{
+  "all_evaluated_configs_repeated": true,
+  "all_per_window_digests_match": true,
+  "all_single_bit_exact": true,
+  "development_rows": 1800,
+  "frozen_sha_checks": {
+    "common.py": true,
+    "model.py": true,
+    "optimizer.py": true,
+    "predictors.py": true,
+    "results/E0/frozen_inputs.json": true,
+    "results/E3/FROZEN_SELECTION.json": true,
+    "results/E4/heldout_main_table.csv": true,
+    "results/E4/per_window.csv": true,
+    "run.py": true
+  },
+  "heldout_rows": 5400,
+  "predictor_sequences": "independent fresh state per configuration/repeat; serial canonical window order",
+  "selection_sha256": "7820facae14329f42f69c1f0566a8e62daa7aae719f2b35791bacb354a21ad6b",
+  "single_regressions": 540
+}

@@ -1,0 +1,25 @@
+{
+  "archives": [
+    {
+      "archive": "baseline_per_window.json.gz",
+      "archive_bytes": 3838564,
+      "archive_sha256": "894dae8c664a1ac106d3d186950268d2a4e867cad876e81bce9892c93bc8ac2b",
+      "gzip_mtime": 0,
+      "original": "baseline_per_window.json",
+      "original_bytes": 55130275,
+      "original_sha256": "087af72a47af05e970665aedc55af10ccc76947040c38782602095ab054241e0",
+      "roundtrip_exact": true
+    },
+    {
+      "archive": "per_window.json.gz",
+      "archive_bytes": 9863609,
+      "archive_sha256": "c186882d06e954551a9626ecdd75e0159880d28376508a39732836636beb8cf3",
+      "gzip_mtime": 0,
+      "original": "per_window.json",
+      "original_bytes": 134920024,
+      "original_sha256": "179849823618f5e1dc0bb82d399c5a7241e77dc50f89105b97744272b1bfe8fd",
+      "roundtrip_exact": true
+    }
+  ],
+  "created_utc": "2026-10-08T05:09:26.999484+00:00"
+}

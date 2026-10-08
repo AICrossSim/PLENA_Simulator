@@ -1,0 +1,4 @@
+/baseline_per_window.json
+/per_window.json
+/__pycache__/
+!/executions/*.log
