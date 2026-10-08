@@ -1,0 +1,47 @@
+{
+  "HBM_cap_GB_s": 126.03076923076924,
+  "MAC_flops": 2,
+  "MiB_bytes": 1048576,
+  "aggregation": "performance=per-window geometric mean; expert counts=arithmetic mean",
+  "checks": {
+    "all_GM_ratio_identities_valid": true,
+    "all_bandwidths_within_cap": true,
+    "all_main_latency_values_match_campaign": true,
+    "all_transfer_lower_bounds_valid": true
+  },
+  "compute_only_layer_latency": "not measured for new dispatch; service counters are not a substitute",
+  "created_utc": "2026-10-08T10:39:14.435857+00:00",
+  "generator_sha256": "268c69fbbdaeaa37ec264cf2184c2ee81bee4df779af9c2887f29be68b6e1710",
+  "hypothetical_cycle_ns": 1,
+  "inputs": {
+    "compare.csv": "749fb2b21f57e2ec77c8c76d41bde973567fbf1c29c9dbd519f119bfb8500e2f",
+    "frozen_designs.json": "615e494ae3ebf88d1ee9869423df3a59a91cea1d571bf6294bd9d5d0674a22c2",
+    "per_window.json.gz": "c186882d06e954551a9626ecdd75e0159880d28376508a39732836636beb8cf3",
+    "selection.json": "7820facae14329f42f69c1f0566a8e62daa7aae719f2b35791bacb354a21ad6b"
+  },
+  "numerical_execution_base_commit": "c6ed0ea03a7fba159d7e9f417e160164edd502b3",
+  "numerical_execution_source_sha256": {
+    "dispatch_fix/__init__.py": "9627f40042eb27e7ac52972e0bf50ec8ba010e7b338e603ade5d7da1e661fc9f",
+    "dispatch_fix/execute.py": "e6cf092bca39d8b3c0190c092adfb5259a51b2071fc3ec3dfa66d6101cdf2320",
+    "dispatch_fix/run.py": "2d3bdd2c05d3c65b3dd8520ecb7fed44ae196eb8734e885cec0e62529a827162",
+    "dispatch_fix/runtime.py": "ee7b9638cc5715442e43339621ecc7aa8f7fcb640c1243f6a5c59e25bf536b05",
+    "dispatch_fix/test_runtime.py": "d4a33bbfe2cd1aa740885bb2d07f1ec685bc14dcb56d7c39f962c7775b994210",
+    "model.py": "3ab8b0d33aaa57a387c2665229ebd21d5bd1b2d5d485424252fffaf394a0e2ca",
+    "optimizer.py": "eb6f0de8f8411ce5f1758e24b4e077d39a88d858043e1e30dbfa333f5203f73d",
+    "predictors.py": "bdd7b3c735368e4f5f7495ef2e83f300c8a45d3147b93eac19272d2a532ce2b2"
+  },
+  "precision": "BF16",
+  "row_counts": {
+    "hardware.csv": 10,
+    "main_table.csv": 21,
+    "metrics_by_batch.csv": 320,
+    "metrics_per_window.csv": 5400,
+    "workload.csv": 7
+  },
+  "scope": "post-router phase-fluid analytical estimates; no new simulations",
+  "selected_runtime": {
+    "large_first": true,
+    "t_big": 3
+  },
+  "source_evidence_commit": "9b57bac10ca4c99e854fb0a98a8b02c5cb595332"
+}
