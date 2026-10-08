@@ -1,0 +1,6 @@
+{
+  "checked_reference_points": 2754,
+  "expanded_bound_scope": "full-row GU/Down lifetime; optimistic simultaneous Z532KiB and retainedW532KiB; private/shared pool allowed",
+  "violation_count": 0,
+  "violations": []
+}
