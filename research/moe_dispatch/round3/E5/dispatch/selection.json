@@ -1,0 +1,101 @@
+{
+  "bootstrap_draws": 200,
+  "chosen": {
+    "large_first": true,
+    "t_big": 4
+  },
+  "development_window_ids": [
+    "joint_test_bfcl_b2_l13_s7",
+    "joint_test_bfcl_b4_l13_s7",
+    "joint_test_bfcl_b8_l13_s7",
+    "joint_test_bfcl_b16_l13_s7",
+    "joint_test_gpqa_b2_l13_s7",
+    "joint_test_gpqa_b4_l13_s7",
+    "joint_test_gpqa_b8_l13_s7",
+    "joint_test_gpqa_b16_l13_s7",
+    "joint_test_swe_b2_l13_s7",
+    "joint_test_swe_b4_l13_s7",
+    "joint_test_swe_b8_l13_s7",
+    "joint_test_swe_b16_l13_s7",
+    "v3_captured_mixed_development_t64_l13",
+    "v3_captured_mixed_development_t96_l13",
+    "v3_captured_mixed_development_t128_l13",
+    "v3_captured_mixed_development_swe_t64_l13",
+    "v3_captured_mixed_development_swe_t96_l13",
+    "v3_captured_mixed_development_swe_t128_l13"
+  ],
+  "objective": "\u6bcf\u4e2a\u5f00\u53d1\u7a97\u53e3\u8de8\u8bbe\u8ba1\u53ca\u6a21\u5f0f\u5e73\u5747 log(fixed/eft_old)\uff0c\u518d\u53d6\u51e0\u4f55\u5e73\u5747",
+  "old126": {
+    "large_first": true,
+    "t_big": 3
+  },
+  "scores": [
+    {
+      "bootstrap_count": 0,
+      "large_first": false,
+      "ratio": 0.965719072854552,
+      "t_big": 2
+    },
+    {
+      "bootstrap_count": 0,
+      "large_first": false,
+      "ratio": 0.965719072854552,
+      "t_big": 3
+    },
+    {
+      "bootstrap_count": 0,
+      "large_first": false,
+      "ratio": 0.965719072854552,
+      "t_big": 4
+    },
+    {
+      "bootstrap_count": 0,
+      "large_first": false,
+      "ratio": 0.965719072854552,
+      "t_big": 6
+    },
+    {
+      "bootstrap_count": 0,
+      "large_first": false,
+      "ratio": 0.965719072854552,
+      "t_big": 8
+    },
+    {
+      "bootstrap_count": 17,
+      "large_first": true,
+      "ratio": 0.961182424368959,
+      "t_big": 2
+    },
+    {
+      "bootstrap_count": 3,
+      "large_first": true,
+      "ratio": 0.9604139962161305,
+      "t_big": 3
+    },
+    {
+      "bootstrap_count": 157,
+      "large_first": true,
+      "ratio": 0.957604855569342,
+      "t_big": 4
+    },
+    {
+      "bootstrap_count": 20,
+      "large_first": true,
+      "ratio": 0.9618470336619017,
+      "t_big": 6
+    },
+    {
+      "bootstrap_count": 3,
+      "large_first": true,
+      "ratio": 0.9623488861859498,
+      "t_big": 8
+    }
+  ],
+  "tie_policy": "\u76f8\u540c\u914d\u5bf9\u76ee\u6807\u503c\u5148\u9009large_first=False\uff0c\u518d\u9009\u8f83\u5c0fT_big\uff1bbootstrap\u4e5f\u6cbf\u7528\u6b64\u786e\u5b9a\u6027\u89c4\u5219",
+  "ties_at_best_within_1e_minus12": [
+    {
+      "large_first": true,
+      "t_big": 4
+    }
+  ]
+}

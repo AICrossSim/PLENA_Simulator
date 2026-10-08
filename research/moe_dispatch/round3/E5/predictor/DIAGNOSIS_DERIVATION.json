@@ -1,0 +1,32 @@
+{
+  "no_simulator_rerun": true,
+  "paired_windows": 1620,
+  "raw_sha256": {
+    "E5/predictor/raw/256_pipelined_B1_nominal.json.gz": "7a4ca7e18cd1adbb8da572d5370bbb6f5bec8d08a5b1970cf61d84425d819d6d",
+    "E5/predictor/raw/256_pipelined_B1_ours.json.gz": "660de5bd5a139f52c18618e6cc8222f4b95bc9610d4ea3811bef98b6636cc568",
+    "E5/predictor/raw/256_pipelined_B2_nominal.json.gz": "9695a795cc3a0462e60743c26cca0e1ec56cf96f04c771181bdfed2c3b96eaae",
+    "E5/predictor/raw/256_pipelined_B2_ours.json.gz": "d79c2c4781f9aee782a9972cca5960b17cc213e48e0fc3554928f837ab53b818",
+    "E5/predictor/raw/256_pipelined_best_hetero_nominal.json.gz": "1aff0013094bfd7eed48f9d009b3e8180dc744809b187d5735e4b99255ed6ae6",
+    "E5/predictor/raw/256_pipelined_best_hetero_ours.json.gz": "5424300bb76b891e04bb891981ab7e1f7fd6700b3a5bfe6acc9a54f2ced6d39a",
+    "E5/predictor/raw/256_port_tight_B1_nominal.json.gz": "005aba8c75d51d9526d6e69fd312df500cd82982b8587b4c0bef5bdac395de40",
+    "E5/predictor/raw/256_port_tight_B1_ours.json.gz": "3c912d10de0dac1020598a7ee81dd889cd4c3d9b530a0dae22c5ac66e39f5c26",
+    "E5/predictor/raw/256_port_tight_B2_nominal.json.gz": "0347799cadd66382a3a62317f07d02949d01a4653ef2d8f740ec4a99196b9523",
+    "E5/predictor/raw/256_port_tight_B2_ours.json.gz": "550b15ad1cda052367f1b37c2c8e79dfacb0354c016a446ab53b293fac8e430d",
+    "E5/predictor/raw/256_port_tight_best_hetero_nominal.json.gz": "51e3874b560612ace0982655c75d5f6a65a4edad6eae8a6d5331fabb0c84779f",
+    "E5/predictor/raw/256_port_tight_best_hetero_ours.json.gz": "9b35196e6430cd5ae6c5b0a92a7054e3964e2be16c5418fa4155be05b79a7412",
+    "E5/predictor/raw/520_pipelined_B1_nominal.json.gz": "e286547e0e2d68ba016c8f4a86c4d630e9ef50666c65b565b8fd368990ce0bbd",
+    "E5/predictor/raw/520_pipelined_B1_ours.json.gz": "14d576d821f219ea0fb3dfa0cfccf8a5a19174dfcc82eb0edcb06eca930d9ba7",
+    "E5/predictor/raw/520_pipelined_B2_nominal.json.gz": "d86325e97fb211663c27b51c3e271645c77bb3431d2d1da6b2ab1c40f5950892",
+    "E5/predictor/raw/520_pipelined_B2_ours.json.gz": "ac84a430bdd638eaa80ad7c232b8c6846f8c2b2afc1c8d8f870292271f03d100",
+    "E5/predictor/raw/520_pipelined_H51_nominal.json.gz": "371efd8739b601e914a542d36dd5411fff6563680e61af6c281952c4e1154f18",
+    "E5/predictor/raw/520_pipelined_H51_ours.json.gz": "9395d70080050f2cbf2b3c2fe6ebfb3ef4f28e71ce2b704c41f420b0ec46c84d",
+    "E5/predictor/raw/520_port_tight_B1_nominal.json.gz": "c24a8fa68f35b365f74cb89d8465204755a1ae2b65b8b15194d17db2774d360b",
+    "E5/predictor/raw/520_port_tight_B1_ours.json.gz": "e7efd18611a1e38eb5260f14c6f6612ed7fa6a161b5fc839d35dfff1f776d8cb",
+    "E5/predictor/raw/520_port_tight_B2_nominal.json.gz": "697438f6aa61cfd5e005d235128d5af15124d2f27a58c7467582149e0b17a159",
+    "E5/predictor/raw/520_port_tight_B2_ours.json.gz": "961a794cd61c151809f114293c98e1002124ea7e3f12753cf3524ae1ec9d4ebc",
+    "E5/predictor/raw/520_port_tight_H42_nominal.json.gz": "3b0a3d5896091f6b67cfd7ba1dea9063273233f69afbe9b6bd4690f8cde1df7a",
+    "E5/predictor/raw/520_port_tight_H42_ours.json.gz": "5332d1c502faac7ae52405c3ac5da0d1ccb341be51552ab31411b4724f06c6e4"
+  },
+  "source_sha256": "ff2db8cff24b577a645abcf925dde880a8ec69080ea84da865eecda39210850c",
+  "summary_digest": "6c4031f087afe4041ebea83e1023bf42c877e61d0dfa903864b48d110172ae5d"
+}

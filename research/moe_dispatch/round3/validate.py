@@ -274,6 +274,30 @@ def single_regression_contract(rows, raw, window_ids, *, modes=MODES, partial=Fa
     return len(seen)
 
 
+def selected_single_regression_receipts(receipts, selection, *, partial=False):
+    """Keep the frozen main runtime distinct from old-threshold supplements."""
+    chosen = selection["chosen"]
+    selected = []
+    protocols = set()
+    expected = set(itertools.product(MODES, ("B0", "B1"), ("eft_old", "fixed")))
+    for receipt in receipts:
+        if (receipt["constraint_group"] != "C0" or receipt["design"] not in ("B0", "B1") or
+                receipt["dispatch"] not in ("eft_old", "fixed")):
+            continue
+        if (int(receipt["t_big"]) != int(chosen["t_big"]) or
+                truth(receipt["large_first"]) != truth(chosen["large_first"]) or
+                int(receipt["credits"]) != parameters().credits):
+            continue
+        ident = receipt["onchip_mode"], receipt["design"], receipt["dispatch"]
+        if ident not in expected or ident in protocols:
+            raise AssertionError("Duplicate or unexpected single-core physical regression protocol")
+        protocols.add(ident)
+        selected.append(receipt)
+    if not partial and protocols != expected:
+        raise AssertionError("Incomplete selected single-core physical regression protocols")
+    return selected
+
+
 def parameters_at_saved_bw(mode, bw):
     """CSV stores the exact derived cap, while registry names are rounded."""
     closest = min((256, 390, 520), key=lambda c: abs(parameters(mode, credits=c).hbm_bandwidth - float(bw)))
@@ -554,14 +578,11 @@ class Audit:
     def regression(self):
         rows = read_csv(self.root / "E5/dispatch/regression.csv")
         receipts = read_json(self.root / "E5/dispatch/repeat_checks.json")
+        selection = read_json(self.root / "E5/dispatch/selection.json")
         raw = {}; protocols = set()
-        for receipt in receipts:
-            if (receipt["constraint_group"] != "C0" or receipt["design"] not in ("B0", "B1") or
-                    receipt["dispatch"] not in ("eft_old", "fixed")):
-                continue
+        selected_receipts = selected_single_regression_receipts(receipts, selection, partial=self.partial)
+        for receipt in selected_receipts:
             ident = receipt["onchip_mode"], receipt["design"], receipt["dispatch"]
-            if ident in protocols:
-                raise AssertionError("Duplicate single-core physical regression protocol")
             protocols.add(ident)
             path = self.root / receipt["raw_file"]
             if sha(path) != receipt["raw_sha256"]:
@@ -574,7 +595,8 @@ class Audit:
                 raw[ident[:2] + (r["workload"], ident[2])] = r
         count = single_regression_contract(rows, raw, [w["id"] for w in self.held], partial=self.partial)
         return {"rows": count, "raw_protocols": len(protocols), "all_bitexact": True,
-                "raw_old_fixed_rechecked": True}
+                "raw_old_fixed_rechecked": True, "selected_runtime": selection["chosen"],
+                "old_runtime_supplements_kept_separate": True}
 
     def selected_baseline_headroom(self):
         """Pair the same LB with measured new baselines, never assume monotonicity."""

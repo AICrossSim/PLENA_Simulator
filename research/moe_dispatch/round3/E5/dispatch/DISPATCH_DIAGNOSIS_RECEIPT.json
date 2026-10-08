@@ -1,0 +1,26 @@
+{
+  "case_slices_file": "E5/dispatch/DISPATCH_DIAGNOSIS_CASE_SLICES.json",
+  "case_slices_sha256": "b5fe4804f4636ae19828ec806a0e51d74725bd3295e903df3a997e1bf5ca88b5",
+  "model_source_sha256": "f3286e5e3aad2af0f0db6cf4a9f38ce182e617286b317152e0e56c7b624ad430",
+  "parameters_sha256": "86b4075d9e86d8f41f40f796cf283bda492408ab2c159f0e71dc497c3d6da3dc",
+  "physical_sources_changed": false,
+  "runtime_source_sha256": "f0bb144f7fee7589f855350f0d3aa5cb744b1609b9a2338451b6e1122da968e4",
+  "scope": "derived saved task/phase/fluid intervals; service amounts overlap and are not summed as wall time",
+  "script_sha256": "cbd2ef22e78feb2f44bfddce8f0a109b3afb68f69775d3dacead2320d9057ac7",
+  "selection_sha256": "3492224977df5f57cec07f84ce47c78423c5229201e4f09f518ad3d68bf11d9d",
+  "simulation_rerun": false,
+  "source_files": {
+    "eft_old": {
+      "file": "E5/dispatch/raw/C0_pipelined_H51_eft_old_t4_1_520.json.gz",
+      "sha256": "86457b89e9ac03914493cf9bc0b62e83e8000487e15217b06dd7d79d1362c343"
+    },
+    "fixed": {
+      "file": "E5/dispatch/raw/C0_pipelined_H51_fixed_t4_1_520.json.gz",
+      "sha256": "9395d70080050f2cbf2b3c2fe6ebfb3ef4f28e71ce2b704c41f420b0ec46c84d"
+    },
+    "milp": {
+      "file": "E5/dispatch/raw/C0_pipelined_H51_milp_t4_1_520.json.gz",
+      "sha256": "79e57c7ac8c793923340a0bae21284cbc1996332c5796a12af254551beb5a197"
+    }
+  }
+}

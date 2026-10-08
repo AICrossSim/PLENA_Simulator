@@ -1,10 +1,10 @@
 {
   "clarified_PDF_sha256": {
-    "fig_ablation": "75760b8682f815cf138872b04d32283bd9915fc8101e701878da7eefe6deea9d",
-    "fig_gpqa_inflight": "14c2647f685e28d0fd1705d7b7cbb956a032930f8f8982b965d297274a8dcf47",
-    "fig_headroom_vs_bw": "ddd6d2d1f3167ba91dca147b273c1c4e77ede5a5ba88c34ffad0b6fa377d919f",
-    "fig_main_by_batch": "bc7f3c06e3c842279d580cc87fad3cfd3c2f45dc5d5836e5ca345c1974a3268e",
-    "fig_predictor": "a67cae4a352f3f7bd3c891a01d4db856e75390797906c4393cfdcf4f80f6727c"
+    "fig_ablation": "ec39d41c83ed09dbce9e73a604baa69347b4375966322c74eb4478fcb11b6200",
+    "fig_gpqa_inflight": "6617aa520b5ebde0de46ca6c670b9e603b7ee79a6c1174e936af8fdf58eb75d5",
+    "fig_headroom_vs_bw": "aad816d57b1031a35c8b8a9be0b41c717c93a3c4eafa2f5ce26f43cf79c5106f",
+    "fig_main_by_batch": "81ec435a38e3008b87aff5fbf015f9f4af694d69c006089630164f19ec35e9b7",
+    "fig_predictor": "6fc52e54ca1d5901c4004527c653b777812d7ecd3b524240bd1d278e70124d79"
   },
   "numerical_inputs_unchanged": true,
   "plotted_values_sha256": "32b8d89a199b340e78849d6ac52fbf3486cd5745d24127ff0c204aaee7426bed",

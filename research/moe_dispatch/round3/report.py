@@ -51,6 +51,18 @@ def main():
     robust_receipt=json.loads((ROOT/'E4/robust_heldout/RUN_RECEIPT.json').read_text())
     robust_global=[r for r in rows('E4/robust_heldout/winners.csv')
                    if r['family']=='all' and r['objective']=='geomean']
+    synthetic=rows('E4/synthetic/reverse_search.csv')
+    synthetic_audit=json.loads((ROOT/'E4/synthetic/COMPLETION_AUDIT.json').read_text())
+    sobol=rows('E5/sobol/sobol_samples.csv')
+    sobol_audit=json.loads((ROOT/'E5/sobol/COMPLETION_AUDIT.json').read_text())
+    synthetic_batches=[]
+    for batch in sorted({int(r['batch']) for r in synthetic}):
+        group=[r for r in synthetic if int(r['batch'])==batch]
+        reversals=[r for r in group if float(r['delta'])<0]
+        synthetic_batches.append([f'B{batch}',len(group),len(reversals),
+            sum(r['compute_shapes_distinct']=='True' for r in reversals),
+            f(max([0.0,*[-100*float(r['delta']) for r in reversals]])),
+            sum(r['proof_complete']=='True' for r in group)])
     qtable=[
         ['Q1 最大可能收益',f"当前模型下，整体相对本轮 B1 至多 {f(newwhole['max_gain_vs_B1_pct'])}%，相对 B2 至多 {f(newwhole['max_gain_vs_B2_pct'])}%；达不到同时快 5%。B96/128 单独仍有空间。",'E4/selected_baseline_headroom.csv'],
         ['Q2 W 槽是否主因',f"H0 {f(ab['H0']['geomean_ms'])} → H2 {f(ab['H2']['geomean_ms'])} ms；W∞可回收 {f(100*attribution['recovery_fraction'],2)}%，未达 80% 标准。",'E3/attribution.json'],
@@ -90,7 +102,7 @@ def main():
                           '+'.join(map(str,d['vector_lanes']))]
                          for name,d in selected['modes'][mode]['C0'].items()]),'']
     lines += ['每核维度、存储和端口按 core0/core1 顺序列出；W 池只计算一次，共享池的各核单独最大槽数不能同时相加。H33 允许与同构空间重叠；若最终核心形状相同，不能把标签 H33 本身当作异构贡献。',
-              '', 'H51／H42／H33 指两核乘法器预算之比 5:1／4:2／3:3，不能当成 PM 行数。PM 对应一次处理的 token 行数，PN 是输出列宽，PK 是物理点积宽度；本轮三个维度均有变化。',
+              '', 'H51／H42／H33 表示两核乘法器预算的无序划分族 5+1／4+2／3+3，不表示 core0/core1 必须按这个顺序排列，也不能当成 PM 行数。具体核顺序以每行 core0/core1 的形状和资源列表为准。PM 对应一次处理的 token 行数，PN 是输出列宽，PK 是物理点积宽度；本轮三个维度均有变化。',
               '', '共享落地池开放的是字节容量共享；本轮仍保留各核冻结的 W bank／读端口份额，没有免费借用另一核的端口。C1 检查扣除计算块后的物理在途空间不少于 16 KiB，它不保证实际供数达到 252 GB/s：尾块有效载荷、阶段边界和片上读端口仍可能限制速率。',
               '', '主目标是 18 开发窗口上 MILP 资源分配＋物理 LPT 回放延迟的几何平均。CVaR10、按 batch 最坏比值和 200 次 bootstrap 为诊断，统一使用同一 B1 参考向量。选择后硬件冻结，不按留出 batch 更换配置。',
               '', '实际覆盖限制必须同时看 SEARCH_COVERAGE_ZH.md：每组 256 个实评点均来自初始点／seed，分支定界尚未解析任何单点叶子。候选生成只有六套容量总额 profile，容量份额和 bank 份额仍主要按等分／算力比例耦合；声明的独立容量、bank 和数据流大空间尚未被充分覆盖。C0/C1 联合重选对每族使用相同生成预算，不能代替全空间优化。',
@@ -132,7 +144,18 @@ def main():
               table(['参数','Sobol 一阶 S1','S1 置信半宽','总效应 ST','ST 置信半宽'],
                     [[r['param'],f(r['S1']),f(r['S1_ci']),f(r['ST']),f(r['ST_ci'])] for r in rows('E5/sobol/sobol_indices.csv')]),
               '', 'Sobol 使用 N=256、五参数、1,792 个样本，每点重新选几何、数据流、私有／共享容量与端口并重复完整过程。在途额度范围 256–640，其余范围沿第二轮。若搜索证明开放，指数衡量的是等预算搜索程序及其最好已测候选的敏感性，不能声称全局最优硬件的 Sobol 指数。翻转点逐一列在 flip_points.csv。',
-              '', '合成反向搜索在 256 下重新执行，单独保留 E4/synthetic/ 的表、完整样本和证明；它只探索可能的工作区间，不进入真实留出主表，也不能代替真实模型精度／推理验证。',
+              '', '表中保留有限样本的原始估计值和置信半宽，未把负的一阶估计或超过 1 的总效应裁剪为比例。置信区间较宽，不能据此给出精确的重要性排序；总效应也不能相加成延迟归因。硬件重新选择与有限搜索候选的跳变都包含在这个响应函数里。',
+              '', '响应量使用同一组 18 个开发窗口：delta = 三个双核比例族（5+1、4+2、3+3）中最好已评估候选的开发集延迟几何平均 / 最好已评估单核的开发集延迟几何平均 − 1。负值仅表示该预算内已测双核候选更快；H33（3+3）允许两核计算形状相同，因此不能把双核族标签解释为严格异构。指数不使用留出窗口选硬件。',
+              '', table(['扫描','完整点数','资源模型回放次数（含双遍）','全局零差距证明闭合点数'],
+                        [['Sobol',sobol_audit['completed_points'],
+                          sobol_audit['physical_simulator_calls_both_repeats'],sobol_audit['closed_global_proofs']],
+                         ['合成反向搜索',synthetic_audit['completed_points'],
+                          synthetic_audit['physical_simulator_calls_both_repeats'],synthetic_audit['closed_global_proofs']]]),
+              '', f"Sobol 的已测 delta 范围为 {f(100*min(float(r['delta']) for r in sobol))}%～{f(100*max(float(r['delta']) for r in sobol))}%，观察到的双核／单核排序反转点为 {sum(float(r['delta'])<0 for r in sobol)} 个。S1／ST／置信半宽从完整 delta 序列独立重算，最大逐值差为 {sobol_audit['maximum_recomputed_index_difference']}；证书、全量索引、源冻结和重复核验见 E5/sobol/COMPLETION_AUDIT.json。",
+              '', f"获选双核中计算形状不同的样本有 {sobol_audit['selected_dual_compute_shape_counts']['distinct']} 个、相同的有 {sobol_audit['selected_dual_compute_shape_counts']['same']} 个，后者属于 H33 的同构重叠空间。逐窗口下界另独立检查 {sobol_audit['independent_development_window_lowerbound_checks']} 项，违例 {sobol_audit['lowerbound_violations']}。样本内的局部 5% incumbent 证书只限制该族已测可执行参照点的改进幅度，不是主表同时对 B1/B2 的 5% 胜出门槛。",
+              '', '### 合成负载：反转只用于探索，不进入主表','',
+              table(['合成 Batch','完整点数','双核已测领先点数','其中计算形状不同','最大已测领先 %','全局证明 B 闭合点数'],synthetic_batches),
+              '', '以上领先只是在每族相同有限搜索预算内比较已测候选，不能写成对全局最优单核的胜出。完整逐点区间、硬件、证明和重复记录保留在 E4/synthetic/reverse_search.csv、SYNTHETIC_ZH.md 与 COMPLETION_AUDIT.json。合成数据只探索可能的工作区间，不进入真实留出主表，也不能代替真实模型精度／推理验证。',
               '', '## 7. 验收与局限','',
               '完整自动验收结果：','', '```json',json.dumps(validation,ensure_ascii=False,indent=2),'```','',
               '模型是相位流体解析近似；共享池在事件边界分配有限字节窗口，并未模拟逐 DRAM 请求返回、真实 bank 地址、交叉开关或全部控制电路。端口与计算占用是重叠积分。当前生命周期和下界都不代表将来更改 compiler 融合后的架构。没有 RTL／面积／功耗综合，也没有完整模型每 token 计时。本轮留出集已被此前调试访问，不能当成全新盲测。',

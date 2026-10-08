@@ -1,0 +1,20 @@
+
+==================================== ERRORS ====================================
+___ ERROR collecting research/moe_dispatch/round3/test_sensitivity_audit.py ____
+ImportError while importing test module '/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/test_sensitivity_audit.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/moe_dispatch/round3/test_sensitivity_audit.py:3: in <module>
+    from .sensitivity_audit import audit_flip_csv
+research/moe_dispatch/round3/sensitivity_audit.py:10: in <module>
+    from .common import ROOT, metadata, sha, write_json
+research/moe_dispatch/round3/common.py:10: in <module>
+    from ..round2.common import inputs, paired_ci
+E   ImportError: attempted relative import beyond top-level package
+=========================== short test summary info ============================
+ERROR research/moe_dispatch/round3/test_sensitivity_audit.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.30s

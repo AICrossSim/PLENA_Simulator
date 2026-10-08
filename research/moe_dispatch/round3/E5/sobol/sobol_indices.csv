@@ -1,0 +1,6 @@
+param,S1,S1_ci,ST,ST_ci,all_searches_certified,scope
+weight_tile_service_cycles,0.1492261421614474,0.20418560340075603,1.0156432118325402,0.26071381201128435,False,indices of full-domain equal-work best-evaluated witnesses; not global-optimum indices if proofs open
+bank_Bpc,-0.049532281865146646,0.12543435474820247,0.5454291395207951,0.24781251673802004,False,indices of full-domain equal-work best-evaluated witnesses; not global-optimum indices if proofs open
+dotstagecycles,0.002518941829071855,0.0038239268804467937,0.044149552655193144,0.05998399799679834,False,indices of full-domain equal-work best-evaluated witnesses; not global-optimum indices if proofs open
+credits,0.03489853298540151,0.08576489803780973,0.4893600139730196,0.20021957698672913,False,indices of full-domain equal-work best-evaluated witnesses; not global-optimum indices if proofs open
+vector_scale,0.0,0.0,0.0,0.0,False,indices of full-domain equal-work best-evaluated witnesses; not global-optimum indices if proofs open

@@ -1,0 +1,312 @@
+{
+  "checks": [
+    {
+      "details": 5670,
+      "name": "schema:E0/repro.csv",
+      "passed": true
+    },
+    {
+      "details": 459,
+      "name": "schema:E2/bounds_by_window.csv",
+      "passed": true
+    },
+    {
+      "details": 48,
+      "name": "schema:E2/bounds_summary.csv",
+      "passed": true
+    },
+    {
+      "details": 459,
+      "name": "schema:E2/port_tight/bounds_by_window.csv",
+      "passed": true
+    },
+    {
+      "details": 48,
+      "name": "schema:E2/port_tight/bounds_summary.csv",
+      "passed": true
+    },
+    {
+      "details": 80,
+      "name": "schema:E3/ablation.csv",
+      "passed": true
+    },
+    {
+      "details": 20,
+      "name": "schema:E4/dse_progress.csv",
+      "passed": true
+    },
+    {
+      "details": 10,
+      "name": "schema:E4/union_generation_budget.csv",
+      "passed": true
+    },
+    {
+      "details": 20,
+      "name": "schema:E4/proof_status.csv",
+      "passed": true
+    },
+    {
+      "details": 17586,
+      "name": "schema:E4/bootstrap_stability.csv",
+      "passed": true
+    },
+    {
+      "details": 56,
+      "name": "schema:E4/heldout_main_table.csv",
+      "passed": true
+    },
+    {
+      "details": 28,
+      "name": "schema:E4/heldout_main_table_pipelined.csv",
+      "passed": true
+    },
+    {
+      "details": 28,
+      "name": "schema:E4/heldout_main_table_port_tight.csv",
+      "passed": true
+    },
+    {
+      "details": 448,
+      "name": "schema:E4/breakdown.csv",
+      "passed": true
+    },
+    {
+      "details": 24,
+      "name": "schema:E4/gates.csv",
+      "passed": true
+    },
+    {
+      "details": 32,
+      "name": "schema:E4/selected_baseline_headroom.csv",
+      "passed": true
+    },
+    {
+      "details": 16,
+      "name": "schema:E4/cross_bw.csv",
+      "passed": true
+    },
+    {
+      "details": 1440,
+      "name": "schema:E4/synthetic/reverse_search.csv",
+      "passed": true
+    },
+    {
+      "details": 42,
+      "name": "schema:E5/dispatch/compare.csv",
+      "passed": true
+    },
+    {
+      "details": 5670,
+      "name": "schema:E5/dispatch/hbm_bytes.csv",
+      "passed": true
+    },
+    {
+      "details": 540,
+      "name": "schema:E5/dispatch/regression.csv",
+      "passed": true
+    },
+    {
+      "details": 2520,
+      "name": "schema:E5/dispatch/development_per_window.csv",
+      "passed": true
+    },
+    {
+      "details": 84,
+      "name": "schema:E5/predictor/predictor_table.csv",
+      "passed": true
+    },
+    {
+      "details": 5,
+      "name": "schema:E5/sobol/sobol_indices.csv",
+      "passed": true
+    },
+    {
+      "details": 1792,
+      "name": "schema:E5/sobol/sobol_samples.csv",
+      "passed": true
+    },
+    {
+      "details": 0,
+      "name": "schema:E5/sobol/flip_points.csv",
+      "passed": true
+    },
+    {
+      "details": {
+        "tree": "c2e29a178010362d4bced173cf86217c74b0613b",
+        "unchanged": true
+      },
+      "name": "round2_readonly",
+      "passed": true
+    },
+    {
+      "details": {
+        "configurations": 42,
+        "nonzero_differences": 0,
+        "rows": 5670
+      },
+      "name": "E0_exact_reproduction_and_LB",
+      "passed": true
+    },
+    {
+      "details": 2754,
+      "name": "E2_saved_bounds_and_reference_LB",
+      "passed": true
+    },
+    {
+      "details": {
+        "E3": 1350,
+        "E5_dispatch": 11340,
+        "E5_old_runtime_setting": 1890,
+        "E5_predictor": 11340
+      },
+      "name": "all_available_per_window_LB_and_repeat",
+      "passed": true
+    },
+    {
+      "details": {
+        "archived_prediction_csv": {
+          "lossless_hash_verified": true,
+          "rows": 353976,
+          "uncompressed_bytes": 103830785
+        },
+        "configuration_receipts": 344,
+        "digest_pairs": 30050,
+        "raw_receipts": 212
+      },
+      "name": "repeat_receipts_raw_hashes_and_raw_LB",
+      "passed": true
+    },
+    {
+      "details": {
+        "CSV_configurations": 140,
+        "raw_configurations": 140,
+        "rows": 2520
+      },
+      "name": "dispatch_development_fixed_and_EFT_reference_repeats",
+      "passed": true
+    },
+    {
+      "details": {
+        "certificates": 16180,
+        "evaluated_points": 134400,
+        "final_union_selection_certificates": 20,
+        "main_family_certificates": 20,
+        "main_union_actual_source_calls_counted_once": 367776,
+        "open_regions": 582212,
+        "proof_B_closed_families": 0,
+        "simulator_calls_including_repeats": 5759136,
+        "sobol_samples": 1792,
+        "successful_points": 134388,
+        "synthetic_points": 1440,
+        "union_selection_certificates_no_new_calls": 20
+      },
+      "name": "all_available_search_witnesses_LB_and_certificate_scope",
+      "passed": true
+    },
+    {
+      "details": {
+        "E4/synthetic/SYNTHETIC_PROTOCOL.json": 1440,
+        "E5/sobol/SOBOL_PROTOCOL.json": 1792,
+        "bootstrap_groups": 60
+      },
+      "name": "bootstrap_and_campaign_counts",
+      "passed": true
+    },
+    {
+      "details": {
+        "recomputed_table_cells": 1536
+      },
+      "name": "published_latency_tables_from_window_values",
+      "passed": true
+    },
+    {
+      "details": {
+        "assumed_heldout_monotonicity": false,
+        "paired_rows": 32
+      },
+      "name": "new_baseline_headroom_from_same_protocol_windows",
+      "passed": true
+    },
+    {
+      "error": "AssertionError: Duplicate single-core physical regression protocol",
+      "name": "single_core_bitexact_regression",
+      "passed": false
+    },
+    {
+      "details": 20,
+      "name": "frozen_main_hardware_isoresource",
+      "passed": true
+    },
+    {
+      "details": {
+        "coverage": {
+          "bootstrap_rows": 1986,
+          "diagnostic_groups": 24,
+          "group_candidate_rows": 334,
+          "new_points": 175,
+          "objective_rows": 662,
+          "per_window_rows": 89370,
+          "planned_groups": 20,
+          "raw_checks": 187,
+          "reused_points": 12,
+          "unique_points": 187,
+          "window_order_checks": 25245,
+          "winner_rows": 72
+        },
+        "max_objective_error": 0.0,
+        "selected_hardware_unchanged": true
+      },
+      "name": "development_frozen_heldout_robust_diagnostics",
+      "passed": true
+    }
+  ],
+  "complete_delivery": false,
+  "errors": [
+    {
+      "error": "AssertionError: Duplicate single-core physical regression protocol",
+      "name": "single_core_bitexact_regression",
+      "passed": false
+    }
+  ],
+  "inflight_scope": "phase-fluid rate times 65-cycle estimate, not a native discrete-credit occupancy trace",
+  "lower_bound_checked_actual_values": {
+    "E0": 5670,
+    "E2": 2754,
+    "E3": 1350,
+    "E3/raw_physical": 1350,
+    "E4/cross_bw_raw_physical": 4320,
+    "E4_search": 91944,
+    "E4_synthetic_search": 57600,
+    "E4_union_selection": 105516,
+    "E5/dispatch/raw_physical": 13230,
+    "E5/predictor/raw_physical": 11340,
+    "E5_dispatch": 11340,
+    "E5_dispatch_development_raw": 5040,
+    "E5_old_runtime_setting": 1890,
+    "E5_predictor": 11340,
+    "E5_sobol_search": 1290240
+  },
+  "lower_bound_checked_total": 1614924,
+  "lower_bound_violation_count": 0,
+  "lower_bound_violations": [],
+  "missing_files": [
+    "REPORT_ZH.md",
+    "README.md"
+  ],
+  "partial_requested": true,
+  "proof_scope": "Exact resource-assignment solver is not a joint temporal-scheduling optimum. Open hardware domains are reported, never closed by an optimal leaf alone.",
+  "repeat_configuration_receipts": 344,
+  "repeat_digest_pairs": 35090,
+  "scope": "BF16 post-router phase-fluid analytical evidence; not native HBM, RTL, calibrated area, or full-model timing",
+  "search_accounting": {
+    "certificates": 16180,
+    "evaluated_points": 134400,
+    "main_union_actual_source_calls_counted_once": 367776,
+    "open_regions": 582212,
+    "proof_B_closed_families": 0,
+    "simulator_calls_including_repeats": 5759136,
+    "successful_points": 134388,
+    "union_selection_certificates_no_new_calls": 20
+  },
+  "status": "failed"
+}

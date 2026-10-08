@@ -6,8 +6,32 @@ import pytest
 
 from research.moe_dispatch.round3.validate import (exact_reproduction, check_repeat_record, certificate_contract,
                        assert_floor, read_csv, check_physical_ledger, union_call_accounting,
-                       indexed_campaign_rows, sensitivity_point_contract, single_regression_contract)
+                       indexed_campaign_rows, sensitivity_point_contract, single_regression_contract,
+                       selected_single_regression_receipts)
 from research.moe_dispatch.round3.common import decode_design, frozen_designs, encode_design
+
+
+def test_single_regression_keeps_old_threshold_supplement_out_of_main_protocol():
+    receipt = dict(constraint_group="C0", design="B1", dispatch="fixed",
+                   onchip_mode="pipelined", t_big=4, large_first=True, credits=520,
+                   raw_file="main.json.gz")
+    supplement = {**receipt, "t_big": 3, "raw_file": "old-setting.json.gz"}
+    chosen = {"chosen": {"t_big": 4, "large_first": True}}
+    assert selected_single_regression_receipts([supplement, receipt], chosen, partial=True) == [receipt]
+    with pytest.raises(AssertionError, match="Duplicate"):
+        selected_single_regression_receipts([receipt, supplement, receipt], chosen, partial=True)
+
+
+def test_single_regression_requires_all_main_protocols_despite_complete_old_supplements():
+    receipts = [dict(constraint_group="C0", design=design, dispatch=dispatch,
+                     onchip_mode=mode, t_big=3, large_first=True, credits=520)
+                for mode in ("pipelined", "port_tight") for design in ("B0", "B1")
+                for dispatch in ("eft_old", "fixed")]
+    chosen = {"chosen": {"t_big": 4, "large_first": True}}
+    with pytest.raises(AssertionError, match="Incomplete"):
+        selected_single_regression_receipts(receipts, chosen)
+    main = [{**receipt, "t_big": 4} for receipt in receipts]
+    assert selected_single_regression_receipts(receipts + main, chosen) == main
 
 
 def test_reproduction_rejects_changed_latency_even_if_abs_diff_forged_zero():

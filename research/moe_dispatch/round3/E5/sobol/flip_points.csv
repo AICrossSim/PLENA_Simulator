@@ -1,0 +1,1 @@
+sample_index,weight_tile_service_cycles,bank_Bpc,dotstagecycles,credits,bw_GBps,vector_scale,exact_repeat_identical,single_ms,hetero_ms,single_design,hetero_design,hetero_family,compute_shapes_distinct,delta,delta_lower,delta_upper,proof_complete,gap_pct,evaluated_points,simulator_calls,task_cache_entries_released,status,certified_reversal,reference

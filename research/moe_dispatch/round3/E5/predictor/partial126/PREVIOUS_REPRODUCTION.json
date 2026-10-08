@@ -1,0 +1,9 @@
+{
+  "all_exact": true,
+  "reference_sha256": {
+    "dispatch_fix/predictor_ablation_20261008/nominal_control/per_window.csv": "0035247cbcead57f282e426005712107aa8ae423708896a1308acec030391959",
+    "dispatch_fix/predictor_ablation_20261008/per_window.csv": "e66af86e10228127399c968ca09757a968ba82065e8c4c06d8229268d1409f9e"
+  },
+  "rows": 4860,
+  "scope": "\u76f8\u540c\u51bb\u7ed3\u786c\u4ef6/\u5171\u540cWS/fixed_legacy/t3true\uff0cfair nominal\u548c\u5168\u90e8\u5b66\u4e60\u5668"
+}
