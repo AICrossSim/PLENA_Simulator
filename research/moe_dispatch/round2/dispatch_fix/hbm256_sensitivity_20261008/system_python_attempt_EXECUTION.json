@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "-u",
+    "-m",
+    "research.moe_dispatch.round2.dispatch_fix.hbm256_sensitivity_20261008.run",
+    "--jobs",
+    "6"
+  ],
+  "cwd": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator",
+  "started_utc": "2026-10-08T12:16:38.033180+00:00",
+  "finished_utc": "2026-10-08T12:16:38.062655+00:00",
+  "elapsed_seconds": 0.029486598446965218,
+  "exit_code": 1
+}

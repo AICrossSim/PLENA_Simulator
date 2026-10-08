@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/usr/lib64/python3.6/runpy.py", line 183, in _run_module_as_main
+    mod_name, mod_spec, code = _get_module_details(mod_name, _Error)
+  File "/usr/lib64/python3.6/runpy.py", line 153, in _get_module_details
+    code = loader.get_code(mod_name)
+  File "<frozen importlib._bootstrap_external>", line 781, in get_code
+  File "<frozen importlib._bootstrap_external>", line 741, in source_to_code
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/dispatch_fix/hbm256_sensitivity_20261008/run.py", line 6
+    from __future__ import annotations
+    ^
+SyntaxError: future feature annotations is not defined

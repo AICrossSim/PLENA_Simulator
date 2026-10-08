@@ -1,0 +1,148 @@
+{
+  "audited_file_sha256": {
+    "METADATA.json": "47e12e0812baf83b7e9c250d2f9c98cbbefa79aa6dcf1c2a7def6516e2af6647",
+    "REPORT_PRESENTATION_FIX.json": "81fcd470b24b9e224182e7b13beceeb0d9a5ea31c0f83f6de432093c70357bec",
+    "TABLES_ZH.md": "850b405db1d2cca7c6fe69ee73a473a65c7ba23b84d5d6e37b1ddd478eb66fc4",
+    "VERIFY.json": "96ebccc9683501f3fd498e6f077da302de990b806379b67190d3f82048f6cf2e",
+    "WINDOW_DIAGNOSTIC.md": "e5c73957bd2792d3c38229ebf5c28e140171d3bf39423620d1a26f28359e47e9",
+    "compare.csv": "41d878de191ba90ed48cd38ffe4d967715aa8e2b3319e103286016da7a7cd4a3",
+    "per_window.csv": "56ebc72e52e38dc8eae833a48d0082e61c67d2294fcba7d4398bab4f5d1171c4",
+    "postprocess_report.py": "39cda12dc372e43830b84a8f924d260df337af9c3ad18b1742414e28ee0ba6db",
+    "repeat_checks.json": "5782920b18a5eb4b886647d0daaa1b0d4c93376b344060cffe0af2d682179211",
+    "run.py": "bf27ca40016f20965d37330168deddc93817238db1824f5aeeda4babce1ec35e",
+    "task_predictions.csv.gz": "191a8381f6e308bcd4eeb718f6c9c071372af07717659f06dad1d203fe34f5cf",
+    "verify.py": "32e36c30ab4766bd1fef4eb46d0ddb65761a5e0f328d43b59972e763c5c4daf0"
+  },
+  "caveats": [
+    "520 credits are a changedsharedcontroller resource; notisoarea withold256credits.",
+    "Increasing sharedcredit cap does not removeprivateweightwindow/bank limits.",
+    "Fixed8KiB ingress burstoccupancy and native perrequest sustainable256GB/s arenotvalidated.",
+    "Hardware remains selectedatoldcredit regime; noDSE oroptimalityclaimat256."
+  ],
+  "checks_passed": 314183,
+  "checks_total": 314183,
+  "configurations": 12,
+  "diagnostic_verified": true,
+  "failed": [],
+  "independent_method": "Read raw per-window/task archives and old baseline tables; independently recompute all96 aggregates and pairedratios; check receipt hashes, unchanged inputs/source and frozen hardware. No simulation or costmodel modifications.",
+  "original_report_terminal_newlines": [
+    2
+  ],
+  "presentation_EOF_hygiene_verified": true,
+  "presentation_change_only_verified": true,
+  "repeats_exact": true,
+  "scope": "BF16 postrouter phase-fluid analytical256GB/s sensitivity, notnative HBM/RTL/fullmodel timing",
+  "simulation_calls": 3672,
+  "summary": [
+    {
+      "design": "B1",
+      "new256_geomean_ms": "1.8976220008066047",
+      "old126_geomean_ms": "3.795787520978372",
+      "onchip_mode": "pipelined",
+      "predictor": "nominal",
+      "ratio_vs_B1_same_predictor": "1.0",
+      "ratio_vs_B2_same_predictor": "0.9360618275088315"
+    },
+    {
+      "design": "B1",
+      "new256_geomean_ms": "1.8969701855211276",
+      "old126_geomean_ms": "3.795094267210405",
+      "onchip_mode": "pipelined",
+      "predictor": "ours",
+      "ratio_vs_B1_same_predictor": "1.0",
+      "ratio_vs_B2_same_predictor": "0.9821266454054703"
+    },
+    {
+      "design": "B2",
+      "new256_geomean_ms": "2.027240023083519",
+      "old126_geomean_ms": "3.8137156573967976",
+      "onchip_mode": "pipelined",
+      "predictor": "nominal",
+      "ratio_vs_B1_same_predictor": "1.068305501423265",
+      "ratio_vs_B2_same_predictor": "1.0"
+    },
+    {
+      "design": "B2",
+      "new256_geomean_ms": "1.9314924347032298",
+      "old126_geomean_ms": "3.8137955444185443",
+      "onchip_mode": "pipelined",
+      "predictor": "ours",
+      "ratio_vs_B1_same_predictor": "1.018198625073603",
+      "ratio_vs_B2_same_predictor": "1.0"
+    },
+    {
+      "design": "best_hetero",
+      "new256_geomean_ms": "1.96254191679926",
+      "old126_geomean_ms": "3.8061942563508224",
+      "onchip_mode": "pipelined",
+      "predictor": "nominal",
+      "ratio_vs_B1_same_predictor": "1.0342111948349357",
+      "ratio_vs_B2_same_predictor": "0.9680856210672821"
+    },
+    {
+      "design": "best_hetero",
+      "new256_geomean_ms": "1.9528887724756783",
+      "old126_geomean_ms": "3.8235850707198935",
+      "onchip_mode": "pipelined",
+      "predictor": "ours",
+      "ratio_vs_B1_same_predictor": "1.0294778417612236",
+      "ratio_vs_B2_same_predictor": "1.0110776192482143"
+    },
+    {
+      "design": "B1",
+      "new256_geomean_ms": "10.612198055195694",
+      "old126_geomean_ms": "10.611953423289952",
+      "onchip_mode": "port_tight",
+      "predictor": "nominal",
+      "ratio_vs_B1_same_predictor": "1.0",
+      "ratio_vs_B2_same_predictor": "0.9739418190635334"
+    },
+    {
+      "design": "B1",
+      "new256_geomean_ms": "10.611767456963909",
+      "old126_geomean_ms": "10.611738249843206",
+      "onchip_mode": "port_tight",
+      "predictor": "ours",
+      "ratio_vs_B1_same_predictor": "1.0",
+      "ratio_vs_B2_same_predictor": "0.9739119368537036"
+    },
+    {
+      "design": "B2",
+      "new256_geomean_ms": "10.89613141922539",
+      "old126_geomean_ms": "10.89608710214452",
+      "onchip_mode": "port_tight",
+      "predictor": "nominal",
+      "ratio_vs_B1_same_predictor": "1.0267553774018268",
+      "ratio_vs_B2_same_predictor": "1.0"
+    },
+    {
+      "design": "B2",
+      "new256_geomean_ms": "10.89602360891687",
+      "old126_geomean_ms": "10.895904377402521",
+      "onchip_mode": "port_tight",
+      "predictor": "ours",
+      "ratio_vs_B1_same_predictor": "1.0267868809890306",
+      "ratio_vs_B2_same_predictor": "1.0"
+    },
+    {
+      "design": "best_hetero",
+      "new256_geomean_ms": "10.880577255864795",
+      "old126_geomean_ms": "10.882540885938548",
+      "onchip_mode": "port_tight",
+      "predictor": "nominal",
+      "ratio_vs_B1_same_predictor": "1.0252896901540298",
+      "ratio_vs_B2_same_predictor": "0.9985725058957023"
+    },
+    {
+      "design": "best_hetero",
+      "new256_geomean_ms": "10.925438628281604",
+      "old126_geomean_ms": "10.917479818173122",
+      "onchip_mode": "port_tight",
+      "predictor": "ours",
+      "ratio_vs_B1_same_predictor": "1.0295588055985763",
+      "ratio_vs_B2_same_predictor": "1.002699610465295"
+    }
+  ],
+  "task_rows": 50568,
+  "window_rows": 1620
+}

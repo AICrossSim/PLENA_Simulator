@@ -1,0 +1,13 @@
+{'done': ('pipelined', 'B1', 'nominal'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 1.8976220008066047}
+{'done': ('pipelined', 'B1', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 1.8969701855211276}
+{'done': ('pipelined', 'B2', 'nominal'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 2.027240023083519}
+{'done': ('pipelined', 'B2', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 1.9314924347032298}
+{'done': ('pipelined', 'best_hetero', 'nominal'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 1.96254191679926}
+{'done': ('pipelined', 'best_hetero', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 1.9528887724756783}
+{'done': ('port_tight', 'B1', 'nominal'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 10.612198055195694}
+{'done': ('port_tight', 'B1', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 10.611767456963909}
+{'done': ('port_tight', 'B2', 'nominal'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 10.89613141922539}
+{'done': ('port_tight', 'B2', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 10.89602360891687}
+{'done': ('port_tight', 'best_hetero', 'nominal'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 10.880577255864795}
+{'done': ('port_tight', 'best_hetero', 'ours'), 'windows': 135, 'tasks': 4214, 'geomean_ms': 10.925438628281604}
+{'completed': 12, 'window_rows': 1620, 'tasks': 50568, 'elapsed_seconds': 52.321587320417166}

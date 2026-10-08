@@ -1,0 +1,11 @@
+{
+  "all_repeats_exact": true,
+  "area_claim_eligible": false,
+  "checks_passed": 6878,
+  "compute_private_storage_unchanged": true,
+  "failed": [],
+  "native_hbm_calibrated": false,
+  "source_and_inputs_unchanged": true,
+  "task_rows": 50568,
+  "window_rows": 1620
+}

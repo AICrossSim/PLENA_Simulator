@@ -1,0 +1,11 @@
+{
+  "change": "table labels describe each row design; no numerical changes",
+  "command": [
+    "-"
+  ],
+  "completed_utc": "2026-10-08T12:23:39.363872+00:00",
+  "numerical_csv_unchanged": true,
+  "report_after_sha256": "850b405db1d2cca7c6fe69ee73a473a65c7ba23b84d5d6e37b1ddd478eb66fc4",
+  "report_before_sha256": "895108373d674872d73cd59e311dbda16e27ea08ada5de50760133a6af69fe91",
+  "script_sha256": "39cda12dc372e43830b84a8f924d260df337af9c3ad18b1742414e28ee0ba6db"
+}

@@ -1,0 +1,1026 @@
+[
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B1",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "d6626fbc2a84ded9aa6b26f41ee6848b31e184b31393d53a4f8f7f07f202b743",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        98304
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        40960
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        12288
+      ],
+      "z_bytes": [
+        393216
+      ]
+    },
+    "heldout_digest": "877b6cc37367c84e12ed9fb8ff10a10d37a631b7ecb62abdf1b4ff988b01c808",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "pipelined",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "nominal",
+    "repeat_final_predictor_state_digest": "d6626fbc2a84ded9aa6b26f41ee6848b31e184b31393d53a4f8f7f07f202b743",
+    "repeat_heldout_digest": "877b6cc37367c84e12ed9fb8ff10a10d37a631b7ecb62abdf1b4ff988b01c808",
+    "repeat_warmup_digest": "23a52ae4eac829b57468d955a80ffaed32704dbc80d4f32deaaa09d4b2a29e0e",
+    "repeats": 2,
+    "warmup_digest": "23a52ae4eac829b57468d955a80ffaed32704dbc80d4f32deaaa09d4b2a29e0e"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B1",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "3ba8b73cad7d1971ba179fc12da1c7bbd2780dc89724dc89161dc20b5c47d21a",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        98304
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        40960
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        12288
+      ],
+      "z_bytes": [
+        393216
+      ]
+    },
+    "heldout_digest": "fd644d3a1429eebaa6adffe22ffb7daa2fb26bad93270c304d313f275b144a66",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "pipelined",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "ours",
+    "repeat_final_predictor_state_digest": "3ba8b73cad7d1971ba179fc12da1c7bbd2780dc89724dc89161dc20b5c47d21a",
+    "repeat_heldout_digest": "fd644d3a1429eebaa6adffe22ffb7daa2fb26bad93270c304d313f275b144a66",
+    "repeat_warmup_digest": "97165fa1b00762024a627d53965b0b0b55155d36757ddb4bcd1efeccdfec2990",
+    "repeats": 2,
+    "warmup_digest": "97165fa1b00762024a627d53965b0b0b55155d36757ddb4bcd1efeccdfec2990"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B2",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "f5aecdadc940a07e78f24f37d8af21d20aa3a0770f550d514c596b3f16e33d36",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        49152,
+        49152
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 24
+        },
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 24
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        20480,
+        20480
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        6144,
+        6144
+      ],
+      "z_bytes": [
+        196608,
+        196608
+      ]
+    },
+    "heldout_digest": "18c58ecb415086aed6919c50481e0ca7649cb771f6fabffd0893a20d7e21a790",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "pipelined",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "nominal",
+    "repeat_final_predictor_state_digest": "f5aecdadc940a07e78f24f37d8af21d20aa3a0770f550d514c596b3f16e33d36",
+    "repeat_heldout_digest": "18c58ecb415086aed6919c50481e0ca7649cb771f6fabffd0893a20d7e21a790",
+    "repeat_warmup_digest": "a902f1ae1417742fd51e38149dbfa2c5049eddebc1ece5ccaac161185e845fe6",
+    "repeats": 2,
+    "warmup_digest": "a902f1ae1417742fd51e38149dbfa2c5049eddebc1ece5ccaac161185e845fe6"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B2",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "22770fb292372b9ac276438c6e1219735ce56672cc2a53f1b36e524b45e5e555",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        49152,
+        49152
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 24
+        },
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 24
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        20480,
+        20480
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        6144,
+        6144
+      ],
+      "z_bytes": [
+        196608,
+        196608
+      ]
+    },
+    "heldout_digest": "1c84c087fef71511fea721a62e9ff46d05e7445651318b59c288579421468a6d",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "pipelined",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "ours",
+    "repeat_final_predictor_state_digest": "22770fb292372b9ac276438c6e1219735ce56672cc2a53f1b36e524b45e5e555",
+    "repeat_heldout_digest": "1c84c087fef71511fea721a62e9ff46d05e7445651318b59c288579421468a6d",
+    "repeat_warmup_digest": "d5857207cd178f76e5d8de2550dfa506565e744b8c1be1f3668921f884142c03",
+    "repeats": 2,
+    "warmup_digest": "d5857207cd178f76e5d8de2550dfa506565e744b8c1be1f3668921f884142c03"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "best_hetero",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "eeef76f24aded7776003156d890c45378c1889b00c85d5ece2473899453f5b82",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        4,
+        8
+      ],
+      "acc_bytes": [
+        16384,
+        81920
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 32
+        },
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        8,
+        56
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        24576,
+        16384
+      ],
+      "x_banks": [
+        4,
+        20
+      ],
+      "x_bytes": [
+        2048,
+        10240
+      ],
+      "z_bytes": [
+        32768,
+        360448
+      ]
+    },
+    "heldout_digest": "67d63308650caab9f1c9b374471a372ef63a503e42588567565c64b459bfccf5",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "pipelined",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "nominal",
+    "repeat_final_predictor_state_digest": "eeef76f24aded7776003156d890c45378c1889b00c85d5ece2473899453f5b82",
+    "repeat_heldout_digest": "67d63308650caab9f1c9b374471a372ef63a503e42588567565c64b459bfccf5",
+    "repeat_warmup_digest": "7df527350fba1a8b420f8dd0142c56c66b5c2f6714c7aa468c1b5239f22c6048",
+    "repeats": 2,
+    "warmup_digest": "7df527350fba1a8b420f8dd0142c56c66b5c2f6714c7aa468c1b5239f22c6048"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "best_hetero",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "34a20fac9d1578fb359a52708b226c2df0f94b63a5fbcf8f059a9629e6c95acf",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        4,
+        8
+      ],
+      "acc_bytes": [
+        16384,
+        81920
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 32
+        },
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        8,
+        56
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        24576,
+        16384
+      ],
+      "x_banks": [
+        4,
+        20
+      ],
+      "x_bytes": [
+        2048,
+        10240
+      ],
+      "z_bytes": [
+        32768,
+        360448
+      ]
+    },
+    "heldout_digest": "17ba9eb939f5b9a29c54b7fd54c8e3713a02805393eb79217df63b84c5b51c3f",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "pipelined",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "pipelined",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "ours",
+    "repeat_final_predictor_state_digest": "34a20fac9d1578fb359a52708b226c2df0f94b63a5fbcf8f059a9629e6c95acf",
+    "repeat_heldout_digest": "17ba9eb939f5b9a29c54b7fd54c8e3713a02805393eb79217df63b84c5b51c3f",
+    "repeat_warmup_digest": "84264db625cb7db9dd71ee945910aabadf1baddeadadcf37fb89776afcab7dd2",
+    "repeats": 2,
+    "warmup_digest": "84264db625cb7db9dd71ee945910aabadf1baddeadadcf37fb89776afcab7dd2"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B1",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "d6626fbc2a84ded9aa6b26f41ee6848b31e184b31393d53a4f8f7f07f202b743",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        98304
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        40960
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        12288
+      ],
+      "z_bytes": [
+        393216
+      ]
+    },
+    "heldout_digest": "63885385d876633b728b3ceaa6f7952d764040c53511ab7e6ef8a2f08ce355f8",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "port_tight",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "nominal",
+    "repeat_final_predictor_state_digest": "d6626fbc2a84ded9aa6b26f41ee6848b31e184b31393d53a4f8f7f07f202b743",
+    "repeat_heldout_digest": "63885385d876633b728b3ceaa6f7952d764040c53511ab7e6ef8a2f08ce355f8",
+    "repeat_warmup_digest": "21c67886b718e54e873b8e6bd39cf6764db707d943e66e793658d97c21bf6a1f",
+    "repeats": 2,
+    "warmup_digest": "21c67886b718e54e873b8e6bd39cf6764db707d943e66e793658d97c21bf6a1f"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B1",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "9af730af20e48e895e585db3714cf3b76bb8115f09c9e2ee07e3994d85f9311f",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        98304
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        40960
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        12288
+      ],
+      "z_bytes": [
+        393216
+      ]
+    },
+    "heldout_digest": "94a67dcb2f1497e209a8ef2352345502960a920ee0cc1fd95df2a6247bae6364",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "port_tight",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "ours",
+    "repeat_final_predictor_state_digest": "9af730af20e48e895e585db3714cf3b76bb8115f09c9e2ee07e3994d85f9311f",
+    "repeat_heldout_digest": "94a67dcb2f1497e209a8ef2352345502960a920ee0cc1fd95df2a6247bae6364",
+    "repeat_warmup_digest": "a70f17947576a9f7bcff97aa44d2ff1c09c9fd9a45152d6f019562c3bc343dc7",
+    "repeats": 2,
+    "warmup_digest": "a70f17947576a9f7bcff97aa44d2ff1c09c9fd9a45152d6f019562c3bc343dc7"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B2",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "6eca82fd29bd8b8da91c8fb003f0030804e912155ac91cd3eca524dc8c1bee9c",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        49152,
+        49152
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 16
+        },
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 16
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        20480,
+        20480
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        6144,
+        6144
+      ],
+      "z_bytes": [
+        196608,
+        196608
+      ]
+    },
+    "heldout_digest": "c012f5139b6e335447ae769bc7332223213907ad667e22bfa42848ad14ffc0af",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "port_tight",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "nominal",
+    "repeat_final_predictor_state_digest": "6eca82fd29bd8b8da91c8fb003f0030804e912155ac91cd3eca524dc8c1bee9c",
+    "repeat_heldout_digest": "c012f5139b6e335447ae769bc7332223213907ad667e22bfa42848ad14ffc0af",
+    "repeat_warmup_digest": "be461774152db71e3f210f62b09c803ddc34fa1d9247e5ab188b55188241e784",
+    "repeats": 2,
+    "warmup_digest": "be461774152db71e3f210f62b09c803ddc34fa1d9247e5ab188b55188241e784"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "B2",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "494dbeb509b1af47f71ade21f72ca600e0e7442ef1bb5179a6bf8e5720d838fc",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        49152,
+        49152
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 16
+        },
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 16
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        20480,
+        20480
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        6144,
+        6144
+      ],
+      "z_bytes": [
+        196608,
+        196608
+      ]
+    },
+    "heldout_digest": "0af2957d50b96e26e56c93b24b88ae4915727d20840f14256da4e97d8b6498f8",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "port_tight",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "ours",
+    "repeat_final_predictor_state_digest": "494dbeb509b1af47f71ade21f72ca600e0e7442ef1bb5179a6bf8e5720d838fc",
+    "repeat_heldout_digest": "0af2957d50b96e26e56c93b24b88ae4915727d20840f14256da4e97d8b6498f8",
+    "repeat_warmup_digest": "a09d32190ab42ed214c243e0262d95181f0bbc7f22d171797557d8a340fc2559",
+    "repeats": 2,
+    "warmup_digest": "a09d32190ab42ed214c243e0262d95181f0bbc7f22d171797557d8a340fc2559"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "best_hetero",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "eb0b0239ad5620edd3a059d0641a2d59413edda567e1776ab16e6f71fd677590",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        4,
+        8
+      ],
+      "acc_bytes": [
+        16384,
+        81920
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 32
+        },
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        8,
+        56
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        24576,
+        16384
+      ],
+      "x_banks": [
+        4,
+        20
+      ],
+      "x_bytes": [
+        2048,
+        10240
+      ],
+      "z_bytes": [
+        32768,
+        360448
+      ]
+    },
+    "heldout_digest": "72e9b287b1306242a16e2d66fcad908897f419159ea6adef5ee76f2ed642ced9",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "port_tight",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "nominal",
+    "repeat_final_predictor_state_digest": "eb0b0239ad5620edd3a059d0641a2d59413edda567e1776ab16e6f71fd677590",
+    "repeat_heldout_digest": "72e9b287b1306242a16e2d66fcad908897f419159ea6adef5ee76f2ed642ced9",
+    "repeat_warmup_digest": "17b40683fd047e16ffaf1d233b3ea958f21a86449eac81163e3f69d5be5a4b02",
+    "repeats": 2,
+    "warmup_digest": "17b40683fd047e16ffaf1d233b3ea958f21a86449eac81163e3f69d5be5a4b02"
+  },
+  {
+    "compute_private_storage_frozen": true,
+    "controller_area_eligibility": "unassessed",
+    "design": "best_hetero",
+    "development_windows_per_repeat": 18,
+    "dispatch_parameters": {
+      "large_first": true,
+      "t_big": 3
+    },
+    "final_predictor_state_digest": "800e5f545eb240e3cb4a853f2e0ec3568621015eede461bd1921f20c7a079eb8",
+    "full_result_repeats_exact": true,
+    "hardware": {
+      "acc_banks": [
+        4,
+        8
+      ],
+      "acc_bytes": [
+        16384,
+        81920
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 32
+        },
+        {
+          "pk": 128,
+          "pm": 2,
+          "pn": 32
+        }
+      ],
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        8,
+        56
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        24576,
+        16384
+      ],
+      "x_banks": [
+        4,
+        20
+      ],
+      "x_bytes": [
+        2048,
+        10240
+      ],
+      "z_bytes": [
+        32768,
+        360448
+      ]
+    },
+    "heldout_digest": "a00bc32f425aef994fe4af93ba7b71b5efb0d09fe58b4701981619886ecfc75a",
+    "heldout_windows_per_repeat": 135,
+    "onchip_mode": "port_tight",
+    "parameters": {
+      "bank_Bpc": 16.0,
+      "binding_lead_cycles": 512.0,
+      "charge_control": true,
+      "credits": 520,
+      "dotstagecycles": 2.0,
+      "hbm_Bpc": 256.0,
+      "hbm_latency": 64.0,
+      "onchip_mode": "port_tight",
+      "prefetch": true,
+      "request_bytes": 32,
+      "seed": 20261007,
+      "sram_weight_read_once_oracle": false,
+      "tile_issue_cycles": 1.0,
+      "vector_scale": 1.0
+    },
+    "predictor": "ours",
+    "repeat_final_predictor_state_digest": "800e5f545eb240e3cb4a853f2e0ec3568621015eede461bd1921f20c7a079eb8",
+    "repeat_heldout_digest": "a00bc32f425aef994fe4af93ba7b71b5efb0d09fe58b4701981619886ecfc75a",
+    "repeat_warmup_digest": "759ffe5aaa9b6e90eb5e24a517b21fd9966473ec14b903816d9f62c36a3181e1",
+    "repeats": 2,
+    "warmup_digest": "759ffe5aaa9b6e90eb5e24a517b21fd9966473ec14b903816d9f62c36a3181e1"
+  }
+]

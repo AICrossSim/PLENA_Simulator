@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/tmp/plena-round2-venv/bin/python",
+    "-m",
+    "research.moe_dispatch.round2.dispatch_fix.hbm256_sensitivity_20261008.verify"
+  ],
+  "cwd": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator",
+  "started_utc": "2026-10-08T12:20:15.130030+00:00",
+  "finished_utc": "2026-10-08T12:20:16.044089+00:00",
+  "elapsed_seconds": 0.9140799008309841,
+  "exit_code": 0,
+  "source_sha256": "32e36c30ab4766bd1fef4eb46d0ddb65761a5e0f328d43b59972e763c5c4daf0",
+  "log_sha256": "034fe0fb3b3c6679d117a6501d658ba151f898cd0b95b1bef2a97e836687fe1a"
+}
