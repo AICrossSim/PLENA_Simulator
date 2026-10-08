@@ -11,7 +11,7 @@
 | E2 | a82abc6c | python -m research.moe_dispatch.round3.bounds --jobs 4 | E2/ |
 | E3 | b2e8189c | python -m research.moe_dispatch.round3.ablation --jobs 3 | E3/ |
 | E4 | c2687cc0 | python -m research.moe_dispatch.round3.dse --jobs 8 --candidates 256 --nodes 2048；python -m research.moe_dispatch.round3.finalize_dse；python -m research.moe_dispatch.round3.sensitivity --stage synthetic --jobs 8 --candidates 8 --nodes 32；python -m research.moe_dispatch.round3.robust_heldout --jobs 3 | E4/ |
-| E5 | 尚未入提交账本 | python -m research.moe_dispatch.round3.evaluations --stage dispatch --jobs 6；python -m research.moe_dispatch.round3.evaluations --stage cross --jobs 6；python -m research.moe_dispatch.round3.evaluations --stage predictor --jobs 6；python -m research.moe_dispatch.round3.sensitivity --stage sobol --jobs 32 --candidates 8 --nodes 32 | E5/ |
+| E5 | 39d0f690 | python -m research.moe_dispatch.round3.evaluations --stage dispatch --jobs 6；python -m research.moe_dispatch.round3.evaluations --stage cross --jobs 6；python -m research.moe_dispatch.round3.evaluations --stage predictor --jobs 6；python -m research.moe_dispatch.round3.sensitivity --stage sobol --jobs 32 --candidates 8 --nodes 32 | E5/ |
 
 上表命令用实际 Python 路径替换 python。E4 与 E5 的主表共用冻结后的完整回放结果；跨带宽采用同一新控制协议，126 预测器历史对照采用 fixed_legacy。在线派工／预测方法从相同初始状态先运行 18 开发窗口再跑 135 留出窗口；离线 MILP＋LPT 参照没有历史预测状态，不做历史预热。
 
