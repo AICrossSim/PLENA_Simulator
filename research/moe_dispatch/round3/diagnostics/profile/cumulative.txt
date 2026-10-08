@@ -1,0 +1,88 @@
+         661599037 function calls (649366341 primitive calls) in 475.759 seconds
+
+   Ordered by: cumulative time
+   List reduced from 451 to 80 due to restriction <80>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000  479.796  479.796 sensitivity.py:73(_sobol_job)
+        2    0.000    0.000  479.772  239.886 search.py:365(search_workloads)
+        2    0.000    0.000  479.772  239.886 search.py:366(<dictcomp>)
+       10    0.011    0.001  479.772   47.977 search.py:276(search_family)
+      118    0.002    0.000  446.175    3.781 search.py:283(evaluate)
+       80    0.024    0.000  446.109    5.576 search.py:229(_evaluate)
+     2880    0.056    0.000  445.132    0.155 optimizer.py:38(evaluate_design)
+     2880    0.013    0.000  238.612    0.083 runtime.py:702(simulate)
+     2304    0.186    0.000  212.105    0.092 runtime.py:615(_simulate_fixed)
+     2304   22.771    0.010  211.869    0.092 runtime.py:91(_one_layer_fixed)
+     2880    0.191    0.000  206.454    0.072 optimizer.py:276(solve_assignment)
+      768   37.595    0.049  140.149    0.182 optimizer.py:201(_solve_fixed_t)
+   644140   26.165    0.000   97.917    0.000 model.py:390(_fluid_rates)
+41824727/41822820   38.327    0.000   90.316    0.000 {built-in method builtins.sum}
+     2880    0.511    0.000   61.145    0.021 optimizer.py:129(_enumerate_assignment)
+4824004/2112   25.135    0.000   55.207    0.026 optimizer.py:175(visit)
+   201744    0.391    0.000   40.641    0.000 dataclasses.py:1265(asdict)
+6055376/201744   16.940    0.000   40.038    0.000 dataclasses.py:1289(_asdict_inner)
+   113680    0.119    0.000   35.481    0.000 cp_model.py:195(deprecated_func)
+    27288    0.033    0.000   34.900    0.001 cp_model.py:2017(Solve)
+    27288    0.570    0.000   34.867    0.001 cp_model.py:1752(solve)
+    27288   34.114    0.001   34.114    0.001 {built-in method ortools.sat.python.cp_model_helper.solve}
+     2890    0.054    0.000   27.917    0.010 {method 'sort' of 'list' objects}
+       88    0.003    0.000   27.322    0.310 search.py:171(seed_designs)
+     5084    0.006    0.000   27.006    0.005 search.py:186(<lambda>)
+     5084    4.604    0.001   27.001    0.005 search.py:174(geometry_proxy)
+      576    0.029    0.000   26.494    0.046 model.py:1083(simulate)
+      576    4.205    0.007   26.453    0.046 model.py:540(_one_layer)
+    27288    0.245    0.000   24.051    0.001 cp_model.py:315(__init__)
+    27288    5.401    0.000   23.805    0.001 cp_model.py:1684(_add_pre_pep8_methods)
+  3534476    2.347    0.000   22.803    0.000 cp_model.py:213(deprecated_func)
+   537784    6.362    0.000   22.149    0.000 runtime.py:506(<dictcomp>)
+  8299900    9.022    0.000   19.950    0.000 {built-in method builtins.min}
+ 36580188   16.014    0.000   19.290    0.000 model.py:399(<genexpr>)
+  3136828   12.536    0.000   15.813    0.000 search.py:180(<listcomp>)
+   644140    5.300    0.000   15.661    0.000 model.py:485(_set_window_limits)
+ 62677012   15.409    0.000   15.409    0.000 optimizer.py:178(<genexpr>)
+ 31246236   12.705    0.000   14.995    0.000 model.py:400(<genexpr>)
+102023307   13.300    0.000   13.300    0.000 {method 'get' of 'dict' objects}
+  1664568    4.973    0.000   12.832    0.000 cp_model.py:229(snake_case_to_camel_case)
+ 30047159   11.542    0.000   12.616    0.000 {built-in method builtins.max}
+  5849996    8.134    0.000   11.055    0.000 copy.py:128(deepcopy)
+  1282808    9.062    0.000   10.149    0.000 cp_model.py:1655(add_hint)
+ 19392724    8.115    0.000    9.851    0.000 runtime.py:506(<genexpr>)
+  4821892    9.155    0.000    9.155    0.000 optimizer.py:185(<listcomp>)
+   847892    6.462    0.000    8.593    0.000 runtime.py:520(<listcomp>)
+  1282808    5.466    0.000    7.343    0.000 cp_model.py:333(new_int_var)
+  9873304    6.904    0.000    6.904    0.000 model.py:403(<lambda>)
+  1667766    3.150    0.000    6.774    0.000 {method 'join' of 'str' objects}
+      220    2.714    0.012    6.172    0.028 optimizer.py:89(region_bound)
+   631808    1.369    0.000    5.354    0.000 model.py:384(task_cost)
+  6257988    2.604    0.000    5.224    0.000 dataclasses.py:1253(_is_dataclass_instance)
+   219088    3.331    0.000    4.445    0.000 model.py:446(allocate)
+     5760    0.016    0.000    3.958    0.001 optimizer.py:64(_costs)
+ 30860130    3.843    0.000    3.843    0.000 {method 'append' of 'list' objects}
+   197440    0.192    0.000    3.661    0.000 optimizer.py:67(<listcomp>)
+  6958440    2.523    0.000    3.623    0.000 cp_model.py:233(<genexpr>)
+   355392    0.160    0.000    3.468    0.000 optimizer.py:93(_legal_cost)
+ 37316242    3.277    0.000    3.277    0.000 {built-in method math.ceil}
+   202300    1.455    0.000    2.975    0.000 dataclasses.py:1235(fields)
+   968860    0.883    0.000    2.964    0.000 cp_model.py:509(add)
+   603238    1.899    0.000    2.953    0.000 model.py:315(_window_bandwidth)
+     2880    0.456    0.000    2.743    0.001 optimizer.py:110(allocation_objective)
+ 19222495    2.737    0.000    2.737    0.000 {built-in method builtins.isinstance}
+  9078376    1.766    0.000    2.719    0.000 {method 'setdefault' of 'dict' objects}
+   605588    1.416    0.000    2.685    0.000 runtime.py:233(event)
+  6266648    2.622    0.000    2.622    0.000 {built-in method builtins.hasattr}
+  1186880    1.633    0.000    2.544    0.000 optimizer.py:24(_down)
+   106356    0.787    0.000    2.324    0.000 model.py:925(<dictcomp>)
+    45056    0.133    0.000    2.249    0.000 optimizer.py:213(<listcomp>)
+ 11085681    2.084    0.000    2.202    0.000 {built-in method builtins.getattr}
+2996560/1441312    1.121    0.000    2.174    0.000 {built-in method builtins.hash}
+ 16356550    2.099    0.000    2.099    0.000 {method 'items' of 'dict' objects}
+  1519601    2.069    0.000    2.069    0.000 {built-in method builtins.round}
+    94403    1.117    0.000    2.035    0.000 {built-in method builtins.sorted}
+     5580    0.054    0.000    2.031    0.000 optimizer.py:52(universal_bound)
+   968860    1.913    0.000    1.913    0.000 {built-in method ortools.sat.python.cp_model_helper._add_bounded_linear_expression}
+   236928    0.129    0.000    1.912    0.000 runtime.py:103(co_for)
+  1026592    1.544    0.000    1.903    0.000 model.py:396(<listcomp>)
+   631808    0.664    0.000    1.871    0.000 <string>:2(__hash__)
+
+

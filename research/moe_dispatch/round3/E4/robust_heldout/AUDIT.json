@@ -1,0 +1,808 @@
+{
+  "checks": [
+    {
+      "name": "\u51bb\u7ed3\u6765\u6e90\u3001\u8f93\u5165\u3001\u8f93\u51fa\u4e0e\u5b8c\u6210\u6807\u8bb0",
+      "passed": true
+    },
+    {
+      "name": "20\u5f00\u53d1\u8fd1\u4f18\u96c6\u5408\u3001187\u552f\u4e00\u70b9\u4e0e24\u8bca\u65ad\u7ec4",
+      "passed": true
+    },
+    {
+      "name": "\u6c47\u603b\u53cc\u904d\u56de\u6267",
+      "passed": true
+    },
+    {
+      "name": "187\u70b9\u53cc\u904d\u8986\u76d6",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0345765484ecf9734640",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 03dfe1de8cdb2e967f2b",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 04790e059f2bf8f7842f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 06e51537fddca0a378fb",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0782b69fc4707a78017c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 09ff76f34529575d6848",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0bee77285c3e1fb4447a",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0c920aa35ab0c66bf7f5",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0c93b6ba657223e78960",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0db7adceed4a9d50b8a2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0ecf6fb1e9be969d0a34",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0f0453ae443e6f9fdf3c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0f0c10c7fbf820315450",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 0fe439ff85be46dd6481",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1107c5e19eaa66c9c3d1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1392f567c93990dca249",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 14af91cf6db71a82489d",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 14ce4aa3f11378290c90",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 17016beec373cc2baa0d",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 17cd1f92c66e53c523dc",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 18076db8d061873801ad",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 185575a610d3b6fd7010",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 18c61a441e294111b373",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 18cd2db0308af95c3b26",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1c23156c9f27bb8121c2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1c688a2f985fcf18411c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1cd20820c95e5fd32121",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1e2e542af503ef6abe0f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 1f5a20357df5998327ef",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 207d73b87e0338f0a9f8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 20aeca8320d0dc3aa100",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 21cd66bf6ee03984b083",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 22411a04b182e10deb0b",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 23632ddb322039758295",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 23f5d9f08c8de6c6c224",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 244c49ad47c0b6e09383",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 265a3fb128ca45e7a9af",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 27c431dad08819fa5734",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 2827641821bc3e3123aa",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 28f04b0c03b67b86633c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 2c5f46b58419778ddacf",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 2c7af875c247282cbf12",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 2dfc001e1a1b9d51eab4",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 2ed0f96dc049ecb80a05",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 30eb31f99e8a4c733342",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 32e6585dbb5cbe51a1f3",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 33fe3e864cd169ef0bb9",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 356567af78d2689e108f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 37f8c8176ef8c2914f78",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 37fba745b24a2ae9cc1f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 389ae5cdbe6c51280918",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 40b35d84f794fb9ff143",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 423fbd051d6cf5ad0227",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 42528be2de4afb5fdb52",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 42a0c0243cd88a832365",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 451b31505e6a302641a9",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 45240e77782d05dc6912",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 452c83910e133a937e1d",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 465864e11bee87c5bc25",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 477d49d9a44642f0f45c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 48bf5b8e0e3c778b7146",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 4c51bad0a18214f79869",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 4f81fd22d8f9fc4ca73a",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 4fde4e44b9f3ffc8a122",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 532e29ac89c362cb6ea8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 5332d2eb4bb3b2a704b4",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 538f4e667f5213504cce",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 541d03ba278c6c273d3b",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 54dbed8e13ac2127c3c2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 5633e2eadb8afd291ac3",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 564b7c61c68531393532",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 5707eed1e370259b9a93",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 57b060399da881584f6e",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 5914fbcb3d3c9aaf3f60",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 59e9d5243597eec1d61c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 5a40ffd62c082cb80e24",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 6021aa598c7053ceaa5a",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 613d5bbff7959b2ce02a",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 629aa550ec3c81737093",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 68925dbb9b42548c9241",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 68d5e80d75cddbdd5139",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 6a26fe28c7069a373ee6",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 6bab572466bb64ae1350",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 6c4b18b90a3954f8a9a1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 6cf27a37d8f5216b3a49",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 6ff7878812d356f19bb8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 71265e2307b346651a44",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 717a7fb187df483e6f45",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 72250890f4fe2ab17ba3",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 73eda2676ca0a2407896",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 746ce7c88050ed7e3abb",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 760632fd98a5603f51e2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 761e099e0fae5961664e",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 782c8212617abefe2eca",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 79513f4c0e5891882ba0",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 7a8d81755ba4ad972ed1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 7af455afd61d4c6b9c76",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 7cb34fcb91e0b9f5f77e",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 7da529ce1dda396243d2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 840c3cc5c9ae356eecff",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 8887d77e48a4bcffb2da",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 897e1eb594b00c73c32c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 8ac14849a84bf7e1fd1f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 8e6792ee185093c2ff88",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 9313ef037fe41d2be22e",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 942ae61f71feee4ba4fd",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 978fe19a57f447f12692",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 97b312984ab4ace87f83",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 980c3530f7a9a9963484",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 99e021b693ba57f54287",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 9b661cc467a566b38738",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 9c2d303c440a93424a73",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 9f4a79e4674932408516",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 9f5eb6a39a9d76e3930d",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e 9f7d37ed397056bfaf0e",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e a1307b5731722fa2d2ea",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e a41c8a764850bee3b25a",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e a814cecf63b63567f071",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e a92dedfd80c1f22843af",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ac0d67a9dd77f87d7738",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b2d4aad4a157789d9dba",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b393ce88234129228d87",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b439e2bcbf85d40281db",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b43f8d819203779b6676",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b61a67b51acaae6c74b8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b825c10b8f3371795a57",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e b83262f43f0122517c04",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ba0aee7532784fc5eaf3",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e bbf1f1b5bd6c4727d40d",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e bc4960d420651bead9ad",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e bdebcb6043a6ed397c79",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e bec58b908c224f0aaed8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e bee39f3791420f1b77e7",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c2e2227e675f61bd734f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c3801e2c70f10fa739ae",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c43c549c8229a7d49ae1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c4b6dd21c9602187d4bf",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c5825d1e9a78bfbff415",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c5af0d938c7db6c1c5c8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c5cd7c3b129f976c5965",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c70482cc9ee570be6eb1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c799ee103ab9ce283b32",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c85baa7eaebc72a1bd98",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c92ffd9afe3dab860841",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e c9c20530a3e0bd963ffd",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ca37cb1bbd7187133cfc",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ca7318c40c0225310b7c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e cb12874532556cce60db",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e cd721d461c74839bf0d2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e cd7ce861de331d38b70b",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e cdecb8c414be00f17522",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d1b76a314d21cdcef12a",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d41c0d1af2b18b9d7533",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d4413f16429ece8309e1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d560f3fb3bc541149d6f",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d581ce111e1df7d3cc9b",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d86332af3fa518144131",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e d9daa1111adad2fbc4fb",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e db6958a8995ba6560815",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e dd1c7be8a164b0a60f54",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e dd884e825b944749e838",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e def1478b5a77601c6e29",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e def7102d20ec80943dd8",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e dfb0f3efc8129d1f8282",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e008080f6db0143b1c0c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e0e1eed68287dfad8f81",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e0ea1e6578a1d0fa46f0",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e0fed4d8a858ece8506c",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e1d84e12857a3503ef30",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e1e975708d3f5f732b48",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e5de3525c10018a79738",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e e76e0dba110fb88641ce",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ea56761f7ede9bd980e1",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ebfc74af50623d4b75de",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ed25fbdf83bdd3becbc7",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e ed634b2137415fb68a21",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e edd41a1f1008ae243406",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f0e602de6cea937e7595",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f10c820c55b56628bce7",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f267adc9d49008bc6e85",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f32bb9a1adf8806eaf85",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f51428023a639c9217b6",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f5daaffe1df5b883ddf0",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f697b6f0f959f167e650",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f72a23d01e2e83b6dfe2",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e f954e13ffad5238f94ff",
+      "passed": true
+    },
+    {
+      "name": "\u9010\u7a97\u53e3\u7269\u7406\u8bc1\u636e fbf6fdf971f8fad1596f",
+      "passed": true
+    },
+    {
+      "name": "\u65b0\u589e\u53ca\u4e25\u683c\u590d\u7528\u6570",
+      "passed": true
+    },
+    {
+      "name": "\u4e09\u76ee\u6807\u3001\u8d62\u5bb6\u3001\u9010\u7a97\u53e3\u4e0e200\u5f00\u53d1bootstrap\u72ec\u7acb\u91cd\u7b97",
+      "passed": true
+    }
+  ],
+  "complete": true,
+  "coverage": {
+    "bootstrap_rows": 1986,
+    "diagnostic_groups": 24,
+    "group_candidate_rows": 334,
+    "new_points": 175,
+    "objective_rows": 662,
+    "per_window_rows": 89370,
+    "planned_groups": 20,
+    "raw_checks": 187,
+    "reused_points": 12,
+    "unique_points": 187,
+    "window_order_checks": 25245,
+    "winner_rows": 72
+  },
+  "evidence_sha256": {
+    "CANDIDATE_PLAN.json": "ee97f10753d46bb62f0f8f95acb8577d3ab16cd48c23ac6aa8f5e724810c0b1c",
+    "COMPLETE.json": "a6d6b3d1d22baa7f627de8cfa2b1f9da9d776255717f6131386368b9d0ff6bf3",
+    "RUN_RECEIPT.json": "1983ccf874754fd9276ce2cbba598532b260f140da56cdf8b82bf6f5dfc274ca",
+    "SUMMARY_ZH.md": "defce2fcf192bd5262725c4932bb8e7b7b85d7b63b9be3fbbafbf4b82fb7d10e",
+    "audit_source": "5521731f290bd618e67bbcb240eeb2ffab650105456a9998bfeb288e701db426",
+    "candidate_counts.csv": "7ca8adf417ad516cabe9d48512f68b12213cf280bd3b6556c577dc4c00a61b68",
+    "per_window.csv": "7dfe7134ed8493b64b108bfdd90e2e8740252c17d6e4759eb690a9858fe0462e",
+    "repeat_checks.json": "d777771c61ec375817daae74f9d0176c4778098d6b102415ae788dff0e9c2cce",
+    "robust_objectives.csv": "045cf4c4e07216a6960929bf51f179ffbcfe49cda46fe818775dfa37e597dc9a",
+    "selection_stability.csv": "7bd9178ae4ad5427090221b3b263caf595884a54b3e2689fb01f2c9c7c4d0c39",
+    "winners.csv": "07730a9e91b6cc0105d5d5c3ecf630644f786073d7de149cd08107d88647718e"
+  },
+  "failures": [],
+  "max_objective_error": 0.0,
+  "passed": true,
+  "stage": "E4_near_best_heldout_robustness"
+}

@@ -1,0 +1,15 @@
+{
+  "formula": "100 * (1 - geometric_mean(global_lower_bound_ms/window_baseline_ms)); gate>=5% against BOTH B1 and B2",
+  "paired_window_rows": 540,
+  "rows": 32,
+  "scope": "heldout conditional mandatory-floor headroom; separate from development proof A and historical E2 frozen references",
+  "script_sha256": "3c69384bbef362f94dbf236d5a7a2177698fe086587683a626e451eb05439461",
+  "second_round_modified": false,
+  "simulation_rerun": false,
+  "source_files": {
+    "E2/bounds_by_window.csv": "b5fbe55094c3cb20a1d4ab433ff8641e139174dd60cb6807e70f480d89511c4b",
+    "E2/port_tight/bounds_by_window.csv": "8afc4771684cebf7967b04f48be5de6c02a082879f9b779b8dafb1492fa4d908",
+    "E4/selected_designs.json": "3492224977df5f57cec07f84ce47c78423c5229201e4f09f518ad3d68bf11d9d",
+    "E5/dispatch/per_window.json": "74b23b637f441318811ce074e445add922524d57e76aadbcd9e79a79ecc886db"
+  }
+}

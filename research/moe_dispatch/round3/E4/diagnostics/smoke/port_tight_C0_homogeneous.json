@@ -1,0 +1,1789 @@
+{
+  "candidate_budget": 4,
+  "capacity_domain": "aggregate W+X+acc+Z+pool=532KiB, 1KiB lattice; category totals unconstrained",
+  "certificate": [],
+  "constraint_domain_note": "C1 proof uses unconstrained superset roots, so lower bound is conservative; no points silently removed",
+  "constraint_group": "C0",
+  "declared_lattice_points": 852246893184630464738448,
+  "entire_search_repeat_identical": true,
+  "evaluated_points": 4,
+  "family": "homogeneous",
+  "gap_pct": 0.01636001540308296,
+  "geometry_count": 41,
+  "global_lb_ms": 4.6227456,
+  "no_wall_clock_timeout": true,
+  "node_budget": 16,
+  "open_regions": [
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 102565014423695899960500,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 102565014423695899960500,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 102565014423695899960500,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 102565014423695899960500,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 102565014423695899960500,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        30,
+        31,
+        32,
+        33,
+        34
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 123078017308435079952600,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        35,
+        36,
+        37,
+        38,
+        39,
+        40
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1367533525649278666140,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        30,
+        31,
+        32,
+        33,
+        34
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          526
+        ],
+        "acc_1": [
+          1,
+          526
+        ],
+        "landing_pool": [
+          1,
+          526
+        ],
+        "x_0": [
+          1,
+          526
+        ],
+        "x_1": [
+          1,
+          526
+        ],
+        "z_0": [
+          1,
+          526
+        ],
+        "z_1": [
+          1,
+          526
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 1641040230779134399368,
+      "depth": 3,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        35,
+        36,
+        37,
+        38,
+        39,
+        40
+      ],
+      "landing_mode": "shared",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 41026005769478359984200,
+      "depth": 4,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        0,
+        1
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 61539008654217539976300,
+      "depth": 4,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        2,
+        3,
+        4
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 41026005769478359984200,
+      "depth": 4,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        5,
+        6
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    },
+    {
+      "bank_cut_intervals": {
+        "acc_banks": [
+          1,
+          11
+        ],
+        "vector_lanes": [
+          1,
+          63
+        ],
+        "w_banks": [
+          1,
+          63
+        ],
+        "x_banks": [
+          1,
+          23
+        ]
+      },
+      "capacity_intervals_KiB": {
+        "acc_0": [
+          1,
+          525
+        ],
+        "acc_1": [
+          1,
+          525
+        ],
+        "w_0": [
+          1,
+          525
+        ],
+        "w_1": [
+          1,
+          525
+        ],
+        "x_0": [
+          1,
+          525
+        ],
+        "x_1": [
+          1,
+          525
+        ],
+        "z_0": [
+          1,
+          525
+        ],
+        "z_1": [
+          1,
+          525
+        ]
+      },
+      "capacity_sum_KiB": 532,
+      "cardinality": 61539008654217539976300,
+      "depth": 4,
+      "family": "homogeneous",
+      "flow_options": [
+        [
+          "OS",
+          "WS",
+          "IS"
+        ],
+        [
+          "OS",
+          "WS",
+          "IS"
+        ]
+      ],
+      "geometry_indices": [
+        7,
+        8,
+        9
+      ],
+      "landing_mode": "private",
+      "lb_ms": 4.6227456
+    }
+  ],
+  "parameters": {
+    "bank_Bpc": 16.0,
+    "binding_lead_cycles": 512.0,
+    "charge_control": true,
+    "credits": 520,
+    "dotstagecycles": 2.0,
+    "hbm_Bpc": 256.0,
+    "hbm_latency": 64.0,
+    "onchip_mode": "port_tight",
+    "prefetch": true,
+    "request_bytes": 32,
+    "seed": 20261007,
+    "sram_weight_read_once_oracle": false,
+    "tile_issue_cycles": 1.0,
+    "vector_scale": 1.0
+  },
+  "proof_A_closed": true,
+  "proof_A_scope": "no design improves this family's executable incumbent by >=5%; conservative global mandatory floor",
+  "proof_B_closed": false,
+  "proof_B_scope": "exact optimum of physical LPT replay objective only if full declared domain closed",
+  "pruned_lattice_points": 0,
+  "repeat_requirement": "two exact deterministic evaluations per point",
+  "search_scope": "full enlarged domain; finite deterministic equal-work incumbent search; unvisited points stay open",
+  "seed": 20261007,
+  "selected": {
+    "allocation_optimal": true,
+    "design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        49152,
+        49152
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 16
+        },
+        {
+          "pk": 128,
+          "pm": 3,
+          "pn": 16
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "WS",
+        "WS"
+      ],
+      "label": "",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 12288,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        20480,
+        20480
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        6144,
+        6144
+      ],
+      "z_bytes": [
+        196608,
+        196608
+      ]
+    },
+    "geometry": "3x16x128+3x16x128",
+    "latencies_ms": [
+      3.0823364,
+      6.935248745679013
+    ],
+    "repeat_identical": true,
+    "scope": "best evaluated physical MILP allocation + LPT witness",
+    "score_ms": 4.623501881892206,
+    "solver_statuses": [
+      "OPTIMAL",
+      "OPTIMAL"
+    ]
+  },
+  "simulator_calls": 16,
+  "successful_points": 4,
+  "total_campaign_simulator_calls": 32,
+  "visited_nodes": 16,
+  "witnesses": [
+    {
+      "allocation_optimal": true,
+      "design": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 16
+          },
+          {
+            "pk": 128,
+            "pm": 3,
+            "pn": 16
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          20480,
+          20480
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "geometry": "3x16x128+3x16x128",
+      "latencies_ms": [
+        3.0823364,
+        6.935248745679013
+      ],
+      "repeat_identical": true,
+      "scope": "best evaluated physical MILP allocation + LPT witness",
+      "score_ms": 4.623501881892206,
+      "solver_statuses": [
+        "OPTIMAL",
+        "OPTIMAL"
+      ],
+      "status": "evaluated"
+    },
+    {
+      "allocation_optimal": true,
+      "design": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          49152,
+          49152
+        ],
+        "cores": [
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 48
+          },
+          {
+            "pk": 128,
+            "pm": 1,
+            "pn": 48
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          20480,
+          20480
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          6144,
+          6144
+        ],
+        "z_bytes": [
+          196608,
+          196608
+        ]
+      },
+      "geometry": "1x48x128+1x48x128",
+      "latencies_ms": [
+        3.1189497333333325,
+        7.0176230666666655
+      ],
+      "repeat_identical": true,
+      "scope": "best evaluated physical MILP allocation + LPT witness",
+      "score_ms": 4.678419988886615,
+      "solver_statuses": [
+        "OPTIMAL",
+        "OPTIMAL"
+      ],
+      "status": "evaluated"
+    },
+    {
+      "allocation_optimal": true,
+      "design": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          32768,
+          32768
+        ],
+        "cores": [
+          {
+            "pk": 64,
+            "pm": 1,
+            "pn": 96
+          },
+          {
+            "pk": 64,
+            "pm": 1,
+            "pn": 96
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "shared",
+        "landing_pool_bytes": 65536,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          0,
+          0
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          16384,
+          16384
+        ],
+        "z_bytes": [
+          190464,
+          190464
+        ]
+      },
+      "geometry": "1x96x64+1x96x64",
+      "latencies_ms": [
+        3.1348562802721087,
+        7.053364185055173
+      ],
+      "repeat_identical": true,
+      "scope": "best evaluated physical MILP allocation + LPT witness",
+      "score_ms": 4.702263605176403,
+      "solver_statuses": [
+        "OPTIMAL",
+        "OPTIMAL"
+      ],
+      "status": "evaluated"
+    },
+    {
+      "allocation_optimal": true,
+      "design": {
+        "acc_banks": [
+          6,
+          6
+        ],
+        "acc_bytes": [
+          24576,
+          24576
+        ],
+        "cores": [
+          {
+            "pk": 512,
+            "pm": 1,
+            "pn": 12
+          },
+          {
+            "pk": 512,
+            "pm": 1,
+            "pn": 12
+          }
+        ],
+        "diagnostic_unbounded_w": false,
+        "flows": [
+          "WS",
+          "WS"
+        ],
+        "label": "",
+        "landing_mode": "private",
+        "landing_pool_bytes": 0,
+        "records": 8,
+        "total_macs": 12288,
+        "vector_lanes": [
+          32,
+          32
+        ],
+        "w_banks": [
+          32,
+          32
+        ],
+        "w_bytes": [
+          40960,
+          40960
+        ],
+        "x_banks": [
+          12,
+          12
+        ],
+        "x_bytes": [
+          32768,
+          32768
+        ],
+        "z_bytes": [
+          174080,
+          174080
+        ]
+      },
+      "geometry": "1x12x512+1x12x512",
+      "latencies_ms": [
+        3.153824664407787,
+        7.096040238029564
+      ],
+      "repeat_identical": true,
+      "scope": "best evaluated physical MILP allocation + LPT witness",
+      "score_ms": 4.730715244265686,
+      "solver_statuses": [
+        "OPTIMAL",
+        "OPTIMAL"
+      ],
+      "status": "evaluated"
+    }
+  ]
+}

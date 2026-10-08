@@ -1,0 +1,170 @@
+{
+  "csv_rows": 50,
+  "final_certificates": 20,
+  "interpretation": "read-only actual witness audit; not exhaustive independent-variable optimization",
+  "original_certificates": 20,
+  "search_source_sha256": "5f1aee68d8e28345fe5238fefe8360477c4a36f781efc82f7d7390e2dff7f59f",
+  "source_actual_simulator_calls": 367776,
+  "source_files": [
+    {
+      "file": "E4/certificates/pipelined_C0_3_3.json",
+      "sha256": "1322feb686b03d09468e9685358c054a9f5f49ddb8cd8359023a574ed0d70bee"
+    },
+    {
+      "file": "E4/certificates/pipelined_C0_4_2.json",
+      "sha256": "a75311394b4390118190dd9f62e0431b21c3da7a5fb59a5c2592431485701ae8"
+    },
+    {
+      "file": "E4/certificates/pipelined_C0_5_1.json",
+      "sha256": "d5e41b0ae92ffdcd673eee96c2f6ca212ab5aa82846e162c9f8ddbcfa2aea686"
+    },
+    {
+      "file": "E4/certificates/pipelined_C0_homogeneous.json",
+      "sha256": "cb2c938fd52c0b700c481d666d37d91237611893343c052b6ed5667f6e9089b1"
+    },
+    {
+      "file": "E4/certificates/pipelined_C0_single.json",
+      "sha256": "5203db346d437d99a0eadfeb48f76d2ea6f6a44e99bd820b48450b16e5e3d7c2"
+    },
+    {
+      "file": "E4/certificates/pipelined_C1_3_3.json",
+      "sha256": "f79f0fadc7c5607fbfaf366096e56e33493e0fad1448812347b1c9575286e1c6"
+    },
+    {
+      "file": "E4/certificates/pipelined_C1_4_2.json",
+      "sha256": "c9fc9336d3a62914ae13cb45194037d06241367fd77a7e2678503a044fffe81c"
+    },
+    {
+      "file": "E4/certificates/pipelined_C1_5_1.json",
+      "sha256": "94c5faf672064a6fa9b96755effafa39efc55137109c7353bc61be3171f7cb5e"
+    },
+    {
+      "file": "E4/certificates/pipelined_C1_homogeneous.json",
+      "sha256": "83f40c7d74122c093a896d6a359d25e23e8cb946143599cd63c0df5f42e3fab3"
+    },
+    {
+      "file": "E4/certificates/pipelined_C1_single.json",
+      "sha256": "8169c92731c585993afd7c2a39715d53c70b2f3cb27efde338d62932066aa3a3"
+    },
+    {
+      "file": "E4/certificates/port_tight_C0_3_3.json",
+      "sha256": "813f51c5d6b511e7ace043ff8f5b108492352a88d062a2a993cf57936d5a217c"
+    },
+    {
+      "file": "E4/certificates/port_tight_C0_4_2.json",
+      "sha256": "3a75aaf1e7f67a89d66f0cca23a4ec4dea34e4e27d5dd641015ae39d664d7186"
+    },
+    {
+      "file": "E4/certificates/port_tight_C0_5_1.json",
+      "sha256": "9f17741c4e406a2bfe691bffb3419e829b3872973cde58cd369072fbcdd35c01"
+    },
+    {
+      "file": "E4/certificates/port_tight_C0_homogeneous.json",
+      "sha256": "3ee57a530eca3dfa9881d81627673af32e939de028117cb9aadd9b871f734f79"
+    },
+    {
+      "file": "E4/certificates/port_tight_C0_single.json",
+      "sha256": "25d32f25dcd14c0df0e96fa349cd75475a3e81d3e95d9728790fc84423a92dc9"
+    },
+    {
+      "file": "E4/certificates/port_tight_C1_3_3.json",
+      "sha256": "2a6e2d165dcd146b47b209027327d63b354c23b03df85fcea8be38847cad3114"
+    },
+    {
+      "file": "E4/certificates/port_tight_C1_4_2.json",
+      "sha256": "ea640712f7d1e5eb6555b59cae7455057c2c74c9fa5c9593d7335a3ef7a4a4aa"
+    },
+    {
+      "file": "E4/certificates/port_tight_C1_5_1.json",
+      "sha256": "afb0e2c2e068dafa43f5ab4dd7296a63696f8e8ebe3919aca3c72817dcba153d"
+    },
+    {
+      "file": "E4/certificates/port_tight_C1_homogeneous.json",
+      "sha256": "b4a73d873202973b7632dd6cc782401ab3fd662cdbd0e5470d2857d3a5374a21"
+    },
+    {
+      "file": "E4/certificates/port_tight_C1_single.json",
+      "sha256": "11c441db8b2bddc28edc60b56ce5013cb9110a22befb4e2d5d8fef7eca8a4459"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C0_3_3.json",
+      "sha256": "1ad9c4fdbd76918793b9afda916ba568e4d95f4e6a675c224a6f66ea510732b1"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C0_4_2.json",
+      "sha256": "7311d162412b1d26bcc44cc62c25f709a53cb0516190246292c0a9959bc6621c"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C0_5_1.json",
+      "sha256": "72d9d64582cbc361ea33f6d8bdbb8f0854abe3a1cff67aa4bf4a57d92605e74e"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C0_homogeneous.json",
+      "sha256": "2123fdc37c8f6d07662bbf2af848b55b25860f4fee8d6fae87e65fdf3b8ac53b"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C0_single.json",
+      "sha256": "96458b715634d0d576e35010a08d134039f2ee8df8a40af7962a54f3ed8bae22"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C1_3_3.json",
+      "sha256": "0f100e5e248b678b67b9d22f731634e77796c619c58cbe9ed81718891e90f378"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C1_4_2.json",
+      "sha256": "d82bdc73c73c71bca2798fd3e93250ad3dc8ef2cb4ab99e8219bdad46431a710"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C1_5_1.json",
+      "sha256": "8cec1b25954dee1c59a422420be6d9a4c8a04e21923c08ee3d89b106309c9075"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C1_homogeneous.json",
+      "sha256": "024853b1182133bd7d274943d0bbe094ba9e7960ed81b46f073ecd2b3f7fc172"
+    },
+    {
+      "file": "E4/final_certificates/pipelined_C1_single.json",
+      "sha256": "10d5bae6d4d1c5a63c720611628ddd89d1d64fbcfa0f90576a5343744b1644e6"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C0_3_3.json",
+      "sha256": "6929a8ce4f1edac5bbdd82e9f0fe7e4b1ccaf0cdd4a8381bf2511747af879025"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C0_4_2.json",
+      "sha256": "b699b559021d9a11274c97cecaddc5e508f16112a7c11865a06a5d14522b3b84"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C0_5_1.json",
+      "sha256": "60acb71d302a0528cc8ef75660ee98808ecdd6805b41d779576c4e0f397abe83"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C0_homogeneous.json",
+      "sha256": "2ad245c7a11d166af303738269400c698dad31e2d108bfbd124157e7fb8015e2"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C0_single.json",
+      "sha256": "a6e313336491d9ea4db11bf1d433744388ae52e7a4b6059a7711b7161099f9bf"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C1_3_3.json",
+      "sha256": "72bb44a218560eee81a60fc116b7188905a9e8f4c41c771ff999a7c7f3686615"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C1_4_2.json",
+      "sha256": "c2aafba855fb72d6e91fb9f9baf1afc3851aa5f19ed6e74ba5b6e059e83c7640"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C1_5_1.json",
+      "sha256": "85848b94c67efa3fa9af04ef54893a5e3e3cabd37169658f68567daa914a36ac"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C1_homogeneous.json",
+      "sha256": "5dbbf27ebd05980fb57e2a9c80034e3af830bcb5441a2e2fcf771a5509f097a1"
+    },
+    {
+      "file": "E4/final_certificates/port_tight_C1_single.json",
+      "sha256": "3be9b6335e56dfc7309210649c1ea948c7b136cc933016164c2ee1776d1c11ad"
+    }
+  ]
+}

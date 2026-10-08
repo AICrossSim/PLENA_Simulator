@@ -1,0 +1,88 @@
+         661599037 function calls (649366341 primitive calls) in 475.759 seconds
+
+   Ordered by: internal time
+   List reduced from 451 to 80 due to restriction <80>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+41824727/41822820   38.327    0.000   90.316    0.000 {built-in method builtins.sum}
+      768   37.595    0.049  140.149    0.182 optimizer.py:201(_solve_fixed_t)
+    27288   34.114    0.001   34.114    0.001 {built-in method ortools.sat.python.cp_model_helper.solve}
+   644140   26.165    0.000   97.917    0.000 model.py:390(_fluid_rates)
+4824004/2112   25.135    0.000   55.207    0.026 optimizer.py:175(visit)
+     2304   22.771    0.010  211.869    0.092 runtime.py:91(_one_layer_fixed)
+6055376/201744   16.940    0.000   40.038    0.000 dataclasses.py:1289(_asdict_inner)
+ 36580188   16.014    0.000   19.290    0.000 model.py:399(<genexpr>)
+ 62677012   15.409    0.000   15.409    0.000 optimizer.py:178(<genexpr>)
+102023307   13.300    0.000   13.300    0.000 {method 'get' of 'dict' objects}
+ 31246236   12.705    0.000   14.995    0.000 model.py:400(<genexpr>)
+  3136828   12.536    0.000   15.813    0.000 search.py:180(<listcomp>)
+ 30047159   11.542    0.000   12.616    0.000 {built-in method builtins.max}
+  4821892    9.155    0.000    9.155    0.000 optimizer.py:185(<listcomp>)
+  1282808    9.062    0.000   10.149    0.000 cp_model.py:1655(add_hint)
+  8299900    9.022    0.000   19.950    0.000 {built-in method builtins.min}
+  5849996    8.134    0.000   11.055    0.000 copy.py:128(deepcopy)
+ 19392724    8.115    0.000    9.851    0.000 runtime.py:506(<genexpr>)
+  9873304    6.904    0.000    6.904    0.000 model.py:403(<lambda>)
+   847892    6.462    0.000    8.593    0.000 runtime.py:520(<listcomp>)
+   537784    6.362    0.000   22.149    0.000 runtime.py:506(<dictcomp>)
+  1282808    5.466    0.000    7.343    0.000 cp_model.py:333(new_int_var)
+    27288    5.401    0.000   23.805    0.001 cp_model.py:1684(_add_pre_pep8_methods)
+   644140    5.300    0.000   15.661    0.000 model.py:485(_set_window_limits)
+  1664568    4.973    0.000   12.832    0.000 cp_model.py:229(snake_case_to_camel_case)
+     5084    4.604    0.001   27.001    0.005 search.py:174(geometry_proxy)
+      576    4.205    0.007   26.453    0.046 model.py:540(_one_layer)
+ 30860130    3.843    0.000    3.843    0.000 {method 'append' of 'list' objects}
+   219088    3.331    0.000    4.445    0.000 model.py:446(allocate)
+ 37316242    3.277    0.000    3.277    0.000 {built-in method math.ceil}
+  1667766    3.150    0.000    6.774    0.000 {method 'join' of 'str' objects}
+ 19222495    2.737    0.000    2.737    0.000 {built-in method builtins.isinstance}
+      220    2.714    0.012    6.172    0.028 optimizer.py:89(region_bound)
+  6266648    2.622    0.000    2.622    0.000 {built-in method builtins.hasattr}
+  6257988    2.604    0.000    5.224    0.000 dataclasses.py:1253(_is_dataclass_instance)
+  6958440    2.523    0.000    3.623    0.000 cp_model.py:233(<genexpr>)
+  3534476    2.347    0.000   22.803    0.000 cp_model.py:213(deprecated_func)
+ 16356550    2.099    0.000    2.099    0.000 {method 'items' of 'dict' objects}
+ 11085681    2.084    0.000    2.202    0.000 {built-in method builtins.getattr}
+  1519601    2.069    0.000    2.069    0.000 {built-in method builtins.round}
+   968860    1.913    0.000    1.913    0.000 {built-in method ortools.sat.python.cp_model_helper._add_bounded_linear_expression}
+   603238    1.899    0.000    2.953    0.000 model.py:315(_window_bandwidth)
+  9078376    1.766    0.000    2.719    0.000 {method 'setdefault' of 'dict' objects}
+  1186880    1.633    0.000    2.544    0.000 optimizer.py:24(_down)
+  1026592    1.544    0.000    1.903    0.000 model.py:396(<listcomp>)
+  6343414    1.537    0.000    1.537    0.000 model.py:35(ceildiv)
+  6219360    1.537    0.000    1.537    0.000 search.py:182(<lambda>)
+   202300    1.455    0.000    2.975    0.000 dataclasses.py:1235(fields)
+  6050372    1.425    0.000    1.425    0.000 dataclasses.py:1250(<genexpr>)
+   605588    1.416    0.000    2.685    0.000 runtime.py:233(event)
+   631808    1.369    0.000    5.354    0.000 model.py:384(task_cost)
+  4840056    1.312    0.000    1.312    0.000 runtime.py:513(<genexpr>)
+    27288    1.250    0.000    1.250    0.000 {built-in method builtins.dir}
+  7152418    1.183    0.000    1.183    0.000 {method 'startswith' of 'str' objects}
+  4840056    1.162    0.000    1.162    0.000 runtime.py:514(<genexpr>)
+  1023860    1.162    0.000    1.391    0.000 model.py:409(<setcomp>)
+2996560/1441312    1.121    0.000    2.174    0.000 {built-in method builtins.hash}
+   644140    1.120    0.000    1.602    0.000 model.py:393(<dictcomp>)
+    94403    1.117    0.000    2.035    0.000 {built-in method builtins.sorted}
+  5293872    1.100    0.000    1.100    0.000 {method 'capitalize' of 'str' objects}
+  4478096    1.018    0.000    1.018    0.000 optimizer.py:252(<genexpr>)
+  1282808    1.007    0.000    1.007    0.000 {built-in method ortools.sat.python.cp_model_helper.with_domain}
+  1664568    0.962    0.000    0.962    0.000 {built-in method builtins.setattr}
+7640666/7640661    0.958    0.000    0.958    0.000 {built-in method builtins.len}
+  1491748    0.893    0.000    1.118    0.000 runtime.py:484(<genexpr>)
+   968860    0.883    0.000    2.964    0.000 cp_model.py:509(add)
+  5935244    0.871    0.000    0.871    0.000 runtime.py:521(<lambda>)
+  1282808    0.870    0.000    0.870    0.000 {built-in method ortools.sat.python.cp_model_helper.with_name}
+    83584    0.868    0.000    1.594    0.000 runtime.py:341(begin_task)
+  5849996    0.814    0.000    0.814    0.000 {built-in method builtins.id}
+  3136828    0.792    0.000    0.792    0.000 search.py:178(<lambda>)
+   106356    0.787    0.000    2.324    0.000 model.py:925(<dictcomp>)
+   806097    0.780    0.000    1.045    0.000 model.py:135(hbm_bandwidth)
+  5849996    0.748    0.000    0.748    0.000 copy.py:182(_deepcopy_atomic)
+  1836960    0.725    0.000    0.874    0.000 model.py:925(<genexpr>)
+   246720    0.721    0.000    1.246    0.000 optimizer.py:100(_resource_services)
+     2964    0.667    0.000    0.866    0.000 optimizer.py:216(obj)
+   631808    0.664    0.000    1.871    0.000 <string>:2(__hash__)
+  2368000    0.662    0.000    0.662    0.000 {method 'as_integer_ratio' of 'float' objects}
+  1664568    0.610    0.000    0.610    0.000 cp_model.py:210(deprecated_method)
+
+

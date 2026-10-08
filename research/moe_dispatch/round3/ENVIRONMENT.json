@@ -1,0 +1,16 @@
+{
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "executable": "/tmp/plena-round2-venv/bin/python",
+  "platform": "Linux-4.18.0-553.115.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "packages": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "ortools": "9.15.6755",
+    "SALib": "1.6.0",
+    "matplotlib": "3.11.2",
+    "pytest": "9.1.1",
+    "pandas": "3.0.6"
+  },
+  "native_host_compiler": "cc (GCC) 8.5.0 20210514 (Red Hat 8.5.0-28)",
+  "scope": "Local software environment for analytical replay and host integer DFS; not native HBM or RTL calibration."
+}

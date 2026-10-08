@@ -1,0 +1,834 @@
+[
+  {
+    "all_geomean_ms": 3.7957875209783682,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "ecd3c343dce92bd6dd35ba948d5f52debebff26b47b834ba4b9c0045558af99c"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "ecd3c343dce92bd6dd35ba948d5f52debebff26b47b834ba4b9c0045558af99c"
+      }
+    ],
+    "credits": 256,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "3x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/old_pipelined_B1_256.json.gz",
+    "raw_sha256": "9fdf77af60da6f6bb317a3185a4ce3485339665e722cd6348e837e2b7d5f191d",
+    "repeat_digest": "841b2d757553fe01a1fb366ad8debe004f53599bd3c73d37e406f14ca138acde",
+    "result_digest": "841b2d757553fe01a1fb366ad8debe004f53599bd3c73d37e406f14ca138acde",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.900270968268241,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "fc19965bda56a5baced9ba7237402be846eee71c5bfe8e6e2c16398f14a0c6a7",
+        "warm": "e5b001a9569c3353c5c870e5c20444707fa9a7e627a4115a9dca42e2b6d0a6e0"
+      },
+      {
+        "state": "fc19965bda56a5baced9ba7237402be846eee71c5bfe8e6e2c16398f14a0c6a7",
+        "warm": "e5b001a9569c3353c5c870e5c20444707fa9a7e627a4115a9dca42e2b6d0a6e0"
+      }
+    ],
+    "credits": 256,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "2x24x128+2x24x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/old_pipelined_B2_256.json.gz",
+    "raw_sha256": "e6ae5327ec8848a2367326b7a8de4237dca9562bbaff1c3611ddf6dd1606d763",
+    "repeat_digest": "af666f19aeb429cf99861b07341ae448afb51ceb4343a2e9c99c09070c5f61df",
+    "result_digest": "af666f19aeb429cf99861b07341ae448afb51ceb4343a2e9c99c09070c5f61df",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.7890511119833965,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "d8b3aa6fff6c21ed047aeaf604dfae00b05fc200c485fa42025d4e2547bafcf5",
+        "warm": "a216b19e6566bced4393464681fbbdf1eeb6d14c0a255061a232b1b989771f71"
+      },
+      {
+        "state": "d8b3aa6fff6c21ed047aeaf604dfae00b05fc200c485fa42025d4e2547bafcf5",
+        "warm": "a216b19e6566bced4393464681fbbdf1eeb6d14c0a255061a232b1b989771f71"
+      }
+    ],
+    "credits": 256,
+    "design": "best_hetero",
+    "exact_repeat": true,
+    "geometry": "1x32x128+2x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/old_pipelined_best_hetero_256.json.gz",
+    "raw_sha256": "9e998f83aeb6ba0c3588c049ca48367617eef975b50a97eea4f4890718a993af",
+    "repeat_digest": "95a22a6cdcb4e75a82366d5f24ae688e4728dbbd8762cb9904ffcb7120fb98bd",
+    "result_digest": "95a22a6cdcb4e75a82366d5f24ae688e4728dbbd8762cb9904ffcb7120fb98bd",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.78426514502382,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "917d488b3a29500030a5b38012e0243369a6310c970dcfdd64bcaa8f6b762a52"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "917d488b3a29500030a5b38012e0243369a6310c970dcfdd64bcaa8f6b762a52"
+      }
+    ],
+    "credits": 256,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "1x48x256",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_B1_256.json.gz",
+    "raw_sha256": "8fb456ce30cf69a514583c8a0902a77d29efc20175795275a728ea017760d2bb",
+    "repeat_digest": "df0ef676e80a37d5117ed1a03e6f3c18b3cd58f9938f6beac8ae2e041f41f61e",
+    "result_digest": "df0ef676e80a37d5117ed1a03e6f3c18b3cd58f9938f6beac8ae2e041f41f61e",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.8128534106864955,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "b2e6f38adcb56bd20c45b3a6ad587291846aee2c25e77d801ef874edf5b71d4d",
+        "warm": "3b08231a72b6e0ff37ad0cc24d57f9d240a6500863139bb947fbe70e23155ba9"
+      },
+      {
+        "state": "b2e6f38adcb56bd20c45b3a6ad587291846aee2c25e77d801ef874edf5b71d4d",
+        "warm": "3b08231a72b6e0ff37ad0cc24d57f9d240a6500863139bb947fbe70e23155ba9"
+      }
+    ],
+    "credits": 256,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "1x48x128+1x48x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_B2_256.json.gz",
+    "raw_sha256": "b06f659718f969bc5e2643da829ce848d8176041f0ed493be5d94458e21f03c3",
+    "repeat_digest": "c7923ea73f2dfa3da7dabd7890434a5e3188c2e4f3b3a946a152cc424c1ec6ed",
+    "result_digest": "c7923ea73f2dfa3da7dabd7890434a5e3188c2e4f3b3a946a152cc424c1ec6ed",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.971132596016786,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "ebe534bfd3ab71dc24b9d0feb51e9750b360a3dd0ee5a850ad6608caae914a84",
+        "warm": "0105c7aa97adee451c833a05116be46cf850a9a39e75846c9a0901b1920b2fdf"
+      },
+      {
+        "state": "ebe534bfd3ab71dc24b9d0feb51e9750b360a3dd0ee5a850ad6608caae914a84",
+        "warm": "0105c7aa97adee451c833a05116be46cf850a9a39e75846c9a0901b1920b2fdf"
+      }
+    ],
+    "credits": 256,
+    "design": "H51",
+    "exact_repeat": true,
+    "geometry": "1x40x256+2x2x512",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_H51_256.json.gz",
+    "raw_sha256": "7cfedfa2bf7213f67d325eb9e8b9a1c925136ca731816f201b39eedd38de8994",
+    "repeat_digest": "4f337d6db80a187c64b9f6fa06270546fc407246c01e5ef78807b5a6178ca868",
+    "result_digest": "4f337d6db80a187c64b9f6fa06270546fc407246c01e5ef78807b5a6178ca868",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.814696014569092,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "7d7b2597ebc71e9a26fd6260e6ed132e08e3eead9fc30683c2dadf07347a6eea",
+        "warm": "21efd372727fe073b2e949d930ee6630ecd2ddf7d6025df6ee5d9f8e8861f6f8"
+      },
+      {
+        "state": "7d7b2597ebc71e9a26fd6260e6ed132e08e3eead9fc30683c2dadf07347a6eea",
+        "warm": "21efd372727fe073b2e949d930ee6630ecd2ddf7d6025df6ee5d9f8e8861f6f8"
+      }
+    ],
+    "credits": 256,
+    "design": "H42",
+    "exact_repeat": true,
+    "geometry": "1x64x128+2x32x64",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_H42_256.json.gz",
+    "raw_sha256": "2eab13428807be349fa2794e83b6057d8387a9f8cf9e5fe05148cb8fbb8230ca",
+    "repeat_digest": "d4b9eab77d03b434fa52d6c3e3ae24d6bf36c84ff3d551436894a57a21043868",
+    "result_digest": "d4b9eab77d03b434fa52d6c3e3ae24d6bf36c84ff3d551436894a57a21043868",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 3.8249929974649,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "416e9b66c5fee979259196361fcebcbe0a3718d7a0bd3693a741fc85ce89d2f2",
+        "warm": "11786ca746207d8e5d50413f90dc27970f4e8af621afd0534e5bc8cb32e92f74"
+      },
+      {
+        "state": "416e9b66c5fee979259196361fcebcbe0a3718d7a0bd3693a741fc85ce89d2f2",
+        "warm": "11786ca746207d8e5d50413f90dc27970f4e8af621afd0534e5bc8cb32e92f74"
+      }
+    ],
+    "credits": 256,
+    "design": "H33",
+    "exact_repeat": true,
+    "geometry": "1x48x128+4x3x512",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_H33_256.json.gz",
+    "raw_sha256": "44f44bbe7fcdf50b4e931755fabf980acd61e53b492226d849e93acdd7108555",
+    "repeat_digest": "1180eba093419f258f2d68bfba88568c7ed720bc97fcab8b18ff87f2240ecf29",
+    "result_digest": "1180eba093419f258f2d68bfba88568c7ed720bc97fcab8b18ff87f2240ecf29",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 1.8976220008066045,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "eef0e76cf5eaed4dee1060257c766be32e1c936ae7dec9f32eb6d363f0f4a8f2"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "eef0e76cf5eaed4dee1060257c766be32e1c936ae7dec9f32eb6d363f0f4a8f2"
+      }
+    ],
+    "credits": 520,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "3x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/old_pipelined_B1_520.json.gz",
+    "raw_sha256": "3644ed381c6536017dcd918923fe957df9301eb4647b06cad01fcb6c40506b80",
+    "repeat_digest": "e62ce42138d284d2571d503b00fa3290d2acd9eec0ab048e1d7f82773da8b973",
+    "result_digest": "e62ce42138d284d2571d503b00fa3290d2acd9eec0ab048e1d7f82773da8b973",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 2.149807818078526,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "f04621c36f66dce96ef36a672dc727c61a2abc1279fc7e015951c778de9c2012",
+        "warm": "c43e58a6f4444bcf6887a94553a93731f752b011769b417489ac04c59694c12a"
+      },
+      {
+        "state": "f04621c36f66dce96ef36a672dc727c61a2abc1279fc7e015951c778de9c2012",
+        "warm": "c43e58a6f4444bcf6887a94553a93731f752b011769b417489ac04c59694c12a"
+      }
+    ],
+    "credits": 520,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "2x24x128+2x24x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/old_pipelined_B2_520.json.gz",
+    "raw_sha256": "22f1ac04f6a072d2c68da20994952976f1ddbea9d4e9369e1faf3754c56dc8b4",
+    "repeat_digest": "b2937dbed598ff01c9c915d9feef929e767ed32fde60e3a94a7b441305d58a99",
+    "result_digest": "b2937dbed598ff01c9c915d9feef929e767ed32fde60e3a94a7b441305d58a99",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 1.951042424995853,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "df5f8beb778523f927b3809363aa13182dc412c84af776ef75abc073f1521185",
+        "warm": "c533208c5bc9dc40494de3020f722680aef54ae4cfd30731c8e53cc033f1f4fe"
+      },
+      {
+        "state": "df5f8beb778523f927b3809363aa13182dc412c84af776ef75abc073f1521185",
+        "warm": "c533208c5bc9dc40494de3020f722680aef54ae4cfd30731c8e53cc033f1f4fe"
+      }
+    ],
+    "credits": 520,
+    "design": "best_hetero",
+    "exact_repeat": true,
+    "geometry": "1x32x128+2x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/old_pipelined_best_hetero_520.json.gz",
+    "raw_sha256": "2d057560cf8f684d5e04a43b0d33712592605ca989054428be2be0b18a846000",
+    "repeat_digest": "4c4714beb170125f146cc36c1ae72b2a7606e1d848f49790dcdf782da8532f03",
+    "result_digest": "4c4714beb170125f146cc36c1ae72b2a7606e1d848f49790dcdf782da8532f03",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 1.878524357562765,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "4da57b80e80418a7b9f02c45756d46af6ce1ad31c1bce00c714920cd16e2c001"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "4da57b80e80418a7b9f02c45756d46af6ce1ad31c1bce00c714920cd16e2c001"
+      }
+    ],
+    "credits": 520,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "1x48x256",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_B1_520.json.gz",
+    "raw_sha256": "a782cf3961d6e059189af9e5c4008a63e11cfa8deca8ca1ef59e6346248d76b0",
+    "repeat_digest": "d37aff0e2f176ebdd6d86532fbf492d1eac220deb350b633c7f692d64af805e4",
+    "result_digest": "d37aff0e2f176ebdd6d86532fbf492d1eac220deb350b633c7f692d64af805e4",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 1.9091352707655385,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "4bceed4867e7b5fb9f4a07f41f33dca1720728341c2ec743f42d623b8485556a",
+        "warm": "d947995ccfe1246ac767735aae1d72dedd660461a66077c86c1bc6bc635b4e06"
+      },
+      {
+        "state": "4bceed4867e7b5fb9f4a07f41f33dca1720728341c2ec743f42d623b8485556a",
+        "warm": "d947995ccfe1246ac767735aae1d72dedd660461a66077c86c1bc6bc635b4e06"
+      }
+    ],
+    "credits": 520,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "1x48x128+1x48x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_B2_520.json.gz",
+    "raw_sha256": "ac84a430bdd638eaa80ad7c232b8c6846f8c2b2afc1c8d8f870292271f03d100",
+    "repeat_digest": "2d33ff9df3dbab53b87c298e46c7c5b2bea892136a1e7dcacc76199635e50f95",
+    "result_digest": "2d33ff9df3dbab53b87c298e46c7c5b2bea892136a1e7dcacc76199635e50f95",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 2.13330739618045,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "75f509d90c04343369aab320c0190ae0b29cb7faab81ddede0d7131988896b53",
+        "warm": "72000f3dce4f1418ab75f2be99ddf305a57d2460b10cbca2891206c60c750e4a"
+      },
+      {
+        "state": "75f509d90c04343369aab320c0190ae0b29cb7faab81ddede0d7131988896b53",
+        "warm": "72000f3dce4f1418ab75f2be99ddf305a57d2460b10cbca2891206c60c750e4a"
+      }
+    ],
+    "credits": 520,
+    "design": "H51",
+    "exact_repeat": true,
+    "geometry": "1x40x256+2x2x512",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_H51_520.json.gz",
+    "raw_sha256": "9395d70080050f2cbf2b3c2fe6ebfb3ef4f28e71ce2b704c41f420b0ec46c84d",
+    "repeat_digest": "3c5cfbd6fcf422ed8e136386e70bf9f4f12a6bb6fec1669dfc705c165fae43d1",
+    "result_digest": "3c5cfbd6fcf422ed8e136386e70bf9f4f12a6bb6fec1669dfc705c165fae43d1",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 1.9332376559765843,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "bba396e681437dce2b596927fef2d6e15a1cc1282b091e882b653b64301b2578",
+        "warm": "905d2accef23e20f197e6f6ca41cb2638c335f9b2859292311ec19466a54763e"
+      },
+      {
+        "state": "bba396e681437dce2b596927fef2d6e15a1cc1282b091e882b653b64301b2578",
+        "warm": "905d2accef23e20f197e6f6ca41cb2638c335f9b2859292311ec19466a54763e"
+      }
+    ],
+    "credits": 520,
+    "design": "H42",
+    "exact_repeat": true,
+    "geometry": "1x64x128+2x32x64",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_H42_520.json.gz",
+    "raw_sha256": "96f6ee85b3a9deb10f8bab2763097f7c3c2341bf73b9e1c931595c5d17b7f053",
+    "repeat_digest": "b31e8fca4ca5580a6a83602d91af12265fda7ddc1004a609c3b2d1aa06b8f162",
+    "result_digest": "b31e8fca4ca5580a6a83602d91af12265fda7ddc1004a609c3b2d1aa06b8f162",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 2.059313471954266,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "c51ac666b9a73b9b715f0aedfbe0ee01641cb79d2fc1b2f42a5766c6ab4f70d9",
+        "warm": "ad2e98b1399e6814cde18929b0d97aa731811df97629a129607bce36cbcfe6a5"
+      },
+      {
+        "state": "c51ac666b9a73b9b715f0aedfbe0ee01641cb79d2fc1b2f42a5766c6ab4f70d9",
+        "warm": "ad2e98b1399e6814cde18929b0d97aa731811df97629a129607bce36cbcfe6a5"
+      }
+    ],
+    "credits": 520,
+    "design": "H33",
+    "exact_repeat": true,
+    "geometry": "1x48x128+4x3x512",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "pipelined",
+    "raw_file": "E4/cross_bw_raw/new_pipelined_H33_520.json.gz",
+    "raw_sha256": "30ba443579261ed7a5924bc33f67c6fa26c897a3c3721b906929edc9039f1adc",
+    "repeat_digest": "c5b556bda76f336a0a5337c62475b9249d9eed15a3884ca405f21496fc2fe146",
+    "result_digest": "c5b556bda76f336a0a5337c62475b9249d9eed15a3884ca405f21496fc2fe146",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.611953423289957,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "f58d2f7b167f8225e6bd09c133fd779f9aa9b5f9f9d27f40e8f7d18b866a575a"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "f58d2f7b167f8225e6bd09c133fd779f9aa9b5f9f9d27f40e8f7d18b866a575a"
+      }
+    ],
+    "credits": 256,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "3x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/old_port_tight_B1_256.json.gz",
+    "raw_sha256": "5eb7e2f3acd964caa1b3811fb38af696d5fed97c84bf70f0c4bfb07997259507",
+    "repeat_digest": "839791dcf0b519f89b1a6458d4a671bd6b2522eab6405e7d17acc969683dafc8",
+    "result_digest": "839791dcf0b519f89b1a6458d4a671bd6b2522eab6405e7d17acc969683dafc8",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.895895396977613,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "46b73def9e1283f3dc475cc3a3fdee3a9b8e0fb265bad81bb202a3d899088575",
+        "warm": "9f3eb94a191790e4c26b64b07d31ba97e7894a1571d69ea7af9558870c041202"
+      },
+      {
+        "state": "46b73def9e1283f3dc475cc3a3fdee3a9b8e0fb265bad81bb202a3d899088575",
+        "warm": "9f3eb94a191790e4c26b64b07d31ba97e7894a1571d69ea7af9558870c041202"
+      }
+    ],
+    "credits": 256,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "3x16x128+3x16x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/old_port_tight_B2_256.json.gz",
+    "raw_sha256": "f3ca0365cb96dd84de5a727c55d5d6b4320f83078cdf5af92b97109bf8920190",
+    "repeat_digest": "90e97b00865d2b0ed534c42514d5f3edf48c5a1f1b710f5242ece6e387a0529a",
+    "result_digest": "90e97b00865d2b0ed534c42514d5f3edf48c5a1f1b710f5242ece6e387a0529a",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.919826363876755,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "c4f8b7e2fcfd7b80ba8294d363b1fcd75c7074deec8362702dbb9b0218595035",
+        "warm": "c6c752affbdc594f13c6ee7550ed0c3b34361a64f4aef52b9042abe2ae58b87d"
+      },
+      {
+        "state": "c4f8b7e2fcfd7b80ba8294d363b1fcd75c7074deec8362702dbb9b0218595035",
+        "warm": "c6c752affbdc594f13c6ee7550ed0c3b34361a64f4aef52b9042abe2ae58b87d"
+      }
+    ],
+    "credits": 256,
+    "design": "best_hetero",
+    "exact_repeat": true,
+    "geometry": "1x32x128+2x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/old_port_tight_best_hetero_256.json.gz",
+    "raw_sha256": "decb51673bd80be3500842de3dbe29fc60a7e6e7fbf1850305731a22ba9cd3d8",
+    "repeat_digest": "8ebb60eef52167c01be3b8cce0489b48f7567f85f32fe1712f7bda39c83d28d2",
+    "result_digest": "8ebb60eef52167c01be3b8cce0489b48f7567f85f32fe1712f7bda39c83d28d2",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.611811592115982,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "10f23ff121a22dd6c9258f6babe1299ab0c633b26fb1e709ee9efafa0c0f85ce"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "10f23ff121a22dd6c9258f6babe1299ab0c633b26fb1e709ee9efafa0c0f85ce"
+      }
+    ],
+    "credits": 256,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "3x32x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_B1_256.json.gz",
+    "raw_sha256": "5427d0c0b705b4136bd68bd4926c43017b1a32720cdf21193fbea171dd108ac6",
+    "repeat_digest": "0d54555acd1983d3151eda9ea75e092772398e08bbf26f177335d1e79b40d097",
+    "result_digest": "0d54555acd1983d3151eda9ea75e092772398e08bbf26f177335d1e79b40d097",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.895765199571338,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "af8f8e525b3f85d1f122c3b2853baa367055d3b82c7f92d9cc39f88d2c1b6681",
+        "warm": "7a221ad08a36d75b8c58c62298f7a58487da695e02a13f288b4ed6616624c016"
+      },
+      {
+        "state": "af8f8e525b3f85d1f122c3b2853baa367055d3b82c7f92d9cc39f88d2c1b6681",
+        "warm": "7a221ad08a36d75b8c58c62298f7a58487da695e02a13f288b4ed6616624c016"
+      }
+    ],
+    "credits": 256,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "3x16x128+3x16x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_B2_256.json.gz",
+    "raw_sha256": "61b2a8690171066f7ec2d32dcb6972aa725d6708f925e3b2575349daaec06ee0",
+    "repeat_digest": "b462914488d960911331875c45819dbcf43376773d1ed7326d95d93e41bcdce0",
+    "result_digest": "b462914488d960911331875c45819dbcf43376773d1ed7326d95d93e41bcdce0",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 11.0261110982731,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "de902870acdd431aec59f231c9918b70ccf0789f48686c1648fefa5925c4fea7",
+        "warm": "d177487c7ce1f3f730907f8e4fd11e962ecf0b98ab220c6a99eafc706aed6b96"
+      },
+      {
+        "state": "de902870acdd431aec59f231c9918b70ccf0789f48686c1648fefa5925c4fea7",
+        "warm": "d177487c7ce1f3f730907f8e4fd11e962ecf0b98ab220c6a99eafc706aed6b96"
+      }
+    ],
+    "credits": 256,
+    "design": "H51",
+    "exact_repeat": true,
+    "geometry": "2x20x256+8x4x64",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_H51_256.json.gz",
+    "raw_sha256": "fe8b8816645d4f454ad79c6648afde267ee0cd35d6b11f59eaeafa6cf43621bb",
+    "repeat_digest": "2a6b6d18ba7246ff252b58467dcc4b6cef9c4fbf97761257dac10bd80cd14ae8",
+    "result_digest": "2a6b6d18ba7246ff252b58467dcc4b6cef9c4fbf97761257dac10bd80cd14ae8",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.919826363876755,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "c4f8b7e2fcfd7b80ba8294d363b1fcd75c7074deec8362702dbb9b0218595035",
+        "warm": "c6c752affbdc594f13c6ee7550ed0c3b34361a64f4aef52b9042abe2ae58b87d"
+      },
+      {
+        "state": "c4f8b7e2fcfd7b80ba8294d363b1fcd75c7074deec8362702dbb9b0218595035",
+        "warm": "c6c752affbdc594f13c6ee7550ed0c3b34361a64f4aef52b9042abe2ae58b87d"
+      }
+    ],
+    "credits": 256,
+    "design": "H42",
+    "exact_repeat": true,
+    "geometry": "1x32x128+2x32x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_H42_256.json.gz",
+    "raw_sha256": "decb51673bd80be3500842de3dbe29fc60a7e6e7fbf1850305731a22ba9cd3d8",
+    "repeat_digest": "8ebb60eef52167c01be3b8cce0489b48f7567f85f32fe1712f7bda39c83d28d2",
+    "result_digest": "8ebb60eef52167c01be3b8cce0489b48f7567f85f32fe1712f7bda39c83d28d2",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.898055728508288,
+    "bw_GBps": 126.03076923076924,
+    "checks": [
+      {
+        "state": "72c2e4121aa75fce521d69f99e1b4f48c27de9f7a65db76c2ebdd43242e9ffb9",
+        "warm": "5e9dd319bec507e01c3dafc5b47b4758993a963ecd1bcf82676f40cf1aa0eb81"
+      },
+      {
+        "state": "72c2e4121aa75fce521d69f99e1b4f48c27de9f7a65db76c2ebdd43242e9ffb9",
+        "warm": "5e9dd319bec507e01c3dafc5b47b4758993a963ecd1bcf82676f40cf1aa0eb81"
+      }
+    ],
+    "credits": 256,
+    "design": "H33",
+    "exact_repeat": true,
+    "geometry": "3x16x128+3x16x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_H33_256.json.gz",
+    "raw_sha256": "988f0a1ea1d3889ec021e34f0381ff34175051fbddbd32fdc4f1a396ae682d3c",
+    "repeat_digest": "2ba0f43af481bfd947907571569f6303bc23703e660b77ddab3c9b227f7aae80",
+    "result_digest": "2ba0f43af481bfd947907571569f6303bc23703e660b77ddab3c9b227f7aae80",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.612198055195694,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "4300efac29ac922b180e179d14010328cfe5935f2ca5b0fd2fab2a863b5c459d"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "4300efac29ac922b180e179d14010328cfe5935f2ca5b0fd2fab2a863b5c459d"
+      }
+    ],
+    "credits": 520,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "3x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/old_port_tight_B1_520.json.gz",
+    "raw_sha256": "bacf00b23d2afd66d0b565123b6f44440826066e8d9ee70936a66d9d401e6dc0",
+    "repeat_digest": "ef97187e6eb25acb8c6948f6fed9e87e5ca90248556b829e596e64b067a02369",
+    "result_digest": "ef97187e6eb25acb8c6948f6fed9e87e5ca90248556b829e596e64b067a02369",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.89601508544936,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "1913c89d7bf04ed72cb3cd12fa63e17cc0b26d55998c8293e5b50ed753a56e12",
+        "warm": "a590d71fa191d4f217c0ec116db2c93b62bc6fefb0278830b7d6e316961fb734"
+      },
+      {
+        "state": "1913c89d7bf04ed72cb3cd12fa63e17cc0b26d55998c8293e5b50ed753a56e12",
+        "warm": "a590d71fa191d4f217c0ec116db2c93b62bc6fefb0278830b7d6e316961fb734"
+      }
+    ],
+    "credits": 520,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "3x16x128+3x16x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/old_port_tight_B2_520.json.gz",
+    "raw_sha256": "f2ab04e7552db20b9bad0d9be6a11d79cc5f6d2918c6b0d0abe813cb5d3e91c7",
+    "repeat_digest": "7fddefc067f9f91f434138507025c7684f61bf01b6ceca6c1d69137ef310bddf",
+    "result_digest": "7fddefc067f9f91f434138507025c7684f61bf01b6ceca6c1d69137ef310bddf",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.91426073761391,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "172e0034503a2daca94d3fc00ba4df3fd15c141986ddf40c27d7659009fd0c56",
+        "warm": "606df46a04b6251fb14347ef6a4cb9564852f244ba807f001fc7fdbac2611059"
+      },
+      {
+        "state": "172e0034503a2daca94d3fc00ba4df3fd15c141986ddf40c27d7659009fd0c56",
+        "warm": "606df46a04b6251fb14347ef6a4cb9564852f244ba807f001fc7fdbac2611059"
+      }
+    ],
+    "credits": 520,
+    "design": "best_hetero",
+    "exact_repeat": true,
+    "geometry": "1x32x128+2x32x128",
+    "hardware_source": "126 \u4e0b\u9009\u51fa",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/old_port_tight_best_hetero_520.json.gz",
+    "raw_sha256": "5332d1c502faac7ae52405c3ac5da0d1ccb341be51552ab31411b4724f06c6e4",
+    "repeat_digest": "cf0e3dfe0ea38ede7dbd8464e4d2ee7856443709dc89c5813efc2fdbcc447cb3",
+    "result_digest": "cf0e3dfe0ea38ede7dbd8464e4d2ee7856443709dc89c5813efc2fdbcc447cb3",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.612114261217762,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "4a605909ac9a743e77a5714ca6ce6f3c0017ff6768ce5cc1bc6e2e1f412cdfdc"
+      },
+      {
+        "state": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "warm": "4a605909ac9a743e77a5714ca6ce6f3c0017ff6768ce5cc1bc6e2e1f412cdfdc"
+      }
+    ],
+    "credits": 520,
+    "design": "B1",
+    "exact_repeat": true,
+    "geometry": "3x32x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_B1_520.json.gz",
+    "raw_sha256": "01056d017f1b1b8d25fd4c9a7d7c8dbad34d4af222ed5398fb5dc63cd7491ed8",
+    "repeat_digest": "7c12340695ed357046c2f701811939c09f88bd7d138d4eac1e477a9ed3db4340",
+    "result_digest": "7c12340695ed357046c2f701811939c09f88bd7d138d4eac1e477a9ed3db4340",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.895883546105402,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "10ea836dc56015b5673abca1730abda5e555a30033d50086ad79b4eaf37ab327",
+        "warm": "489122c1c60dc402adbeaf5af52d62d7793f548b77eee108fbf0d12de7313197"
+      },
+      {
+        "state": "10ea836dc56015b5673abca1730abda5e555a30033d50086ad79b4eaf37ab327",
+        "warm": "489122c1c60dc402adbeaf5af52d62d7793f548b77eee108fbf0d12de7313197"
+      }
+    ],
+    "credits": 520,
+    "design": "B2",
+    "exact_repeat": true,
+    "geometry": "3x16x128+3x16x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_B2_520.json.gz",
+    "raw_sha256": "961a794cd61c151809f114293c98e1002124ea7e3f12753cf3524ae1ec9d4ebc",
+    "repeat_digest": "52bb36cabdafa8294262b017cfc6536d0aee98dca64c404480c20d0d80ba04b3",
+    "result_digest": "52bb36cabdafa8294262b017cfc6536d0aee98dca64c404480c20d0d80ba04b3",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 11.026119966537768,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "b5d2198701de1944cbf9df5d17a54039bcedd5c4cda4fc58522b3b7dc8a386ce",
+        "warm": "5b5aff1578ed683687411825aa9e4c27b739637ef550b01ceb9dea2dd46615f9"
+      },
+      {
+        "state": "b5d2198701de1944cbf9df5d17a54039bcedd5c4cda4fc58522b3b7dc8a386ce",
+        "warm": "5b5aff1578ed683687411825aa9e4c27b739637ef550b01ceb9dea2dd46615f9"
+      }
+    ],
+    "credits": 520,
+    "design": "H51",
+    "exact_repeat": true,
+    "geometry": "2x20x256+8x4x64",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_H51_520.json.gz",
+    "raw_sha256": "7f4ab99121be70fd6a08434570fd8cd6157c36188000f5655e71e759a9d8b5a3",
+    "repeat_digest": "efb0283e3c89a2acc67c496a641e8776b3e2cc3a228f465dca274caef2d5696e",
+    "result_digest": "efb0283e3c89a2acc67c496a641e8776b3e2cc3a228f465dca274caef2d5696e",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.91426073761391,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "172e0034503a2daca94d3fc00ba4df3fd15c141986ddf40c27d7659009fd0c56",
+        "warm": "606df46a04b6251fb14347ef6a4cb9564852f244ba807f001fc7fdbac2611059"
+      },
+      {
+        "state": "172e0034503a2daca94d3fc00ba4df3fd15c141986ddf40c27d7659009fd0c56",
+        "warm": "606df46a04b6251fb14347ef6a4cb9564852f244ba807f001fc7fdbac2611059"
+      }
+    ],
+    "credits": 520,
+    "design": "H42",
+    "exact_repeat": true,
+    "geometry": "1x32x128+2x32x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_H42_520.json.gz",
+    "raw_sha256": "5332d1c502faac7ae52405c3ac5da0d1ccb341be51552ab31411b4724f06c6e4",
+    "repeat_digest": "cf0e3dfe0ea38ede7dbd8464e4d2ee7856443709dc89c5813efc2fdbcc447cb3",
+    "result_digest": "cf0e3dfe0ea38ede7dbd8464e4d2ee7856443709dc89c5813efc2fdbcc447cb3",
+    "t_big": 4
+  },
+  {
+    "all_geomean_ms": 10.898173412679158,
+    "bw_GBps": 256.0,
+    "checks": [
+      {
+        "state": "39d7da421c2ef86d79d4d6d35ce15846dbb8a1ffc5e4fc632d8ce9f838b4a7b4",
+        "warm": "935bca380cbd57bf0cfadb750abac896571b98b8ddcebdba1fb478bd100bcd46"
+      },
+      {
+        "state": "39d7da421c2ef86d79d4d6d35ce15846dbb8a1ffc5e4fc632d8ce9f838b4a7b4",
+        "warm": "935bca380cbd57bf0cfadb750abac896571b98b8ddcebdba1fb478bd100bcd46"
+      }
+    ],
+    "credits": 520,
+    "design": "H33",
+    "exact_repeat": true,
+    "geometry": "3x16x128+3x16x128",
+    "hardware_source": "256 \u4e0b\u91cd\u65b0\u641c\u7d22",
+    "large_first": true,
+    "onchip_mode": "port_tight",
+    "raw_file": "E4/cross_bw_raw/new_port_tight_H33_520.json.gz",
+    "raw_sha256": "710e17fa899c250706850317030ccf71c03eeb1aecf21cd0d72384bd2f1f6e73",
+    "repeat_digest": "977a80194cca7114b2a59f7aed10c54cb5e5608715c6da3058556feb60bd892e",
+    "result_digest": "977a80194cca7114b2a59f7aed10c54cb5e5608715c6da3058556feb60bd892e",
+    "t_big": 4
+  }
+]

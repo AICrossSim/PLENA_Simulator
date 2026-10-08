@@ -1,0 +1,27 @@
+[
+  {
+    "family": "single",
+    "first_geometry": "1x96x128",
+    "profiled_seconds": 0.21547467820346355
+  },
+  {
+    "family": "homogeneous",
+    "first_geometry": "1x48x128+1x48x128",
+    "profiled_seconds": 0.2508606296032667
+  },
+  {
+    "family": "5+1",
+    "first_geometry": "1x16x128+1x80x128",
+    "profiled_seconds": 4.70675353333354
+  },
+  {
+    "family": "4+2",
+    "first_geometry": "1x32x128+1x64x128",
+    "profiled_seconds": 4.242150643840432
+  },
+  {
+    "family": "3+3",
+    "first_geometry": "1x48x128+1x48x128",
+    "profiled_seconds": 4.821844048798084
+  }
+]

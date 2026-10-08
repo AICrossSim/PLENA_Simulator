@@ -1,0 +1,7 @@
+{
+  "formal_certificate_exists": false,
+  "profile_diagnostic_certificate": "research/moe_dispatch/round3/diagnostics/profile/outputs/E5/sobol/certificates/0000.json.gz",
+  "formal_sample_contamination": false,
+  "sha256": "6d2240953501c53ada46adc26c823126ab9b64c42216710522ee8e5516a5c9f6",
+  "moved_to": "research/moe_dispatch/round3/diagnostics/profile/diagnostic_sample_0000.json.gz"
+}

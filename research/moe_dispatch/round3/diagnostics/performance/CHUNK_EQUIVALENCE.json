@@ -1,0 +1,20 @@
+{
+  "all_canonical_bitexact": true,
+  "cases": 72,
+  "scope": "Synthetic explicit storage-chunk/spill regression; not captured benchmark performance",
+  "source_sha256": {
+    "model.py": "f3286e5e3aad2af0f0db6cf4a9f38ce182e617286b317152e0e56c7b624ad430",
+    "optimizer.py": "7fd0d6308d4391c4759a3c294522a646f93f2c1b036685db3d5df4227550e75e",
+    "runtime.py": "f0bb144f7fee7589f855350f0d3aa5cb744b1609b9a2338451b6e1122da968e4"
+  },
+  "timing": {
+    "False": {
+      "new_seconds": 0.46191095374524593,
+      "old_seconds": 0.5507352259010077
+    },
+    "True": {
+      "new_seconds": 0.5873960480093956,
+      "old_seconds": 0.578329099342227
+    }
+  }
+}

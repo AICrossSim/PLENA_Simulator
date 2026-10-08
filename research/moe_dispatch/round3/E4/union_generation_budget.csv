@@ -1,0 +1,11 @@
+onchip_mode,family,candidate_generation_budget,node_generation_budget,generated_points_with_overlap,unique_attempted_points,unique_successful_points,actual_simulator_calls
+pipelined,single,512,4096,512,272,271,36720
+pipelined,homogeneous,512,4096,512,288,286,36576
+pipelined,5+1,512,4096,512,403,403,36864
+pipelined,4+2,512,4096,512,362,362,36864
+pipelined,3+3,512,4096,512,333,333,36864
+port_tight,single,512,4096,512,272,271,36720
+port_tight,homogeneous,512,4096,512,287,285,36576
+port_tight,5+1,512,4096,512,403,403,36864
+port_tight,4+2,512,4096,512,362,362,36864
+port_tight,3+3,512,4096,512,332,332,36864

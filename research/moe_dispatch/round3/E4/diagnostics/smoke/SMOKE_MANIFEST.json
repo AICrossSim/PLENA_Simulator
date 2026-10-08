@@ -1,0 +1,14 @@
+[
+  {
+    "file": "pipelined_C0_homogeneous.json",
+    "development_window_count": 2,
+    "sha256": "1539c622303c05a9d2724abfba4ae4bbe5e4790680fe517535d5386d86b0212b",
+    "scope": "smoke test; notproduction18windowDSE"
+  },
+  {
+    "file": "port_tight_C0_homogeneous.json",
+    "development_window_count": 2,
+    "sha256": "5deeae0bed89de8c11f6acad02b07b36daef1302b7ff4985a830360c9f023efa",
+    "scope": "smoke test; notproduction18windowDSE"
+  }
+]

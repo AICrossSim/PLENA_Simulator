@@ -1,0 +1,1742 @@
+{
+  "best_hetero_by_mode": {
+    "pipelined": "H51",
+    "port_tight": "H42"
+  },
+  "design_details": {
+    "pipelined": {
+      "C0": {
+        "B1": {
+          "W_slots": [
+            2
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              64.0
+            ],
+            "w_bytes": [
+              64.0
+            ],
+            "x_bytes": [
+              32.0
+            ],
+            "z_bytes": [
+              372.0
+            ]
+          },
+          "geometry": "1x48x256",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "B2": {
+          "W_slots": [
+            4,
+            4
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              32.0,
+              32.0
+            ],
+            "w_bytes": [
+              0.0,
+              0.0
+            ],
+            "x_bytes": [
+              16.0,
+              16.0
+            ],
+            "z_bytes": [
+              186.0,
+              186.0
+            ]
+          },
+          "geometry": "1x48x128+1x48x128",
+          "landing_mode": "shared",
+          "landing_pool_KiB": 64.0,
+          "proof_A_closed": false,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": true
+        },
+        "H33": {
+          "W_slots": [
+            2,
+            8
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              16.0,
+              16.0
+            ],
+            "w_bytes": [
+              24.0,
+              24.0
+            ],
+            "x_bytes": [
+              24.0,
+              24.0
+            ],
+            "z_bytes": [
+              202.0,
+              202.0
+            ]
+          },
+          "geometry": "1x48x128+4x3x512",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": false,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "H42": {
+          "W_slots": [
+            3,
+            6
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              32.0,
+              16.0
+            ],
+            "w_bytes": [
+              53.0,
+              27.0
+            ],
+            "x_bytes": [
+              43.0,
+              21.0
+            ],
+            "z_bytes": [
+              227.0,
+              113.0
+            ]
+          },
+          "geometry": "1x64x128+2x32x64",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": false,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "H51": {
+          "W_slots": [
+            3,
+            7
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              40.0,
+              8.0
+            ],
+            "w_bytes": [
+              66.0,
+              14.0
+            ],
+            "x_bytes": [
+              53.0,
+              11.0
+            ],
+            "z_bytes": [
+              283.0,
+              57.0
+            ]
+          },
+          "geometry": "1x40x256+2x2x512",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        }
+      },
+      "C1": {
+        "B1": {
+          "W_slots": [
+            2
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              64.0
+            ],
+            "w_bytes": [
+              64.0
+            ],
+            "x_bytes": [
+              32.0
+            ],
+            "z_bytes": [
+              372.0
+            ]
+          },
+          "geometry": "1x48x256",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "B2": {
+          "W_slots": [
+            4,
+            4
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              32.0,
+              32.0
+            ],
+            "w_bytes": [
+              0.0,
+              0.0
+            ],
+            "x_bytes": [
+              16.0,
+              16.0
+            ],
+            "z_bytes": [
+              186.0,
+              186.0
+            ]
+          },
+          "geometry": "1x48x128+1x48x128",
+          "landing_mode": "shared",
+          "landing_pool_KiB": 64.0,
+          "proof_A_closed": false,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": true
+        },
+        "H33": {
+          "W_slots": [
+            3,
+            8
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              16.0,
+              16.0
+            ],
+            "w_bytes": [
+              36.0,
+              24.0
+            ],
+            "x_bytes": [
+              24.0,
+              24.0
+            ],
+            "z_bytes": [
+              190.0,
+              202.0
+            ]
+          },
+          "geometry": "1x48x128+4x3x512",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": false,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "H42": {
+          "W_slots": [
+            3,
+            6
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              32.0,
+              16.0
+            ],
+            "w_bytes": [
+              53.0,
+              27.0
+            ],
+            "x_bytes": [
+              43.0,
+              21.0
+            ],
+            "z_bytes": [
+              227.0,
+              113.0
+            ]
+          },
+          "geometry": "1x64x128+2x32x64",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": false,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "H51": {
+          "W_slots": [
+            3,
+            9
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              40.0,
+              8.0
+            ],
+            "w_bytes": [
+              66.0,
+              18.0
+            ],
+            "x_bytes": [
+              53.0,
+              11.0
+            ],
+            "z_bytes": [
+              283.0,
+              53.0
+            ]
+          },
+          "geometry": "1x40x256+2x2x512",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        }
+      }
+    },
+    "port_tight": {
+      "C0": {
+        "B1": {
+          "W_slots": [
+            8
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              64.0
+            ],
+            "w_bytes": [
+              64.0
+            ],
+            "x_bytes": [
+              32.0
+            ],
+            "z_bytes": [
+              372.0
+            ]
+          },
+          "geometry": "3x32x128",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "B2": {
+          "W_slots": [
+            6,
+            6
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              16.0,
+              16.0
+            ],
+            "w_bytes": [
+              24.0,
+              24.0
+            ],
+            "x_bytes": [
+              24.0,
+              24.0
+            ],
+            "z_bytes": [
+              202.0,
+              202.0
+            ]
+          },
+          "geometry": "3x16x128+3x16x128",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": true
+        },
+        "H33": {
+          "W_slots": [
+            15,
+            15
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              32.0,
+              32.0
+            ],
+            "w_bytes": [
+              0.0,
+              0.0
+            ],
+            "x_bytes": [
+              16.0,
+              16.0
+            ],
+            "z_bytes": [
+              186.0,
+              186.0
+            ]
+          },
+          "geometry": "3x16x128+3x16x128",
+          "landing_mode": "shared",
+          "landing_pool_KiB": 64.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": true
+        },
+        "H42": {
+          "W_slots": [
+            3,
+            2
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              16.0,
+              80.0
+            ],
+            "w_bytes": [
+              24.0,
+              16.0
+            ],
+            "x_bytes": [
+              2.0,
+              10.0
+            ],
+            "z_bytes": [
+              32.0,
+              352.0
+            ]
+          },
+          "geometry": "1x32x128+2x32x128",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "H51": {
+          "W_slots": [
+            3,
+            44
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              13.0,
+              3.0
+            ],
+            "w_bytes": [
+              0.0,
+              0.0
+            ],
+            "x_bytes": [
+              26.0,
+              6.0
+            ],
+            "z_bytes": [
+              376.0,
+              76.0
+            ]
+          },
+          "geometry": "2x20x256+8x4x64",
+          "landing_mode": "shared",
+          "landing_pool_KiB": 32.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        }
+      },
+      "C1": {
+        "B1": {
+          "W_slots": [
+            8
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              64.0
+            ],
+            "w_bytes": [
+              64.0
+            ],
+            "x_bytes": [
+              32.0
+            ],
+            "z_bytes": [
+              372.0
+            ]
+          },
+          "geometry": "3x32x128",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "B2": {
+          "W_slots": [
+            6,
+            6
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              16.0,
+              16.0
+            ],
+            "w_bytes": [
+              24.0,
+              24.0
+            ],
+            "x_bytes": [
+              24.0,
+              24.0
+            ],
+            "z_bytes": [
+              202.0,
+              202.0
+            ]
+          },
+          "geometry": "3x16x128+3x16x128",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": true
+        },
+        "H33": {
+          "W_slots": [
+            15,
+            15
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              32.0,
+              32.0
+            ],
+            "w_bytes": [
+              0.0,
+              0.0
+            ],
+            "x_bytes": [
+              16.0,
+              16.0
+            ],
+            "z_bytes": [
+              186.0,
+              186.0
+            ]
+          },
+          "geometry": "3x16x128+3x16x128",
+          "landing_mode": "shared",
+          "landing_pool_KiB": 64.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": true
+        },
+        "H42": {
+          "W_slots": [
+            3,
+            7
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              11.0,
+              21.0
+            ],
+            "w_bytes": [
+              24.0,
+              31.0
+            ],
+            "x_bytes": [
+              17.0,
+              31.0
+            ],
+            "z_bytes": [
+              128.0,
+              269.0
+            ]
+          },
+          "geometry": "1x64x64+4x32x64",
+          "landing_mode": "private",
+          "landing_pool_KiB": 0.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        },
+        "H51": {
+          "W_slots": [
+            3,
+            44
+          ],
+          "capacities_KiB": {
+            "acc_bytes": [
+              13.0,
+              3.0
+            ],
+            "w_bytes": [
+              0.0,
+              0.0
+            ],
+            "x_bytes": [
+              26.0,
+              6.0
+            ],
+            "z_bytes": [
+              376.0,
+              76.0
+            ]
+          },
+          "geometry": "2x20x256+8x4x64",
+          "landing_mode": "shared",
+          "landing_pool_KiB": 32.0,
+          "proof_A_closed": true,
+          "proof_B_closed": false,
+          "shape_equal_homogeneous": false
+        }
+      }
+    }
+  },
+  "development_scores_ms": {
+    "pipelined": {
+      "C0": {
+        "B1": 2.0061799131840203,
+        "B2": 2.3136863544177144,
+        "H33": 2.2831885360380664,
+        "H42": 2.1078782154516786,
+        "H51": 2.049757755671654
+      },
+      "C1": {
+        "B1": 2.0061799131840203,
+        "B2": 2.3136863544177144,
+        "H33": 2.24596431636443,
+        "H42": 2.1078782154516786,
+        "H51": 2.049757755671654
+      }
+    },
+    "port_tight": {
+      "C0": {
+        "B1": 11.24412819119842,
+        "B2": 11.688061357455947,
+        "H33": 11.688061357455947,
+        "H42": 11.526196230510678,
+        "H51": 11.618485476908084
+      },
+      "C1": {
+        "B1": 11.24412819119842,
+        "B2": 11.688061357455947,
+        "H33": 11.688061357455947,
+        "H42": 11.55507795520482,
+        "H51": 11.618485476908084
+      }
+    }
+  },
+  "modes": {
+    "pipelined": {
+      "C0": {
+        "B1": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            65536
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 48
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            65536
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            32768
+          ],
+          "z_bytes": [
+            380928
+          ]
+        },
+        "B2": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            32768,
+            32768
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 48
+            },
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 48
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "shared",
+          "landing_pool_bytes": 65536,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            0,
+            0
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            16384,
+            16384
+          ],
+          "z_bytes": [
+            190464,
+            190464
+          ]
+        },
+        "H33": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            16384,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 48
+            },
+            {
+              "pk": 512,
+              "pm": 4,
+              "pn": 3
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            24576
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            24576,
+            24576
+          ],
+          "z_bytes": [
+            206848,
+            206848
+          ]
+        },
+        "H42": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            32768,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 64
+            },
+            {
+              "pk": 64,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            43,
+            21
+          ],
+          "w_banks": [
+            43,
+            21
+          ],
+          "w_bytes": [
+            54272,
+            27648
+          ],
+          "x_banks": [
+            16,
+            8
+          ],
+          "x_bytes": [
+            44032,
+            21504
+          ],
+          "z_bytes": [
+            232448,
+            115712
+          ]
+        },
+        "H51": {
+          "acc_banks": [
+            10,
+            2
+          ],
+          "acc_bytes": [
+            40960,
+            8192
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 40
+            },
+            {
+              "pk": 512,
+              "pm": 2,
+              "pn": 2
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            53,
+            11
+          ],
+          "w_banks": [
+            53,
+            11
+          ],
+          "w_bytes": [
+            67584,
+            14336
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            54272,
+            11264
+          ],
+          "z_bytes": [
+            289792,
+            58368
+          ]
+        }
+      },
+      "C1": {
+        "B1": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            65536
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 48
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            65536
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            32768
+          ],
+          "z_bytes": [
+            380928
+          ]
+        },
+        "B2": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            32768,
+            32768
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 48
+            },
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 48
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "shared",
+          "landing_pool_bytes": 65536,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            0,
+            0
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            16384,
+            16384
+          ],
+          "z_bytes": [
+            190464,
+            190464
+          ]
+        },
+        "H33": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            16384,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 48
+            },
+            {
+              "pk": 512,
+              "pm": 4,
+              "pn": 3
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            36864,
+            24576
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            24576,
+            24576
+          ],
+          "z_bytes": [
+            194560,
+            206848
+          ]
+        },
+        "H42": {
+          "acc_banks": [
+            8,
+            4
+          ],
+          "acc_bytes": [
+            32768,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 64
+            },
+            {
+              "pk": 64,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            43,
+            21
+          ],
+          "w_banks": [
+            43,
+            21
+          ],
+          "w_bytes": [
+            54272,
+            27648
+          ],
+          "x_banks": [
+            16,
+            8
+          ],
+          "x_bytes": [
+            44032,
+            21504
+          ],
+          "z_bytes": [
+            232448,
+            115712
+          ]
+        },
+        "H51": {
+          "acc_banks": [
+            10,
+            2
+          ],
+          "acc_bytes": [
+            40960,
+            8192
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 1,
+              "pn": 40
+            },
+            {
+              "pk": 512,
+              "pm": 2,
+              "pn": 2
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            53,
+            11
+          ],
+          "w_banks": [
+            53,
+            11
+          ],
+          "w_bytes": [
+            67584,
+            18432
+          ],
+          "x_banks": [
+            20,
+            4
+          ],
+          "x_bytes": [
+            54272,
+            11264
+          ],
+          "z_bytes": [
+            289792,
+            54272
+          ]
+        }
+      }
+    },
+    "port_tight": {
+      "C0": {
+        "B1": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            65536
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            65536
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            32768
+          ],
+          "z_bytes": [
+            380928
+          ]
+        },
+        "B2": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            16384,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            24576
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            24576,
+            24576
+          ],
+          "z_bytes": [
+            206848,
+            206848
+          ]
+        },
+        "H33": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            32768,
+            32768
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "shared",
+          "landing_pool_bytes": 65536,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            0,
+            0
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            16384,
+            16384
+          ],
+          "z_bytes": [
+            190464,
+            190464
+          ]
+        },
+        "H42": {
+          "acc_banks": [
+            4,
+            8
+          ],
+          "acc_bytes": [
+            16384,
+            81920
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 1,
+              "pn": 32
+            },
+            {
+              "pk": 128,
+              "pm": 2,
+              "pn": 32
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            8,
+            56
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            16384
+          ],
+          "x_banks": [
+            4,
+            20
+          ],
+          "x_bytes": [
+            2048,
+            10240
+          ],
+          "z_bytes": [
+            32768,
+            360448
+          ]
+        },
+        "H51": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            13312,
+            3072
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 2,
+              "pn": 20
+            },
+            {
+              "pk": 64,
+              "pm": 8,
+              "pn": 4
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "shared",
+          "landing_pool_bytes": 32768,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            0,
+            0
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            26624,
+            6144
+          ],
+          "z_bytes": [
+            385024,
+            77824
+          ]
+        }
+      },
+      "C1": {
+        "B1": {
+          "acc_banks": [
+            12
+          ],
+          "acc_bytes": [
+            65536
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 32
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            64
+          ],
+          "w_banks": [
+            64
+          ],
+          "w_bytes": [
+            65536
+          ],
+          "x_banks": [
+            24
+          ],
+          "x_bytes": [
+            32768
+          ],
+          "z_bytes": [
+            380928
+          ]
+        },
+        "B2": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            16384,
+            16384
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            24576,
+            24576
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            24576,
+            24576
+          ],
+          "z_bytes": [
+            206848,
+            206848
+          ]
+        },
+        "H33": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            32768,
+            32768
+          ],
+          "cores": [
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            },
+            {
+              "pk": 128,
+              "pm": 3,
+              "pn": 16
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "shared",
+          "landing_pool_bytes": 65536,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            0,
+            0
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            16384,
+            16384
+          ],
+          "z_bytes": [
+            190464,
+            190464
+          ]
+        },
+        "H42": {
+          "acc_banks": [
+            5,
+            7
+          ],
+          "acc_bytes": [
+            11264,
+            21504
+          ],
+          "cores": [
+            {
+              "pk": 64,
+              "pm": 1,
+              "pn": 64
+            },
+            {
+              "pk": 64,
+              "pm": 4,
+              "pn": 32
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "private",
+          "landing_pool_bytes": 0,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            22,
+            42
+          ],
+          "w_banks": [
+            22,
+            42
+          ],
+          "w_bytes": [
+            24576,
+            31744
+          ],
+          "x_banks": [
+            9,
+            15
+          ],
+          "x_bytes": [
+            17408,
+            31744
+          ],
+          "z_bytes": [
+            131072,
+            275456
+          ]
+        },
+        "H51": {
+          "acc_banks": [
+            6,
+            6
+          ],
+          "acc_bytes": [
+            13312,
+            3072
+          ],
+          "cores": [
+            {
+              "pk": 256,
+              "pm": 2,
+              "pn": 20
+            },
+            {
+              "pk": 64,
+              "pm": 8,
+              "pn": 4
+            }
+          ],
+          "diagnostic_unbounded_w": false,
+          "flows": [
+            "WS",
+            "WS"
+          ],
+          "label": "",
+          "landing_mode": "shared",
+          "landing_pool_bytes": 32768,
+          "records": 8,
+          "total_macs": 12288,
+          "vector_lanes": [
+            32,
+            32
+          ],
+          "w_banks": [
+            32,
+            32
+          ],
+          "w_bytes": [
+            0,
+            0
+          ],
+          "x_banks": [
+            12,
+            12
+          ],
+          "x_bytes": [
+            26624,
+            6144
+          ],
+          "z_bytes": [
+            385024,
+            77824
+          ]
+        }
+      }
+    }
+  },
+  "selection_metadata": {
+    "candidate_budget_per_family": 256,
+    "capacity_domain": "532KiB aggregate/private1KiB cuts with cross-category exchanges; shared pool offered tobothdualorganizations",
+    "development_ids": [
+      "joint_test_bfcl_b2_l13_s7",
+      "joint_test_bfcl_b4_l13_s7",
+      "joint_test_bfcl_b8_l13_s7",
+      "joint_test_bfcl_b16_l13_s7",
+      "joint_test_gpqa_b2_l13_s7",
+      "joint_test_gpqa_b4_l13_s7",
+      "joint_test_gpqa_b8_l13_s7",
+      "joint_test_gpqa_b16_l13_s7",
+      "joint_test_swe_b2_l13_s7",
+      "joint_test_swe_b4_l13_s7",
+      "joint_test_swe_b8_l13_s7",
+      "joint_test_swe_b16_l13_s7",
+      "v3_captured_mixed_development_t64_l13",
+      "v3_captured_mixed_development_t96_l13",
+      "v3_captured_mixed_development_t128_l13",
+      "v3_captured_mixed_development_swe_t64_l13",
+      "v3_captured_mixed_development_swe_t96_l13",
+      "v3_captured_mixed_development_swe_t128_l13"
+    ],
+    "exact_search_repeat_identical": true,
+    "hardware_frozen_before_heldout": true,
+    "node_budget_per_family": 2048,
+    "objective": "geometricmean paired MILP allocation + physical LPT replay latency over18development windows; same reference vector for every family",
+    "scope": "best-evaluated incumbent if proof B remains open; no claim of global optimum",
+    "seed": 20261007
+  }
+}

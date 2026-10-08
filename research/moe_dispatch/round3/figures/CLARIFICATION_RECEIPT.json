@@ -1,0 +1,38 @@
+{
+  "clarified_PDF_sha256": {
+    "fig_ablation": "75760b8682f815cf138872b04d32283bd9915fc8101e701878da7eefe6deea9d",
+    "fig_gpqa_inflight": "14c2647f685e28d0fd1705d7b7cbb956a032930f8f8982b965d297274a8dcf47",
+    "fig_headroom_vs_bw": "ddd6d2d1f3167ba91dca147b273c1c4e77ede5a5ba88c34ffad0b6fa377d919f",
+    "fig_main_by_batch": "bc7f3c06e3c842279d580cc87fad3cfd3c2f45dc5d5836e5ca345c1974a3268e",
+    "fig_predictor": "a67cae4a352f3f7bd3c891a01d4db856e75390797906c4393cfdcf4f80f6727c"
+  },
+  "numerical_inputs_unchanged": true,
+  "plotted_values_sha256": "32b8d89a199b340e78849d6ac52fbf3486cd5745d24127ff0c204aaee7426bed",
+  "prior_PDF_sha256": {
+    "fig_ablation": "3a3514dca9f58567f79d8a6329790fe6dbc1a4be8b0506b4d3c694ee0c716496",
+    "fig_gpqa_inflight": "b43c883cec3388a00def13e5f9142e1db9c41c99a7d296771ce534aaac08b1bb",
+    "fig_headroom_vs_bw": "81b1c5bdef2bd7ff9cda32c73d11bb1e58dc764e3b4abe85abc490de57518150",
+    "fig_main_by_batch": "8f65db9ac3985510e816d81a1d362a14e499d08051a7cc795fecc1c00857381e",
+    "fig_predictor": "b2bbc2c8418e8b76f45211f4ede3ad1167c121346385443cbfb378724b383f18"
+  },
+  "protected_numerical_source_sha256": {
+    "ablation.py": "a4ea415d94ba4b18af2e3bc00e9aca3b1a772b0363a0f73bf243ac5e58382436",
+    "bounds.py": "3a502fdff69c588055f03faa4f79fdd6b40b1ac4e643cab2146d9bd61343405e",
+    "config.py": "86b4075d9e86d8f41f40f796cf283bda492408ab2c159f0e71dc497c3d6da3dc",
+    "evaluations.py": "e601ebbb6f554db011c4d766722e7759a6dc506dd97a9ed42f7a00386bdfe851",
+    "model.py": "f3286e5e3aad2af0f0db6cf4a9f38ce182e617286b317152e0e56c7b624ad430",
+    "optimizer.py": "7fd0d6308d4391c4759a3c294522a646f93f2c1b036685db3d5df4227550e75e",
+    "runtime.py": "f0bb144f7fee7589f855350f0d3aa5cb744b1609b9a2338451b6e1122da968e4",
+    "search.py": "5f1aee68d8e28345fe5238fefe8360477c4a36f781efc82f7d7390e2dff7f59f",
+    "sensitivity.py": "3095c7c7535db78233ec159c21e81196cce7b0f3c7ada4e3aac129b5f0aa6302"
+  },
+  "scope": "presentation-only redraw from unchanged saved values; no numerical simulation/search",
+  "script_sha256": "e7688c18ddbce0fa388a08e054a54459550b192ecd6ee1d5829fde6ea527fbdc",
+  "source_sha256": {
+    "E2/bounds_summary.csv": "9dd79173ed301cb43cde188aaa87cc16fd56a6f35e167f695aa83c59ede52655",
+    "E3/ablation.csv": "1347eab95332a9dad702e524d011db9e47bdca39cea7777e42d9a7f9d5629fae",
+    "E3/gpqa_full_results.json.gz": "f13843d61a6b801b13ad2f0543648d6adb2c9d7917fbe3c3ffc1685258089aae",
+    "E4/heldout_main_table.csv": "5f064b0348dba751d6c3fd8e9e693ab196ad133b54b6159c8272420279e84f48",
+    "E5/predictor/predictor_table.csv": "7836c0fc752ba461d2eacbc5320106df6ccd89cc61d12a770e8748ae72a4a2da"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "all_canonical_bitexact": true,
+  "cases": 896,
+  "changes": [
+    "detail=False skips discarded phase rows",
+    "same-order static per-phase attribution reason",
+    "same official CP methods via static isolated aliases",
+    "detail=False storage chunk execution avoids discarded observations and offsets; exact spill service preserved"
+  ],
+  "elapsed_seconds": 161.86150912754238,
+  "independence": "Each side constructs a fresh solver and executes its own full physical replay; no owner/solution/result caching.",
+  "new_source_sha256": {
+    "model.py": "f3286e5e3aad2af0f0db6cf4a9f38ce182e617286b317152e0e56c7b624ad430",
+    "optimizer.py": "7fd0d6308d4391c4759a3c294522a646f93f2c1b036685db3d5df4227550e75e",
+    "runtime.py": "f0bb144f7fee7589f855350f0d3aa5cb744b1609b9a2338451b6e1122da968e4"
+  },
+  "old_source_sha256": {
+    "model.py": "423f98540a1480d65965826445ce7d86cc2097584c42c7d03c154e5ce209b814",
+    "optimizer.py": "22eef9b01145b8f089ca218005c625a532b7c35200d271760d1ac8a8da591734",
+    "runtime.py": "f2170e6923788228b99cdc166bef912aeae41148fa5bf2d02c6ba7302af1831b"
+  }
+}

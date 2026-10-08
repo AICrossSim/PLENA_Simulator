@@ -1,0 +1,31 @@
+{
+  "after_sha256": "6d2240953501c53ada46adc26c823126ab9b64c42216710522ee8e5516a5c9f6",
+  "before_sha256": "6d2240953501c53ada46adc26c823126ab9b64c42216710522ee8e5516a5c9f6",
+  "elapsed_seconds": 185.09528347477317,
+  "full_search_result_bit_exact": true,
+  "note": "Two full searches and every per-window double allocation/replay retained; diagnostic only, not Saltelli sample 0",
+  "result": {
+    "bank_Bpc": 16,
+    "bw_GBps": 256.0,
+    "compute_shapes_distinct": true,
+    "credits": 520,
+    "delta": 0.02464350883550348,
+    "delta_lower": -0.008022101344071997,
+    "delta_upper": 0.03292977618133963,
+    "dotstagecycles": 2,
+    "evaluated_points": 40,
+    "exact_repeat_identical": true,
+    "gap_pct": 5.902118528737188,
+    "hetero_design": "{\"acc_banks\":[4,8],\"acc_bytes\":[16384,81920],\"cores\":[{\"pk\":128,\"pm\":1,\"pn\":32},{\"pk\":128,\"pm\":2,\"pn\":32}],\"diagnostic_unbounded_w\":false,\"flows\":[\"WS\",\"WS\"],\"label\":\"\",\"landing_mode\":\"private\",\"landing_pool_bytes\":0,\"records\":8,\"total_macs\":12288,\"vector_lanes\":[8,56],\"w_banks\":[32,32],\"w_bytes\":[24576,16384],\"x_banks\":[4,20],\"x_bytes\":[2048,10240],\"z_bytes\":[32768,360448]}",
+    "hetero_family": "4+2",
+    "hetero_ms": 5.6884430718248,
+    "proof_complete": false,
+    "sample_index": 0,
+    "simulator_calls": 2880,
+    "single_design": "{\"acc_banks\":[12],\"acc_bytes\":[98304],\"cores\":[{\"pk\":128,\"pm\":3,\"pn\":32}],\"diagnostic_unbounded_w\":false,\"flows\":[\"WS\"],\"label\":\"\",\"landing_mode\":\"private\",\"landing_pool_bytes\":0,\"records\":8,\"total_macs\":12288,\"vector_lanes\":[64],\"w_banks\":[64],\"w_bytes\":[40960],\"x_banks\":[24],\"x_bytes\":[12288],\"z_bytes\":[393216]}",
+    "single_ms": 5.551631394502909,
+    "task_cache_entries_released": 3264,
+    "vector_scale": 1,
+    "weight_tile_service_cycles": 15
+  }
+}

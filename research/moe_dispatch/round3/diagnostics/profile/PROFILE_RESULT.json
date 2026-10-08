@@ -1,0 +1,4127 @@
+{
+  "changed_nonexecuted_report_files": [
+    "research/moe_dispatch/round3/evaluations.py",
+    "research/moe_dispatch/round3/finalize_dse.py",
+    "research/moe_dispatch/round3/report.py",
+    "research/moe_dispatch/round3/shared_rate_diagnostic.py",
+    "research/moe_dispatch/round3/test_dse_reporting.py",
+    "research/moe_dispatch/round3/test_evaluations.py"
+  ],
+  "elapsed_profiled_sobol_job_seconds": 479.79627577400004,
+  "functions": [
+    {
+      "calls": 41824727,
+      "cumulative_seconds": 90.31616386200001,
+      "filename": "~",
+      "function": "<built-in method builtins.sum>",
+      "line": 0,
+      "primitive_calls": 41822820,
+      "self_seconds": 38.326578663
+    },
+    {
+      "calls": 768,
+      "cumulative_seconds": 140.148629862,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_solve_fixed_t",
+      "line": 201,
+      "primitive_calls": 768,
+      "self_seconds": 37.595319778000004
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 34.113955955,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper.solve>",
+      "line": 0,
+      "primitive_calls": 27288,
+      "self_seconds": 34.113955955
+    },
+    {
+      "calls": 644140,
+      "cumulative_seconds": 97.91716571500001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_fluid_rates",
+      "line": 390,
+      "primitive_calls": 644140,
+      "self_seconds": 26.164715113000003
+    },
+    {
+      "calls": 4824004,
+      "cumulative_seconds": 55.20666450900001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "visit",
+      "line": 175,
+      "primitive_calls": 2112,
+      "self_seconds": 25.134946041000003
+    },
+    {
+      "calls": 2304,
+      "cumulative_seconds": 211.868508477,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "_one_layer_fixed",
+      "line": 91,
+      "primitive_calls": 2304,
+      "self_seconds": 22.771446329
+    },
+    {
+      "calls": 6055376,
+      "cumulative_seconds": 40.038357688000005,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "_asdict_inner",
+      "line": 1289,
+      "primitive_calls": 201744,
+      "self_seconds": 16.939754327
+    },
+    {
+      "calls": 36580188,
+      "cumulative_seconds": 19.290414349000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 399,
+      "primitive_calls": 36580188,
+      "self_seconds": 16.014359696
+    },
+    {
+      "calls": 62677012,
+      "cumulative_seconds": 15.408590176,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 178,
+      "primitive_calls": 62677012,
+      "self_seconds": 15.408590176
+    },
+    {
+      "calls": 102023307,
+      "cumulative_seconds": 13.299803643,
+      "filename": "~",
+      "function": "<method 'get' of 'dict' objects>",
+      "line": 0,
+      "primitive_calls": 102023307,
+      "self_seconds": 13.299803643
+    },
+    {
+      "calls": 31246236,
+      "cumulative_seconds": 14.994746695000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 400,
+      "primitive_calls": 31246236,
+      "self_seconds": 12.705008766
+    },
+    {
+      "calls": 3136828,
+      "cumulative_seconds": 15.812873438,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 180,
+      "primitive_calls": 3136828,
+      "self_seconds": 12.536083263
+    },
+    {
+      "calls": 30047159,
+      "cumulative_seconds": 12.616137838,
+      "filename": "~",
+      "function": "<built-in method builtins.max>",
+      "line": 0,
+      "primitive_calls": 30047159,
+      "self_seconds": 11.542054289000001
+    },
+    {
+      "calls": 4821892,
+      "cumulative_seconds": 9.155395576,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 185,
+      "primitive_calls": 4821892,
+      "self_seconds": 9.155395576
+    },
+    {
+      "calls": 1282808,
+      "cumulative_seconds": 10.149437644,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "add_hint",
+      "line": 1655,
+      "primitive_calls": 1282808,
+      "self_seconds": 9.061654547
+    },
+    {
+      "calls": 8299900,
+      "cumulative_seconds": 19.949877071,
+      "filename": "~",
+      "function": "<built-in method builtins.min>",
+      "line": 0,
+      "primitive_calls": 8299900,
+      "self_seconds": 9.022037699
+    },
+    {
+      "calls": 5849996,
+      "cumulative_seconds": 11.055167027000001,
+      "filename": "/usr/lib64/python3.11/copy.py",
+      "function": "deepcopy",
+      "line": 128,
+      "primitive_calls": 5849996,
+      "self_seconds": 8.133793016
+    },
+    {
+      "calls": 19392724,
+      "cumulative_seconds": 9.851404493,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 506,
+      "primitive_calls": 19392724,
+      "self_seconds": 8.114746107
+    },
+    {
+      "calls": 9873304,
+      "cumulative_seconds": 6.903722796,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<lambda>",
+      "line": 403,
+      "primitive_calls": 9873304,
+      "self_seconds": 6.903722796
+    },
+    {
+      "calls": 847892,
+      "cumulative_seconds": 8.59287198,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<listcomp>",
+      "line": 520,
+      "primitive_calls": 847892,
+      "self_seconds": 6.462040365
+    },
+    {
+      "calls": 537784,
+      "cumulative_seconds": 22.14874967,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<dictcomp>",
+      "line": 506,
+      "primitive_calls": 537784,
+      "self_seconds": 6.3619258290000005
+    },
+    {
+      "calls": 1282808,
+      "cumulative_seconds": 7.34311538,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "new_int_var",
+      "line": 333,
+      "primitive_calls": 1282808,
+      "self_seconds": 5.465736392
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 23.805285686,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "_add_pre_pep8_methods",
+      "line": 1684,
+      "primitive_calls": 27288,
+      "self_seconds": 5.401341425
+    },
+    {
+      "calls": 644140,
+      "cumulative_seconds": 15.661353345,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_set_window_limits",
+      "line": 485,
+      "primitive_calls": 644140,
+      "self_seconds": 5.2995076160000005
+    },
+    {
+      "calls": 1664568,
+      "cumulative_seconds": 12.831577421,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "snake_case_to_camel_case",
+      "line": 229,
+      "primitive_calls": 1664568,
+      "self_seconds": 4.972665922
+    },
+    {
+      "calls": 5084,
+      "cumulative_seconds": 27.000582631,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "geometry_proxy",
+      "line": 174,
+      "primitive_calls": 5084,
+      "self_seconds": 4.604392693
+    },
+    {
+      "calls": 576,
+      "cumulative_seconds": 26.452831058,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_one_layer",
+      "line": 540,
+      "primitive_calls": 576,
+      "self_seconds": 4.204587436000001
+    },
+    {
+      "calls": 30860130,
+      "cumulative_seconds": 3.842782408,
+      "filename": "~",
+      "function": "<method 'append' of 'list' objects>",
+      "line": 0,
+      "primitive_calls": 30860130,
+      "self_seconds": 3.842782408
+    },
+    {
+      "calls": 219088,
+      "cumulative_seconds": 4.444855962,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "allocate",
+      "line": 446,
+      "primitive_calls": 219088,
+      "self_seconds": 3.3311058300000003
+    },
+    {
+      "calls": 37316242,
+      "cumulative_seconds": 3.276833728,
+      "filename": "~",
+      "function": "<built-in method math.ceil>",
+      "line": 0,
+      "primitive_calls": 37316242,
+      "self_seconds": 3.276833728
+    },
+    {
+      "calls": 1667766,
+      "cumulative_seconds": 6.773506845,
+      "filename": "~",
+      "function": "<method 'join' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 1667766,
+      "self_seconds": 3.1500720760000003
+    },
+    {
+      "calls": 19222495,
+      "cumulative_seconds": 2.7368000670000003,
+      "filename": "~",
+      "function": "<built-in method builtins.isinstance>",
+      "line": 0,
+      "primitive_calls": 19222495,
+      "self_seconds": 2.7368000670000003
+    },
+    {
+      "calls": 220,
+      "cumulative_seconds": 6.171883817,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "region_bound",
+      "line": 89,
+      "primitive_calls": 220,
+      "self_seconds": 2.714263604
+    },
+    {
+      "calls": 6266648,
+      "cumulative_seconds": 2.6221286630000002,
+      "filename": "~",
+      "function": "<built-in method builtins.hasattr>",
+      "line": 0,
+      "primitive_calls": 6266648,
+      "self_seconds": 2.6221286630000002
+    },
+    {
+      "calls": 6257988,
+      "cumulative_seconds": 5.224301797000001,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "_is_dataclass_instance",
+      "line": 1253,
+      "primitive_calls": 6257988,
+      "self_seconds": 2.604304376
+    },
+    {
+      "calls": 6958440,
+      "cumulative_seconds": 3.6232170470000002,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "<genexpr>",
+      "line": 233,
+      "primitive_calls": 6958440,
+      "self_seconds": 2.522717798
+    },
+    {
+      "calls": 3534476,
+      "cumulative_seconds": 22.80347134,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "deprecated_func",
+      "line": 213,
+      "primitive_calls": 3534476,
+      "self_seconds": 2.346721343
+    },
+    {
+      "calls": 16356550,
+      "cumulative_seconds": 2.0994693730000002,
+      "filename": "~",
+      "function": "<method 'items' of 'dict' objects>",
+      "line": 0,
+      "primitive_calls": 16356550,
+      "self_seconds": 2.0994693730000002
+    },
+    {
+      "calls": 11085681,
+      "cumulative_seconds": 2.2018308600000003,
+      "filename": "~",
+      "function": "<built-in method builtins.getattr>",
+      "line": 0,
+      "primitive_calls": 11085681,
+      "self_seconds": 2.084098946
+    },
+    {
+      "calls": 1519601,
+      "cumulative_seconds": 2.068623794,
+      "filename": "~",
+      "function": "<built-in method builtins.round>",
+      "line": 0,
+      "primitive_calls": 1519601,
+      "self_seconds": 2.068623794
+    },
+    {
+      "calls": 968860,
+      "cumulative_seconds": 1.912971513,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper._add_bounded_linear_expression>",
+      "line": 0,
+      "primitive_calls": 968860,
+      "self_seconds": 1.912971513
+    },
+    {
+      "calls": 603238,
+      "cumulative_seconds": 2.952588866,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_window_bandwidth",
+      "line": 315,
+      "primitive_calls": 603238,
+      "self_seconds": 1.898865475
+    },
+    {
+      "calls": 9078376,
+      "cumulative_seconds": 2.7187961040000004,
+      "filename": "~",
+      "function": "<method 'setdefault' of 'dict' objects>",
+      "line": 0,
+      "primitive_calls": 9078376,
+      "self_seconds": 1.765645933
+    },
+    {
+      "calls": 1186880,
+      "cumulative_seconds": 2.544160643,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_down",
+      "line": 24,
+      "primitive_calls": 1186880,
+      "self_seconds": 1.632967346
+    },
+    {
+      "calls": 1026592,
+      "cumulative_seconds": 1.9028013250000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 396,
+      "primitive_calls": 1026592,
+      "self_seconds": 1.54400913
+    },
+    {
+      "calls": 6343414,
+      "cumulative_seconds": 1.537489987,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "ceildiv",
+      "line": 35,
+      "primitive_calls": 6343414,
+      "self_seconds": 1.537489987
+    },
+    {
+      "calls": 6219360,
+      "cumulative_seconds": 1.5372260800000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<lambda>",
+      "line": 182,
+      "primitive_calls": 6219360,
+      "self_seconds": 1.5372260800000002
+    },
+    {
+      "calls": 202300,
+      "cumulative_seconds": 2.9754587810000004,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "fields",
+      "line": 1235,
+      "primitive_calls": 202300,
+      "self_seconds": 1.454881297
+    },
+    {
+      "calls": 6050372,
+      "cumulative_seconds": 1.4249140770000002,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "<genexpr>",
+      "line": 1250,
+      "primitive_calls": 6050372,
+      "self_seconds": 1.4249140770000002
+    },
+    {
+      "calls": 605588,
+      "cumulative_seconds": 2.685034323,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "event",
+      "line": 233,
+      "primitive_calls": 605588,
+      "self_seconds": 1.4162388860000001
+    },
+    {
+      "calls": 631808,
+      "cumulative_seconds": 5.3538288540000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "task_cost",
+      "line": 384,
+      "primitive_calls": 631808,
+      "self_seconds": 1.3694640020000002
+    },
+    {
+      "calls": 4840056,
+      "cumulative_seconds": 1.3121301410000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 513,
+      "primitive_calls": 4840056,
+      "self_seconds": 1.3121301410000001
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 1.250457254,
+      "filename": "~",
+      "function": "<built-in method builtins.dir>",
+      "line": 0,
+      "primitive_calls": 27288,
+      "self_seconds": 1.250457254
+    },
+    {
+      "calls": 7152418,
+      "cumulative_seconds": 1.1830085650000002,
+      "filename": "~",
+      "function": "<method 'startswith' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 7152418,
+      "self_seconds": 1.1830085650000002
+    },
+    {
+      "calls": 4840056,
+      "cumulative_seconds": 1.162250425,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 514,
+      "primitive_calls": 4840056,
+      "self_seconds": 1.162250425
+    },
+    {
+      "calls": 1023860,
+      "cumulative_seconds": 1.390861523,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<setcomp>",
+      "line": 409,
+      "primitive_calls": 1023860,
+      "self_seconds": 1.16218095
+    },
+    {
+      "calls": 2996560,
+      "cumulative_seconds": 2.1742540630000002,
+      "filename": "~",
+      "function": "<built-in method builtins.hash>",
+      "line": 0,
+      "primitive_calls": 1441312,
+      "self_seconds": 1.1207771260000001
+    },
+    {
+      "calls": 644140,
+      "cumulative_seconds": 1.601565469,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<dictcomp>",
+      "line": 393,
+      "primitive_calls": 644140,
+      "self_seconds": 1.1199275260000001
+    },
+    {
+      "calls": 94403,
+      "cumulative_seconds": 2.035067213,
+      "filename": "~",
+      "function": "<built-in method builtins.sorted>",
+      "line": 0,
+      "primitive_calls": 94403,
+      "self_seconds": 1.117217994
+    },
+    {
+      "calls": 5293872,
+      "cumulative_seconds": 1.100499249,
+      "filename": "~",
+      "function": "<method 'capitalize' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 5293872,
+      "self_seconds": 1.100499249
+    },
+    {
+      "calls": 4478096,
+      "cumulative_seconds": 1.0183141770000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 252,
+      "primitive_calls": 4478096,
+      "self_seconds": 1.0183141770000002
+    },
+    {
+      "calls": 1282808,
+      "cumulative_seconds": 1.007177671,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper.with_domain>",
+      "line": 0,
+      "primitive_calls": 1282808,
+      "self_seconds": 1.007177671
+    },
+    {
+      "calls": 1664568,
+      "cumulative_seconds": 0.9622747460000001,
+      "filename": "~",
+      "function": "<built-in method builtins.setattr>",
+      "line": 0,
+      "primitive_calls": 1664568,
+      "self_seconds": 0.9622747460000001
+    },
+    {
+      "calls": 7640666,
+      "cumulative_seconds": 0.958016996,
+      "filename": "~",
+      "function": "<built-in method builtins.len>",
+      "line": 0,
+      "primitive_calls": 7640661,
+      "self_seconds": 0.9580145950000001
+    },
+    {
+      "calls": 1491748,
+      "cumulative_seconds": 1.118340101,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 484,
+      "primitive_calls": 1491748,
+      "self_seconds": 0.893027012
+    },
+    {
+      "calls": 968860,
+      "cumulative_seconds": 2.9641969730000004,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "add",
+      "line": 509,
+      "primitive_calls": 968860,
+      "self_seconds": 0.8826782700000001
+    },
+    {
+      "calls": 5935244,
+      "cumulative_seconds": 0.871473885,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<lambda>",
+      "line": 521,
+      "primitive_calls": 5935244,
+      "self_seconds": 0.871473885
+    },
+    {
+      "calls": 1282808,
+      "cumulative_seconds": 0.870201317,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper.with_name>",
+      "line": 0,
+      "primitive_calls": 1282808,
+      "self_seconds": 0.870201317
+    },
+    {
+      "calls": 83584,
+      "cumulative_seconds": 1.594264469,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "begin_task",
+      "line": 341,
+      "primitive_calls": 83584,
+      "self_seconds": 0.868288546
+    },
+    {
+      "calls": 5849996,
+      "cumulative_seconds": 0.8143432580000001,
+      "filename": "~",
+      "function": "<built-in method builtins.id>",
+      "line": 0,
+      "primitive_calls": 5849996,
+      "self_seconds": 0.8143432580000001
+    },
+    {
+      "calls": 3136828,
+      "cumulative_seconds": 0.791751481,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<lambda>",
+      "line": 178,
+      "primitive_calls": 3136828,
+      "self_seconds": 0.791751481
+    },
+    {
+      "calls": 106356,
+      "cumulative_seconds": 2.32392001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<dictcomp>",
+      "line": 925,
+      "primitive_calls": 106356,
+      "self_seconds": 0.786930655
+    },
+    {
+      "calls": 806097,
+      "cumulative_seconds": 1.0446413570000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/model.py",
+      "function": "hbm_bandwidth",
+      "line": 135,
+      "primitive_calls": 806097,
+      "self_seconds": 0.780371047
+    },
+    {
+      "calls": 5849996,
+      "cumulative_seconds": 0.748396543,
+      "filename": "/usr/lib64/python3.11/copy.py",
+      "function": "_deepcopy_atomic",
+      "line": 182,
+      "primitive_calls": 5849996,
+      "self_seconds": 0.748396543
+    },
+    {
+      "calls": 1836960,
+      "cumulative_seconds": 0.8738391200000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 925,
+      "primitive_calls": 1836960,
+      "self_seconds": 0.724634059
+    },
+    {
+      "calls": 246720,
+      "cumulative_seconds": 1.24592079,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_resource_services",
+      "line": 100,
+      "primitive_calls": 246720,
+      "self_seconds": 0.721364793
+    },
+    {
+      "calls": 2964,
+      "cumulative_seconds": 0.865901596,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "obj",
+      "line": 216,
+      "primitive_calls": 2964,
+      "self_seconds": 0.6673617380000001
+    },
+    {
+      "calls": 631808,
+      "cumulative_seconds": 1.8709098290000001,
+      "filename": "<string>",
+      "function": "__hash__",
+      "line": 2,
+      "primitive_calls": 631808,
+      "self_seconds": 0.664046659
+    },
+    {
+      "calls": 2368000,
+      "cumulative_seconds": 0.661931554,
+      "filename": "~",
+      "function": "<method 'as_integer_ratio' of 'float' objects>",
+      "line": 0,
+      "primitive_calls": 2368000,
+      "self_seconds": 0.661931554
+    },
+    {
+      "calls": 1664568,
+      "cumulative_seconds": 0.610401217,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "deprecated_method",
+      "line": 210,
+      "primitive_calls": 1664568,
+      "self_seconds": 0.610401217
+    },
+    {
+      "calls": 219088,
+      "cumulative_seconds": 0.9148926940000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "__init__",
+      "line": 440,
+      "primitive_calls": 219088,
+      "self_seconds": 0.5971233450000001
+    },
+    {
+      "calls": 1721156,
+      "cumulative_seconds": 0.5814737120000001,
+      "filename": "~",
+      "function": "<built-in method _heapq.heappop>",
+      "line": 0,
+      "primitive_calls": 1721156,
+      "self_seconds": 0.5814737120000001
+    },
+    {
+      "calls": 1583040,
+      "cumulative_seconds": 0.7224290550000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 164,
+      "primitive_calls": 1583040,
+      "self_seconds": 0.5779302980000001
+    },
+    {
+      "calls": 3329136,
+      "cumulative_seconds": 0.574320704,
+      "filename": "~",
+      "function": "<method 'replace' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 3329136,
+      "self_seconds": 0.574320704
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 34.867055338,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "solve",
+      "line": 1752,
+      "primitive_calls": 27288,
+      "self_seconds": 0.570203647
+    },
+    {
+      "calls": 87988,
+      "cumulative_seconds": 0.7220888240000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 939,
+      "primitive_calls": 87988,
+      "self_seconds": 0.554668766
+    },
+    {
+      "calls": 1282808,
+      "cumulative_seconds": 0.548222059,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper.append>",
+      "line": 0,
+      "primitive_calls": 1282808,
+      "self_seconds": 0.548222059
+    },
+    {
+      "calls": 1664570,
+      "cumulative_seconds": 0.512189224,
+      "filename": "~",
+      "function": "<method 'split' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 1664570,
+      "self_seconds": 0.512189224
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 61.14496728100001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_enumerate_assignment",
+      "line": 129,
+      "primitive_calls": 2880,
+      "self_seconds": 0.51083055
+    },
+    {
+      "calls": 4821892,
+      "cumulative_seconds": 0.49760847900000005,
+      "filename": "~",
+      "function": "<method 'pop' of 'list' objects>",
+      "line": 0,
+      "primitive_calls": 4821892,
+      "self_seconds": 0.49760847900000005
+    },
+    {
+      "calls": 47904,
+      "cumulative_seconds": 1.626810703,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 164,
+      "primitive_calls": 47904,
+      "self_seconds": 0.482863853
+    },
+    {
+      "calls": 1721494,
+      "cumulative_seconds": 0.46201325400000004,
+      "filename": "~",
+      "function": "<built-in method _heapq.heappush>",
+      "line": 0,
+      "primitive_calls": 1721494,
+      "self_seconds": 0.46201325400000004
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 2.7432154640000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "allocation_objective",
+      "line": 110,
+      "primitive_calls": 2880,
+      "self_seconds": 0.45620577900000003
+    },
+    {
+      "calls": 644140,
+      "cumulative_seconds": 0.44352016200000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<dictcomp>",
+      "line": 392,
+      "primitive_calls": 644140,
+      "self_seconds": 0.44352016200000005
+    },
+    {
+      "calls": 5580,
+      "cumulative_seconds": 0.6105630780000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "rowchunk_hbm_floor_bytes",
+      "line": 377,
+      "primitive_calls": 5580,
+      "self_seconds": 0.41707908000000005
+    },
+    {
+      "calls": 201744,
+      "cumulative_seconds": 40.640668085,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "asdict",
+      "line": 1265,
+      "primitive_calls": 201744,
+      "self_seconds": 0.390730108
+    },
+    {
+      "calls": 759800,
+      "cumulative_seconds": 0.38846336200000003,
+      "filename": "~",
+      "function": "<method 'discard' of 'set' objects>",
+      "line": 0,
+      "primitive_calls": 759800,
+      "self_seconds": 0.38846336200000003
+    },
+    {
+      "calls": 3113,
+      "cumulative_seconds": 0.360828179,
+      "filename": "/usr/lib64/python3.11/json/encoder.py",
+      "function": "iterencode",
+      "line": 205,
+      "primitive_calls": 3113,
+      "self_seconds": 0.360828179
+    },
+    {
+      "calls": 3274560,
+      "cumulative_seconds": 0.35933574500000004,
+      "filename": "~",
+      "function": "<built-in method builtins.callable>",
+      "line": 0,
+      "primitive_calls": 3274560,
+      "self_seconds": 0.35933574500000004
+    },
+    {
+      "calls": 196850,
+      "cumulative_seconds": 0.505967692,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 372,
+      "primitive_calls": 196850,
+      "self_seconds": 0.349706251
+    },
+    {
+      "calls": 154212,
+      "cumulative_seconds": 0.6433882240000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "event",
+      "line": 661,
+      "primitive_calls": 154212,
+      "self_seconds": 0.33469407
+    },
+    {
+      "calls": 90112,
+      "cumulative_seconds": 1.6630635710000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<dictcomp>",
+      "line": 213,
+      "primitive_calls": 90112,
+      "self_seconds": 0.323832966
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.31905715100000004,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "status_name",
+      "line": 1954,
+      "primitive_calls": 27288,
+      "self_seconds": 0.31905715100000004
+    },
+    {
+      "calls": 219088,
+      "cumulative_seconds": 0.49792747600000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 495,
+      "primitive_calls": 219088,
+      "self_seconds": 0.302647651
+    },
+    {
+      "calls": 621412,
+      "cumulative_seconds": 0.37810681700000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/model.py",
+      "function": "dot_latency",
+      "line": 149,
+      "primitive_calls": 621412,
+      "self_seconds": 0.28848262
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 24.050785008000002,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "__init__",
+      "line": 315,
+      "primitive_calls": 27288,
+      "self_seconds": 0.24472137000000002
+    },
+    {
+      "calls": 675840,
+      "cumulative_seconds": 0.302807309,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 238,
+      "primitive_calls": 675840,
+      "self_seconds": 0.23723514
+    },
+    {
+      "calls": 229984,
+      "cumulative_seconds": 0.63981389,
+      "filename": "~",
+      "function": "<built-in method builtins.any>",
+      "line": 0,
+      "primitive_calls": 229984,
+      "self_seconds": 0.23541328900000003
+    },
+    {
+      "calls": 759878,
+      "cumulative_seconds": 0.22869670800000003,
+      "filename": "~",
+      "function": "<method 'add' of 'set' objects>",
+      "line": 0,
+      "primitive_calls": 759878,
+      "self_seconds": 0.22869670800000003
+    },
+    {
+      "calls": 57888,
+      "cumulative_seconds": 1.113677229,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<dictcomp>",
+      "line": 152,
+      "primitive_calls": 57888,
+      "self_seconds": 0.22371000700000002
+    },
+    {
+      "calls": 493500,
+      "cumulative_seconds": 0.219926749,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "w_slice_bytes",
+      "line": 56,
+      "primitive_calls": 493500,
+      "self_seconds": 0.219926749
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.39092529000000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "begin_task",
+      "line": 760,
+      "primitive_calls": 20320,
+      "self_seconds": 0.21435767
+    },
+    {
+      "calls": 260322,
+      "cumulative_seconds": 0.26994465500000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "w_bandwidth",
+      "line": 45,
+      "primitive_calls": 260322,
+      "self_seconds": 0.20355051300000002
+    },
+    {
+      "calls": 671429,
+      "cumulative_seconds": 0.19543637400000002,
+      "filename": "~",
+      "function": "<built-in method math.isfinite>",
+      "line": 0,
+      "primitive_calls": 671429,
+      "self_seconds": 0.19543637400000002
+    },
+    {
+      "calls": 197440,
+      "cumulative_seconds": 3.6605515960000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 67,
+      "primitive_calls": 197440,
+      "self_seconds": 0.19209789900000002
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 206.454445117,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "solve_assignment",
+      "line": 276,
+      "primitive_calls": 2880,
+      "self_seconds": 0.191226413
+    },
+    {
+      "calls": 2304,
+      "cumulative_seconds": 212.10463338600002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "_simulate_fixed",
+      "line": 615,
+      "primitive_calls": 2304,
+      "self_seconds": 0.18552453900000002
+    },
+    {
+      "calls": 638136,
+      "cumulative_seconds": 0.17241078,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 932,
+      "primitive_calls": 638136,
+      "self_seconds": 0.17241078
+    },
+    {
+      "calls": 629830,
+      "cumulative_seconds": 0.166976709,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/model.py",
+      "function": "issue_interval",
+      "line": 140,
+      "primitive_calls": 629830,
+      "self_seconds": 0.166976709
+    },
+    {
+      "calls": 219088,
+      "cumulative_seconds": 0.161388535,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<dictcomp>",
+      "line": 455,
+      "primitive_calls": 219088,
+      "self_seconds": 0.161388535
+    },
+    {
+      "calls": 355392,
+      "cumulative_seconds": 3.468453697,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_legal_cost",
+      "line": 93,
+      "primitive_calls": 355392,
+      "self_seconds": 0.15961038800000002
+    },
+    {
+      "calls": 638136,
+      "cumulative_seconds": 0.15224585300000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 933,
+      "primitive_calls": 638136,
+      "self_seconds": 0.15224585300000001
+    },
+    {
+      "calls": 982681,
+      "cumulative_seconds": 0.15028491100000002,
+      "filename": "~",
+      "function": "<method 'values' of 'dict' objects>",
+      "line": 0,
+      "primitive_calls": 982681,
+      "self_seconds": 0.15028491100000002
+    },
+    {
+      "calls": 196850,
+      "cumulative_seconds": 0.17112628500000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "<genexpr>",
+      "line": 66,
+      "primitive_calls": 196850,
+      "self_seconds": 0.139191219
+    },
+    {
+      "calls": 196850,
+      "cumulative_seconds": 0.166670268,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "<genexpr>",
+      "line": 68,
+      "primitive_calls": 196850,
+      "self_seconds": 0.13532744000000002
+    },
+    {
+      "calls": 196850,
+      "cumulative_seconds": 0.165120086,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "<genexpr>",
+      "line": 70,
+      "primitive_calls": 196850,
+      "self_seconds": 0.133900751
+    },
+    {
+      "calls": 45056,
+      "cumulative_seconds": 2.249040669,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 213,
+      "primitive_calls": 45056,
+      "self_seconds": 0.132999012
+    },
+    {
+      "calls": 8418,
+      "cumulative_seconds": 0.35909064,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_projection",
+      "line": 211,
+      "primitive_calls": 8418,
+      "self_seconds": 0.13257954300000002
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.143484766,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "__init__",
+      "line": 1744,
+      "primitive_calls": 27288,
+      "self_seconds": 0.129891536
+    },
+    {
+      "calls": 236928,
+      "cumulative_seconds": 1.9122257530000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "co_for",
+      "line": 103,
+      "primitive_calls": 236928,
+      "self_seconds": 0.129123862
+    },
+    {
+      "calls": 196850,
+      "cumulative_seconds": 0.158370126,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "<genexpr>",
+      "line": 61,
+      "primitive_calls": 196850,
+      "self_seconds": 0.126676079
+    },
+    {
+      "calls": 229620,
+      "cumulative_seconds": 0.156274101,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 903,
+      "primitive_calls": 229620,
+      "self_seconds": 0.125959279
+    },
+    {
+      "calls": 219088,
+      "cumulative_seconds": 0.142789467,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 502,
+      "primitive_calls": 219088,
+      "self_seconds": 0.12366469100000001
+    },
+    {
+      "calls": 236928,
+      "cumulative_seconds": 0.14848312400000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "actual_core",
+      "line": 105,
+      "primitive_calls": 236928,
+      "self_seconds": 0.12186529300000001
+    },
+    {
+      "calls": 678336,
+      "cumulative_seconds": 0.120038002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 170,
+      "primitive_calls": 678336,
+      "self_seconds": 0.120038002
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.11952201000000001,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper.set_parameters>",
+      "line": 0,
+      "primitive_calls": 27288,
+      "self_seconds": 0.11952201000000001
+    },
+    {
+      "calls": 113680,
+      "cumulative_seconds": 35.481269534,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "deprecated_func",
+      "line": 195,
+      "primitive_calls": 113680,
+      "self_seconds": 0.11915760900000001
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.164225495,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_work_upper",
+      "line": 38,
+      "primitive_calls": 27288,
+      "self_seconds": 0.111608047
+    },
+    {
+      "calls": 615916,
+      "cumulative_seconds": 0.09578924600000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<lambda>",
+      "line": 940,
+      "primitive_calls": 615916,
+      "self_seconds": 0.09578924600000001
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.17545470000000002,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "getLogger",
+      "line": 1327,
+      "primitive_calls": 27288,
+      "self_seconds": 0.090860878
+    },
+    {
+      "calls": 621412,
+      "cumulative_seconds": 0.089624197,
+      "filename": "~",
+      "function": "<built-in method math.log2>",
+      "line": 0,
+      "primitive_calls": 621412,
+      "self_seconds": 0.089624197
+    },
+    {
+      "calls": 13984,
+      "cumulative_seconds": 0.33732031700000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 170,
+      "primitive_calls": 13984,
+      "self_seconds": 0.089313974
+    },
+    {
+      "calls": 332988,
+      "cumulative_seconds": 0.08849172400000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 449,
+      "primitive_calls": 332988,
+      "self_seconds": 0.08849172400000001
+    },
+    {
+      "calls": 101600,
+      "cumulative_seconds": 0.145896624,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 309,
+      "primitive_calls": 101600,
+      "self_seconds": 0.087951258
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 1.133482985,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_group_tasks",
+      "line": 55,
+      "primitive_calls": 2880,
+      "self_seconds": 0.084829292
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.082769218,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "name",
+      "line": 320,
+      "primitive_calls": 27288,
+      "self_seconds": 0.082769218
+    },
+    {
+      "calls": 138621,
+      "cumulative_seconds": 0.10883226700000001,
+      "filename": "<frozen importlib._bootstrap>",
+      "function": "parent",
+      "line": 405,
+      "primitive_calls": 138621,
+      "self_seconds": 0.078933795
+    },
+    {
+      "calls": 54576,
+      "cumulative_seconds": 0.07592288800000001,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "proto",
+      "line": 1529,
+      "primitive_calls": 54576,
+      "self_seconds": 0.07592288800000001
+    },
+    {
+      "calls": 270336,
+      "cumulative_seconds": 0.093372167,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 236,
+      "primitive_calls": 270336,
+      "self_seconds": 0.072780335
+    },
+    {
+      "calls": 20160,
+      "cumulative_seconds": 0.09465639,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "storage_chunks",
+      "line": 1073,
+      "primitive_calls": 20160,
+      "self_seconds": 0.067466803
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.247865514,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "getLogger",
+      "line": 2074,
+      "primitive_calls": 27288,
+      "self_seconds": 0.06657125
+    },
+    {
+      "calls": 83933,
+      "cumulative_seconds": 0.190519143,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "matches",
+      "line": 54,
+      "primitive_calls": 83933,
+      "self_seconds": 0.06510805800000001
+    },
+    {
+      "calls": 25912,
+      "cumulative_seconds": 0.199938359,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_pool_can_reserve_next",
+      "line": 479,
+      "primitive_calls": 25912,
+      "self_seconds": 0.06352329200000001
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.08173414300000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 580,
+      "primitive_calls": 81280,
+      "self_seconds": 0.062291761
+    },
+    {
+      "calls": 78976,
+      "cumulative_seconds": 0.696480045,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<lambda>",
+      "line": 118,
+      "primitive_calls": 78976,
+      "self_seconds": 0.05922767
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 445.131564855,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "evaluate_design",
+      "line": 38,
+      "primitive_calls": 2880,
+      "self_seconds": 0.056239899
+    },
+    {
+      "calls": 197522,
+      "cumulative_seconds": 0.08842721,
+      "filename": "~",
+      "function": "<built-in method builtins.all>",
+      "line": 0,
+      "primitive_calls": 197522,
+      "self_seconds": 0.054915961000000006
+    },
+    {
+      "calls": 5580,
+      "cumulative_seconds": 2.030835212,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/optimizer.py",
+      "function": "universal_bound",
+      "line": 52,
+      "primitive_calls": 5580,
+      "self_seconds": 0.054458853
+    },
+    {
+      "calls": 2890,
+      "cumulative_seconds": 27.917267449,
+      "filename": "~",
+      "function": "<method 'sort' of 'list' objects>",
+      "line": 0,
+      "primitive_calls": 2890,
+      "self_seconds": 0.054179279000000004
+    },
+    {
+      "calls": 246720,
+      "cumulative_seconds": 0.05048745,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "irreducible_busy",
+      "line": 202,
+      "primitive_calls": 246720,
+      "self_seconds": 0.05048745
+    },
+    {
+      "calls": 3264,
+      "cumulative_seconds": 0.613246246,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_task_cached",
+      "line": 349,
+      "primitive_calls": 3264,
+      "self_seconds": 0.050402665000000006
+    },
+    {
+      "calls": 768,
+      "cumulative_seconds": 0.17421266600000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 223,
+      "primitive_calls": 768,
+      "self_seconds": 0.050366693000000004
+    },
+    {
+      "calls": 240592,
+      "cumulative_seconds": 0.050082521000000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "try_bind",
+      "line": 260,
+      "primitive_calls": 240592,
+      "self_seconds": 0.050082521000000005
+    },
+    {
+      "calls": 45056,
+      "cumulative_seconds": 0.23834236700000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 214,
+      "primitive_calls": 45056,
+      "self_seconds": 0.048521051
+    },
+    {
+      "calls": 45056,
+      "cumulative_seconds": 0.116776345,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<lambda>",
+      "line": 225,
+      "primitive_calls": 45056,
+      "self_seconds": 0.044471050000000005
+    },
+    {
+      "calls": 150651,
+      "cumulative_seconds": 0.071403454,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 59,
+      "primitive_calls": 150651,
+      "self_seconds": 0.043189842000000006
+    },
+    {
+      "calls": 77736,
+      "cumulative_seconds": 0.065609494,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 480,
+      "primitive_calls": 77736,
+      "self_seconds": 0.042333060000000006
+    },
+    {
+      "calls": 78976,
+      "cumulative_seconds": 0.040493418,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<listcomp>",
+      "line": 166,
+      "primitive_calls": 78976,
+      "self_seconds": 0.040493418
+    },
+    {
+      "calls": 3264,
+      "cumulative_seconds": 0.09056330900000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_isolated",
+      "line": 333,
+      "primitive_calls": 3264,
+      "self_seconds": 0.037750692
+    },
+    {
+      "calls": 135168,
+      "cumulative_seconds": 0.036595256,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 225,
+      "primitive_calls": 135168,
+      "self_seconds": 0.036595256
+    },
+    {
+      "calls": 117359,
+      "cumulative_seconds": 0.033846054,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "macs",
+      "line": 43,
+      "primitive_calls": 117359,
+      "self_seconds": 0.033846054
+    },
+    {
+      "calls": 122176,
+      "cumulative_seconds": 0.033260298,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 165,
+      "primitive_calls": 122176,
+      "self_seconds": 0.033260298
+    },
+    {
+      "calls": 116820,
+      "cumulative_seconds": 0.043912339,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 374,
+      "primitive_calls": 116820,
+      "self_seconds": 0.032932286000000005
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 34.899631728,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "Solve",
+      "line": 2017,
+      "primitive_calls": 27288,
+      "self_seconds": 0.032576390000000004
+    },
+    {
+      "calls": 27366,
+      "cumulative_seconds": 0.031524107,
+      "filename": "~",
+      "function": "<method 'update' of 'dict' objects>",
+      "line": 0,
+      "primitive_calls": 27366,
+      "self_seconds": 0.031524107
+    },
+    {
+      "calls": 78976,
+      "cumulative_seconds": 0.030745193,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<lambda>",
+      "line": 184,
+      "primitive_calls": 78976,
+      "self_seconds": 0.030745193
+    },
+    {
+      "calls": 2304,
+      "cumulative_seconds": 0.030522725,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<listcomp>",
+      "line": 576,
+      "primitive_calls": 2304,
+      "self_seconds": 0.030522725
+    },
+    {
+      "calls": 27289,
+      "cumulative_seconds": 0.044599771,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "_acquireLock",
+      "line": 228,
+      "primitive_calls": 27289,
+      "self_seconds": 0.029971632
+    },
+    {
+      "calls": 5892,
+      "cumulative_seconds": 0.029915510000000003,
+      "filename": "~",
+      "function": "<built-in method builtins.format>",
+      "line": 0,
+      "primitive_calls": 5892,
+      "self_seconds": 0.029915510000000003
+    },
+    {
+      "calls": 138621,
+      "cumulative_seconds": 0.029898472000000002,
+      "filename": "~",
+      "function": "<method 'rpartition' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 138621,
+      "self_seconds": 0.029898472000000002
+    },
+    {
+      "calls": 59232,
+      "cumulative_seconds": 0.036101753,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "actual_core",
+      "line": 554,
+      "primitive_calls": 59232,
+      "self_seconds": 0.029750996000000002
+    },
+    {
+      "calls": 576,
+      "cumulative_seconds": 26.494443147000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "simulate",
+      "line": 1083,
+      "primitive_calls": 576,
+      "self_seconds": 0.029402547
+    },
+    {
+      "calls": 135168,
+      "cumulative_seconds": 0.029321323000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 223,
+      "primitive_calls": 135168,
+      "self_seconds": 0.029321323000000003
+    },
+    {
+      "calls": 31816,
+      "cumulative_seconds": 0.028745851000000003,
+      "filename": "~",
+      "function": "<built-in method ortools.sat.python.cp_model_helper.value>",
+      "line": 0,
+      "primitive_calls": 31816,
+      "self_seconds": 0.028745851000000003
+    },
+    {
+      "calls": 177696,
+      "cumulative_seconds": 0.028632821000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_prediction",
+      "line": 413,
+      "primitive_calls": 177696,
+      "self_seconds": 0.028632821000000003
+    },
+    {
+      "calls": 20981,
+      "cumulative_seconds": 0.06663057700000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 237,
+      "primitive_calls": 20981,
+      "self_seconds": 0.028425642
+    },
+    {
+      "calls": 197440,
+      "cumulative_seconds": 0.028273088000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 139,
+      "primitive_calls": 197440,
+      "self_seconds": 0.028273088000000002
+    },
+    {
+      "calls": 57888,
+      "cumulative_seconds": 0.027946367000000003,
+      "filename": "~",
+      "function": "<method 'update' of 'set' objects>",
+      "line": 0,
+      "primitive_calls": 57888,
+      "self_seconds": 0.027946367000000003
+    },
+    {
+      "calls": 2547,
+      "cumulative_seconds": 0.215230049,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 64,
+      "primitive_calls": 2547,
+      "self_seconds": 0.02536563
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.34421243,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "StatusName",
+      "line": 2027,
+      "primitive_calls": 27288,
+      "self_seconds": 0.025155279000000003
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.025096194000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 627,
+      "primitive_calls": 81280,
+      "self_seconds": 0.025096194000000002
+    },
+    {
+      "calls": 90112,
+      "cumulative_seconds": 0.024524319000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<lambda>",
+      "line": 223,
+      "primitive_calls": 90112,
+      "self_seconds": 0.024524319000000003
+    },
+    {
+      "calls": 31816,
+      "cumulative_seconds": 0.059740777,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "value",
+      "line": 1787,
+      "primitive_calls": 31816,
+      "self_seconds": 0.024125476
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 446.109410953,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "_evaluate",
+      "line": 229,
+      "primitive_calls": 80,
+      "self_seconds": 0.023750974
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 0.02356348,
+      "filename": "~",
+      "function": "<function Random.seed at 0x7fa96b573d80>",
+      "line": 0,
+      "primitive_calls": 2880,
+      "self_seconds": 0.02356348
+    },
+    {
+      "calls": 45824,
+      "cumulative_seconds": 0.071082401,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 234,
+      "primitive_calls": 45824,
+      "self_seconds": 0.023334861000000002
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.04493529,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "debug",
+      "line": 1467,
+      "primitive_calls": 27288,
+      "self_seconds": 0.023291966
+    },
+    {
+      "calls": 54576,
+      "cumulative_seconds": 0.022413534000000002,
+      "filename": "~",
+      "function": "<method '__exit__' of '_thread.lock' objects>",
+      "line": 0,
+      "primitive_calls": 54576,
+      "self_seconds": 0.022413534000000002
+    },
+    {
+      "calls": 39488,
+      "cumulative_seconds": 0.28377639600000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "co_for",
+      "line": 552,
+      "primitive_calls": 39488,
+      "self_seconds": 0.021892742
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.021643324000000002,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "isEnabledFor",
+      "line": 1734,
+      "primitive_calls": 27288,
+      "self_seconds": 0.021639383
+    },
+    {
+      "calls": 90112,
+      "cumulative_seconds": 0.021017805,
+      "filename": "~",
+      "function": "<method 'copy' of 'dict' objects>",
+      "line": 0,
+      "primitive_calls": 90112,
+      "self_seconds": 0.021017805
+    },
+    {
+      "calls": 17983,
+      "cumulative_seconds": 0.045917112,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 256,
+      "primitive_calls": 17983,
+      "self_seconds": 0.020551587
+    },
+    {
+      "calls": 25728,
+      "cumulative_seconds": 0.020485915,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 149,
+      "primitive_calls": 25728,
+      "self_seconds": 0.020485915
+    },
+    {
+      "calls": 90112,
+      "cumulative_seconds": 0.019556254000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<lambda>",
+      "line": 232,
+      "primitive_calls": 90112,
+      "self_seconds": 0.019556254000000002
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.044505505,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "ResponseProto",
+      "line": 2009,
+      "primitive_calls": 27288,
+      "self_seconds": 0.019454997
+    },
+    {
+      "calls": 32640,
+      "cumulative_seconds": 0.089985744,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<lambda>",
+      "line": 374,
+      "primitive_calls": 32640,
+      "self_seconds": 0.019449105
+    },
+    {
+      "calls": 30546,
+      "cumulative_seconds": 0.027412884000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "_group_cycles",
+      "line": 207,
+      "primitive_calls": 30546,
+      "self_seconds": 0.019431450000000003
+    },
+    {
+      "calls": 33397,
+      "cumulative_seconds": 0.019302864000000003,
+      "filename": "<string>",
+      "function": "__le__",
+      "line": 2,
+      "primitive_calls": 33397,
+      "self_seconds": 0.019302864000000003
+    },
+    {
+      "calls": 32160,
+      "cumulative_seconds": 0.018542885000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 146,
+      "primitive_calls": 32160,
+      "self_seconds": 0.018542885000000002
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.017698838,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 577,
+      "primitive_calls": 81280,
+      "self_seconds": 0.017698838
+    },
+    {
+      "calls": 27289,
+      "cumulative_seconds": 0.025001712000000002,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "_releaseLock",
+      "line": 237,
+      "primitive_calls": 27289,
+      "self_seconds": 0.016656888
+    },
+    {
+      "calls": 59104,
+      "cumulative_seconds": 0.016204344000000002,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "_checked_response",
+      "line": 1971,
+      "primitive_calls": 59104,
+      "self_seconds": 0.016204344000000002
+    },
+    {
+      "calls": 5760,
+      "cumulative_seconds": 3.958271175,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_costs",
+      "line": 64,
+      "primitive_calls": 5760,
+      "self_seconds": 0.015973857
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.025050508000000003,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "response_proto",
+      "line": 1939,
+      "primitive_calls": 27288,
+      "self_seconds": 0.015715614
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 0.041398499000000005,
+      "filename": "/usr/lib64/python3.11/random.py",
+      "function": "seed",
+      "line": 128,
+      "primitive_calls": 2880,
+      "self_seconds": 0.015376866000000001
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.019840579,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 999,
+      "primitive_calls": 20320,
+      "self_seconds": 0.015346888000000001
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.015312113,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 579,
+      "primitive_calls": 81280,
+      "self_seconds": 0.015312113
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.014756365,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 585,
+      "primitive_calls": 81280,
+      "self_seconds": 0.014756365
+    },
+    {
+      "calls": 3113,
+      "cumulative_seconds": 0.394967397,
+      "filename": "/usr/lib64/python3.11/json/__init__.py",
+      "function": "dumps",
+      "line": 183,
+      "primitive_calls": 3113,
+      "self_seconds": 0.014668927000000002
+    },
+    {
+      "calls": 27289,
+      "cumulative_seconds": 0.014628139,
+      "filename": "~",
+      "function": "<method 'acquire' of '_thread.RLock' objects>",
+      "line": 0,
+      "primitive_calls": 27289,
+      "self_seconds": 0.014628139
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.014430035,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 578,
+      "primitive_calls": 81280,
+      "self_seconds": 0.014430035
+    },
+    {
+      "calls": 23775,
+      "cumulative_seconds": 0.014237294000000001,
+      "filename": "<string>",
+      "function": "__eq__",
+      "line": 2,
+      "primitive_calls": 23775,
+      "self_seconds": 0.014237294000000001
+    },
+    {
+      "calls": 19744,
+      "cumulative_seconds": 0.153957006,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<lambda>",
+      "line": 567,
+      "primitive_calls": 19744,
+      "self_seconds": 0.014180517
+    },
+    {
+      "calls": 31816,
+      "cumulative_seconds": 0.07376226200000001,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/ortools/sat/python/cp_model.py",
+      "function": "Value",
+      "line": 2043,
+      "primitive_calls": 31816,
+      "self_seconds": 0.014021485
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.013830624000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 593,
+      "primitive_calls": 81280,
+      "self_seconds": 0.013830624000000001
+    },
+    {
+      "calls": 27288,
+      "cumulative_seconds": 0.013593230000000001,
+      "filename": "~",
+      "function": "<built-in method _thread.allocate_lock>",
+      "line": 0,
+      "primitive_calls": 27288,
+      "self_seconds": 0.013593230000000001
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.013580403000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 595,
+      "primitive_calls": 81280,
+      "self_seconds": 0.013580403000000001
+    },
+    {
+      "calls": 81280,
+      "cumulative_seconds": 0.013573651,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<genexpr>",
+      "line": 594,
+      "primitive_calls": 81280,
+      "self_seconds": 0.013573651
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 238.612347755,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "simulate",
+      "line": 702,
+      "primitive_calls": 2880,
+      "self_seconds": 0.012739469000000002
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.032532123,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "<listcomp>",
+      "line": 89,
+      "primitive_calls": 1,
+      "self_seconds": 0.012586348
+    },
+    {
+      "calls": 3113,
+      "cumulative_seconds": 0.375670202,
+      "filename": "/usr/lib64/python3.11/json/encoder.py",
+      "function": "encode",
+      "line": 183,
+      "primitive_calls": 3113,
+      "self_seconds": 0.012573892000000001
+    },
+    {
+      "calls": 59552,
+      "cumulative_seconds": 0.012505776000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "try_bind",
+      "line": 688,
+      "primitive_calls": 59552,
+      "self_seconds": 0.012505776000000001
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 0.015171249000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 141,
+      "primitive_calls": 2880,
+      "self_seconds": 0.011765320000000001
+    },
+    {
+      "calls": 35040,
+      "cumulative_seconds": 0.014704400000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 155,
+      "primitive_calls": 35040,
+      "self_seconds": 0.011653234
+    },
+    {
+      "calls": 61888,
+      "cumulative_seconds": 0.011037539,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<genexpr>",
+      "line": 171,
+      "primitive_calls": 61888,
+      "self_seconds": 0.011037539
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 479.77153747100004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "search_family",
+      "line": 276,
+      "primitive_calls": 10,
+      "self_seconds": 0.011018061000000001
+    },
+    {
+      "calls": 376,
+      "cumulative_seconds": 0.021807527,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "__post_init__",
+      "line": 70,
+      "primitive_calls": 376,
+      "self_seconds": 0.010818228000000001
+    },
+    {
+      "calls": 8640,
+      "cumulative_seconds": 0.054433429000000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "_common_spill",
+      "line": 89,
+      "primitive_calls": 8640,
+      "self_seconds": 0.010520986000000001
+    },
+    {
+      "calls": 4908,
+      "cumulative_seconds": 0.026058451000000003,
+      "filename": "~",
+      "function": "<built-in method math.prod>",
+      "line": 0,
+      "primitive_calls": 4908,
+      "self_seconds": 0.010249364
+    },
+    {
+      "calls": 27808,
+      "cumulative_seconds": 0.009599873,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 481,
+      "primitive_calls": 27808,
+      "self_seconds": 0.009271708
+    },
+    {
+      "calls": 13606,
+      "cumulative_seconds": 0.017285151000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "effective_w_bytes",
+      "line": 116,
+      "primitive_calls": 13606,
+      "self_seconds": 0.008779611000000001
+    },
+    {
+      "calls": 27289,
+      "cumulative_seconds": 0.008344824,
+      "filename": "~",
+      "function": "<method 'release' of '_thread.RLock' objects>",
+      "line": 0,
+      "primitive_calls": 27289,
+      "self_seconds": 0.008344824
+    },
+    {
+      "calls": 5892,
+      "cumulative_seconds": 0.007970733,
+      "filename": "~",
+      "function": "<method 'scaleb' of 'decimal.Decimal' objects>",
+      "line": 0,
+      "primitive_calls": 5892,
+      "self_seconds": 0.007970733
+    },
+    {
+      "calls": 868,
+      "cumulative_seconds": 0.023929693000000002,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "replace",
+      "line": 1455,
+      "primitive_calls": 868,
+      "self_seconds": 0.007661363000000001
+    },
+    {
+      "calls": 19744,
+      "cumulative_seconds": 0.0072652,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<lambda>",
+      "line": 612,
+      "primitive_calls": 19744,
+      "self_seconds": 0.0072652
+    },
+    {
+      "calls": 3108,
+      "cumulative_seconds": 0.388080914,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "canonical",
+      "line": 33,
+      "primitive_calls": 3108,
+      "self_seconds": 0.007256051
+    },
+    {
+      "calls": 19744,
+      "cumulative_seconds": 0.0072035580000000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 594,
+      "primitive_calls": 19744,
+      "self_seconds": 0.0072035580000000005
+    },
+    {
+      "calls": 5580,
+      "cumulative_seconds": 0.549261761,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "unique_hbm_bytes",
+      "line": 371,
+      "primitive_calls": 5580,
+      "self_seconds": 0.007076407000000001
+    },
+    {
+      "calls": 576,
+      "cumulative_seconds": 0.006673867,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 995,
+      "primitive_calls": 576,
+      "self_seconds": 0.006673867
+    },
+    {
+      "calls": 2112,
+      "cumulative_seconds": 0.006299771,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<listcomp>",
+      "line": 168,
+      "primitive_calls": 2112,
+      "self_seconds": 0.006299771
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.006209287,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 1094,
+      "primitive_calls": 20320,
+      "self_seconds": 0.006209287
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.006055434,
+      "filename": "~",
+      "function": "<method 'cache_clear' of 'functools._lru_cache_wrapper' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 0.006055434
+    },
+    {
+      "calls": 5084,
+      "cumulative_seconds": 27.006463697,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<lambda>",
+      "line": 186,
+      "primitive_calls": 5084,
+      "self_seconds": 0.005881066000000001
+    },
+    {
+      "calls": 2112,
+      "cumulative_seconds": 0.005392372,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<dictcomp>",
+      "line": 157,
+      "primitive_calls": 2112,
+      "self_seconds": 0.005392372
+    },
+    {
+      "calls": 2880,
+      "cumulative_seconds": 0.046675301,
+      "filename": "/usr/lib64/python3.11/random.py",
+      "function": "__init__",
+      "line": 119,
+      "primitive_calls": 2880,
+      "self_seconds": 0.005276802000000001
+    },
+    {
+      "calls": 3113,
+      "cumulative_seconds": 0.0046282680000000005,
+      "filename": "/usr/lib64/python3.11/json/encoder.py",
+      "function": "__init__",
+      "line": 105,
+      "primitive_calls": 3113,
+      "self_seconds": 0.0046282680000000005
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.004218557,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 996,
+      "primitive_calls": 20320,
+      "self_seconds": 0.004218557
+    },
+    {
+      "calls": 6460,
+      "cumulative_seconds": 0.005292785,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 125,
+      "primitive_calls": 6460,
+      "self_seconds": 0.004052259
+    },
+    {
+      "calls": 2336,
+      "cumulative_seconds": 0.007965644000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "<genexpr>",
+      "line": 81,
+      "primitive_calls": 2336,
+      "self_seconds": 0.00403194
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.0036088490000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 1004,
+      "primitive_calls": 20320,
+      "self_seconds": 0.0036088490000000003
+    },
+    {
+      "calls": 8640,
+      "cumulative_seconds": 0.041583888,
+      "filename": "/usr/lib64/python3.11/dataclasses.py",
+      "function": "<genexpr>",
+      "line": 1321,
+      "primitive_calls": 8640,
+      "self_seconds": 0.003578196
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.0035707580000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 998,
+      "primitive_calls": 20320,
+      "self_seconds": 0.0035707580000000003
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.003499334,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 997,
+      "primitive_calls": 20320,
+      "self_seconds": 0.003499334
+    },
+    {
+      "calls": 1536,
+      "cumulative_seconds": 0.446665034,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/optimizer.py",
+      "function": "<lambda>",
+      "line": 233,
+      "primitive_calls": 1536,
+      "self_seconds": 0.0034861780000000004
+    },
+    {
+      "calls": 5852,
+      "cumulative_seconds": 0.0034271790000000002,
+      "filename": "<string>",
+      "function": "__lt__",
+      "line": 2,
+      "primitive_calls": 5852,
+      "self_seconds": 0.0034271790000000002
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.003398697,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 1012,
+      "primitive_calls": 20320,
+      "self_seconds": 0.003398697
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.003354147,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 1013,
+      "primitive_calls": 20320,
+      "self_seconds": 0.003354147
+    },
+    {
+      "calls": 20320,
+      "cumulative_seconds": 0.003287669,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 1014,
+      "primitive_calls": 20320,
+      "self_seconds": 0.003287669
+    },
+    {
+      "calls": 2461,
+      "cumulative_seconds": 0.004459647000000001,
+      "filename": "<string>",
+      "function": "__init__",
+      "line": 2,
+      "primitive_calls": 2461,
+      "self_seconds": 0.003104702
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.0027298020000000004,
+      "filename": "~",
+      "function": "<method 'compress' of 'zlib.Compress' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 0.0027298020000000004
+    },
+    {
+      "calls": 88,
+      "cumulative_seconds": 27.321641951,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "seed_designs",
+      "line": 171,
+      "primitive_calls": 88,
+      "self_seconds": 0.002609838
+    },
+    {
+      "calls": 1014,
+      "cumulative_seconds": 0.006363129,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "cardinality",
+      "line": 93,
+      "primitive_calls": 1014,
+      "self_seconds": 0.002525114
+    },
+    {
+      "calls": 5892,
+      "cumulative_seconds": 0.00250356,
+      "filename": "~",
+      "function": "<method 'adjusted' of 'decimal.Decimal' objects>",
+      "line": 0,
+      "primitive_calls": 5892,
+      "self_seconds": 0.00250356
+    },
+    {
+      "calls": 2304,
+      "cumulative_seconds": 0.0024911070000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<listcomp>",
+      "line": 218,
+      "primitive_calls": 2304,
+      "self_seconds": 0.0024911070000000002
+    },
+    {
+      "calls": 11682,
+      "cumulative_seconds": 0.002474347,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 378,
+      "primitive_calls": 11682,
+      "self_seconds": 0.002474347
+    },
+    {
+      "calls": 5890,
+      "cumulative_seconds": 0.004188755000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 51,
+      "primitive_calls": 5890,
+      "self_seconds": 0.002169243
+    },
+    {
+      "calls": 5580,
+      "cumulative_seconds": 0.002019512,
+      "filename": "~",
+      "function": "<built-in method math.log>",
+      "line": 0,
+      "primitive_calls": 5580,
+      "self_seconds": 0.002019512
+    },
+    {
+      "calls": 118,
+      "cumulative_seconds": 446.174586508,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "evaluate",
+      "line": 283,
+      "primitive_calls": 118,
+      "self_seconds": 0.002015151
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.046349929000000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "enumerate_geometries",
+      "line": 73,
+      "primitive_calls": 1,
+      "self_seconds": 0.001667496
+    },
+    {
+      "calls": 2304,
+      "cumulative_seconds": 0.0016154650000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/runtime.py",
+      "function": "<listcomp>",
+      "line": 107,
+      "primitive_calls": 2304,
+      "self_seconds": 0.0016154650000000002
+    },
+    {
+      "calls": 338,
+      "cumulative_seconds": 0.0051845400000000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "describe",
+      "line": 121,
+      "primitive_calls": 338,
+      "self_seconds": 0.001536768
+    },
+    {
+      "calls": 5760,
+      "cumulative_seconds": 0.001427164,
+      "filename": "~",
+      "function": "<built-in method builtins.abs>",
+      "line": 0,
+      "primitive_calls": 5760,
+      "self_seconds": 0.001427164
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 0.001393207,
+      "filename": "/usr/lib64/python3.11/json/decoder.py",
+      "function": "raw_decode",
+      "line": 343,
+      "primitive_calls": 80,
+      "self_seconds": 0.001393207
+    },
+    {
+      "calls": 320,
+      "cumulative_seconds": 0.007643558000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "split",
+      "line": 128,
+      "primitive_calls": 320,
+      "self_seconds": 0.001360876
+    },
+    {
+      "calls": 2461,
+      "cumulative_seconds": 0.001354945,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "__post_init__",
+      "line": 38,
+      "primitive_calls": 2461,
+      "self_seconds": 0.001354945
+    },
+    {
+      "calls": 624,
+      "cumulative_seconds": 0.002521938,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "_allocate",
+      "line": 162,
+      "primitive_calls": 624,
+      "self_seconds": 0.001308366
+    },
+    {
+      "calls": 4278,
+      "cumulative_seconds": 0.001104687,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 96,
+      "primitive_calls": 4278,
+      "self_seconds": 0.001104687
+    },
+    {
+      "calls": 310,
+      "cumulative_seconds": 0.07287304,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "gm",
+      "line": 49,
+      "primitive_calls": 310,
+      "self_seconds": 0.001042514
+    },
+    {
+      "calls": 1880,
+      "cumulative_seconds": 0.0015341550000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 108,
+      "primitive_calls": 1880,
+      "self_seconds": 0.0010289070000000001
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 0.000927154,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 247,
+      "primitive_calls": 80,
+      "self_seconds": 0.000927154
+    },
+    {
+      "calls": 4224,
+      "cumulative_seconds": 0.000867978,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 92,
+      "primitive_calls": 4224,
+      "self_seconds": 0.000867978
+    },
+    {
+      "calls": 1626,
+      "cumulative_seconds": 0.000851919,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 117,
+      "primitive_calls": 1626,
+      "self_seconds": 0.000851919
+    },
+    {
+      "calls": 2732,
+      "cumulative_seconds": 0.000842872,
+      "filename": "~",
+      "function": "<method 'remove' of 'set' objects>",
+      "line": 0,
+      "primitive_calls": 2732,
+      "self_seconds": 0.000842872
+    },
+    {
+      "calls": 338,
+      "cumulative_seconds": 0.002154535,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "_capacity_names",
+      "line": 114,
+      "primitive_calls": 338,
+      "self_seconds": 0.000834423
+    },
+    {
+      "calls": 228,
+      "cumulative_seconds": 0.08053937400000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "key",
+      "line": 37,
+      "primitive_calls": 228,
+      "self_seconds": 0.000832975
+    },
+    {
+      "calls": 78,
+      "cumulative_seconds": 0.0025230110000000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<dictcomp>",
+      "line": 198,
+      "primitive_calls": 78,
+      "self_seconds": 0.000806361
+    },
+    {
+      "calls": 120,
+      "cumulative_seconds": 0.006896918,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "decode",
+      "line": 41,
+      "primitive_calls": 120,
+      "self_seconds": 0.0007830070000000001
+    },
+    {
+      "calls": 624,
+      "cumulative_seconds": 0.000999688,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 165,
+      "primitive_calls": 624,
+      "self_seconds": 0.00077881
+    },
+    {
+      "calls": 1904,
+      "cumulative_seconds": 0.0007514580000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 76,
+      "primitive_calls": 1904,
+      "self_seconds": 0.0007514580000000001
+    },
+    {
+      "calls": 1500,
+      "cumulative_seconds": 0.000722718,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 250,
+      "primitive_calls": 1500,
+      "self_seconds": 0.000722718
+    },
+    {
+      "calls": 1056,
+      "cumulative_seconds": 0.000860174,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 95,
+      "primitive_calls": 1056,
+      "self_seconds": 0.0006879950000000001
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 0.26223810000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "geometries",
+      "line": 62,
+      "primitive_calls": 5,
+      "self_seconds": 0.000658122
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.001191402,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/geometry3d/compute.py",
+      "function": "<listcomp>",
+      "line": 88,
+      "primitive_calls": 1,
+      "self_seconds": 0.0006518860000000001
+    },
+    {
+      "calls": 1056,
+      "cumulative_seconds": 0.000802842,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 73,
+      "primitive_calls": 1056,
+      "self_seconds": 0.0005270580000000001
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 0.002436044,
+      "filename": "/usr/lib64/python3.11/json/decoder.py",
+      "function": "decode",
+      "line": 332,
+      "primitive_calls": 80,
+      "self_seconds": 0.0004943020000000001
+    },
+    {
+      "calls": 161,
+      "cumulative_seconds": 0.00047400500000000005,
+      "filename": "~",
+      "function": "<method 'match' of 're.Pattern' objects>",
+      "line": 0,
+      "primitive_calls": 161,
+      "self_seconds": 0.00047400500000000005
+    },
+    {
+      "calls": 196,
+      "cumulative_seconds": 0.0009886200000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 45,
+      "primitive_calls": 196,
+      "self_seconds": 0.000447685
+    },
+    {
+      "calls": 576,
+      "cumulative_seconds": 0.00044227400000000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 646,
+      "primitive_calls": 576,
+      "self_seconds": 0.00044227400000000004
+    },
+    {
+      "calls": 896,
+      "cumulative_seconds": 0.00042484600000000005,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 118,
+      "primitive_calls": 896,
+      "self_seconds": 0.00042484600000000005
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 0.005587098,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 342,
+      "primitive_calls": 10,
+      "self_seconds": 0.000402558
+    },
+    {
+      "calls": 1056,
+      "cumulative_seconds": 0.0005912490000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 75,
+      "primitive_calls": 1056,
+      "self_seconds": 0.00038601300000000005
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 0.002881041,
+      "filename": "/usr/lib64/python3.11/json/__init__.py",
+      "function": "loads",
+      "line": 299,
+      "primitive_calls": 80,
+      "self_seconds": 0.00038174400000000005
+    },
+    {
+      "calls": 220,
+      "cumulative_seconds": 0.00037990800000000004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 340,
+      "primitive_calls": 220,
+      "self_seconds": 0.00037990800000000004
+    },
+    {
+      "calls": 576,
+      "cumulative_seconds": 0.000322649,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<listcomp>",
+      "line": 556,
+      "primitive_calls": 576,
+      "self_seconds": 0.000322649
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 0.001398064,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "composition_count",
+      "line": 67,
+      "primitive_calls": 3,
+      "self_seconds": 0.000306097
+    },
+    {
+      "calls": 78,
+      "cumulative_seconds": 0.0013304060000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<dictcomp>",
+      "line": 201,
+      "primitive_calls": 78,
+      "self_seconds": 0.00030326
+    },
+    {
+      "calls": 320,
+      "cumulative_seconds": 0.0022557000000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "singleton",
+      "line": 98,
+      "primitive_calls": 320,
+      "self_seconds": 0.000285621
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 0.00034298200000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 107,
+      "primitive_calls": 10,
+      "self_seconds": 0.000278993
+    },
+    {
+      "calls": 1056,
+      "cumulative_seconds": 0.000270258,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 96,
+      "primitive_calls": 1056,
+      "self_seconds": 0.000270258
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 479.771796895,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<dictcomp>",
+      "line": 366,
+      "primitive_calls": 2,
+      "self_seconds": 0.000259424
+    },
+    {
+      "calls": 7,
+      "cumulative_seconds": 0.000284319,
+      "filename": "~",
+      "function": "<built-in method posix.mkdir>",
+      "line": 0,
+      "primitive_calls": 7,
+      "self_seconds": 0.000251739
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 0.00022656300000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 251,
+      "primitive_calls": 80,
+      "self_seconds": 0.00022656300000000002
+    },
+    {
+      "calls": 190,
+      "cumulative_seconds": 0.06615351900000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 303,
+      "primitive_calls": 190,
+      "self_seconds": 0.000226259
+    },
+    {
+      "calls": 880,
+      "cumulative_seconds": 0.00022185800000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 198,
+      "primitive_calls": 880,
+      "self_seconds": 0.00022185800000000002
+    },
+    {
+      "calls": 224,
+      "cumulative_seconds": 0.000217722,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 129,
+      "primitive_calls": 224,
+      "self_seconds": 0.000217722
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.00020116,
+      "filename": "~",
+      "function": "<method 'flush' of 'zlib.Compress' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 0.00020116
+    },
+    {
+      "calls": 348,
+      "cumulative_seconds": 0.0015201020000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 343,
+      "primitive_calls": 348,
+      "self_seconds": 0.00019166900000000002
+    },
+    {
+      "calls": 310,
+      "cumulative_seconds": 0.00018013500000000002,
+      "filename": "~",
+      "function": "<built-in method math.exp>",
+      "line": 0,
+      "primitive_calls": 310,
+      "self_seconds": 0.00018013500000000002
+    },
+    {
+      "calls": 680,
+      "cumulative_seconds": 0.000172179,
+      "filename": "~",
+      "function": "<method 'upper' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 680,
+      "self_seconds": 0.000172179
+    },
+    {
+      "calls": 220,
+      "cumulative_seconds": 0.00026353600000000003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 196,
+      "primitive_calls": 220,
+      "self_seconds": 0.00016347
+    },
+    {
+      "calls": 774,
+      "cumulative_seconds": 0.00015998000000000002,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 100,
+      "primitive_calls": 774,
+      "self_seconds": 0.00015998000000000002
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.000155288,
+      "filename": "~",
+      "function": "<built-in method zlib.crc32>",
+      "line": 0,
+      "primitive_calls": 2,
+      "self_seconds": 0.000155288
+    },
+    {
+      "calls": 282,
+      "cumulative_seconds": 0.000234354,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "<genexpr>",
+      "line": 102,
+      "primitive_calls": 282,
+      "self_seconds": 0.000151877
+    },
+    {
+      "calls": 80,
+      "cumulative_seconds": 0.000532736,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/model.py",
+      "function": "geometry",
+      "line": 127,
+      "primitive_calls": 80,
+      "self_seconds": 0.000133045
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 479.79627577400004,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "_sobol_job",
+      "line": 73,
+      "primitive_calls": 1,
+      "self_seconds": 0.00012480800000000002
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.00016405100000000002,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "_parse",
+      "line": 516,
+      "primitive_calls": 2,
+      "self_seconds": 8.6395e-05
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 0.000445168,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "roots",
+      "line": 103,
+      "primitive_calls": 10,
+      "self_seconds": 8.5154e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.000238437,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "_parse_sub",
+      "line": 456,
+      "primitive_calls": 2,
+      "self_seconds": 7.0912e-05
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 0.00010441500000000001,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_compile",
+      "line": 37,
+      "primitive_calls": 2,
+      "self_seconds": 5.92e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.0006967130000000001,
+      "filename": "/usr/lib64/python3.11/re/__init__.py",
+      "function": "_compile",
+      "line": 272,
+      "primitive_calls": 2,
+      "self_seconds": 5.6138000000000004e-05
+    },
+    {
+      "calls": 90,
+      "cumulative_seconds": 5.5129e-05,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 349,
+      "primitive_calls": 90,
+      "self_seconds": 5.5129e-05
+    },
+    {
+      "calls": 11,
+      "cumulative_seconds": 5.4287000000000004e-05,
+      "filename": "~",
+      "function": "<method 'write' of '_io.BufferedWriter' objects>",
+      "line": 0,
+      "primitive_calls": 11,
+      "self_seconds": 5.4287000000000004e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 5.8746e-05,
+      "filename": "~",
+      "function": "<built-in method io.open>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 5.2641000000000006e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.000777952,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/numpy/lib/_version.py",
+      "function": "__init__",
+      "line": 53,
+      "primitive_calls": 1,
+      "self_seconds": 4.6722000000000004e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.00021457,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_code",
+      "line": 573,
+      "primitive_calls": 2,
+      "self_seconds": 4.5962000000000005e-05
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 4.0738e-05,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 344,
+      "primitive_calls": 10,
+      "self_seconds": 4.0738e-05
+    },
+    {
+      "calls": 161,
+      "cumulative_seconds": 3.6635000000000004e-05,
+      "filename": "~",
+      "function": "<method 'end' of 're.Match' objects>",
+      "line": 0,
+      "primitive_calls": 161,
+      "self_seconds": 3.6635000000000004e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 6.393e-05,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_compile_info",
+      "line": 511,
+      "primitive_calls": 2,
+      "self_seconds": 3.4097e-05
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 6.4398e-05,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 296,
+      "primitive_calls": 10,
+      "self_seconds": 3.3599e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.000560966,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "compile",
+      "line": 740,
+      "primitive_calls": 2,
+      "self_seconds": 3.3441e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.000305921,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "parse",
+      "line": 979,
+      "primitive_calls": 2,
+      "self_seconds": 3.3094000000000005e-05
+    },
+    {
+      "calls": 28,
+      "cumulative_seconds": 0.001599942,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 306,
+      "primitive_calls": 28,
+      "self_seconds": 2.8562000000000002e-05
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 7.107600000000001e-05,
+      "filename": "/usr/lib64/python3.11/enum.py",
+      "function": "__and__",
+      "line": 1525,
+      "primitive_calls": 4,
+      "self_seconds": 2.8527000000000003e-05
+    },
+    {
+      "calls": 7,
+      "cumulative_seconds": 0.000345942,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "mkdir",
+      "line": 1111,
+      "primitive_calls": 1,
+      "self_seconds": 2.6644e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 4.3692e-05,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "_write_gzip_header",
+      "line": 240,
+      "primitive_calls": 1,
+      "self_seconds": 2.3392000000000002e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 8.846200000000001e-05,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "__init__",
+      "line": 134,
+      "primitive_calls": 1,
+      "self_seconds": 2.2242e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 0.000289268,
+      "filename": "~",
+      "function": "<method '__exit__' of '_io._IOBase' objects>",
+      "line": 0,
+      "primitive_calls": 2,
+      "self_seconds": 2.1975000000000002e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 2.83e-05,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "_fixupParents",
+      "line": 1378,
+      "primitive_calls": 1,
+      "self_seconds": 2.1175e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 479.77204811900003,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "search_workloads",
+      "line": 365,
+      "primitive_calls": 2,
+      "self_seconds": 2.0419000000000002e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.006085877,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "clear_parameter_cost_cache",
+      "line": 23,
+      "primitive_calls": 1,
+      "self_seconds": 2.0293e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 5.4936000000000004e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "_parse_args",
+      "line": 484,
+      "primitive_calls": 2,
+      "self_seconds": 2.0268e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 2.2825000000000003e-05,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__init__",
+      "line": 231,
+      "primitive_calls": 2,
+      "self_seconds": 1.9139e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 3.2724e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "parse_parts",
+      "line": 56,
+      "primitive_calls": 2,
+      "self_seconds": 1.8998e-05
+    },
+    {
+      "calls": 8,
+      "cumulative_seconds": 2.9235e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "__str__",
+      "line": 536,
+      "primitive_calls": 8,
+      "self_seconds": 1.7704000000000002e-05
+    },
+    {
+      "calls": 30,
+      "cumulative_seconds": 2.3395000000000002e-05,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__getitem__",
+      "line": 168,
+      "primitive_calls": 30,
+      "self_seconds": 1.7692000000000003e-05
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 2.515e-05,
+      "filename": "/usr/lib64/python3.11/enum.py",
+      "function": "__call__",
+      "line": 688,
+      "primitive_calls": 4,
+      "self_seconds": 1.7533e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.00011584300000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "_result_interval",
+      "line": 55,
+      "primitive_calls": 1,
+      "self_seconds": 1.6809e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.0028993060000000004,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "write",
+      "line": 272,
+      "primitive_calls": 1,
+      "self_seconds": 1.6538e-05
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 1.9203000000000002e-05,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "getwidth",
+      "line": 178,
+      "primitive_calls": 2,
+      "self_seconds": 1.6127e-05
+    },
+    {
+      "calls": 14,
+      "cumulative_seconds": 1.5408000000000002e-05,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__next",
+      "line": 240,
+      "primitive_calls": 14,
+      "self_seconds": 1.5408000000000002e-05
+    },
+    {
+      "calls": 40,
+      "cumulative_seconds": 1.5127000000000001e-05,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 105,
+      "primitive_calls": 40,
+      "self_seconds": 1.5127000000000001e-05
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 2.082e-05,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "_escape",
+      "line": 376,
+      "primitive_calls": 5,
+      "self_seconds": 1.4827e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.000624754,
+      "filename": "/usr/lib64/python3.11/re/__init__.py",
+      "function": "match",
+      "line": 163,
+      "primitive_calls": 1,
+      "self_seconds": 1.4785000000000002e-05
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 1.8241e-05,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_optimize_charset",
+      "line": 243,
+      "primitive_calls": 3,
+      "self_seconds": 1.4495000000000001e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 7.9233e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "_make_child",
+      "line": 530,
+      "primitive_calls": 2,
+      "self_seconds": 1.4358e-05
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 1.9643e-05,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "__init__",
+      "line": 1447,
+      "primitive_calls": 1,
+      "self_seconds": 1.4132000000000001e-05
+    },
+    {
+      "calls": 12,
+      "cumulative_seconds": 1.7399e-05,
+      "filename": "/usr/lib64/python3.11/enum.py",
+      "function": "_get_value",
+      "line": 1507,
+      "primitive_calls": 12,
+      "self_seconds": 1.3820000000000002e-05
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 1.2659e-05,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<listcomp>",
+      "line": 368,
+      "primitive_calls": 2,
+      "self_seconds": 1.2659e-05
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 1.2574e-05,
+      "filename": "~",
+      "function": "<method 'encode' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 3,
+      "self_seconds": 1.2574e-05
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 0.014154970000000001,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/common.py",
+      "function": "canonical",
+      "line": 18,
+      "primitive_calls": 5,
+      "self_seconds": 1.2436000000000001e-05
+    },
+    {
+      "calls": 6,
+      "cumulative_seconds": 1.2753000000000001e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "_cparts",
+      "line": 569,
+      "primitive_calls": 6,
+      "self_seconds": 1.1979e-05
+    },
+    {
+      "calls": 7,
+      "cumulative_seconds": 1.8404000000000002e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "parent",
+      "line": 777,
+      "primitive_calls": 7,
+      "self_seconds": 1.1494e-05
+    },
+    {
+      "calls": 9,
+      "cumulative_seconds": 1.4186000000000001e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "_from_parsed_parts",
+      "line": 515,
+      "primitive_calls": 9,
+      "self_seconds": 1.1248000000000001e-05
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 9.988e-06,
+      "filename": "~",
+      "function": "<built-in method sys.intern>",
+      "line": 0,
+      "primitive_calls": 4,
+      "self_seconds": 9.988e-06
+    },
+    {
+      "calls": 8,
+      "cumulative_seconds": 3.8685e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "__fspath__",
+      "line": 546,
+      "primitive_calls": 8,
+      "self_seconds": 9.450000000000001e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 0.000267293,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "close",
+      "line": 327,
+      "primitive_calls": 1,
+      "self_seconds": 8.995000000000001e-06
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 1.1531e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "_format_parsed_parts",
+      "line": 523,
+      "primitive_calls": 5,
+      "self_seconds": 8.266e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 8.833e-06,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_compile_charset",
+      "line": 216,
+      "primitive_calls": 3,
+      "self_seconds": 7.943e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 1.326e-05,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "__post_init__",
+      "line": 40,
+      "primitive_calls": 1,
+      "self_seconds": 7.72e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 7.617e-06,
+      "filename": "/usr/lib64/python3.11/enum.py",
+      "function": "__new__",
+      "line": 1095,
+      "primitive_calls": 4,
+      "self_seconds": 7.617e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 1.3744000000000001e-05,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "_init_write",
+      "line": 232,
+      "primitive_calls": 1,
+      "self_seconds": 7.551e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 1.4716000000000001e-05,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "write32u",
+      "line": 70,
+      "primitive_calls": 3,
+      "self_seconds": 7.1880000000000005e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 6.874000000000001e-06,
+      "filename": "~",
+      "function": "<built-in method _struct.pack>",
+      "line": 0,
+      "primitive_calls": 3,
+      "self_seconds": 6.874000000000001e-06
+    },
+    {
+      "calls": 12,
+      "cumulative_seconds": 1.8799e-05,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "get",
+      "line": 261,
+      "primitive_calls": 12,
+      "self_seconds": 6.843e-06
+    },
+    {
+      "calls": 22,
+      "cumulative_seconds": 6.815000000000001e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 70,
+      "primitive_calls": 22,
+      "self_seconds": 6.815000000000001e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 6.707e-06,
+      "filename": "~",
+      "function": "<built-in method zlib.compressobj>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 6.707e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 1.9936e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "__eq__",
+      "line": 578,
+      "primitive_calls": 3,
+      "self_seconds": 6.5340000000000005e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 6.28e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__init__",
+      "line": 77,
+      "primitive_calls": 2,
+      "self_seconds": 6.28e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 5.553e-06,
+      "filename": "/tmp/plena-round2-venv/lib64/python3.11/site-packages/numpy/lib/_version.py",
+      "function": "<listcomp>",
+      "line": 60,
+      "primitive_calls": 1,
+      "self_seconds": 5.553e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 9.8955e-05,
+      "filename": "/usr/lib64/python3.11/re/__init__.py",
+      "function": "search",
+      "line": 173,
+      "primitive_calls": 1,
+      "self_seconds": 5.232e-06
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 5.039e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__init__",
+      "line": 113,
+      "primitive_calls": 5,
+      "self_seconds": 5.039e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 5.285e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "fix_flags",
+      "line": 963,
+      "primitive_calls": 2,
+      "self_seconds": 4.993e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 7.126e-06,
+      "filename": "~",
+      "function": "<method 'cache_info' of 'functools._lru_cache_wrapper' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 4.9100000000000004e-06
+    },
+    {
+      "calls": 11,
+      "cumulative_seconds": 6.497000000000001e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__len__",
+      "line": 164,
+      "primitive_calls": 11,
+      "self_seconds": 4.8660000000000005e-06
+    },
+    {
+      "calls": 6,
+      "cumulative_seconds": 4.6350000000000005e-06,
+      "filename": "~",
+      "function": "<method 'rfind' of 'str' objects>",
+      "line": 0,
+      "primitive_calls": 6,
+      "self_seconds": 4.6350000000000005e-06
+    },
+    {
+      "calls": 9,
+      "cumulative_seconds": 5.925e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "append",
+      "line": 176,
+      "primitive_calls": 9,
+      "self_seconds": 4.577e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 5.1530000000000005e-06,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "isstring",
+      "line": 570,
+      "primitive_calls": 4,
+      "self_seconds": 4.5110000000000005e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 4.999e-06,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_get_literal_prefix",
+      "line": 436,
+      "primitive_calls": 2,
+      "self_seconds": 4.373e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 6.3045e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "open",
+      "line": 1036,
+      "primitive_calls": 1,
+      "self_seconds": 4.299000000000001e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 8.3214e-05,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "__truediv__",
+      "line": 765,
+      "primitive_calls": 2,
+      "self_seconds": 3.9810000000000005e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 7.193e-06,
+      "filename": "<frozen posixpath>",
+      "function": "basename",
+      "line": 140,
+      "primitive_calls": 1,
+      "self_seconds": 3.978e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 3.88e-06,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "__init__",
+      "line": 1267,
+      "primitive_calls": 4,
+      "self_seconds": 3.88e-06
+    },
+    {
+      "calls": 10,
+      "cumulative_seconds": 3.846e-06,
+      "filename": "~",
+      "function": "<built-in method __new__ of type object at 0x7fa96e8d3540>",
+      "line": 0,
+      "primitive_calls": 10,
+      "self_seconds": 3.846e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 8.946e-06,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_simple",
+      "line": 398,
+      "primitive_calls": 3,
+      "self_seconds": 3.5490000000000002e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 5.01e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round2/model.py",
+      "function": "__post_init__",
+      "line": 126,
+      "primitive_calls": 1,
+      "self_seconds": 3.4150000000000003e-06
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 4.222e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "tell",
+      "line": 293,
+      "primitive_calls": 5,
+      "self_seconds": 3.4e-06
+    },
+    {
+      "calls": 6,
+      "cumulative_seconds": 3.372e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "<genexpr>",
+      "line": 68,
+      "primitive_calls": 6,
+      "self_seconds": 3.372e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 3.7090000000000004e-06,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_get_charset_prefix",
+      "line": 467,
+      "primitive_calls": 2,
+      "self_seconds": 3.202e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 3.1900000000000004e-06,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "__init__",
+      "line": 795,
+      "primitive_calls": 1,
+      "self_seconds": 3.1900000000000004e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 2.841e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/search.py",
+      "function": "<genexpr>",
+      "line": 369,
+      "primitive_calls": 4,
+      "self_seconds": 2.841e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 2.7660000000000003e-06,
+      "filename": "~",
+      "function": "<built-in method _sre.compile>",
+      "line": 0,
+      "primitive_calls": 2,
+      "self_seconds": 2.7660000000000003e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 2.5460000000000003e-06,
+      "filename": "~",
+      "function": "<built-in method math.comb>",
+      "line": 0,
+      "primitive_calls": 3,
+      "self_seconds": 2.5460000000000003e-06
+    },
+    {
+      "calls": 8,
+      "cumulative_seconds": 2.539e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "match",
+      "line": 256,
+      "primitive_calls": 8,
+      "self_seconds": 2.539e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 2.5120000000000003e-06,
+      "filename": "~",
+      "function": "<method 'find' of 'bytearray' objects>",
+      "line": 0,
+      "primitive_calls": 3,
+      "self_seconds": 2.5120000000000003e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 2.4500000000000003e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "<lambda>",
+      "line": 58,
+      "primitive_calls": 3,
+      "self_seconds": 2.4500000000000003e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 2.161e-06,
+      "filename": "/usr/lib64/python3.11/gzip.py",
+      "function": "closed",
+      "line": 323,
+      "primitive_calls": 3,
+      "self_seconds": 2.161e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 2.119e-06,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "splitroot",
+      "line": 239,
+      "primitive_calls": 2,
+      "self_seconds": 2.119e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 2.015e-06,
+      "filename": "~",
+      "function": "<method 'search' of 're.Pattern' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 2.015e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 2.4610000000000002e-06,
+      "filename": "/usr/lib64/python3.11/_compression.py",
+      "function": "_check_not_closed",
+      "line": 12,
+      "primitive_calls": 1,
+      "self_seconds": 1.901e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 2.2640000000000003e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "groups",
+      "line": 83,
+      "primitive_calls": 4,
+      "self_seconds": 1.813e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 2.3210000000000003e-06,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "_checkLevel",
+      "line": 202,
+      "primitive_calls": 1,
+      "self_seconds": 1.7830000000000001e-06
+    },
+    {
+      "calls": 6,
+      "cumulative_seconds": 1.777e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "<genexpr>",
+      "line": 70,
+      "primitive_calls": 6,
+      "self_seconds": 1.777e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 1.7640000000000002e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "<listcomp>",
+      "line": 57,
+      "primitive_calls": 1,
+      "self_seconds": 1.7640000000000002e-06
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 1.743e-06,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "join_parsed_parts",
+      "line": 94,
+      "primitive_calls": 2,
+      "self_seconds": 1.743e-06
+    },
+    {
+      "calls": 6,
+      "cumulative_seconds": 1.438e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "<genexpr>",
+      "line": 69,
+      "primitive_calls": 6,
+      "self_seconds": 1.438e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 2.216e-06,
+      "filename": "<string>",
+      "function": "<lambda>",
+      "line": 1,
+      "primitive_calls": 1,
+      "self_seconds": 1.308e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 1.28e-06,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "getEffectiveLevel",
+      "line": 1720,
+      "primitive_calls": 1,
+      "self_seconds": 1.28e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 1.2650000000000002e-06,
+      "filename": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round3/sensitivity.py",
+      "function": "<genexpr>",
+      "line": 59,
+      "primitive_calls": 4,
+      "self_seconds": 1.2650000000000002e-06
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 1.6030000000000002e-06,
+      "filename": "<frozen posixpath>",
+      "function": "_get_sep",
+      "line": 41,
+      "primitive_calls": 1,
+      "self_seconds": 1.195e-06
+    },
+    {
+      "calls": 4,
+      "cumulative_seconds": 1.133e-06,
+      "filename": "/usr/lib64/python3.11/re/_compiler.py",
+      "function": "_get_iscased",
+      "line": 428,
+      "primitive_calls": 4,
+      "self_seconds": 1.133e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 1.1180000000000001e-06,
+      "filename": "/usr/lib64/python3.11/re/_parser.py",
+      "function": "__setitem__",
+      "line": 172,
+      "primitive_calls": 3,
+      "self_seconds": 1.1180000000000001e-06
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 9.78e-07,
+      "filename": "~",
+      "function": "<method 'bit_count' of 'int' objects>",
+      "line": 0,
+      "primitive_calls": 3,
+      "self_seconds": 9.78e-07
+    },
+    {
+      "calls": 5,
+      "cumulative_seconds": 9.240000000000001e-07,
+      "filename": "~",
+      "function": "<built-in method builtins.ord>",
+      "line": 0,
+      "primitive_calls": 5,
+      "self_seconds": 9.240000000000001e-07
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 8.480000000000001e-07,
+      "filename": "~",
+      "function": "<method 'group' of 're.Match' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 8.480000000000001e-07
+    },
+    {
+      "calls": 3,
+      "cumulative_seconds": 7.94e-07,
+      "filename": "~",
+      "function": "<built-in method posix.fspath>",
+      "line": 0,
+      "primitive_calls": 3,
+      "self_seconds": 7.94e-07
+    },
+    {
+      "calls": 6,
+      "cumulative_seconds": 7.74e-07,
+      "filename": "/usr/lib64/python3.11/pathlib.py",
+      "function": "casefold_parts",
+      "line": 257,
+      "primitive_calls": 6,
+      "self_seconds": 7.74e-07
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 6.180000000000001e-07,
+      "filename": "~",
+      "function": "<method 'endswith' of 'bytes' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 6.180000000000001e-07
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 5.280000000000001e-07,
+      "filename": "~",
+      "function": "<method 'disable' of '_lsprof.Profiler' objects>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 5.280000000000001e-07
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 5.01e-07,
+      "filename": "/usr/lib64/python3.11/logging/__init__.py",
+      "function": "disable",
+      "line": 1319,
+      "primitive_calls": 1,
+      "self_seconds": 5.01e-07
+    },
+    {
+      "calls": 2,
+      "cumulative_seconds": 3.75e-07,
+      "filename": "~",
+      "function": "<method 'reverse' of 'list' objects>",
+      "line": 0,
+      "primitive_calls": 2,
+      "self_seconds": 3.75e-07
+    },
+    {
+      "calls": 1,
+      "cumulative_seconds": 2.91e-07,
+      "filename": "~",
+      "function": "<built-in method builtins.chr>",
+      "line": 0,
+      "primitive_calls": 1,
+      "self_seconds": 2.91e-07
+    }
+  ],
+  "physical_search_source_unchanged": true,
+  "receipt_note": "Original broad manifest guard failed after complete .prof/certificate save because report/evaluation files changed. Executed numeric sources match their before-run hashes.",
+  "result": {
+    "delta": 0.02464350883550348,
+    "delta_lower": -0.008022101344071997,
+    "delta_upper": 0.03292977618133963,
+    "evaluated_points": 40,
+    "gap_pct": 5.902118528737188,
+    "hetero_design": "{\"acc_banks\":[4,8],\"acc_bytes\":[16384,81920],\"cores\":[{\"pk\":128,\"pm\":1,\"pn\":32},{\"pk\":128,\"pm\":2,\"pn\":32}],\"diagnostic_unbounded_w\":false,\"flows\":[\"WS\",\"WS\"],\"label\":\"\",\"landing_mode\":\"private\",\"landing_pool_bytes\":0,\"records\":8,\"total_macs\":12288,\"vector_lanes\":[8,56],\"w_banks\":[32,32],\"w_bytes\":[24576,16384],\"x_banks\":[4,20],\"x_bytes\":[2048,10240],\"z_bytes\":[32768,360448]}",
+    "hetero_family": "4+2",
+    "hetero_ms": 5.6884430718248,
+    "proof_complete": false,
+    "simulator_calls": 2880,
+    "single_design": "{\"acc_banks\":[12],\"acc_bytes\":[98304],\"cores\":[{\"pk\":128,\"pm\":3,\"pn\":32}],\"diagnostic_unbounded_w\":false,\"flows\":[\"WS\"],\"label\":\"\",\"landing_mode\":\"private\",\"landing_pool_bytes\":0,\"records\":8,\"total_macs\":12288,\"vector_lanes\":[64],\"w_banks\":[64],\"w_bytes\":[40960],\"x_banks\":[24],\"x_bytes\":[12288],\"z_bytes\":[393216]}",
+    "single_ms": 5.551631394502909
+  },
+  "sample": [
+    15,
+    16,
+    2,
+    520,
+    1
+  ],
+  "scope": "Diagnostic full two-search/two-replay Sobol smoke with old initial witnesses; not final Sobol sampling output",
+  "source_sha256": {
+    "research/moe_dispatch/round3/__init__.py": "9d342374a9b3e61ff2896733395cd065178f6343187c8419f526b144d9cf89a4",
+    "research/moe_dispatch/round3/ablation.py": "a4ea415d94ba4b18af2e3bc00e9aca3b1a772b0363a0f73bf243ac5e58382436",
+    "research/moe_dispatch/round3/bounds.py": "cbb7d0b538a8b949f15294c7c1671fb241372bc8c807cc416adcb85c613d14ca",
+    "research/moe_dispatch/round3/common.py": "4d93bfb9cb72638a7ef842c429e489a534cd3f63f34a36a97adc290949ee3f39",
+    "research/moe_dispatch/round3/config.py": "86b4075d9e86d8f41f40f796cf283bda492408ab2c159f0e71dc497c3d6da3dc",
+    "research/moe_dispatch/round3/dse.py": "a37f7dab5cb62a93293c4ac9b55729db72728e86415eddefec22cd3bbddd6d20",
+    "research/moe_dispatch/round3/evaluations.py": "82905bc5e4a20c5413fefdf2b8163e705896d252d68911beda83cea67678f88c",
+    "research/moe_dispatch/round3/execute.py": "bbcf35a5a1ca33c1f3c44d0d904e506497cd501e9568e189852d31110e4c1703",
+    "research/moe_dispatch/round3/finalize_dse.py": "83ecae15f6b0aa059ec817aaaa5351ed6660739fab5f3f6332766168c34c7ec1",
+    "research/moe_dispatch/round3/incumbent_audit.py": "0d69e317796b21784c8933c5b54a7e0d16543afaf1723f9c4bda31ae47389978",
+    "research/moe_dispatch/round3/model.py": "423f98540a1480d65965826445ce7d86cc2097584c42c7d03c154e5ce209b814",
+    "research/moe_dispatch/round3/optimizer.py": "22eef9b01145b8f089ca218005c625a532b7c35200d271760d1ac8a8da591734",
+    "research/moe_dispatch/round3/oracle_replay.py": "ef787a5be170bc7143a352b7eff6a13231b88e631727c70bdb1d22e6dba6bd5d",
+    "research/moe_dispatch/round3/report.py": "8494d01e1fe4a7980d2d0e7b5d663603a3ae24e44274393ca95604074a0ce231",
+    "research/moe_dispatch/round3/reproduce.py": "f6a3d268b8070695d75b711900eb63e624494a2cedf8ec73db130cb89ec1cee1",
+    "research/moe_dispatch/round3/runtime.py": "f2170e6923788228b99cdc166bef912aeae41148fa5bf2d02c6ba7302af1831b",
+    "research/moe_dispatch/round3/search.py": "4c74c81ad27a35a35a620c8f65e258c8410212eeee7e418207da4fe117e1ca70",
+    "research/moe_dispatch/round3/sensitivity.py": "1e34af2ac4f18dcfb17eb17b5507085543317972812d9393eacb5ebbafe6c115",
+    "research/moe_dispatch/round3/test_dse_reporting.py": "18f80ee1d79036e300ef1b411795402b96258518d65989968bd25127dfc7878f",
+    "research/moe_dispatch/round3/test_evaluations.py": "b62ee63af4ccccd92db0d638e455c1cecfd63567d244227d27b3f1996920c3de",
+    "research/moe_dispatch/round3/test_model_runtime.py": "c1af63de74585d444d08c56c150047e388240ed7eb3553feff83b2bf7a123650",
+    "research/moe_dispatch/round3/test_oracle_replay.py": "4d3dc589e2bfbb96e07bb7c4b19ef1d2b3aed5c30b0866cc2e6858bd3c62ecd3",
+    "research/moe_dispatch/round3/test_search.py": "bf6dc9d3416ca30a61c987f3df16160f7c1b7b2db40bdebda3b38916e953460e",
+    "research/moe_dispatch/round3/test_sensitivity.py": "685180b8c18503e88e9b723f9658e47bf9826bfc5ae1513b1d3869eee1b2342a",
+    "research/moe_dispatch/round3/test_validate.py": "0f2a6ec65846a755031b73c4484e7ef24bc87079234e20bd4e449d058311bc22",
+    "research/moe_dispatch/round3/validate.py": "271724fcb3c17ba3b8c1e0a3d222e9f4ade00fa8d84078a2ffc25588a05a7bd9"
+  },
+  "total_calls": 661599037,
+  "total_primitive_calls": 649366341,
+  "total_profiled_seconds": 475.75942067800014
+}

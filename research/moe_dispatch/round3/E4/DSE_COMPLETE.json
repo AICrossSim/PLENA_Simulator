@@ -1,0 +1,28 @@
+{
+  "all20certificates_have18development_windows": true,
+  "all20fullsearchrepetitions_identical": true,
+  "development_ids": [
+    "joint_test_bfcl_b2_l13_s7",
+    "joint_test_bfcl_b4_l13_s7",
+    "joint_test_bfcl_b8_l13_s7",
+    "joint_test_bfcl_b16_l13_s7",
+    "joint_test_gpqa_b2_l13_s7",
+    "joint_test_gpqa_b4_l13_s7",
+    "joint_test_gpqa_b8_l13_s7",
+    "joint_test_gpqa_b16_l13_s7",
+    "joint_test_swe_b2_l13_s7",
+    "joint_test_swe_b4_l13_s7",
+    "joint_test_swe_b8_l13_s7",
+    "joint_test_swe_b16_l13_s7",
+    "v3_captured_mixed_development_t64_l13",
+    "v3_captured_mixed_development_t96_l13",
+    "v3_captured_mixed_development_t128_l13",
+    "v3_captured_mixed_development_swe_t64_l13",
+    "v3_captured_mixed_development_swe_t96_l13",
+    "v3_captured_mixed_development_swe_t128_l13"
+  ],
+  "jointproofAandcommonrobustreference_reported": true,
+  "numeric_hardware_selected_before_heldout": true,
+  "private_and_shared_slots_separated": true,
+  "selection_uses_equal_C0_C1_witness_union": true
+}
