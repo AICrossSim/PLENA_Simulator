@@ -1,0 +1,13 @@
+{
+  "HBM_rates": "decimal GB/s; 1 B/cycle at 1GHz =1GB/s; MiB=2**20B",
+  "capacity": "simultaneous task-reservation envelope, a sufficient provisioning policy, not minimum-SRAM proof",
+  "exact_8_stack_rate": 9832,
+  "feasibility": "only requested <=8 HBM3E-stack bandwidth criterion, not packaging, capacity, area or power validation",
+  "last_sweep_point": 9830,
+  "nominal_stack_GBps": {
+    "HBM2_model": 256,
+    "HBM3": 819,
+    "HBM3E": 1229
+  },
+  "peak_ports": "maximum simultaneous private phase-fluid demand envelope; issue_peak columns give unsmoothed issue interface demand"
+}
