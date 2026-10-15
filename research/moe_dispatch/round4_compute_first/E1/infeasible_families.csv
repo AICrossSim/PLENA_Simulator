@@ -1,0 +1,5 @@
+pn_cap,family,total_macs,status,reason
+256,hetero21,65536,no_exact_integer_split,65536 is not divisible by 3; no rounding is permitted
+256,hetero51,65536,no_exact_integer_split,65536 is not divisible by 6; no rounding is permitted
+512,hetero21,65536,no_exact_integer_split,65536 is not divisible by 3; no rounding is permitted
+512,hetero51,65536,no_exact_integer_split,65536 is not divisible by 6; no rounding is permitted

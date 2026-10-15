@@ -1,0 +1,1808 @@
+{
+  "pn256_hetero11": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 64
+      },
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_hetero11",
+    "dev_GM_cycles": 18198.15564931631,
+    "family": "hetero11",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      32768,
+      32768
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 64
+        },
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn256_hetero11",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        82944,
+        82944
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn256_hetero31": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 96
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_hetero31",
+    "dev_GM_cycles": 18610.389996137015,
+    "family": "hetero31",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      49152,
+      16384
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 96
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn256_hetero31",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        48,
+        16
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        115712,
+        50176
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn256_hetero71": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 112
+      },
+      {
+        "pk": 64,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_hetero71",
+    "dev_GM_cycles": 19460.438158873603,
+    "family": "hetero71",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      57344,
+      8192
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 112
+        },
+        {
+          "pk": 64,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn256_hetero71",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        55,
+        9
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        132096,
+        33792
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn256_homo2": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_homo2",
+    "dev_GM_cycles": 18168.347956972357,
+    "family": "homo2",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      32768,
+      32768
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn256_homo2",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        82944,
+        82944
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn256_homo4": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_homo4",
+    "dev_GM_cycles": 17846.25797890462,
+    "family": "homo4",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK",
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      16384,
+      16384,
+      16384,
+      16384
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "acc_bytes": [
+        17408,
+        17408,
+        17408,
+        17408
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK",
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn256_homo4",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "w_banks": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "w_bytes": [
+        41984,
+        41984,
+        41984,
+        41984
+      ],
+      "x_banks": [
+        6,
+        6,
+        6,
+        6
+      ],
+      "x_bytes": [
+        9216,
+        9216,
+        9216,
+        9216
+      ],
+      "z_bytes": [
+        67584,
+        67584,
+        67584,
+        67584
+      ]
+    }
+  },
+  "pn256_single": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_single",
+    "dev_GM_cycles": 20239.21797070586,
+    "family": "single",
+    "flows": [
+      "PER_TASK"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK"
+      ],
+      "label": "pn256_single",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn256_single_fixed": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_single_fixed",
+    "dev_GM_cycles": 20847.58426027215,
+    "family": "single_fixed",
+    "flows": [
+      "IS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "IS"
+      ],
+      "label": "pn256_single_fixed",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn256_single_is": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_single_is",
+    "dev_GM_cycles": 20847.58426027215,
+    "family": "single_is",
+    "flows": [
+      "IS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "IS"
+      ],
+      "label": "pn256_single_is",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn256_single_os": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 256
+      }
+    ],
+    "design": "pn256_single_os",
+    "dev_GM_cycles": 32196.81973850703,
+    "family": "single_os",
+    "flows": [
+      "OS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        69632
+      ],
+      "cores": [
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 256
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "OS"
+      ],
+      "label": "pn256_single_os",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        34816
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn256_single_per_task": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_single_per_task",
+    "dev_GM_cycles": 20239.21797070586,
+    "family": "single_per_task",
+    "flows": [
+      "PER_TASK"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK"
+      ],
+      "label": "pn256_single_per_task",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn256_single_pertask": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn256_single_pertask",
+    "dev_GM_cycles": 20239.21797070586,
+    "family": "single_pertask",
+    "flows": [
+      "PER_TASK"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK"
+      ],
+      "label": "pn256_single_pertask",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn256_single_ws": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 256
+      }
+    ],
+    "design": "pn256_single_ws",
+    "dev_GM_cycles": 61104.248576109974,
+    "family": "single_ws",
+    "flows": [
+      "WS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 256,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        69632
+      ],
+      "cores": [
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 256
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "WS"
+      ],
+      "label": "pn256_single_ws",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        34816
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_hetero11": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 64
+      },
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_hetero11",
+    "dev_GM_cycles": 18198.15564931631,
+    "family": "hetero11",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      32768,
+      32768
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 64
+        },
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn512_hetero11",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        82944,
+        82944
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn512_hetero31": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 96
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_hetero31",
+    "dev_GM_cycles": 18610.389996137015,
+    "family": "hetero31",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      49152,
+      16384
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 96
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn512_hetero31",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        48,
+        16
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        115712,
+        50176
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn512_hetero71": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 112
+      },
+      {
+        "pk": 64,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_hetero71",
+    "dev_GM_cycles": 19460.438158873603,
+    "family": "hetero71",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      57344,
+      8192
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 112
+        },
+        {
+          "pk": 64,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn512_hetero71",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        55,
+        9
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        132096,
+        33792
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn512_homo2": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_homo2",
+    "dev_GM_cycles": 18168.347956972357,
+    "family": "homo2",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      32768,
+      32768
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        6,
+        6
+      ],
+      "acc_bytes": [
+        33792,
+        33792
+      ],
+      "cores": [
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn512_homo2",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        32,
+        32
+      ],
+      "w_banks": [
+        32,
+        32
+      ],
+      "w_bytes": [
+        82944,
+        82944
+      ],
+      "x_banks": [
+        12,
+        12
+      ],
+      "x_bytes": [
+        18432,
+        18432
+      ],
+      "z_bytes": [
+        137216,
+        137216
+      ]
+    }
+  },
+  "pn512_homo4": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      },
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_homo4",
+    "dev_GM_cycles": 17846.25797890462,
+    "family": "homo4",
+    "flows": [
+      "PER_TASK",
+      "PER_TASK",
+      "PER_TASK",
+      "PER_TASK"
+    ],
+    "macs": [
+      16384,
+      16384,
+      16384,
+      16384
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "acc_bytes": [
+        17408,
+        17408,
+        17408,
+        17408
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        },
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK",
+        "PER_TASK",
+        "PER_TASK",
+        "PER_TASK"
+      ],
+      "label": "pn512_homo4",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "w_banks": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "w_bytes": [
+        41984,
+        41984,
+        41984,
+        41984
+      ],
+      "x_banks": [
+        6,
+        6,
+        6,
+        6
+      ],
+      "x_bytes": [
+        9216,
+        9216,
+        9216,
+        9216
+      ],
+      "z_bytes": [
+        67584,
+        67584,
+        67584,
+        67584
+      ]
+    }
+  },
+  "pn512_single": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_single",
+    "dev_GM_cycles": 20239.21797070586,
+    "family": "single",
+    "flows": [
+      "PER_TASK"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK"
+      ],
+      "label": "pn512_single",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_single_fixed": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_single_fixed",
+    "dev_GM_cycles": 20847.58426027215,
+    "family": "single_fixed",
+    "flows": [
+      "IS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "IS"
+      ],
+      "label": "pn512_single_fixed",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_single_is": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_single_is",
+    "dev_GM_cycles": 20847.58426027215,
+    "family": "single_is",
+    "flows": [
+      "IS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "IS"
+      ],
+      "label": "pn512_single_is",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_single_os": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 256,
+        "pm": 1,
+        "pn": 256
+      }
+    ],
+    "design": "pn512_single_os",
+    "dev_GM_cycles": 32196.81973850703,
+    "family": "single_os",
+    "flows": [
+      "OS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        69632
+      ],
+      "cores": [
+        {
+          "pk": 256,
+          "pm": 1,
+          "pn": 256
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "OS"
+      ],
+      "label": "pn512_single_os",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        34816
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_single_per_task": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_single_per_task",
+    "dev_GM_cycles": 20239.21797070586,
+    "family": "single_per_task",
+    "flows": [
+      "PER_TASK"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK"
+      ],
+      "label": "pn512_single_per_task",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_single_pertask": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 512,
+        "pm": 1,
+        "pn": 128
+      }
+    ],
+    "design": "pn512_single_pertask",
+    "dev_GM_cycles": 20239.21797070586,
+    "family": "single_pertask",
+    "flows": [
+      "PER_TASK"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        68608
+      ],
+      "cores": [
+        {
+          "pk": 512,
+          "pm": 1,
+          "pn": 128
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "PER_TASK"
+      ],
+      "label": "pn512_single_pertask",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        35840
+      ],
+      "z_bytes": [
+        274432
+      ]
+    }
+  },
+  "pn512_single_ws": {
+    "capacity_reason": "",
+    "cores": [
+      {
+        "pk": 128,
+        "pm": 1,
+        "pn": 512
+      }
+    ],
+    "design": "pn512_single_ws",
+    "dev_GM_cycles": 53872.98487968376,
+    "family": "single_ws",
+    "flows": [
+      "WS"
+    ],
+    "macs": [
+      65536
+    ],
+    "pn_cap": 512,
+    "real_capacity_feasible": true,
+    "real_sram_design": {
+      "acc_banks": [
+        12
+      ],
+      "acc_bytes": [
+        71680
+      ],
+      "cores": [
+        {
+          "pk": 128,
+          "pm": 1,
+          "pn": 512
+        }
+      ],
+      "diagnostic_unbounded_w": false,
+      "flows": [
+        "WS"
+      ],
+      "label": "pn512_single_ws",
+      "landing_mode": "private",
+      "landing_pool_bytes": 0,
+      "records": 8,
+      "total_macs": 65536,
+      "vector_lanes": [
+        64
+      ],
+      "w_banks": [
+        64
+      ],
+      "w_bytes": [
+        165888
+      ],
+      "x_banks": [
+        24
+      ],
+      "x_bytes": [
+        34816
+      ],
+      "z_bytes": [
+        272384
+      ]
+    }
+  }
+}

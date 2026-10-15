@@ -1,0 +1,28 @@
+{
+  "illegal_families": {
+    "hetero21": "65536 is not divisible by 3",
+    "hetero51": "65536 is not divisible by 6"
+  },
+  "inputs_hash": "4d1fc9142babb091199c49a31028220203230eeaf2ecd3845a66e175c7392e3e",
+  "objective": "geometric mean across all 18 development windows",
+  "optimality_scope": "exhaustive declared shape/flow grid, fixed deterministic scheduler; not schedule/PPA optimum",
+  "runs": [
+    {
+      "candidates": 28228,
+      "pn_cap": 256,
+      "runs_each": 2,
+      "sha256": "85b4e59ce9fcdcdb5cb49d04575ae543e97a0deaf59713886eab005bcf929035",
+      "wall_seconds": 101.42716526053846,
+      "windows": 18
+    },
+    {
+      "candidates": 32300,
+      "pn_cap": 512,
+      "runs_each": 2,
+      "sha256": "0fa9317c422addb701cc4ac2e32040ad69e9ad97ed2c5f2c7e92ffa6f4b948cb",
+      "wall_seconds": 129.85481653735042,
+      "windows": 18
+    }
+  ],
+  "total_macs": 65536
+}

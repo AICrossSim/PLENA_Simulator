@@ -1,0 +1,5 @@
+{
+  "uncompressed_sha256": "680f99f408a6db1f749f08ab3cc8752bd81a72dc997ed7a0626e24844c0d7e3e",
+  "source": "round2/results/E0/frozen_inputs.json",
+  "scope": "exact full 18 development and 135 heldout workload dictionaries"
+}
