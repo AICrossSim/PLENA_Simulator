@@ -54,6 +54,7 @@ def run():
                  for n,s,r in zip(names,stores,needs)])]
     doc.append('## 3. 四项指标与完整系统回放')
     doc.append('下表同时列出同构二核和四核：纯计算最优不代表有限供数下也最优。“取数BW/有效FLOPs”使用理想重叠估计；完整系统列是有限容量/端口/HBM/fixed派工的独立事件仿真，两者不得混用。')
+    doc.append('模式A的Tc包含SRAM端口服务，因此A表中的“计算”表示片上服务一侧受限，不能据此称为MAC阵列计算受限；具体HBM/W/X/Acc瓶颈已在逐窗口偏差表量化。')
     tr=[]
     for mode in ('B','A'):
         for b in (256,1229):

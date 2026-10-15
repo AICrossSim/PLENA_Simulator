@@ -68,3 +68,14 @@ python -m research.moe_dispatch.round4_compute_first.validate
 ```
 
 提交账本见 `COMMITS.json`（最终归档时写入各阶段真实提交号）。运行凭据/输入与源码哈希见 `PROVENANCE.json`；每点重复凭据见E1/E3的`repeat_checks.json`和DSE表。主表同构基线在开发集选择；E4门槛与系统校准门槛同时要求超过单核、同构2核、同构4核，避免只选较慢的同构作对照；未完成独立校准一律不宣布“架构胜出”。
+
+## 已完成的阶段提交
+
+| 阶段 | 提交 |
+|---|---|
+| E1 | `f5516f46925646cea867e2984096c40fe3e3e34a` |
+| E2 | `d8ce8febd81ae77dc69e78d91393d391df82a3eb` |
+| E3 | `cf409671cab5f8a53fca446adf2064ca9ad9802e` |
+| E4 | `c90cadc6cf35a5e26b489bca5a339c03c50e7b86` |
+
+最后另附一笔复现账本提交，记录上述四笔提交及最终哈希。
