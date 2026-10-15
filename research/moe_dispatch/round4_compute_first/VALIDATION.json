@@ -1,0 +1,29 @@
+{
+  "four_metric_aggregates": 1920,
+  "ledger_rows": 12960,
+  "no_native_datapath_calibration": true,
+  "repeat_points": {
+    "E1": 6480,
+    "E3": 6480
+  },
+  "required_files": [
+    "E1/selected_designs.json",
+    "E1/compute_by_window.csv",
+    "E1/compute_main_table.csv",
+    "E2/sram_requirement.csv",
+    "E2/balance_bandwidth.csv",
+    "E3/four_metrics.csv",
+    "E3/four_metrics_ZH.md",
+    "E3/system_by_window.csv",
+    "E4/crossover.csv",
+    "E4/fig_speedup_vs_bw.pdf",
+    "E4/HETERO_VS_PERTASK_DATAFLOW.md",
+    "REPORT_ZH.md",
+    "README.md"
+  ],
+  "second_third_round_unchanged": true,
+  "selected_designs": 24,
+  "status": "PASS",
+  "tests": "..........                                                               [100%]\n10 passed in 0.75s",
+  "windows": 135
+}
