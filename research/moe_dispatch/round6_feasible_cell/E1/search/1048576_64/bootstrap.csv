@@ -1,0 +1,3 @@
+org,resamples,same_hardware_pct,within_1pct_pct,p95_regret_pct,method
+H+,200,72.0,100.0,0.03199300636858027,"paired source-group bootstrap; feasible upper bounds across complete grid, not exact all-candidate optima"
+P+,200,90.0,100.0,0.025201428199062015,"paired source-group bootstrap; feasible upper bounds across complete grid, not exact all-candidate optima"

@@ -1,0 +1,20 @@
+{
+  "round5_commit": "b095a7de67a0be07802df0fb1fa2c2b3063bdc75",
+  "round5_input_sha256": "af646e97503bebb13c21be1e8b9ea13f104eb5181ad002c2a411b64820056fe6",
+  "digest": "701815e803e3271ab9252e99f4fef5d1850316186c533205c46d67de84a7da90",
+  "counts": {
+    "development": 105,
+    "heldout": 105
+  },
+  "batches": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "windows_per_batch": 15,
+  "b4096": "Distinct original request groups concatenated only after real routing. Source groups overlap across windows; bootstrap original groups."
+}

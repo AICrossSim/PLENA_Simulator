@@ -1,0 +1,11 @@
+{
+  "windows": 15,
+  "schedulers": 4,
+  "repeats": 2,
+  "bitwise_equal": true,
+  "rows_digest": "ce4a390a73e06e4141abb6e7577dc0e13641975a92f173823c54e48a1de8f4d1",
+  "mode": "full_scaled",
+  "bw": 10,
+  "delta": 0.05,
+  "selection_digest": "1ec12b9ffe4bb8535e869792330f4bbdf8b70b0ab906b969bd9f1793c9455bc1"
+}

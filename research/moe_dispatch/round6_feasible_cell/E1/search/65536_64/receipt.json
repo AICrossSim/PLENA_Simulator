@@ -1,0 +1,15 @@
+{
+  "budget": 65536,
+  "chunk": 64,
+  "candidates": 19208,
+  "refined": 31,
+  "windows": 105,
+  "grid_repeats": 2,
+  "grid_bitwise_equal": true,
+  "refined_repeats": 2,
+  "dev_digest": "16ee325eff54fdcf429f28728321cd3e883227721a2a2305ad1ac9e3a3326baa",
+  "seconds": 713.6503447312862,
+  "broadcast_TBps": 10,
+  "lower": "strict relaxation lower bound; refined CP-SAT bounds",
+  "grid_sha256": "2280e1214138f3867889eaa0bcaf89f649093f09d3a0393deb0713abd7cac275"
+}
