@@ -1,0 +1,71 @@
+macs,batch,org,certified_excluded,reason
+65536,64,P,True,A: even feasible-upper-time bandwidth exceeds10
+65536,64,P+,True,A: even feasible-upper-time bandwidth exceeds10
+65536,128,P,True,B: H upper / P strict lower <1.10
+65536,128,P+,True,B: H upper / P strict lower <1.10
+65536,256,P,True,B: H upper / P strict lower <1.10
+65536,256,P+,True,B: H upper / P strict lower <1.10
+65536,512,P,True,B: H upper / P strict lower <1.10
+65536,512,P+,True,B: H upper / P strict lower <1.10
+65536,1024,P,True,B: H upper / P strict lower <1.10
+65536,1024,P+,True,B: H upper / P strict lower <1.10
+65536,2048,P,True,B: H upper / P strict lower <1.10
+65536,2048,P+,True,B: H upper / P strict lower <1.10
+65536,4096,P,True,B: H upper / P strict lower <1.10
+65536,4096,P+,True,B: H upper / P strict lower <1.10
+131072,64,P,True,A: even feasible-upper-time bandwidth exceeds10
+131072,64,P+,True,A: even feasible-upper-time bandwidth exceeds10
+131072,128,P,True,A: even feasible-upper-time bandwidth exceeds10
+131072,128,P+,True,A: even feasible-upper-time bandwidth exceeds10
+131072,256,P,True,B: H upper / P strict lower <1.10
+131072,256,P+,True,B: H upper / P strict lower <1.10
+131072,512,P,True,B: H upper / P strict lower <1.10
+131072,512,P+,True,B: H upper / P strict lower <1.10
+131072,1024,P,True,B: H upper / P strict lower <1.10
+131072,1024,P+,True,B: H upper / P strict lower <1.10
+131072,2048,P,True,B: H upper / P strict lower <1.10
+131072,2048,P+,True,B: H upper / P strict lower <1.10
+131072,4096,P,True,B: H upper / P strict lower <1.10
+131072,4096,P+,True,B: H upper / P strict lower <1.10
+262144,64,P,True,A: even feasible-upper-time bandwidth exceeds10
+262144,64,P+,True,A: even feasible-upper-time bandwidth exceeds10
+262144,128,P,True,A: even feasible-upper-time bandwidth exceeds10
+262144,128,P+,True,A: even feasible-upper-time bandwidth exceeds10
+262144,256,P,True,A: even feasible-upper-time bandwidth exceeds10
+262144,256,P+,True,A: even feasible-upper-time bandwidth exceeds10
+262144,512,P,True,B: H upper / P strict lower <1.10
+262144,512,P+,True,B: H upper / P strict lower <1.10
+262144,1024,P,True,B: H upper / P strict lower <1.10
+262144,1024,P+,True,B: H upper / P strict lower <1.10
+262144,2048,P,True,B: H upper / P strict lower <1.10
+262144,2048,P+,True,B: H upper / P strict lower <1.10
+262144,4096,P,True,B: H upper / P strict lower <1.10
+262144,4096,P+,True,B: H upper / P strict lower <1.10
+524288,64,P,True,A: even feasible-upper-time bandwidth exceeds10
+524288,64,P+,True,A: even feasible-upper-time bandwidth exceeds10
+524288,128,P,True,A: even feasible-upper-time bandwidth exceeds10
+524288,128,P+,True,A: even feasible-upper-time bandwidth exceeds10
+524288,256,P,True,A: even feasible-upper-time bandwidth exceeds10
+524288,256,P+,True,A: even feasible-upper-time bandwidth exceeds10
+524288,512,P,True,A: even feasible-upper-time bandwidth exceeds10
+524288,512,P+,True,A: even feasible-upper-time bandwidth exceeds10
+524288,1024,P,True,B: H upper / P strict lower <1.10
+524288,1024,P+,True,B: H upper / P strict lower <1.10
+524288,2048,P,True,B: H upper / P strict lower <1.10
+524288,2048,P+,True,B: H upper / P strict lower <1.10
+524288,4096,P,True,B: H upper / P strict lower <1.10
+524288,4096,P+,True,B: H upper / P strict lower <1.10
+1048576,64,P,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,64,P+,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,128,P,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,128,P+,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,256,P,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,256,P+,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,512,P,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,512,P+,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,1024,P,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,1024,P+,True,A: even feasible-upper-time bandwidth exceeds10
+1048576,2048,P,True,B: H upper / P strict lower <1.10
+1048576,2048,P+,True,B: H upper / P strict lower <1.10
+1048576,4096,P,True,B: H upper / P strict lower <1.10
+1048576,4096,P+,True,B: H upper / P strict lower <1.10

@@ -1,0 +1,48 @@
+{
+  "passed": true,
+  "input_windows": {
+    "development": 105,
+    "heldout": 105
+  },
+  "main_cells": 175,
+  "main_window_scheduler_rows": 10500,
+  "frozen_designs": 25,
+  "per_batch_designs": 175,
+  "receipt_files": 250,
+  "all_points_repeated_exactly": true,
+  "all_required_files_present": true,
+  "frozen_round2_to_round5_unchanged": true,
+  "python": "3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]",
+  "versions": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "ortools": "9.15.6755",
+    "matplotlib": "3.11.2",
+    "pytest": "9.1.1"
+  },
+  "source_sha256": {
+    "__init__.py": "d48377d9c77b8ff1a94b04c72dda93be27d355f8a7d7389196a2d470163811a2",
+    "audit.py": "1892f54627025fd39d4f4a7b13031f2b713ac4b3dc162de34f2a1fc8c0af0abc",
+    "common.py": "0e9b78acbdf17209f4e0d55795fe3e213d2d4fe49762258d5159f84bee19e143",
+    "deliver.py": "c0335b24647cd701c447285a4a131fa30c59287dce7fe6430c2b6e1972fe8328",
+    "evaluate.py": "60c7fb868d12b83205537049400a4926a6fff39a2d9daa34c0f3b5dc76b00d2a",
+    "inputs.py": "ac2d1ba9c19cf5d29c7f06338fb1444600cd2035a1faeb31ee17241dcb122b21",
+    "kernel.cpp": "dbdc33ce8996c9f53e0dfb7671275c0babae18a92a55452696fb6f9edb59fbeb",
+    "model.py": "5c6c9ae67fea6daaef0f185e380614b90cd80ff384052204e1cbf1dbf2470ad9",
+    "online.py": "d02b5abedea4e5926f0f2f257b2bdc86200507b140086cf00d4f1324a00d5975",
+    "report.py": "d9f866ede8a6bc7ce38b24cb1d4d004fda6ac954381e5d03c4b05232c5dc2ffd",
+    "run_all.py": "9c0ba5d16571109a65447f58794da90d73f8930cbb7974c0177b007fe09de4d1",
+    "search.py": "85230404418e44249431116226f5c7273481d83b3c5b7ac2390fc4fc54b5efdc",
+    "solver.py": "d2445d0eaf8d2fae01c125532fae37e29e65527fc3fc246b9c6ad1b49ca9920c",
+    "test_round6.py": "54df24ea5aa00d698c8e372d4195460471024c5f73c2b1bc8e5016d89e585782"
+  },
+  "output_sha256": {
+    "E1/cells.csv": "5f74cd55e7abc7bd055687f9456c488485271707671f795e4ec8aeb5d5b70761",
+    "E2/online_compare.csv": "9a495423c27233b5157eb725384f41e4dc479105af03f5ab02cf809708a718f5",
+    "E2/workload_balance.csv": "63a56e6ebb2795346605cb97baa6a8e931608c31e96f6d19a296a9ea9869da49",
+    "E2/SCHEDULER.md": "4f8c7249b0c43bfa6b739917372d144b2504234fe310150b2e209e1b17d4810f",
+    "E3/winning_cells.md": "1eb7b39f981a2c454e6857b8a465f28d4b16f797e8069e38add4c75f970c9bd5",
+    "REPORT_ZH.md": "c0a764ea5874252ad6d28faa45fb7d22bc3dcc0c2d75dd615355925ff3c9b386",
+    "figures/fig_cells.pdf": "e4d1fd83a1d589f16666b222476fe32c8317047abd6c1e9386e7645428aeb212"
+  }
+}
