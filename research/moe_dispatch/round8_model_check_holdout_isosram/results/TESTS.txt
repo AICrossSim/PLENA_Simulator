@@ -1,0 +1,7 @@
+Stage 1 diagnostic tests: 6 passed in 0.12s.
+45 GEMM/model comparisons reproduced twice.
+27 real B2 legacy timelines reproduced twice, with identical results.
+All 135 original windows checked for unchanged Routed task identities/counts.
+Two-page diagnosis.pdf rendered and visually checked; no missing glyph warnings after font fallback correction.
+Round7 file hashes unchanged; tracked round2-through-round6 files unchanged.
+Stage 2: NOT RUN. Stage 3: NOT RUN. Main model awaits user confirmation.

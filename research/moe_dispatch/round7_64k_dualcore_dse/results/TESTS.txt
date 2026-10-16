@@ -1,0 +1,9 @@
+Command: PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 /tmp/plena-round2-venv/bin/python -m pytest -q research/moe_dispatch/round7_64k_dualcore_dse/test_round7.py
+Result: 7 passed in 0.29s
+
+Independent full-result audit: VALIDATION.json
+84,780 candidate/window/timing points; each run twice (169,560 executions).
+All repeated integer cycle/assignment/metric results identical.
+16 independent CP-SAT checks on real B128 windows: exact optima matched.
+72 CSV/Markdown table pairs validated.
+Previous committed round2 through round6 results unchanged.

@@ -1,0 +1,1345 @@
+{
+  "row": {
+    "window": "heldout_bfcl_b2_l2_s3",
+    "active_routed": 12,
+    "legacy_task_count": 13,
+    "r7_task_count": 14,
+    "legacy_compute_us": 8.514,
+    "legacy_control_us": 0.005,
+    "legacy_total_us": 8.519,
+    "plena_os_pure_us": 7.84,
+    "plena_os_reduction_drain_us": 0.504,
+    "plena_os_accumulation_dependency_us": 9.87,
+    "plena_os_other_us": 0.084,
+    "plena_os_total_us": 18.298,
+    "plena_os_merged_shared_us": 18.289,
+    "issue_formula_pure_us": 7.84,
+    "issue_formula_reduction_drain_us": 0.0,
+    "issue_formula_accumulation_dependency_us": 0.0,
+    "issue_formula_other_us": 0.0,
+    "issue_formula_total_us": 7.84,
+    "issue_formula_merged_shared_us": 7.776
+  },
+  "original": {
+    "batch": 2,
+    "dataset": "bfcl",
+    "descriptor_order": "shared_first",
+    "experts": [
+      {
+        "F": 2816,
+        "H": 2048,
+        "Me": 2,
+        "id": -1,
+        "is_shared": true,
+        "route_scores": [
+          1.0,
+          1.0
+        ],
+        "route_slots": [
+          -1,
+          -1
+        ],
+        "token_indices": [
+          0,
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 6509559808,
+            "payload_bytes": 11534336,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 11534336,
+            "row_stride_bytes": 5632,
+            "shape_nk": [
+              2048,
+              2816
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 6442450944,
+            "payload_bytes": 11534336,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 11534336,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              2816,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 6476005376,
+            "payload_bytes": 11534336,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 11534336,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              2816,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 10,
+        "is_shared": false,
+        "route_scores": [
+          0.07366943359375
+        ],
+        "route_slots": [
+          0
+        ],
+        "token_indices": [
+          0
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 1073741824,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 1006632960,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 1040187392,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 14,
+        "is_shared": false,
+        "route_scores": [
+          0.0435791015625
+        ],
+        "route_slots": [
+          0
+        ],
+        "token_indices": [
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 1476395008,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 1409286144,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 1442840576,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 17,
+        "is_shared": false,
+        "route_scores": [
+          0.1168212890625
+        ],
+        "route_slots": [
+          1
+        ],
+        "token_indices": [
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 1778384896,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 1711276032,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 1744830464,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 18,
+        "is_shared": false,
+        "route_scores": [
+          0.0294342041015625
+        ],
+        "route_slots": [
+          5
+        ],
+        "token_indices": [
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 1879048192,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 1811939328,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 1845493760,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 20,
+        "is_shared": false,
+        "route_scores": [
+          0.0439453125
+        ],
+        "route_slots": [
+          5
+        ],
+        "token_indices": [
+          0
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 2080374784,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 2013265920,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 2046820352,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 24,
+        "is_shared": false,
+        "route_scores": [
+          0.053680419921875
+        ],
+        "route_slots": [
+          2
+        ],
+        "token_indices": [
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 2483027968,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 2415919104,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 2449473536,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 33,
+        "is_shared": false,
+        "route_scores": [
+          0.07000732421875
+        ],
+        "route_slots": [
+          3
+        ],
+        "token_indices": [
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 3388997632,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 3321888768,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 3355443200,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 36,
+        "is_shared": false,
+        "route_scores": [
+          0.10894775390625
+        ],
+        "route_slots": [
+          1
+        ],
+        "token_indices": [
+          0
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 3690987520,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 3623878656,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 3657433088,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 43,
+        "is_shared": false,
+        "route_scores": [
+          0.057647705078125
+        ],
+        "route_slots": [
+          2
+        ],
+        "token_indices": [
+          0
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 4395630592,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 4328521728,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 4362076160,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 51,
+        "is_shared": false,
+        "route_scores": [
+          0.08392333984375
+        ],
+        "route_slots": [
+          4
+        ],
+        "token_indices": [
+          1
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 5200936960,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 5133828096,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 5167382528,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 54,
+        "is_shared": false,
+        "route_scores": [
+          0.11016845703125
+        ],
+        "route_slots": [
+          3
+        ],
+        "token_indices": [
+          0
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 5502926848,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 5435817984,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 5469372416,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      },
+      {
+        "F": 1408,
+        "H": 2048,
+        "Me": 1,
+        "id": 55,
+        "is_shared": false,
+        "route_scores": [
+          0.054901123046875
+        ],
+        "route_slots": [
+          4
+        ],
+        "token_indices": [
+          0
+        ],
+        "weights": {
+          "down": {
+            "dtype": "BF16",
+            "hbm_base": 5603590144,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 2816,
+            "shape_nk": [
+              2048,
+              1408
+            ]
+          },
+          "gate": {
+            "dtype": "BF16",
+            "hbm_base": 5536481280,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          },
+          "up": {
+            "dtype": "BF16",
+            "hbm_base": 5570035712,
+            "payload_bytes": 5767168,
+            "payload_scope": "capture dimensions only; weights not numeric payload",
+            "physical_bytes": 5767168,
+            "row_stride_bytes": 4096,
+            "shape_nk": [
+              1408,
+              2048
+            ]
+          }
+        }
+      }
+    ],
+    "hidden": 2048,
+    "id": "heldout_bfcl_b2_l2_s3",
+    "layer": 2,
+    "provenance": "captured_decode",
+    "request_ids": [
+      "bfcl:sql_24",
+      "bfcl:multi_turn_long_context_115"
+    ],
+    "route_scores_renormalized": false,
+    "routing_is_input_not_timed": true,
+    "scope": "one captured MoE FFN layer, router and attention excluded; shape-only analytical simulation",
+    "source_sha256": "d869d6d4fa2e2bed48fe90a0312014898bd6a590f8c5d302a22337447686e6ff",
+    "split": "heldout",
+    "step": 3,
+    "tokens": [
+      {
+        "routes": [
+          {
+            "expert_id": 10,
+            "score": 0.07366943359375,
+            "slot": 0
+          },
+          {
+            "expert_id": 36,
+            "score": 0.10894775390625,
+            "slot": 1
+          },
+          {
+            "expert_id": 43,
+            "score": 0.057647705078125,
+            "slot": 2
+          },
+          {
+            "expert_id": 54,
+            "score": 0.11016845703125,
+            "slot": 3
+          },
+          {
+            "expert_id": 55,
+            "score": 0.054901123046875,
+            "slot": 4
+          },
+          {
+            "expert_id": 20,
+            "score": 0.0439453125,
+            "slot": 5
+          }
+        ],
+        "sample_id": "sql_24",
+        "token_index": 0
+      },
+      {
+        "routes": [
+          {
+            "expert_id": 14,
+            "score": 0.0435791015625,
+            "slot": 0
+          },
+          {
+            "expert_id": 17,
+            "score": 0.1168212890625,
+            "slot": 1
+          },
+          {
+            "expert_id": 24,
+            "score": 0.053680419921875,
+            "slot": 2
+          },
+          {
+            "expert_id": 33,
+            "score": 0.07000732421875,
+            "slot": 3
+          },
+          {
+            "expert_id": 51,
+            "score": 0.08392333984375,
+            "slot": 4
+          },
+          {
+            "expert_id": 18,
+            "score": 0.0294342041015625,
+            "slot": 5
+          }
+        ],
+        "sample_id": "multi_turn_long_context_115",
+        "token_index": 1
+      }
+    ],
+    "top_k": 6
+  },
+  "normalized": {
+    "id": "heldout_bfcl_b2_l2_s3",
+    "batch": 2,
+    "dataset": "bfcl",
+    "layer": 2,
+    "step": 3,
+    "counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "tasks": [
+      {
+        "id": -1,
+        "m": 2,
+        "shared": true
+      },
+      {
+        "id": -2,
+        "m": 2,
+        "shared": true
+      },
+      {
+        "id": 10,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 14,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 17,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 18,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 20,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 24,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 33,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 36,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 43,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 51,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 54,
+        "m": 1,
+        "shared": false
+      },
+      {
+        "id": 55,
+        "m": 1,
+        "shared": false
+      }
+    ],
+    "source": "/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/heldout.json",
+    "source_index": 0,
+    "provenance": "captured_decode",
+    "scope": "one captured MoE FFN layer, router and attention excluded; shape-only analytical simulation",
+    "request_ids": [
+      "bfcl:sql_24",
+      "bfcl:multi_turn_long_context_115"
+    ]
+  },
+  "runtime": {
+    "cycles": 8519,
+    "core_cycles": [
+      8514
+    ],
+    "core_finish_cycles": [
+      8519
+    ],
+    "queue_max_occupancy": [
+      8
+    ],
+    "queue_depth": 8,
+    "source_descriptor_count": 13,
+    "source_finish_cycle": 2340,
+    "frontend_backpressure_cycles": 2327,
+    "context_service_cycles": 52,
+    "context_overlap_cycles": 48,
+    "context_exposed_cycles": 4,
+    "controller_delay_cycles": 5,
+    "core_idle_cycles": [
+      5
+    ],
+    "steal_count": 0,
+    "migration_count": 0,
+    "supply_delay_cycles": 0,
+    "policy": "mdpu",
+    "threshold": 2,
+    "prefetch": true,
+    "bypass": true,
+    "context_cycles": 4,
+    "profile": "pipelined_tree1",
+    "contract": "finite_dual_fifo_current_shadow_context_ideal_data_supply",
+    "wait_best": true,
+    "jobs": [
+      {
+        "expert_id": -1,
+        "is_shared": true,
+        "core_id": 0,
+        "M": 2,
+        "H": 2048,
+        "F": 2816,
+        "start": 5,
+        "end": 1103,
+        "cycles": 1098,
+        "queue_entry": 0,
+        "queue_visible": 1,
+        "claim": 1,
+        "context_ready": 5,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 1103,
+        "prediction_error": 0,
+        "issued_macs": 69206016,
+        "useful_macs": 34603008,
+        "source_index": 0
+      },
+      {
+        "expert_id": 10,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 1103,
+        "end": 1721,
+        "cycles": 618,
+        "queue_entry": 1,
+        "queue_visible": 2,
+        "claim": 5,
+        "context_ready": 9,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 1721,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 1
+      },
+      {
+        "expert_id": 14,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 1721,
+        "end": 2339,
+        "cycles": 618,
+        "queue_entry": 2,
+        "queue_visible": 3,
+        "claim": 1103,
+        "context_ready": 1107,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 2339,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 2
+      },
+      {
+        "expert_id": 17,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 2339,
+        "end": 2957,
+        "cycles": 618,
+        "queue_entry": 3,
+        "queue_visible": 4,
+        "claim": 1721,
+        "context_ready": 1725,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 2957,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 3
+      },
+      {
+        "expert_id": 18,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 2957,
+        "end": 3575,
+        "cycles": 618,
+        "queue_entry": 4,
+        "queue_visible": 5,
+        "claim": 2339,
+        "context_ready": 2343,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 3575,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 4
+      },
+      {
+        "expert_id": 20,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 3575,
+        "end": 4193,
+        "cycles": 618,
+        "queue_entry": 5,
+        "queue_visible": 6,
+        "claim": 2957,
+        "context_ready": 2961,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 4193,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 5
+      },
+      {
+        "expert_id": 24,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 4193,
+        "end": 4811,
+        "cycles": 618,
+        "queue_entry": 6,
+        "queue_visible": 7,
+        "claim": 3575,
+        "context_ready": 3579,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 4811,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 6
+      },
+      {
+        "expert_id": 33,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 4811,
+        "end": 5429,
+        "cycles": 618,
+        "queue_entry": 7,
+        "queue_visible": 8,
+        "claim": 4193,
+        "context_ready": 4197,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 5429,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 7
+      },
+      {
+        "expert_id": 36,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 5429,
+        "end": 6047,
+        "cycles": 618,
+        "queue_entry": 8,
+        "queue_visible": 9,
+        "claim": 4811,
+        "context_ready": 4815,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 6047,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 8
+      },
+      {
+        "expert_id": 43,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 6047,
+        "end": 6665,
+        "cycles": 618,
+        "queue_entry": 9,
+        "queue_visible": 10,
+        "claim": 5429,
+        "context_ready": 5433,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 6665,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 9
+      },
+      {
+        "expert_id": 51,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 6665,
+        "end": 7283,
+        "cycles": 618,
+        "queue_entry": 1103,
+        "queue_visible": 1104,
+        "claim": 6047,
+        "context_ready": 6051,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 7283,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 10
+      },
+      {
+        "expert_id": 54,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 7283,
+        "end": 7901,
+        "cycles": 618,
+        "queue_entry": 1721,
+        "queue_visible": 1722,
+        "claim": 6665,
+        "context_ready": 6669,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 7901,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 11
+      },
+      {
+        "expert_id": 55,
+        "is_shared": false,
+        "core_id": 0,
+        "M": 1,
+        "H": 2048,
+        "F": 1408,
+        "start": 7901,
+        "end": 8519,
+        "cycles": 618,
+        "queue_entry": 2339,
+        "queue_visible": 2340,
+        "claim": 7283,
+        "context_ready": 7287,
+        "queue_owner": 0,
+        "preferred_core": 0,
+        "predicted_end_at_enqueue": 8519,
+        "prediction_error": 0,
+        "issued_macs": 37748736,
+        "useful_macs": 8650752,
+        "source_index": 12
+      }
+    ],
+    "useful_MACs": 138412032,
+    "issued_macs": 522190848,
+    "unique_weight_bytes": 242221056,
+    "wall_peak_utilization": 0.24791642211527173,
+    "spatial_utilization": 0.26506024096385544,
+    "padding_waste_fraction": 0.7349397590361446,
+    "boundary_stats": {
+      "reference_threshold": 2,
+      "realizable_thresholds": [],
+      "shared_core": 0,
+      "cold_jobs_by_core": [
+        12
+      ],
+      "hot_jobs_by_core": [
+        0
+      ],
+      "core_useful_MACs": [
+        138412032
+      ],
+      "core_issued_macs": [
+        522190848
+      ],
+      "idle_fractions": [
+        0.0005869233478107416
+      ],
+      "imbalance_ratio": 1.0,
+      "bottleneck_core": 0
+    },
+    "affinity_deviation_count": 0,
+    "prediction_mae_cycles": 0.0,
+    "prediction_worst_underestimate_cycles": 0,
+    "source_order": [
+      -1,
+      10,
+      14,
+      17,
+      18,
+      20,
+      24,
+      33,
+      36,
+      43,
+      51,
+      54,
+      55
+    ]
+  }
+}

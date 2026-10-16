@@ -1,0 +1,75 @@
+{
+  "functions": {
+    "legacy_replay": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round7_64k_dualcore_dse/legacy.py",
+      "function": "run",
+      "line": 12,
+      "sha256": "200763a83749774cd3c847734417a16a7342b10202190c4f20922cf2391cee98"
+    },
+    "legacy_runtime": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/scaling_g64/runtime.py",
+      "function": "schedule",
+      "line": 104,
+      "sha256": "0b30b962fda2a12a43000c7a0f34a7feb91caf0a264a904921e75d4a10f9e799"
+    },
+    "legacy_job": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/plena65536_dedicated/model.py",
+      "function": "job_cycles",
+      "line": 16,
+      "sha256": "25c08d267677e63ce85b90ed95c29ff92723a9b0ddf86229a165025cc3c0e836"
+    },
+    "legacy_phase": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/plena65536_shared/timing.py",
+      "function": "phase",
+      "line": 32,
+      "sha256": "78740f796c79691b784c93e269f3cb234cde2593f706dffd5dd9fc7f6a8c5c62"
+    },
+    "r7_gemm": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round7_64k_dualcore_dse/model.py",
+      "function": "gemm",
+      "line": 49,
+      "sha256": "863042514ca7d60dfb02ebdeef0ce594abb4010178a998910b22556d737a09b6"
+    },
+    "r7_task": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round7_64k_dualcore_dse/model.py",
+      "function": "task_cost",
+      "line": 59,
+      "sha256": "863042514ca7d60dfb02ebdeef0ce594abb4010178a998910b22556d737a09b6"
+    },
+    "r5_projection": {
+      "path": "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/research/moe_dispatch/round5_largebatch_compute/model.py",
+      "function": "projection",
+      "line": 28,
+      "sha256": "ad1f7fc58eeff473c499d7472a407a54dc6d3a696d8b0809411d379852b8c75a"
+    }
+  },
+  "history": {
+    "research/moe_dispatch/geometry3d/compute.py": [
+      "1fcc764a 2026-10-04T02:56:43+01:00 research: search variable M/N/K MoE geometries under finite budgets"
+    ],
+    "research/moe_dispatch/round2/model.py": [
+      "2a68dfdb 2026-10-07T12:50:22+01:00 Validate merged research profiles and freeze BF16 round-two evaluation",
+      "12c5e43c 2026-10-07T14:33:25+01:00 fix(round2): prevent queued tasks and cold requests before binding grant completes"
+    ],
+    "research/moe_dispatch/round4_compute_first/model.py": [
+      "f5516f46 2026-10-16T00:28:23+01:00 round4: complete exhaustive compute-first DSE at the paper multiplier budget (E1)"
+    ],
+    "research/moe_dispatch/round5_largebatch_compute/model.py": [
+      "b095a7de 2026-10-16T09:10:42+01:00 round5: complete large-batch compute DSE, runtime diagnostics, and audited results"
+    ],
+    "research/moe_dispatch/plena65536_shared/timing.py": [],
+    "research/moe_dispatch/scaling_g64/runtime.py": [],
+    "research/moe_dispatch/round7_64k_dualcore_dse/model.py": []
+  },
+  "evidence_files": {
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/analytic_models/performance/customISA_lib.json": "323c0c11000a8df72febe8366ea50c7134e30f249cdd30273da845015b46c831",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator/src/matrix_machine.rs": "6283153983fd655ce266dfb46bbcd626ef9c461e256ed898125fbb4285afd890",
+    "/scratch/shared/mcl123/plena/worktrees/moe-supply-first-v3-simulator/transactional_emulator/src/matrix_service.rs": "80051e9d1b6722a39088ef6fcd2bd637cea4e698a712f9016e748b3319de2f6a",
+    "/scratch/shared/mcl123/plena/worktrees/pr_candidates/PLENA_RTL_fake_hbm_capacity/src/basic_components/systolic_gemm_fp/rtl/fp_sum_across_sa.sv": "142ca5576e20eb29e22f1ad3186a5200977105d010b20fa19c33b91c6da7fc8b",
+    "/scratch/shared/mcl123/plena/worktrees/pr_candidates/PLENA_RTL_fake_hbm_capacity/src/basic_components/systolic_gemm_fp/rtl/fp_default_pe.sv": "9a5d700daffc4b0247e96ba77f224278bc2ac302cf4894010b457f4fd2104d33",
+    "/scratch/shared/mcl123/plena/worktrees/pr_candidates/PLENA_RTL_fake_hbm_capacity/src/basic_components/gemv/rtl/fp_adder_tree.sv": "a71a8667ba5a255e37d9f66073dfee556380021b058a4c88bdf9e4a39ab4c615"
+  },
+  "paper": "https://arxiv.org/html/2509.09505v3#S3.SS2",
+  "paper_section": "III-B, Figures 5/6; pipelined tiles, OS PE partials, M_SUM across subarrays",
+  "interpretation": "Paper supports mechanisms, not fixed 8 contexts or a 15-cycle per-K recurrence."
+}

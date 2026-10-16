@@ -1,0 +1,30 @@
+{
+  "256": {
+    "single": {
+      "geometry": "4x256x64",
+      "gm_compute_us": 81.7387366447391
+    },
+    "homo": {
+      "geometry": "2x256x64+2x256x64",
+      "gm_compute_us": 60.39008474907152
+    },
+    "hetero": {
+      "geometry": "4x192x64+1x256x64",
+      "gm_compute_us": 58.48063864633335
+    }
+  },
+  "512": {
+    "single": {
+      "geometry": "4x256x64",
+      "gm_compute_us": 81.7387366447391
+    },
+    "homo": {
+      "geometry": "2x256x64+2x256x64",
+      "gm_compute_us": 60.39008474907152
+    },
+    "hetero": {
+      "geometry": "4x192x64+1x256x64",
+      "gm_compute_us": 58.48063864633335
+    }
+  }
+}

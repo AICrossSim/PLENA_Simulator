@@ -1,0 +1,62 @@
+{
+  "statistics": {
+    "legacy_compute_us": {
+      "AM_us": 7.667111111111111,
+      "GM_us": 7.600745276420384
+    },
+    "legacy_control_us": {
+      "AM_us": 0.005,
+      "GM_us": 0.005000000000000002
+    },
+    "legacy_total_us": {
+      "AM_us": 7.672111111111111,
+      "GM_us": 7.605794395941989
+    },
+    "plena_os_pure_us": {
+      "AM_us": 7.072592592592593,
+      "GM_us": 7.013659673452631
+    },
+    "plena_os_reduction_drain_us": {
+      "AM_us": 0.45466666666666666,
+      "GM_us": 0.45087812186481196
+    },
+    "plena_os_accumulation_dependency_us": {
+      "AM_us": 8.903888888888888,
+      "GM_us": 8.8296965531859
+    },
+    "plena_os_other_us": {
+      "AM_us": 0.07577777777777778,
+      "GM_us": 0.07514635364413533
+    },
+    "plena_os_total_us": {
+      "AM_us": 16.506925925925923,
+      "GM_us": 16.369380702147485
+    },
+    "plena_os_merged_shared_us": {
+      "AM_us": 16.497925925925927,
+      "GM_us": 16.360295726235762
+    },
+    "issue_formula_pure_us": {
+      "AM_us": 7.072592592592593,
+      "GM_us": 7.013659673452631
+    },
+    "issue_formula_total_us": {
+      "AM_us": 7.072592592592593,
+      "GM_us": 7.013659673452631
+    },
+    "issue_formula_merged_shared_us": {
+      "AM_us": 7.008592592592593,
+      "GM_us": 6.949049435016779
+    }
+  },
+  "active_histogram": {
+    "7": 2,
+    "8": 2,
+    "9": 1,
+    "10": 4,
+    "11": 8,
+    "12": 10
+  },
+  "active_mean": 10.62962962962963,
+  "task_counts_match_except_shared": true
+}

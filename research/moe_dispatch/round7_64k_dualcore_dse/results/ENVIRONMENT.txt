@@ -1,0 +1,4 @@
+Python: 3.11.13 (main, Mar 26 2026, 12:08:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)]
+NumPy: 2.4.6
+OR-Tools: 9.15.6755
+pytest: 9.1.1

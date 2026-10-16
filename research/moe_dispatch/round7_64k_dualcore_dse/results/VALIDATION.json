@@ -1,0 +1,141 @@
+{
+  "passed": true,
+  "windows": 135,
+  "batch_counts": {
+    "2": 27,
+    "4": 27,
+    "8": 27,
+    "16": 27,
+    "64": 9,
+    "96": 9,
+    "128": 9
+  },
+  "validated_candidate_window_points": 84780,
+  "paired_executions": 169560,
+  "all_exact_no_timeout": true,
+  "all_repeats_identical": true,
+  "table_pairs_csv_md": 72,
+  "cpsat_independent_checks": [
+    {
+      "model": "plena_os",
+      "overhead": 0,
+      "geometry": "3x256x64+1x256x64",
+      "cycles": 342434
+    },
+    {
+      "model": "plena_os",
+      "overhead": 0,
+      "geometry": "4x192x64+1x256x64",
+      "cycles": 326750
+    },
+    {
+      "model": "plena_os",
+      "overhead": 0,
+      "geometry": "7x128x64+1x128x64",
+      "cycles": 368292
+    },
+    {
+      "model": "plena_os",
+      "overhead": 0,
+      "geometry": "1x512x64+1x512x64",
+      "cycles": 664064
+    },
+    {
+      "model": "plena_os",
+      "overhead": 16,
+      "geometry": "3x256x64+1x256x64",
+      "cycles": 343586
+    },
+    {
+      "model": "plena_os",
+      "overhead": 16,
+      "geometry": "4x192x64+1x256x64",
+      "cycles": 328205
+    },
+    {
+      "model": "plena_os",
+      "overhead": 16,
+      "geometry": "7x128x64+1x128x64",
+      "cycles": 370020
+    },
+    {
+      "model": "plena_os",
+      "overhead": 16,
+      "geometry": "1x512x64+1x512x64",
+      "cycles": 665648
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 0,
+      "geometry": "3x256x64+1x256x64",
+      "cycles": 146720
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 0,
+      "geometry": "4x192x64+1x256x64",
+      "cycles": 147030
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 0,
+      "geometry": "7x128x64+1x128x64",
+      "cycles": 148896
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 0,
+      "geometry": "1x512x64+1x512x64",
+      "cycles": 143360
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 16,
+      "geometry": "3x256x64+1x256x64",
+      "cycles": 147968
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 16,
+      "geometry": "4x192x64+1x256x64",
+      "cycles": 148470
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 16,
+      "geometry": "7x128x64+1x128x64",
+      "cycles": 150624
+    },
+    {
+      "model": "issue_formula",
+      "overhead": 16,
+      "geometry": "1x512x64+1x512x64",
+      "cycles": 144944
+    }
+  ],
+  "old_published_max_replay_error_pct": 0.004910055427875815,
+  "earlier_rounds_unchanged": true,
+  "source_sha256": {
+    "scheduler.py": "c9a04ab58dd595817492a8dee6416b666746f190a33d6a032173137d5ce7af4a",
+    "metrics.py": "2c39423fc38fb61ad54db9375d8dc55eb6b2ea0b65549aa4c3fa278329a5e443",
+    "__init__.py": "623e804747447254b1b76ed2fda0d8c1567fcca1ee5d0550873c1b5fa50d7778",
+    "legacy.py": "200763a83749774cd3c847734417a16a7342b10202190c4f20922cf2391cee98",
+    "search.py": "964a4cdbdbcd3a6808cd0337aedd5a20a4ec1be10d0d277a01503be629b8de00",
+    "test_round7.py": "0a109160ed18b80fc8d1d096d57d4c80c6d8cfe749245c2be1fdf94ce46e02e3",
+    "model.py": "863042514ca7d60dfb02ebdeef0ce594abb4010178a998910b22556d737a09b6",
+    "report.py": "17db16137d1562acba718ac37f9ceb53559699e08123071b5eebc4c830fc3f15",
+    "run_all.py": "287de50e36543b486c4e757534fef8840d492cae507f6b5354b1446dd63de1dd",
+    "audit.py": "358be992dafca9e26a2e13fc986c615246986ede15ccea98d3d07419ebead307",
+    "trace.py": "f8faa7a944bb7664fc3b3f241a949de8c8bc958401f3367e32eee25a7a2d7c27",
+    "common.py": "a188b4c8add42740e1bbb352af71c12df7a728978fe80a685cd954a8bf97791c"
+  },
+  "cpp_sha256": "a9b2a18560d069069b1a82c018ec4ee58662097136745dc7c72e5625b220a1e4",
+  "config_sha256": "9ae3e72a46e984dbabadaa8ad69241815ea912cae7a21b1cfc00eebf78e63b45",
+  "reused_model_sha256": "ad1f7fc58eeff473c499d7472a407a54dc6d3a696d8b0809411d379852b8c75a",
+  "result_sha256": {
+    "results/plena_os_overhead0/all_windows.json.gz": "c8d10ddf6e6eeb1797e7e5ca16865c5a41e064ec01fc4e5e9b66bd3a4e61e4cb",
+    "results/plena_os_overhead16/all_windows.json.gz": "0337596c8149b3ed9451d9eeb067e65d9207b5da1e163ce5d71a4934b9925b7c",
+    "results/issue_formula_overhead0/all_windows.json.gz": "3075ab7ff7c9cf193b8fc2d6ed7ad898e339d164712055d9b3879481c293d5e4",
+    "results/issue_formula_overhead16/all_windows.json.gz": "2a898b5c15e1bf789d9ebc146ff17cb8c47d14e62f6576f8ed699f4bb1042bb5"
+  }
+}

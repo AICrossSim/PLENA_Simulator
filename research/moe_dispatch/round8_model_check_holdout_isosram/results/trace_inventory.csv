@@ -1,0 +1,8 @@
+path,batch,count,layers,decode_steps,composition,capture_prefix_smoke_windows
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/heldout.json,2,27,"2,13,26","3,7,11","distinct requests, one token each",0
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/heldout.json,4,27,"2,13,26","3,7,11","distinct requests, one token each",0
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/heldout.json,8,27,"2,13,26","3,7,11","distinct requests, one token each",0
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/heldout.json,16,27,"2,13,26","3,7,11","distinct requests, one token each",0
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/mixed_heldout.json,64,9,"2,13,26",7,16 decode + 48 contiguous prefill,6
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/mixed_heldout.json,96,9,"2,13,26",7,16 decode + 80 contiguous prefill,6
+/scratch/shared/mcl123/plena/final_artifacts/moe_regime_20261005_v1/payload/inputs/mixed_heldout.json,128,9,"2,13,26",7,16 decode + 112 contiguous prefill,6

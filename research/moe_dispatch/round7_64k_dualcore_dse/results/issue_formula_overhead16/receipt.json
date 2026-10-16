@@ -1,0 +1,37 @@
+{
+  "model": "issue_formula",
+  "overhead": 16,
+  "candidates": 157,
+  "candidate_counts_by_cap": {
+    "256": {
+      "single": 5,
+      "homo": 5,
+      "hetero": 116
+    },
+    "512": {
+      "single": 6,
+      "homo": 6,
+      "hetero": 144
+    }
+  },
+  "windows": 135,
+  "points": 21195,
+  "executions": 42390,
+  "all_repetitions_identical": true,
+  "all_assignments_status": "OPTIMAL",
+  "algorithm": "exact_pareto_DP_no_cutoff",
+  "results_sha256": "8104957d811afde41624d3a0c3353fd95afd858816fd92847eaa814783d7981c",
+  "elapsed_seconds": 6.247059106826782,
+  "config_sha256": "9ae3e72a46e984dbabadaa8ad69241815ea912cae7a21b1cfc00eebf78e63b45",
+  "source_sha256": {
+    "scheduler.py": "c9a04ab58dd595817492a8dee6416b666746f190a33d6a032173137d5ce7af4a",
+    "metrics.py": "2c39423fc38fb61ad54db9375d8dc55eb6b2ea0b65549aa4c3fa278329a5e443",
+    "__init__.py": "623e804747447254b1b76ed2fda0d8c1567fcca1ee5d0550873c1b5fa50d7778",
+    "search.py": "964a4cdbdbcd3a6808cd0337aedd5a20a4ec1be10d0d277a01503be629b8de00",
+    "test_round7.py": "0a109160ed18b80fc8d1d096d57d4c80c6d8cfe749245c2be1fdf94ce46e02e3",
+    "model.py": "863042514ca7d60dfb02ebdeef0ce594abb4010178a998910b22556d737a09b6",
+    "trace.py": "f8faa7a944bb7664fc3b3f241a949de8c8bc958401f3367e32eee25a7a2d7c27",
+    "common.py": "a188b4c8add42740e1bbb352af71c12df7a728978fe80a685cd954a8bf97791c"
+  },
+  "exact_cpp_sha256": "a9b2a18560d069069b1a82c018ec4ee58662097136745dc7c72e5625b220a1e4"
+}
