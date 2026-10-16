@@ -156,7 +156,7 @@ def final_report(cells):
  '- E3/winning_cells.md：通过格子专项敏感性或无赢家时最近三格与失败原因。',
  '- figures/fig_cells.pdf：开发选定异构组织的三项热力图，并分别附P/P+；fig_cells.png为首图。',
  '- README.md：提交号和完整运行命令；METHOD.md：计时/广播/统计契约。','']
- (ROOT/'REPORT_ZH.md').write_text('\n'.join(lines))
+ (ROOT/'REPORT_ZH.md').write_text('\n'.join(line.rstrip() for line in '\n'.join(lines).splitlines())+'\n')
 
 def main():
  cells=build();scheduler_doc();wins=e3_no_winners(cells)

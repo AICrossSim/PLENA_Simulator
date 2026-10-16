@@ -24,7 +24,7 @@
     "__init__.py": "d48377d9c77b8ff1a94b04c72dda93be27d355f8a7d7389196a2d470163811a2",
     "audit.py": "1892f54627025fd39d4f4a7b13031f2b713ac4b3dc162de34f2a1fc8c0af0abc",
     "common.py": "0e9b78acbdf17209f4e0d55795fe3e213d2d4fe49762258d5159f84bee19e143",
-    "deliver.py": "c0335b24647cd701c447285a4a131fa30c59287dce7fe6430c2b6e1972fe8328",
+    "deliver.py": "e24ab89adbf32cff92bc29abc2e81963d9c8e42276adfab18879cb01b288608b",
     "evaluate.py": "60c7fb868d12b83205537049400a4926a6fff39a2d9daa34c0f3b5dc76b00d2a",
     "inputs.py": "ac2d1ba9c19cf5d29c7f06338fb1444600cd2035a1faeb31ee17241dcb122b21",
     "kernel.cpp": "dbdc33ce8996c9f53e0dfb7671275c0babae18a92a55452696fb6f9edb59fbeb",
@@ -42,7 +42,7 @@
     "E2/workload_balance.csv": "63a56e6ebb2795346605cb97baa6a8e931608c31e96f6d19a296a9ea9869da49",
     "E2/SCHEDULER.md": "4f8c7249b0c43bfa6b739917372d144b2504234fe310150b2e209e1b17d4810f",
     "E3/winning_cells.md": "1eb7b39f981a2c454e6857b8a465f28d4b16f797e8069e38add4c75f970c9bd5",
-    "REPORT_ZH.md": "c0a764ea5874252ad6d28faa45fb7d22bc3dcc0c2d75dd615355925ff3c9b386",
-    "figures/fig_cells.pdf": "e4d1fd83a1d589f16666b222476fe32c8317047abd6c1e9386e7645428aeb212"
+    "REPORT_ZH.md": "024e55618b290dc9bfdc94c2edfa6182f7a99a58ad8825fecef1245371df2777",
+    "figures/fig_cells.pdf": "6226423c911f012c5af0ad3f2bedb73ba71a2bd915931c44f5abf81a05cbc2e9"
   }
 }
