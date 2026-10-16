@@ -1,0 +1,9 @@
+{
+  "rows": 12600,
+  "original_naive_file_sha256": "34372409763f61af8fa0a592d0ade9bf57ff33e8cb5dfe3acbce12e62c80c70f",
+  "corrected_file_sha256": "6ae92f6214aaf789a3cd98505d612480c10388113c26cd3f13cef85fe6d1d1e7",
+  "all_new_runtime_points_repeated_exactly": true,
+  "geometry_and_offline_results_unchanged": true,
+  "policy_parameters_fitted_on_holdout": false,
+  "note": "Post-hoc correction of generic priority/admission semantics; naive results retained for transparent comparison. No per-batch or per-organization tuning."
+}

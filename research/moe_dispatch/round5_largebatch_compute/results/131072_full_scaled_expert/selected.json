@@ -1,0 +1,1172 @@
+{
+  "single": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "single",
+    "cores": [
+      {
+        "pm": 4,
+        "pn": 128,
+        "pk": 256
+      }
+    ],
+    "geometry": "1*(4x128x256)",
+    "dev_upper_cycles": 235257.50955975495,
+    "dev_global_lower_cycles": 235257.50955975495,
+    "dse_gap_pct": 0.0,
+    "candidates": 24,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "homo2": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "homo2",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 2,
+        "pn": 128,
+        "pk": 256
+      }
+    ],
+    "geometry": "2*(2x128x256)",
+    "dev_upper_cycles": 223791.35419686142,
+    "dev_global_lower_cycles": 223782.65558434426,
+    "dse_gap_pct": 0.0038870807455682055,
+    "candidates": 26,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "homo4": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "homo4",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      }
+    ],
+    "geometry": "4*(1x128x256)",
+    "dev_upper_cycles": 217441.21153885045,
+    "dev_global_lower_cycles": 217265.29073654526,
+    "dse_gap_pct": 0.080970504634581,
+    "candidates": 26,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "homo8": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "homo8",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 2,
+        "pn": 256,
+        "pk": 32
+      }
+    ],
+    "geometry": "8*(2x256x32)",
+    "dev_upper_cycles": 382735.79238276527,
+    "dev_global_lower_cycles": 382735.79238276527,
+    "dse_gap_pct": 0.0,
+    "candidates": 24,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "homo16": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "homo16",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 256,
+        "pk": 32
+      }
+    ],
+    "geometry": "16*(1x256x32)",
+    "dev_upper_cycles": 765048.7541717722,
+    "dev_global_lower_cycles": 765048.7541717722,
+    "dse_gap_pct": 0.0,
+    "candidates": 20,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero2": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero2",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 4,
+        "pn": 128,
+        "pk": 128
+      }
+    ],
+    "geometry": "1*(2x128x256)+1*(4x128x128)",
+    "dev_upper_cycles": 221938.07511585363,
+    "dev_global_lower_cycles": 221866.05905269005,
+    "dse_gap_pct": 0.032459251978900205,
+    "candidates": 2559,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero3": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero3",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      }
+    ],
+    "geometry": "1*(2x128x256)+2*(1x128x256)",
+    "dev_upper_cycles": 218235.50533694497,
+    "dev_global_lower_cycles": 217609.02658651696,
+    "dse_gap_pct": 0.2878918950445897,
+    "candidates": 3898,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero4": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero4",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 2,
+        "pn": 128,
+        "pk": 128
+      }
+    ],
+    "geometry": "3*(1x128x256)+1*(2x128x128)",
+    "dev_upper_cycles": 217072.2704246849,
+    "dev_global_lower_cycles": 216501.27528105205,
+    "dse_gap_pct": 0.263737542835063,
+    "candidates": 3925,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero5": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero5",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      }
+    ],
+    "geometry": "3*(1x128x256)+2*(1x128x128)",
+    "dev_upper_cycles": 216655.57358748608,
+    "dev_global_lower_cycles": 215803.07710607207,
+    "dse_gap_pct": 0.39503444197646065,
+    "candidates": 3951,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero6": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero6",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      }
+    ],
+    "geometry": "2*(1x128x256)+4*(1x128x128)",
+    "dev_upper_cycles": 216284.63618713646,
+    "dev_global_lower_cycles": 215005.9054522045,
+    "dse_gap_pct": 0.5947421454506108,
+    "candidates": 3547,
+    "refined_candidates": 2,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero7": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero7",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 128
+      }
+    ],
+    "geometry": "1*(1x128x256)+6*(1x128x128)",
+    "dev_upper_cycles": 215635.87508721993,
+    "dev_global_lower_cycles": 214682.53848603874,
+    "dse_gap_pct": 0.44406806808985344,
+    "candidates": 3161,
+    "refined_candidates": 6,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero8": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero8",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 88,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 96,
+        "pk": 128
+      }
+    ],
+    "geometry": "1*(2x88x256)+7*(1x96x128)",
+    "dev_upper_cycles": 218976.59253783638,
+    "dev_global_lower_cycles": 216989.49943520414,
+    "dse_gap_pct": 0.9157554203334195,
+    "candidates": 3919,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero9": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero9",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      }
+    ],
+    "geometry": "1*(2x128x256)+8*(1x128x64)",
+    "dev_upper_cycles": 217746.99292935478,
+    "dev_global_lower_cycles": 215317.19489147043,
+    "dse_gap_pct": 1.1284737566403358,
+    "candidates": 2165,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero10": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero10",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      }
+    ],
+    "geometry": "2*(1x128x256)+8*(1x128x64)",
+    "dev_upper_cycles": 216375.0992736282,
+    "dev_global_lower_cycles": 214337.7540435209,
+    "dse_gap_pct": 0.9505302690134609,
+    "candidates": 2724,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero11": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero11",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      }
+    ],
+    "geometry": "3*(1x128x256)+8*(1x128x32)",
+    "dev_upper_cycles": 217186.23799926337,
+    "dev_global_lower_cycles": 215055.7962423593,
+    "dse_gap_pct": 0.9906460528518624,
+    "candidates": 2280,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero12": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero12",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 160,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      }
+    ],
+    "geometry": "1*(2x160x128)+11*(1x128x64)",
+    "dev_upper_cycles": 217666.29675309773,
+    "dev_global_lower_cycles": 214861.41089382867,
+    "dse_gap_pct": 1.3054395610643477,
+    "candidates": 2235,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero13": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero13",
+    "cores": [
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 256
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 64
+      }
+    ],
+    "geometry": "1*(1x128x256)+12*(1x128x64)",
+    "dev_upper_cycles": 215715.61803683464,
+    "dev_global_lower_cycles": 213878.20680837697,
+    "dse_gap_pct": 0.8590923104680348,
+    "candidates": 1745,
+    "refined_candidates": 7,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero14": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero14",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 160,
+        "pk": 128
+      },
+      {
+        "pm": 2,
+        "pn": 160,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      }
+    ],
+    "geometry": "2*(2x160x128)+12*(1x128x32)",
+    "dev_upper_cycles": 220519.37415241348,
+    "dev_global_lower_cycles": 216931.32029338714,
+    "dse_gap_pct": 1.6540045274115789,
+    "candidates": 2135,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero15": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero15",
+    "cores": [
+      {
+        "pm": 4,
+        "pn": 144,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      }
+    ],
+    "geometry": "1*(4x144x128)+14*(1x128x32)",
+    "dev_upper_cycles": 223594.82967156026,
+    "dev_global_lower_cycles": 218242.35478692027,
+    "dse_gap_pct": 2.4525371758684633,
+    "candidates": 910,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  },
+  "hetero16": {
+    "total_macs": 131072,
+    "mode": "full_scaled",
+    "granularity": "expert",
+    "family": "hetero16",
+    "cores": [
+      {
+        "pm": 2,
+        "pn": 144,
+        "pk": 128
+      },
+      {
+        "pm": 2,
+        "pn": 144,
+        "pk": 128
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      },
+      {
+        "pm": 1,
+        "pn": 128,
+        "pk": 32
+      }
+    ],
+    "geometry": "2*(2x144x128)+14*(1x128x32)",
+    "dev_upper_cycles": 220990.04213733942,
+    "dev_global_lower_cycles": 216790.807336065,
+    "dse_gap_pct": 1.9369985530635736,
+    "candidates": 3450,
+    "refined_candidates": 1,
+    "optimality": "bounded optimum of declared grid; exact only when gap=0",
+    "objective": "6 batches equally weighted, GM across development windows within batch",
+    "selection_uses_heldout": false
+  }
+}

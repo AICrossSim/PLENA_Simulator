@@ -1,0 +1,11 @@
+{
+  "optimization": "cache immutable LPT ordering keys; no change to schedule, objective, or cost model",
+  "old_cpp_sha256": "4de9dc8fea0b580bf0bfa524801ee35d0a9a3189e4f1e66c486632de3a0e1aa0",
+  "new_cpp_sha256": "b51d25bf27219952d404089c57e8345e01895824769884b05f68ef2b916ebc22",
+  "real_development_windows": 6,
+  "all_1M_configurations": 106802,
+  "all_lower_and_upper_arrays_bitwise_equal": true,
+  "old_seconds": 11.564443089067936,
+  "new_seconds": 5.043294100090861,
+  "note": "Implementation equivalence test, not an architectural speedup."
+}

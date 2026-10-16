@@ -1,0 +1,6 @@
+{
+  "lower": "integer-cycle ceil of original fractional lower bound",
+  "upper": "unchanged exact integer-cycle feasible schedules",
+  "original_continuous_objectives": "all_candidates.csv.gz and selected.json",
+  "changes_hardware_or_results": false
+}

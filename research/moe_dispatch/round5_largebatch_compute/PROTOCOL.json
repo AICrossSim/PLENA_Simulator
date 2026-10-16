@@ -1,0 +1,53 @@
+{
+  "scope": "large real prefill token batches; Shared plus routed MoE, ideal data supply",
+  "batches": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048
+  ],
+  "multiplier_budgets": [
+    65536,
+    131072,
+    262144,
+    524288,
+    1048576
+  ],
+  "frequency_GHz": 1,
+  "precision": "BF16 input/weight; FP32 accumulation; multiplier-count fairness, no equal-PPA claim",
+  "PM": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32,
+    64
+  ],
+  "PN": "8..256 step8, identical legality for every core",
+  "PK": [
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "per_core_MAC_granularity": 4096,
+  "organizations": "single; all legal homogeneous counts <=16 (2/4/8/16); all two-type hetero pools with every count2..16 and every exact aligned split",
+  "dataflow": "per-expert minimum of OS/WS/IS, same allowance for all organizations; no switch cost charged",
+  "timing_assumption": "one tile issue/cycle, dot+commit latency 3+2log2(PK),8 OS contexts/core; analytical, not synthesis proven",
+  "primary_modes": [
+    "matrix",
+    "full_scaled"
+  ],
+  "vector_scaled": "64 elements/cycle per65536 multipliers, proportional per-core shares",
+  "vector_control": "fixed64 total elements/cycle on frozen designs",
+  "objective": "GM of6 batch GMs on development only; freeze hardware across batches per MAC budget",
+  "offline": "feasible assignment upper bounds plus rigorous fractional/pmax lower bounds and integer optimization certificates",
+  "granularity": "whole experts primary; universally allowed64-token Shared row shards sensitivity",
+  "runtime": "causal known-shape EFT after route completion; same policy on all multicore designs, no unmeasured predictor claims",
+  "no_commits_or_push": true,
+  "domain_amendment": "Before any official DSE results: include non-power-of-two heterogeneous core counts, e.g.1+6, under the common max16-core constraint."
+}

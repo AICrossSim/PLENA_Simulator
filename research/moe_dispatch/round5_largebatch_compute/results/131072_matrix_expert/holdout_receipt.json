@@ -1,0 +1,10 @@
+{
+  "windows": 90,
+  "rows": 10800,
+  "input_digest": "289b6d7e74aef54a74d0d0cb21da5ba28d8cd7138a194bac80fc2ec361c5fa95",
+  "selection_digest": "719b87ef5802ccf40dd3cda436152ff9e56f997118305b9cedd392c50a2bd0c3",
+  "all_point_repeats_exact": true,
+  "integer_optimizer_deterministic_work": 0.08,
+  "wall_seconds": 322.6597290467471,
+  "runtime_policy": "LPT priority, compare all cores including temporarily-full queues; bounded8-entry bypass"
+}

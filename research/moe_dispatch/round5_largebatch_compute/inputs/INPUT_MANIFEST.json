@@ -1,0 +1,22 @@
+{
+  "capture_manifest_sha256": "8df9ba24fc2f513e6431d5f2256de5e5e6a8e30fe39ed20f60c0fff3e0eb9593",
+  "input_digest": "82ce8a04f881d6c0f8bd8b2527090a5de6819a12867c590f712299be69f2ec85",
+  "windows": {
+    "development": 90,
+    "heldout": 90
+  },
+  "batches": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048
+  ],
+  "requests_disjoint": true,
+  "group_count": {
+    "development": 5,
+    "heldout": 5
+  },
+  "note": "Prefill token batches, not2048 independent decode requests. Requests/layers recur across B; use group-cluster bootstrap. Timing heldout chosen by identity hash before new routes/search; requests may have appeared in historical unrelated studies."
+}

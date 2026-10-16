@@ -1,0 +1,10 @@
+{
+  "candidates": 19204,
+  "windows": 90,
+  "grid_repeats": 2,
+  "grid_bitwise_equal": true,
+  "wall_seconds": 135.99700972996652,
+  "dev_digest": "1cc6bdd8c46117fea3b0304039a26cefdbcf6382b6cfeabc44f3e5776d72b5fd",
+  "refinement_limit": 12,
+  "note": "Finite grid complete; scheduler and selection residual gaps explicitly retained."
+}
