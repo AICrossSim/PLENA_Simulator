@@ -1,0 +1,11 @@
+{
+  "delta": 0.05,
+  "objective": {
+    "0.02": 1.020060637819326,
+    "0.05": 1.018208575653068,
+    "0.1": 1.0210784515814033,
+    "0.2": 1.0238420320595083
+  },
+  "objective_definition": "Paired online/offline GM, equal weight per budget, organization and batch; development only",
+  "all_points_repeated_exactly": true
+}
