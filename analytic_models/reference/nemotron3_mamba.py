@@ -220,12 +220,8 @@ def mamba_state_engine_step(
         raise ValueError("projected token must have shape [batch, projection_size]")
     batch = projected.shape[0]
     _require_shape("projected", projected, (batch, shape.projection_size))
-    _, xbc, dt = projected.float().split(
-        [shape.d_inner, shape.conv_channels, shape.num_heads], dim=-1
-    )
-    xbc, conv_state = causal_conv_step(
-        xbc, state.conv, conv_weight, conv_bias
-    )
+    _, xbc, dt = projected.float().split([shape.d_inner, shape.conv_channels, shape.num_heads], dim=-1)
+    xbc, conv_state = causal_conv_step(xbc, state.conv, conv_weight, conv_bias)
     x, b, c = xbc.split(
         [
             shape.d_inner,
@@ -265,9 +261,7 @@ def mamba_state_engine_prefill(
 ) -> tuple[Tensor, Mamba2State]:
     """Golden X_STATE PREFILL, defined as sequential STEP operations."""
     if projected.ndim != 3 or projected.shape[-1] != shape.projection_size:
-        raise ValueError(
-            "projected prefill input must be [batch, sequence, projection_size]"
-        )
+        raise ValueError("projected prefill input must be [batch, sequence, projection_size]")
     outputs = []
     current = state
     for token in projected.unbind(dim=1):

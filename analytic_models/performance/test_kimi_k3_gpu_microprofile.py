@@ -117,10 +117,7 @@ def _fixture(root: Path) -> None:
     _write(traffic_path, traffic)
 
     files = (comparison_path, flashkda_path, layout_path, traffic_path)
-    hashes = {
-        f"/home/fixture-user/plena-profiles/{path.relative_to(root)}": _hash(path)
-        for path in files
-    }
+    hashes = {f"/home/fixture-user/plena-profiles/{path.relative_to(root)}": _hash(path) for path in files}
     manifest = {
         "source": {
             "kimi_k3": {"commit": EXPECTED_KIMI_COMMIT},

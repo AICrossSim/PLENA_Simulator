@@ -49,9 +49,7 @@ def run_kda_precision_experiment(
     def update(state: torch.Tensor, q, k, v, gate, beta):
         q = q * torch.rsqrt(q.square().sum(-1, keepdim=True) + 1.0e-6)
         k = k * torch.rsqrt(k.square().sum(-1, keepdim=True) + 1.0e-6)
-        log_decay = -5.0 * torch.sigmoid(
-            torch.exp(a_log)[None, :, None] * (gate + dt_bias[None])
-        )
+        log_decay = -5.0 * torch.sigmoid(torch.exp(a_log)[None, :, None] * (gate + dt_bias[None]))
         decayed = state * torch.exp(log_decay)[:, :, None, :]
         prediction = torch.einsum("bhvk,bhk->bhv", decayed, k)
         error = torch.sigmoid(beta)[:, :, None] * (v - prediction)
@@ -83,9 +81,7 @@ def run_kda_precision_experiment(
             state_bytes=byte_count,
             compression_vs_fp32=fp32_bytes / byte_count,
             state_error=_metrics(state, reference_state),
-            output_error=_metrics(
-                torch.stack(candidate_outputs[storage]), reference_output
-            ),
+            output_error=_metrics(torch.stack(candidate_outputs[storage]), reference_output),
         )
         results.append(
             {

@@ -75,15 +75,7 @@ PROJECTION = D_INNER + CONV_CHANNELS + HEADS
 
 
 def _bf16_bytes(value: torch.Tensor) -> bytes:
-    return (
-        value.to(torch.bfloat16)
-        .contiguous()
-        .view(torch.uint16)
-        .cpu()
-        .numpy()
-        .astype("<u2", copy=False)
-        .tobytes()
-    )
+    return value.to(torch.bfloat16).contiguous().view(torch.uint16).cpu().numpy().astype("<u2", copy=False).tobytes()
 
 
 def _patch_hbm(
@@ -126,9 +118,7 @@ def _read_vram_row(
             raw = stream.read(MLEN * 2)
             if len(raw) != MLEN * 2:
                 raise AssertionError("VRAM dump ended inside a logical row")
-            blocks.append(
-                torch.frombuffer(bytearray(raw), dtype=torch.bfloat16).clone()
-            )
+            blocks.append(torch.frombuffer(bytearray(raw), dtype=torch.bfloat16).clone())
     return torch.cat(blocks)[:width].reshape(1, width)
 
 
@@ -168,12 +158,8 @@ def _golden(hidden: torch.Tensor, weights: dict[str, torch.Tensor]) -> torch.Ten
     # Zero initial convolution state and a [0,0,0,1] depthwise kernel.
     convolved = _bf16(torch.nn.functional.silu(xbc.float()))
     x = convolved[:, :D_INNER].reshape(1, HEADS, HEAD_DIM).float()
-    b = convolved[:, D_INNER : D_INNER + GROUP_STATE].reshape(
-        1, GROUPS, STATE_DIM
-    ).float()
-    c = convolved[:, D_INNER + GROUP_STATE :].reshape(
-        1, GROUPS, STATE_DIM
-    ).float()
+    b = convolved[:, D_INNER : D_INNER + GROUP_STATE].reshape(1, GROUPS, STATE_DIM).float()
+    c = convolved[:, D_INNER + GROUP_STATE :].reshape(1, GROUPS, STATE_DIM).float()
     b = b.repeat_interleave(HEADS // GROUPS, dim=1)
     c = c.repeat_interleave(HEADS // GROUPS, dim=1)
     # Match the state engine's f32 left-to-right reduction.  torch.sum may use
@@ -190,22 +176,15 @@ def _golden(hidden: torch.Tensor, weights: dict[str, torch.Tensor]) -> torch.Ten
             x_value = np.float32(x_np[0, head, position])
             reduced = np.float32(0.0)
             for state_index in range(STATE_DIM):
-                updated = np.float32(
-                    np.float32(dt_value * b_np[0, head, state_index]) * x_value
-                )
-                reduced = np.float32(
-                    reduced + np.float32(updated * c_np[0, head, state_index])
-                )
+                updated = np.float32(np.float32(dt_value * b_np[0, head, state_index]) * x_value)
+                reduced = np.float32(reduced + np.float32(updated * c_np[0, head, state_index]))
             state_out_np[0, head, position] = np.float32(reduced + x_value)
     state_out = _bf16(torch.from_numpy(state_out_np).reshape(1, D_INNER))
 
     gated = _bf16(state_out.float() * _bf16(gate.float() * _sigmoid(gate).float()).float())
     grouped = gated.reshape(1, GROUPS, D_INNER // GROUPS)
     normalized = torch.cat(
-        [
-            _rms_norm_vector_ref(group, EPS, _active_precision_settings())
-            for group in grouped.unbind(1)
-        ],
+        [_rms_norm_vector_ref(group, EPS, _active_precision_settings()) for group in grouped.unbind(1)],
         dim=-1,
     )
     normalized = _bf16(normalized * weights["W_MAMBA_NORM"].float())
@@ -219,24 +198,12 @@ def _register_moe(
     router = torch.zeros(MLEN, 4, dtype=torch.bfloat16)
     for expert in range(4):
         router[:, expert] = _exact((MLEN,), expert + 1, expert, scale=1 / 32)
-    up_values = [
-        _exact((MLEN, MLEN), expert + 2, expert + 1, 1 / 32)
-        for expert in range(4)
-    ]
-    down_values = [
-        _exact((MLEN, MLEN), expert + 3, expert + 2, 1 / 32)
-        for expert in range(4)
-    ]
+    up_values = [_exact((MLEN, MLEN), expert + 2, expert + 1, 1 / 32) for expert in range(4)]
+    down_values = [_exact((MLEN, MLEN), expert + 3, expert + 2, 1 / 32) for expert in range(4)]
     weights = NemotronMoeWeights(
-        router=_register_weight(
-            prog, tensors, "W_NEMOTRON_ROUTER", router, bf16=True
-        ),
-        routed_up=_register_expert_table(
-            prog, tensors, prefix="W_NEMOTRON_EXPERT_UP", values=up_values
-        ),
-        routed_down=_register_expert_table(
-            prog, tensors, prefix="W_NEMOTRON_EXPERT_DOWN", values=down_values
-        ),
+        router=_register_weight(prog, tensors, "W_NEMOTRON_ROUTER", router, bf16=True),
+        routed_up=_register_expert_table(prog, tensors, prefix="W_NEMOTRON_EXPERT_UP", values=up_values),
+        routed_down=_register_expert_table(prog, tensors, prefix="W_NEMOTRON_EXPERT_DOWN", values=down_values),
         shared_up=_register_weight(
             prog,
             tensors,
@@ -289,30 +256,20 @@ def _nemotron_moe_golden(
             hidden,
             tensors.references[f"W_NEMOTRON_EXPERT_UP_{expert}"],
         )
-        activated = _bf16(
-            torch.clamp(up.float(), min=0.0), precision=precision
-        )
-        activated = _bf16(
-            activated.float() * activated.float(), precision=precision
-        )
+        activated = _bf16(torch.clamp(up.float(), min=0.0), precision=precision)
+        activated = _bf16(activated.float() * activated.float(), precision=precision)
         output = _linear(
             activated,
             tensors.references[f"W_NEMOTRON_EXPERT_DOWN_{expert}"],
         )
-        output = _bf16(
-            output.float() * selected[0, pair].float(), precision=precision
-        )
-        accumulator = _bf16(
-            accumulator.float() + output.float(), precision=precision
-        )
+        output = _bf16(output.float() * selected[0, pair].float(), precision=precision)
+        accumulator = _bf16(accumulator.float() + output.float(), precision=precision)
 
     shared = _linear(hidden, tensors.values["W_NEMOTRON_SHARED_UP"])
     shared = _bf16(torch.clamp(shared.float(), min=0.0), precision=precision)
     shared = _bf16(shared.float() * shared.float(), precision=precision)
     shared = _linear(shared, tensors.values["W_NEMOTRON_SHARED_DOWN"])
-    return _bf16(
-        accumulator.float() + shared.float(), precision=precision
-    )
+    return _bf16(accumulator.float() + shared.float(), precision=precision)
 
 
 def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
@@ -334,11 +291,7 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
     scheduler = Nemotron3MambaScheduler(config)
     trace = scheduler.build()
     lowered = lower_mamba_trace_to_existing_isa(trace, descriptor_base=0)
-    memories = {
-        event.memory
-        for event in lowered.events
-        if isinstance(event.memory, MambaLayerMemoryMap)
-    }
+    memories = {event.memory for event in lowered.events if isinstance(event.memory, MambaLayerMemoryMap)}
     if len(memories) != 1:
         raise AssertionError(f"expected one Mamba memory map, got {len(memories)}")
     memory = memories.pop()
@@ -374,9 +327,7 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
         memory.normalization_scratch_vram_addr + 2 * MLEN * MLEN,
         dtype=torch.bfloat16,
     )
-    hidden_value = (
-        0.25 + torch.arange(MLEN, dtype=torch.float32).reshape(1, -1) / 512.0
-    ).to(torch.bfloat16)
+    hidden_value = (0.25 + torch.arange(MLEN, dtype=torch.float32).reshape(1, -1) / 512.0).to(torch.bfloat16)
     hidden = prestage_bf16_vram_matrix(
         prog=prog,
         name="HIDDEN",
@@ -408,11 +359,7 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
         [[0.0, 0.125, 0.25, -0.125] + [0.0] * (MLEN - 4)],
         dtype=torch.bfloat16,
     )
-    correction_addr = (
-        (memory.normalization_scratch_vram_addr + MLEN * MLEN - 1)
-        // (MLEN * MLEN)
-        * (MLEN * MLEN)
-    )
+    correction_addr = (memory.normalization_scratch_vram_addr + MLEN * MLEN - 1) // (MLEN * MLEN) * (MLEN * MLEN)
     correction = prestage_bf16_vram_matrix(
         prog=prog,
         name="MOE_CORRECTION",
@@ -423,9 +370,7 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
     )
 
     if stage == "mamba_moe":
-        mamba_residual = prog.vram_copy(
-            hidden, name="mamba_residual", num_rows=1
-        )
+        mamba_residual = prog.vram_copy(hidden, name="mamba_residual", num_rows=1)
         mamba_input = prog.vram_copy(hidden, name="mamba_input", num_rows=1)
         prog.rms_norm(
             mamba_input,
@@ -454,9 +399,7 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
         )
         golden = _nemotron_moe_golden(hidden_value, tensors, correction_value)
     if stage == "mamba_moe":
-        current = prog.vram_copy(
-            mamba_residual, name="prefix_after_mamba", num_rows=1
-        )
+        current = prog.vram_copy(mamba_residual, name="prefix_after_mamba", num_rows=1)
         prog.vram_add(current, hidden, num_rows=1)
         mamba_prefix = current
         golden = _bf16(hidden_value.float() + golden.float())
@@ -485,22 +428,14 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
         )
         prog.vram_add(moe_residual, moe_out, num_rows=1)
         current = moe_residual
-        golden = _bf16(
-            golden.float()
-            + _nemotron_moe_golden(
-                moe_input_golden, tensors, correction_value
-            ).float()
-        )
+        golden = _bf16(golden.float() + _nemotron_moe_golden(moe_input_golden, tensors, correction_value).float())
     assembly = prog.compile()
 
     input_tensors = tensors.values
     tensor_layouts = infer_hbm_tensor_layouts(input_tensors)
     for name in tensors.bf16_names:
         tensor_layouts[name] = _bf16_layout(input_tensors[name])
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
-        for name in input_tensors
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
     create_sim_env(
         input_tensors,
         assembly,
@@ -521,14 +456,17 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
         tensor_layouts=tensor_layouts,
         hbm_addrs=hbm_addrs,
     )
-    hbm_size = math.ceil(
-        max(
-            prog._next_hbm_addr,
-            layout.arena_end,
-            lowered.layout_descriptor_base + len(lowered.layout_descriptor_image),
+    hbm_size = (
+        math.ceil(
+            max(
+                prog._next_hbm_addr,
+                layout.arena_end,
+                lowered.layout_descriptor_base + len(lowered.layout_descriptor_image),
+            )
+            / 64
         )
-        / 64
-    ) * 64
+        * 64
+    )
     _patch_hbm(
         build_dir / "hbm_for_behave_sim.bin",
         descriptor_image=lowered.descriptor_image,
@@ -553,14 +491,10 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
         golden=golden,
     )
     model_atol = 0.05 if stage == "mamba_moe" else 0.008
-    params.update(
-        {"atol": model_atol, "rtol": 0.02, "min_allclose_match_rate": 100.0}
-    )
+    params.update({"atol": model_atol, "rtol": 0.02, "min_allclose_match_rate": 100.0})
     if stage != "moe" and float(golden.abs().max()) < 0.05:
         raise AssertionError("Mamba golden signal is too small")
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(params, indent=2) + "\n"
-    )
+    (build_dir / "comparison_params.json").write_text(json.dumps(params, indent=2) + "\n")
     (build_dir / "generated_asm_code.asm").write_text(assembly)
     (build_dir / "hbm_size.txt").write_text(f"{hbm_size}\n")
 
@@ -573,9 +507,7 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
     results, _ = compare_emulator_output(build_dir, verbose=False)
     rate = float(results.get("allclose_match_rate", 0.0))
     if rate < 100.0:
-        raise AssertionError(
-            f"Mamba Rust comparison failed: max_abs={results.get('max_error')}, rate={rate}%"
-        )
+        raise AssertionError(f"Mamba Rust comparison failed: max_abs={results.get('max_error')}, rate={rate}%")
     edge_max_abs_error = None
     if stage == "mamba_moe":
         assert mamba_prefix is not None
@@ -593,21 +525,11 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
             physical_rows=current.physical_shape[0],
         )
         edge_golden = _bf16(
-            mamba_actual.float()
-            + _nemotron_moe_golden(
-                _rms(mamba_actual), tensors, correction_value
-            ).float()
+            mamba_actual.float() + _nemotron_moe_golden(_rms(mamba_actual), tensors, correction_value).float()
         )
-        edge_max_abs_error = float(
-            (final_actual.float() - edge_golden.float()).abs().max()
-        )
-        if not torch.allclose(
-            final_actual.float(), edge_golden.float(), atol=0.008, rtol=0.02
-        ):
-            raise AssertionError(
-                "Mamba-to-MoE physical handoff failed: "
-                f"max_abs={edge_max_abs_error}"
-            )
+        edge_max_abs_error = float((final_actual.float() - edge_golden.float()).abs().max())
+        if not torch.allclose(final_actual.float(), edge_golden.float(), atol=0.008, rtol=0.02):
+            raise AssertionError(f"Mamba-to-MoE physical handoff failed: max_abs={edge_max_abs_error}")
     summary = {
         "stage": stage,
         "sim_latency_ns": metrics.get("sim_latency_ns"),
@@ -623,24 +545,15 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--stage", choices=("mamba", "moe", "mamba_moe", "all"), default="all"
-    )
+    parser.add_argument("--stage", choices=("mamba", "moe", "mamba_moe", "all"), default="all")
     parser.add_argument(
         "--build-dir",
         type=Path,
         default=Path("transactional_emulator/testbench/build/nemotron3_mamba_connected"),
     )
     args = parser.parse_args()
-    stages = (
-        ("mamba", "moe", "mamba_moe")
-        if args.stage == "all"
-        else (args.stage,)
-    )
-    summaries = [
-        build_and_run(stage, args.build_dir.expanduser().resolve() / stage)
-        for stage in stages
-    ]
+    stages = ("mamba", "moe", "mamba_moe") if args.stage == "all" else (args.stage,)
+    summaries = [build_and_run(stage, args.build_dir.expanduser().resolve() / stage) for stage in stages]
     print(json.dumps(summaries, indent=2))
 
 

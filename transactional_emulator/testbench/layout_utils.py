@@ -25,16 +25,12 @@ def read_bf16_vram_matrix(
         for row in range(rows):
             blocks = []
             for column_block in range(math.ceil(width / mlen)):
-                element_offset = (
-                    address + column_block * physical_rows * mlen + row * mlen
-                )
+                element_offset = address + column_block * physical_rows * mlen + row * mlen
                 stream.seek(element_offset * 2)
                 raw = stream.read(mlen * 2)
                 if len(raw) != mlen * 2:
                     raise AssertionError("VRAM dump ended inside a matrix row")
-                blocks.append(
-                    torch.frombuffer(bytearray(raw), dtype=torch.bfloat16).clone()
-                )
+                blocks.append(torch.frombuffer(bytearray(raw), dtype=torch.bfloat16).clone())
             result[row] = torch.cat(blocks)[:width]
     return result
 

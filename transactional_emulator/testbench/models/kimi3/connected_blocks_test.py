@@ -93,9 +93,7 @@ def _set_matrix_kv_plain_bf16() -> None:
             precision[key] = tomlkit.table()
             precision[key]["format"] = "Plain"
             precision[key]["DATA_TYPE"] = tomlkit.table()
-            precision[key]["DATA_TYPE"].update(
-                {"type": "Fp", "sign": True, "exponent": 8, "mantissa": 7}
-            )
+            precision[key]["DATA_TYPE"].update({"type": "Fp", "sign": True, "exponent": 8, "mantissa": 7})
     with settings.open("w") as stream:
         tomlkit.dump(config, stream)
 
@@ -161,14 +159,10 @@ def _situ(
         precision=precision,
     )
     gate_denom = _bf16(gate_exp.float() + 1.0, precision=precision)
-    gate_denom = _bf16(
-        torch.reciprocal(gate_denom.float()), precision=precision
-    )
+    gate_denom = _bf16(torch.reciprocal(gate_denom.float()), precision=precision)
     gate_num = _bf16(gate_exp.float() * -1.0, precision=precision)
     gate_num = _bf16(gate_num.float() + 1.0, precision=precision)
-    gate_tanh = _bf16(
-        gate_num.float() * gate_denom.float(), precision=precision
-    )
+    gate_tanh = _bf16(gate_num.float() * gate_denom.float(), precision=precision)
     gate_term = _bf16(
         gate_tanh.float() * _sigmoid(gate, precision=precision).float(),
         precision=precision,
@@ -234,7 +228,8 @@ def _moe_golden(
     accumulator = torch.zeros_like(routed_input)
     for slot, expert in enumerate(selected):
         gate = _linear(
-            routed_input, tensors.references.get(f"W_expert_gate_{expert}", tensors.values.get(f"W_expert_gate_{expert}"))
+            routed_input,
+            tensors.references.get(f"W_expert_gate_{expert}", tensors.values.get(f"W_expert_gate_{expert}")),
         )
         up = _linear(
             routed_input, tensors.references.get(f"W_expert_up_{expert}", tensors.values.get(f"W_expert_up_{expert}"))
@@ -243,12 +238,8 @@ def _moe_golden(
             _situ(gate, up, precision=precision),
             tensors.references.get(f"W_expert_down_{expert}", tensors.values.get(f"W_expert_down_{expert}")),
         )
-        weighted = _bf16(
-            expert_out.float() * route[slot].float(), precision=precision
-        )
-        accumulator = _bf16(
-            accumulator.float() + weighted.float(), precision=precision
-        )
+        weighted = _bf16(expert_out.float() * route[slot].float(), precision=precision)
+        accumulator = _bf16(accumulator.float() + weighted.float(), precision=precision)
     routed = _linear(
         _rms(accumulator, precision=precision),
         tensors.values["W_moe_latent_up"],
@@ -327,9 +318,7 @@ def _register_expert_table(
     stride = prog.hbm_tensor_size(block_size)
     raw_group_size = stride * len(values)
     tile_group_stride = 1 << (raw_group_size - 1).bit_length()
-    prog._next_hbm_addr = (
-        (prog._next_hbm_addr + tile_group_stride - 1) // tile_group_stride
-    ) * tile_group_stride
+    prog._next_hbm_addr = ((prog._next_hbm_addr + tile_group_stride - 1) // tile_group_stride) * tile_group_stride
     row_tiles = rows // prog.mlen
     col_tiles = cols // prog.mlen
     base = prog._allocate_hbm(row_tiles * col_tiles * tile_group_stride)
@@ -354,9 +343,7 @@ def _register_expert_table(
                     name,
                     shape=(prog.mlen, prog.mlen),
                     physical_shape=(prog.mlen, prog.mlen),
-                    hbm_addr=(
-                        base + group * tile_group_stride + expert * stride
-                    ),
+                    hbm_addr=(base + group * tile_group_stride + expert * stride),
                 )
     return ExpertWeightTable(
         template=template,
@@ -549,18 +536,9 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 17) -> dict:
     router[:, 2] = _exact((MLEN,), 3, 2, scale=1 / 32)
     router[:, 3] = _exact((MLEN,), 4, 3, scale=1 / 32)
     routed_hidden = 5 * MLEN if stage == "moe_ksplit" else MLEN
-    gate_values = [
-        _exact((routed_hidden, MLEN), expert + 1, expert, 1 / 32)
-        for expert in range(4)
-    ]
-    up_values = [
-        _exact((routed_hidden, MLEN), expert + 2, expert + 1, 1 / 32)
-        for expert in range(4)
-    ]
-    down_values = [
-        _exact((MLEN, routed_hidden), expert + 3, expert + 2, 1 / 32)
-        for expert in range(4)
-    ]
+    gate_values = [_exact((routed_hidden, MLEN), expert + 1, expert, 1 / 32) for expert in range(4)]
+    up_values = [_exact((routed_hidden, MLEN), expert + 2, expert + 1, 1 / 32) for expert in range(4)]
+    down_values = [_exact((MLEN, routed_hidden), expert + 3, expert + 2, 1 / 32) for expert in range(4)]
     moe_weights = KimiLatentMoeWeights(
         router=_register_weight(prog, tensors, "W_moe_router", router, bf16=True),
         routed_down=_register_weight(
@@ -575,15 +553,9 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 17) -> dict:
             "W_moe_latent_up",
             _exact((routed_hidden, MLEN), 3, 3, 1 / 32),
         ),
-        routed_gate=_register_expert_table(
-            prog, tensors, prefix="W_expert_gate", values=gate_values
-        ),
-        routed_up_expert=_register_expert_table(
-            prog, tensors, prefix="W_expert_up", values=up_values
-        ),
-        routed_down_expert=_register_expert_table(
-            prog, tensors, prefix="W_expert_down", values=down_values
-        ),
+        routed_gate=_register_expert_table(prog, tensors, prefix="W_expert_gate", values=gate_values),
+        routed_up_expert=_register_expert_table(prog, tensors, prefix="W_expert_up", values=up_values),
+        routed_down_expert=_register_expert_table(prog, tensors, prefix="W_expert_down", values=down_values),
         shared=(
             _register_weight(prog, tensors, "W_shared_gate", _exact((MLEN, MLEN), 4, 1, 1 / 32)),
             _register_weight(prog, tensors, "W_shared_up", _exact((MLEN, MLEN), 2, 3, 1 / 32)),
@@ -653,9 +625,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 17) -> dict:
             rows=1,
             name="connected_attnres_before_mla",
         )
-        mixer_input_golden = _attn_res_golden(
-            (block_value,), golden, score_weight_value
-        )
+        mixer_input_golden = _attn_res_golden((block_value,), golden, score_weight_value)
         mixer_out = emit_mla_residual_block(
             prog,
             mixer_input,
@@ -692,9 +662,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 17) -> dict:
             rows=1,
             name="connected_attnres_before_moe",
         )
-        ffn_input_golden = _attn_res_golden(
-            (block_value,), prefix_after_mixer_golden, score_weight_value
-        )
+        ffn_input_golden = _attn_res_golden((block_value,), prefix_after_mixer_golden, score_weight_value)
         moe_out = emit_kimi_latent_moe_residual_block(
             prog,
             ffn_input,
@@ -730,9 +698,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 17) -> dict:
     layouts = infer_hbm_tensor_layouts(input_tensors)
     for name in tensors.bf16_names:
         layouts[name] = _bf16_layout(input_tensors[name])
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
     data_order = sorted(input_tensors, key=hbm_addrs.__getitem__)
 
     create_sim_env(
@@ -818,14 +784,9 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=17)
     args = parser.parse_args()
-    stages = (
-        ("mla", "moe", "chain", "attnres", "attnres_chain")
-        if args.stage == "all"
-        else (args.stage,)
-    )
+    stages = ("mla", "moe", "chain", "attnres", "attnres_chain") if args.stage == "all" else (args.stage,)
     summaries = [
-        build_and_run(stage, args.build_dir.expanduser().resolve() / stage, seed=args.seed)
-        for stage in stages
+        build_and_run(stage, args.build_dir.expanduser().resolve() / stage, seed=args.seed) for stage in stages
     ]
     print(json.dumps(summaries, indent=2))
 

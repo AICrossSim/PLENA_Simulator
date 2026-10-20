@@ -106,9 +106,7 @@ def test_formal_campaign_attaches_real_routing_but_keeps_cycles_uncalibrated() -
     assert capacity["one_hottest_routed_expert_for_all_moe_layers_mib"] == pytest.approx(
         capacity["routed_expert_mib_per_layer"] * 23
     )
-    assert capacity["one_hottest_expert_per_layer_assignment_coverage"] == pytest.approx(
-        32785 / 300150
-    )
+    assert capacity["one_hottest_expert_per_layer_assignment_coverage"] == pytest.approx(32785 / 300150)
     assert "not a cache-hit prediction" in capacity["interpretation"]
     assert document["results"][0]["metrics"]["calibrated"] is False
     guardrail = document["formal_b200_guardrail"]

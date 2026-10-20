@@ -206,11 +206,8 @@ def _attach_b200_decode_guardrail(metadata: dict[str, Any]) -> None:
         "candidate_latency_ms_per_step": metrics["latency_us_per_step"] / 1000,
         "candidate_latency_over_gpu": metrics["latency_us_per_step"] / 1000 / gpu_itl_ms,
         "candidate_logical_hbm_gib_per_step": hbm_bytes / (1024**3),
-        "minimum_hbm_bytes_per_cycle_to_match_gpu_ignoring_compute": hbm_bytes
-        / (design["frequency_hz"] * gpu_seconds),
-        "minimum_hbm_gib_per_second_to_match_gpu_ignoring_compute": hbm_bytes
-        / gpu_seconds
-        / (1024**3),
+        "minimum_hbm_bytes_per_cycle_to_match_gpu_ignoring_compute": hbm_bytes / (design["frequency_hz"] * gpu_seconds),
+        "minimum_hbm_gib_per_second_to_match_gpu_ignoring_compute": hbm_bytes / gpu_seconds / (1024**3),
         "interpretation": (
             "This is a rejection guardrail, not calibrated speedup: the candidate cycles are analytic, and the "
             "bandwidth floor optimistically ignores every compute and synchronization cycle."
@@ -271,15 +268,11 @@ def build_document(args: argparse.Namespace) -> dict[str, Any]:
             "weight_format": "NVFP4 logical bytes excluding global scales and padding",
             "expert_mlp": "up -> ReLU2 -> down (two matrices)",
             "routed_expert_mib_per_layer": routed_expert_bytes / MIB,
-            "one_hottest_routed_expert_for_all_moe_layers_mib": (
-                routed_expert_bytes * moe_layers / MIB
-            ),
-            "all_shared_experts_for_all_moe_layers_mib": (
-                shared_expert_bytes * moe.shared_experts * moe_layers / MIB
-            ),
-            "one_hottest_expert_per_layer_assignment_coverage": campaign["nemotron"][
-                "routing"
-            ]["one_hottest_expert_per_layer_assignment_coverage"],
+            "one_hottest_routed_expert_for_all_moe_layers_mib": (routed_expert_bytes * moe_layers / MIB),
+            "all_shared_experts_for_all_moe_layers_mib": (shared_expert_bytes * moe.shared_experts * moe_layers / MIB),
+            "one_hottest_expert_per_layer_assignment_coverage": campaign["nemotron"]["routing"][
+                "one_hottest_expert_per_layer_assignment_coverage"
+            ],
             "interpretation": (
                 "This is a static capacity/frequency bound, not a cache-hit prediction. "
                 "Exact reuse and Expert/M/K scheduling require the raw per-step top-k trace."
@@ -377,7 +370,9 @@ def _print_summary(document: dict[str, Any], top_k: int) -> None:
         )
         return
 
-    headings = "rank design                                             us/step  Mamba us  HBM MiB spill MiB hit% bank stall"
+    headings = (
+        "rank design                                             us/step  Mamba us  HBM MiB spill MiB hit% bank stall"
+    )
     print(headings)
     print("-" * len(headings))
     for rank, result in enumerate(document["results"][:top_k], start=1):

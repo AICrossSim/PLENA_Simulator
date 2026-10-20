@@ -33,7 +33,7 @@ jobs:
       - name: Run ruff lint
         run: uv run ruff check .
 
-      - name: Run hybrid pre-RTL model guards
+      - name: Run hybrid and MoE model guards
         env:
           PYTHONPATH: ${{ github.workspace }}/PLENA_Compiler:${{ github.workspace }}:${{ github.workspace }}/PLENA_Tools:${{ github.workspace }}/transactional_emulator/testbench
         run: |
@@ -47,4 +47,15 @@ jobs:
             transactional_emulator/testbench/models/nemotron3/test_full_synthetic_configuration.py \
             transactional_emulator/testbench/test_gpt_oss_testkit.py \
             transactional_emulator/testbench/test_x_state_contract_sync.py \
-            transactional_emulator/testbench/test_hybrid_isa_freeze_sync.py
+            transactional_emulator/testbench/test_hybrid_isa_freeze_sync.py \
+            transactional_emulator/testbench/test_hbm_tile_major_layout.py \
+            transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
+            transactional_emulator/testbench/moe_timing/replay/test_analyze_full_swe_grouping.py \
+            transactional_emulator/testbench/moe_timing/replay/test_analyze_sram_context_capacity.py \
+            transactional_emulator/testbench/moe_timing/replay/test_moe_dma_campaign.py \
+            transactional_emulator/testbench/moe_timing/replay/test_moe_joint_dse.py \
+            transactional_emulator/testbench/moe_timing/replay/test_run_swe_grouping_campaign.py \
+            transactional_emulator/testbench/moe_timing/replay/test_summarize_multi_expert_panel_pool.py \
+            transactional_emulator/testbench/moe_timing/replay/test_summarize_sram_pingpong_ablation.py \
+            transactional_emulator/testbench/moe_timing/replay/test_summarize_sram_ring_sweep.py \
+            transactional_emulator/testbench/moe_timing/replay/test_summarize_swe_grouping_campaign.py

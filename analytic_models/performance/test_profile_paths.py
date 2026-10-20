@@ -6,9 +6,10 @@ from .profile_paths import profile_relative_path
 
 
 def test_profile_path_drops_the_profiling_username() -> None:
-    assert profile_relative_path(
-        "/home/another-user/plena-profiles/formal-runs/campaign/manifest.json"
-    ) == "formal-runs/campaign/manifest.json"
+    assert (
+        profile_relative_path("/home/another-user/plena-profiles/formal-runs/campaign/manifest.json")
+        == "formal-runs/campaign/manifest.json"
+    )
 
 
 @pytest.mark.parametrize(

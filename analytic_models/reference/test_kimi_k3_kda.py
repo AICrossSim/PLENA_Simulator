@@ -241,12 +241,9 @@ def test_conv_state_precision_is_independent_of_recurrent_state_precision() -> N
     initial = KdaXState.zeros(shape, batch)
 
     common = dict(state_storage=StateStorage.FP32)
-    uniform, uniform_state = kda_state_engine_prefill(
-        projected, initial, conv_weights, a_log, dt_bias, shape, **common
-    )
+    uniform, uniform_state = kda_state_engine_prefill(projected, initial, conv_weights, a_log, dt_bias, shape, **common)
     mixed, mixed_state = kda_state_engine_prefill(
-        projected, initial, conv_weights, a_log, dt_bias, shape,
-        conv_state_storage=StateStorage.BF16, **common
+        projected, initial, conv_weights, a_log, dt_bias, shape, conv_state_storage=StateStorage.BF16, **common
     )
 
     # The recurrent state stays FP32 in both runs, so any divergence can only

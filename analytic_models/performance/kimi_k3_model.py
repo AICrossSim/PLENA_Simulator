@@ -124,20 +124,14 @@ def build_document(args: argparse.Namespace) -> dict:
     document = {
         "schema_version": 1,
         "model_id": "moonshotai/Kimi-K3",
-        "scope": (
-            "text_backbone_kda_mixers_only"
-            if args.scope == "kda"
-            else "full_93_layer_text_backbone"
-        ),
+        "scope": ("text_backbone_kda_mixers_only" if args.scope == "kda" else "full_93_layer_text_backbone"),
         "calibration": {
             "state_contract": "rtx5090_real_shape_random_weight_layer_profile",
             "plena_timing": "uncalibrated_no_rtl_or_stage_counter_fit",
         },
         "gpu_profile": _rtx5090_profile_summary(),
         "excluded": (
-            ["MLA", "LatentMoE", "dense FFN", "AttnRes", "vision tower"]
-            if args.scope == "kda"
-            else ["vision tower"]
+            ["MLA", "LatentMoE", "dense FFN", "AttnRes", "vision tower"] if args.scope == "kda" else ["vision tower"]
         ),
         "architecture": {
             "text_layers": arch.num_layers,

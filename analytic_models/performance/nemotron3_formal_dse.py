@@ -368,13 +368,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     l_compute = report["l_compute_layout"]["nemotron3_mamba_decode"]
     state = report["mamba_state_cache"]["requirements"]
     routed = report["moe_weight_cache"]["routed_expert"]
-    routed_rows = {
-        row["capacity_entries"]: row for row in routed["access_orders"]["expert_id"]
-    }
+    routed_rows = {row["capacity_entries"]: row for row in routed["access_orders"]["expert_id"]}
     moe_event_rows = [
-        row
-        for row in report["moe_event_dse"]["records"]
-        if row["capacity_entries"] == 138 and row["shared_resident"]
+        row for row in report["moe_event_dse"]["records"] if row["capacity_entries"] == 138 and row["shared_resident"]
     ]
     system = report["system_dse"]["decode_b1_context2048_steps127"]
     lines = [
@@ -448,11 +444,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     for calibration in report["moe_event_dse"]["calibrations"]:
         best = min(
-            (
-                row
-                for row in moe_event_rows
-                if row["calibration"]["name"] == calibration["name"]
-            ),
+            (row for row in moe_event_rows if row["calibration"]["name"] == calibration["name"]),
             key=lambda row: row["rank"],
         )
         lines.append(

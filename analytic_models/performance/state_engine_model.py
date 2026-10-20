@@ -80,12 +80,8 @@ def build_document(args: argparse.Namespace) -> dict:
                 banks_per_head_lane=bank_count,
                 head_tile_slots=slot_count,
             ),
-        ).evaluate(
-            state_resident=args.state_resident
-        )
-        for layout, head_lane_count, bank_count, slot_count in product(
-            layouts, head_lanes, banks, head_tile_slots
-        )
+        ).evaluate(state_resident=args.state_resident)
+        for layout, head_lane_count, bank_count, slot_count in product(layouts, head_lanes, banks, head_tile_slots)
     ]
     return {
         "schema_version": 1,

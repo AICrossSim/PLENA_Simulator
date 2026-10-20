@@ -1,0 +1,111 @@
+{
+  "date": "2026-10-20",
+  "repository": "AICrossSim/PLENA_Simulator",
+  "canonical_branch": "research/moe-supply-first-v3",
+  "base_commit": "246f6d320d46a1151db414d34694894ed5f9066b",
+  "sources": [
+    {
+      "branch": "feat/emulator-timing-core",
+      "sha": "2ebbd2fda6ab8dbc51e406b90a9f2dee976ff2da",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feat/matrix-sram-lcompute",
+      "sha": "57d2b051aee46a45612aa694405248f6319fff31",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feat/static-kda-gpu-evidence",
+      "sha": "4ce1611270ab812a26a66d062f7cdba77fb8ca7d",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feat/static-kda-official-layer",
+      "sha": "a3100ea38b29b3cd1399173ffb969205d7f02558",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feat/window1-p1-timing-replay",
+      "sha": "1be2b23f2a478d940ec430087c9238f2ff32a0b8",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feat/window1-p2-qwen-replay",
+      "sha": "4d3fa12e7befda39a70d6b202f2238c511b95591",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feat/window1-p3-representative-runner",
+      "sha": "b610e1399b4266aaa5c19dd54037291cd58fac55",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "feature/mamba-kda-support",
+      "sha": "bcc9a89424324e0d9b6378c88218862705763b15",
+      "already_ancestor_of_base": false,
+      "integration": "merged with current implementation preserved on formatting conflicts"
+    },
+    {
+      "branch": "research/moe-heterogeneous-dispatch",
+      "sha": "917e9d163117561d4e4f0305a61dd1bf48f50bca",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "research/moe-joint-runtime",
+      "sha": "3ea69acce1fbfcd9e48518b54c8c2e17c6291931",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "research/moe-supply-first-v3",
+      "sha": "01e57880ae74c15dda3d464ef797015bf79617b9",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "review/matrix-lcompute-20260905",
+      "sha": "44693edaf041de7ddc922a1f50fdc735cbc59068",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    },
+    {
+      "branch": "review/moe-dual-normal-20260905",
+      "sha": "fe6768aac2e427ae431d431b3c99adb164c5ae40",
+      "already_ancestor_of_base": true,
+      "integration": "already included"
+    }
+  ],
+  "excluded_other_creator_branch": "research/moe-ipd-bf16-ab",
+  "remote_branch_deletion": false,
+  "validation": {
+    "python": "3.11.13",
+    "torch": "2.7.1+cpu",
+    "analytic_tests_passed": 62,
+    "dse_runtime_tests_passed": 54,
+    "stage_guard_tests_passed": 6,
+    "integration_reference_tests_passed": 44,
+    "integration_subtests_passed": 10,
+    "preexisting_contract_failures": 2,
+    "preexisting_failures_reproduced_from_base": true,
+    "research_tree_unchanged": true,
+    "submodule_pins_unchanged": true
+  },
+  "baseline_failures": [
+    {
+      "test": "test_l_scatter_m_golden_matches_the_compiler_spec_copy",
+      "reason": "Compiler and Simulator L_SCATTER_M golden files differ; regenerate the Compiler golden and copy it byte-for-byte into transactional_emulator/testdata"
+    },
+    {
+      "test": "test_generated_state_contract_matches_the_compiler_spec",
+      "reason": "the Compiler X_STATE spec and this repo's generated contract disagree."
+    }
+  ]
+}

@@ -147,9 +147,7 @@ def test_formal_checkpoint_policy_applies_real_layer_specific_bf16_exclusions() 
         mamba.conv_channels * mamba.conv_kernel,
         Precision.BF16,
     )
-    attention_elements = arch.hidden_size * (
-        arch.num_heads * arch.head_dim + 2 * arch.num_kv_heads * arch.head_dim
-    )
+    attention_elements = arch.hidden_size * (arch.num_heads * arch.head_dim + 2 * arch.num_kv_heads * arch.head_dim)
     assert weight_bytes(5, "attention_qkv_projection") == storage_bytes(attention_elements, Precision.BF16)
     routed_elements = 6 * 2 * arch.hidden_size * moe.intermediate_size
     assert weight_bytes(1, "moe_routed_experts") == storage_bytes(routed_elements, Precision.NVFP4)
