@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from perf_model import PerfModel, load_hardware_config_from_toml
@@ -51,7 +52,12 @@ class LLaMAModel:
         self.frequency = frequency_hz
         self.hardware_config = hardware_config
         self.batch_size = batch_size
-        self.device_batch_size = batch_size // device_num
+        if device_num < 1:
+            raise ValueError(f"device_num must be at least 1, got {device_num}")
+        # The devices are data-parallel replicas: the busiest one serves
+        # ceil(batch_size / device_num) sequences and sets the time. Communication
+        # between devices is not modelled.
+        self.device_batch_size = math.ceil(batch_size / device_num)
         self.device_num = device_num
 
         # Initialize PLENA hardware latency model
@@ -191,7 +197,9 @@ class LLaMAModel:
         """
         prefill_time = self.compute_prefill_time(verbose)
         first_token_decode = self.compute_decode_time(1, verbose=False)
-        ttft = (prefill_time + first_token_decode) / self.device_num
+        # Every replica prefills its own sequences at the same time, so the time is
+        # already per device and is not divided by device_num again.
+        ttft = prefill_time + first_token_decode
 
         decode_time = self.compute_decode_time(self.output_seq_len, verbose)
         tps = (self.batch_size * self.output_seq_len) / decode_time
@@ -266,7 +274,7 @@ class LLaMAModel:
             tuple: (total_time_seconds, output_tokens_per_second)
         """
         step_time = self.compute_llada_step_time(seq_len, verbose=verbose)
-        total_time = (diffusion_steps * step_time) / self.device_num
+        total_time = diffusion_steps * step_time
         # Throughput: output tokens generated per second (batch * seq_len across all steps)
         output_tokens_per_second = (self.batch_size * seq_len) / total_time
 
