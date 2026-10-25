@@ -216,6 +216,25 @@ just latency-full llama-3.1-8b 4 2048 1024
 just latency-json llama-3.1-8b
 ```
 
+### 3D-Stacked DRAM Model
+
+`analytic_models/stacked_dram` models a 3D-stacked DRAM: vertical connectivity
+efficiency, transaction granularity, a Little's-law buffering bound, thermal
+clock derating and access energy. It also adds a memory term to the latency
+estimate, so the same decoder can be compared on a fixed-bandwidth baseline and
+on DRAM stacks of different heights. The memory mechanisms are ported from
+DeepStack ([arXiv:2604.04750](https://arxiv.org/abs/2604.04750)). Designs are
+described in JSON profiles; the package ships no hardware values, and the
+profiles in `examples/` are fictional.
+
+```bash
+just stacked-dram-describe analytic_models/stacked_dram/examples/fictional_stacked_dram.json --total-layers 4,8,12
+just stacked-dram-estimate llama-3.1-8b analytic_models/stacked_dram/examples/fictional_stacked_dram.json
+just test-stacked-dram
+```
+
+See [`analytic_models/stacked_dram/README.md`](analytic_models/stacked_dram/README.md) for the profile format, assumptions and citation.
+
 ## Project Structure
 
 ```
@@ -223,6 +242,7 @@ PLENA_Simulator/
 ├── transactional_emulator/    # Transaction-level simulator (Rust)
 ├── analytic_models/          # Analytical models (Python)
 │   ├── latency/             # Latency estimation model
+│   ├── stacked_dram/        # 3D-stacked DRAM memory model
 │   └── utilisation/         # Utilization analysis model
 ├── compiler/                # Compiler and model definitions
 ├── PLENA_Tools/             # Supporting tools and utilities (submodule)
