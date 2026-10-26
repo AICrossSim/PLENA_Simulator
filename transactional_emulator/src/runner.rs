@@ -118,10 +118,16 @@ pub(crate) async fn run_from_cli() {
         *VECTOR_SRAM_TYPE,
     )); // Vector SRAM
 
-    let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    let mut m_machine =
+        MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    // `--matrix-latency-model` wins over MATRIX_LATENCY_MODEL in plena_settings.toml.
+    if let Some(model) = opts.matrix_latency_model {
+        m_machine.set_latency_model(model);
+    }
     let big_core = m_machine.core_profile();
     let tail_core = MatrixCoreProfile::tail_4x256();
     tracing::info!(
+        matrix_latency_model = %m_machine.latency_model(),
         big_core = big_core.name,
         big_rows = big_core.rows,
         big_cols = big_core.cols,

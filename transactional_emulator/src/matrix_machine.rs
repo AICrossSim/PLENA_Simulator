@@ -18,11 +18,46 @@ use quantize::QuantTensor;
 use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
+use crate::load_config::MatrixLatencyModel;
 use crate::matrix_core::{MatrixCore, MatrixCoreProfile};
-use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
+use crate::runtime_config::{MATRIX_LATENCY_MODEL, SYSTOLIC_PROCESSING_OVERHEAD};
 
 /// Tensor allocation options used for every accumulator buffer (f32 on CPU).
 const ACCUM_OPTS: (tch::Kind, tch::Device) = (tch::Kind::Float, tch::Device::Cpu);
+
+/// Slope of the RTL-measured matrix-matrix accumulate cost, in cycles per
+/// unit of BLEN (see [`matrix_accumulate_cycles`] for the measurement).
+const RTL_ACCUMULATE_CYCLES_PER_ROW: u32 = 3;
+/// Intercept of the RTL-measured matrix-matrix accumulate cost, in cycles.
+const RTL_ACCUMULATE_FIXED_CYCLES: u32 = 11;
+
+/// Cycles charged for one matrix-matrix accumulate (`M_MM`, `M_TMM`, `M_BMM`,
+/// `M_BTMM`) under `model`.
+///
+/// * [`MatrixLatencyModel::Mlen`]: `SYSTOLIC_PROCESSING_OVERHEAD + MLEN`, the
+///   historical charge.
+/// * [`MatrixLatencyModel::RtlMeasured`]: `3 * BLEN + 11`, the issue-to-issue
+///   cost of back-to-back accumulates on the PLENA_RTL matrix machine
+///   (`matrix_machine.sv` over `mxint_systolic_mcu.sv`, KLEN = BLEN), measured
+///   with Verilator 5.034 on SimTop at PLENA_RTL 783ee48: 23 cycles at BLEN=4
+///   (MLEN 8, 16, 32, 64), 35 at BLEN=8 (MLEN 16, 32) and 59 at BLEN=16
+///   (MLEN 32), identical for all four opcodes. The RTL drains each accumulate
+///   before starting the next, and the MLEN-deep reduction is split across
+///   MLEN / BLEN parallel mini-arrays, so the cost depends on BLEN only. The
+///   `SYSTOLIC_PROCESSING_OVERHEAD` knob belongs to the `mlen` model.
+pub(crate) fn matrix_accumulate_cycles(
+    model: MatrixLatencyModel,
+    blen: u32,
+    mlen: u32,
+    systolic_overhead: u32,
+) -> u32 {
+    match model {
+        MatrixLatencyModel::Mlen => systolic_overhead + mlen,
+        MatrixLatencyModel::RtlMeasured => {
+            RTL_ACCUMULATE_CYCLES_PER_ROW * blen + RTL_ACCUMULATE_FIXED_CYCLES
+        }
+    }
+}
 
 /// Executes matrix opcodes by reading tiles/vectors from `mram`/`vram`,
 /// running matmul in f32, and accumulating into per-shape buffers that are
@@ -39,6 +74,7 @@ pub(crate) struct MatrixMachine {
     blen: u32,
     broadcast_amount: u32,
     core: MatrixCore,
+    latency_model: MatrixLatencyModel,
 }
 
 impl MatrixMachine {
@@ -90,6 +126,7 @@ impl MatrixMachine {
             blen,
             broadcast_amount,
             core: MatrixCore::new(core_profile),
+            latency_model: *MATRIX_LATENCY_MODEL,
         }
     }
 
@@ -97,8 +134,26 @@ impl MatrixMachine {
         self.core.profile()
     }
 
+    pub(crate) fn latency_model(&self) -> MatrixLatencyModel {
+        self.latency_model
+    }
+
+    pub(crate) fn set_latency_model(&mut self, model: MatrixLatencyModel) {
+        self.latency_model = model;
+    }
+
     fn core(&self) -> MatrixCore {
         self.core
+    }
+
+    /// Cycles charged for one matrix-matrix accumulate under the active model.
+    fn accumulate_cycles(&self) -> u32 {
+        matrix_accumulate_cycles(
+            self.latency_model,
+            self.blen,
+            self.mlen,
+            *SYSTOLIC_PROCESSING_OVERHEAD,
+        )
     }
 
     pub(crate) async fn mm(&mut self, m_addr: u32, v_addr: u32) {
@@ -122,9 +177,7 @@ impl MatrixMachine {
                 mat_offset as i64..(mat_offset as i64 + self.blen as i64),
             ));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        self.core()
-            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
-            .await;
+        self.core().compute(self.accumulate_cycles()).await;
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -163,9 +216,7 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        self.core()
-            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
-            .await;
+        self.core().compute(self.accumulate_cycles()).await;
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
@@ -281,9 +332,7 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        self.core()
-            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
-            .await;
+        self.core().compute(self.accumulate_cycles()).await;
         // B, S, H, D
         for i in 0..self.mlen {
             tensors.push(
@@ -403,9 +452,7 @@ impl MatrixMachine {
             .transpose(-1, -2)
             .i((.., mat_offset as i64..(mat_offset + self.blen) as i64));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        self.core()
-            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
-            .await;
+        self.core().compute(self.accumulate_cycles()).await;
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -569,8 +616,25 @@ mod tests {
     use tch::Tensor;
 
     use super::*;
+    use crate::load_config::MatrixLatencyModel;
     use crate::matrix_core::MatrixCoreProfile;
     use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
+
+    #[test]
+    fn accumulate_cycles_pin_both_models() {
+        use MatrixLatencyModel::{Mlen, RtlMeasured};
+        // Historical charge: overhead + MLEN, independent of BLEN.
+        assert_eq!(matrix_accumulate_cycles(Mlen, 4, 64, 0), 64);
+        assert_eq!(matrix_accumulate_cycles(Mlen, 8, 64, 0), 64);
+        assert_eq!(matrix_accumulate_cycles(Mlen, 4, 64, 5), 69);
+        // RTL measurement: 23, 35 and 59 cycles at BLEN 4, 8 and 16,
+        // independent of MLEN and of the overhead knob.
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 4, 8, 0), 23);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 4, 64, 0), 23);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 8, 64, 0), 35);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 16, 32, 0), 59);
+        assert_eq!(matrix_accumulate_cycles(RtlMeasured, 8, 1024, 5), 35);
+    }
 
     fn bf16_plain() -> MxDataType {
         MxDataType::Plain(DataType::Fp(FpType::BF16))
@@ -650,6 +714,31 @@ mod tests {
         assert!(a1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
         assert!(b0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
         assert!(b1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
+    }
+
+    #[tokio::test]
+    async fn rtl_measured_model_changes_only_the_accumulate_charge() {
+        let executor = Executor::new();
+        let (mut machine, vram, out) = make_machine(8).await;
+        machine.set_latency_model(MatrixLatencyModel::RtlMeasured);
+
+        executor.spawn(async move {
+            machine.mm(0, 0).await;
+            machine.mm_wo(out, 1).await;
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        // BLEN = 2: 3 * 2 + 11 cycles for the accumulate, then the write-out's
+        // one cycle as before.
+        let expected_cycles = 3 * 2 + 11 + 1;
+        assert_eq!(
+            executor.now(),
+            Instant::INIT + Duration::from_nanos(expected_cycles)
+        );
+        let a0 = vram.read(8).await.as_tensor().shallow_clone();
+        let a1 = vram.read(12).await.as_tensor().shallow_clone();
+        assert!(a0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
+        assert!(a1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
     }
 
     #[tokio::test]
