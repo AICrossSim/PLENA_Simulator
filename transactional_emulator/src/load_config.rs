@@ -124,10 +124,26 @@ pub struct PrecisionSection {
     pub hbm_v_act_type: MxDataTypeConfig,
     #[serde(rename = "HBM_V_KV_TYPE")]
     pub hbm_v_kv_type: MxDataTypeConfig,
+    /// State transfers through explicit Matrix-view DMA use their own format.
+    #[serde(rename = "HBM_STATE_TYPE", default = "default_state_type")]
+    pub hbm_state_type: MxDataTypeConfig,
     #[serde(rename = "HBM_V_INT_TYPE")]
     pub hbm_v_int_type: MxDataTypeConfig,
     #[serde(rename = "SCALAR_FP")]
     pub scalar_fp: DataTypeConfig,
+}
+
+fn default_state_type() -> MxDataTypeConfig {
+    MxDataTypeConfig {
+        format: "Plain".to_string(),
+        data: MxDataTypeData::Plain {
+            data_type: DataTypeConfig::Fp(FpTypeConfig {
+                sign: true,
+                exponent: 8,
+                mantissa: 7,
+            }),
+        },
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -267,6 +283,7 @@ impl Default for AcceleratorConfig {
                         }),
                     },
                 },
+                hbm_state_type: default_state_type(),
                 hbm_v_int_type: MxDataTypeConfig {
                     format: "Plain".to_string(),
                     data: MxDataTypeData::Plain {
@@ -485,6 +502,10 @@ pub fn vector_activation_type() -> MxDataType {
 
 pub fn vector_kv_type() -> MxDataType {
     CONFIG.precision.hbm_v_kv_type.clone().into()
+}
+
+pub fn state_type() -> MxDataType {
+    CONFIG.precision.hbm_state_type.clone().into()
 }
 
 /// Reserved for future scalar FP ops; not yet wired into any opcode dispatch.

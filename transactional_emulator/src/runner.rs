@@ -12,7 +12,7 @@ use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
     BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
-    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
+    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STATE_TYPE, STORE_V_AMOUNT,
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
@@ -96,6 +96,7 @@ pub(crate) async fn run_from_cli() {
         vector_sram_size = *VECTOR_SRAM_SIZE,
         matrix_type = ?*MATRIX_SRAM_TYPE,
         vector_type = ?*VECTOR_SRAM_TYPE,
+        recurrent_state_type = ?*STATE_TYPE,
         "SRAM"
     );
     tracing::info!(
@@ -111,7 +112,12 @@ pub(crate) async fn run_from_cli() {
         "Config source"
     );
 
-    let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
+    let mram = Arc::new(MatrixSram::with_banks(
+        *MLEN,
+        *MATRIX_SRAM_SIZE,
+        *BLEN,
+        *MATRIX_SRAM_TYPE,
+    )); // Matrix SRAM
     let vram = Arc::new(VectorSram::from_mx_type(
         *VLEN,
         *VECTOR_SRAM_SIZE,
@@ -239,6 +245,17 @@ pub(crate) async fn run_from_cli() {
         .do_ops(&decoded_ops, stage_profiler.as_mut(), timing_driver)
         .await;
 
+    let matrix_packet = accelerator.matrix_view_packet_counters();
+    tracing::info!(
+        packets = matrix_packet.packets,
+        values = matrix_packet.values,
+        bank_words = matrix_packet.bank_words,
+        service_cycles = matrix_packet.service_cycles,
+        ideal_cycles = matrix_packet.ideal_cycles,
+        bank_stall_cycles = matrix_packet.bank_stall_cycles,
+        "Matrix-view packet counters"
+    );
+
     let serial_duration = Executor::current().now() - Instant::INIT;
     if let Some(sb) = scoreboard.as_ref() {
         let stats = sb.stats;
@@ -297,17 +314,22 @@ pub(crate) async fn run_from_cli() {
     let intsram_bytes = accelerator.intsram_dump_bytes();
     dump_to_file("intsram_dump.bin", &intsram_bytes);
 
-    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
-    // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
+    // Dump HBM only on an explicit request or under DEBUG tracing because the
+    // modeled capacity may be 128 GiB+.  The explicit path lets connected
+    // numerical tests inspect state/output writes without enabling noisy logs.
+    if opts.hbm_dump.is_some() || tracing::enabled!(tracing::Level::DEBUG) {
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
             hbm_bytes[..len].copy_from_slice(&f[..len]);
         });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+        let path = opts
+            .hbm_dump
+            .as_deref()
+            .and_then(|path| path.to_str())
+            .unwrap_or("hbm_dump.bin");
+        dump_to_file(path, &hbm_bytes);
     }
 
     let memory_stats = hbm.statistics();

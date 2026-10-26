@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use half::bf16;
-use quantize::{QuantTensor, tensor_from_f32_slice};
+use quantize::{QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
 use sram::VectorSram;
 use tch::Tensor;
 
@@ -27,6 +27,45 @@ pub(crate) struct VectorMachine {
     pub(crate) vram: Arc<VectorSram>,
     tile_size: u32,
     mask_unit: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum VectorBinaryOp {
+    Add,
+    Sub,
+    Mul,
+}
+
+/// Coefficient representation selected by the Matrix-view descriptor.
+/// A one-tile packet has the same length in either representation, so packet
+/// length cannot identify whether coefficients are global or packet-local.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum TileScaleLayout {
+    Compact { first_tile: u32 },
+    Expanded,
+}
+
+impl TileScaleLayout {
+    fn validate(self, values: usize, tiles: usize, width: u32, per_tile: usize) {
+        assert!(width as usize >= per_tile);
+        match self {
+            Self::Compact { first_tile } => {
+                assert_eq!(values, width as usize);
+                assert!(
+                    per_tile * (first_tile as usize + tiles) <= values,
+                    "compact L_TILE coefficients must cover every addressed tile"
+                );
+            }
+            Self::Expanded => assert_eq!(values, tiles * width as usize),
+        }
+    }
+
+    fn coefficient_index(self, tile: usize, width: u32, per_tile: usize) -> usize {
+        match self {
+            Self::Compact { first_tile } => per_tile * (first_tile as usize + tile),
+            Self::Expanded => tile * width as usize,
+        }
+    }
 }
 
 impl VectorMachine {
@@ -457,6 +496,148 @@ impl VectorMachine {
 
         cycle!((*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32));
         (indices, weights)
+    }
+    pub(crate) fn tile_size(&self) -> u32 {
+        self.tile_size
+    }
+
+    pub(crate) async fn binary_packet(
+        &self,
+        op: VectorBinaryOp,
+        a: QuantTensor,
+        b: QuantTensor,
+        rmask: u8,
+        mask: u32,
+    ) -> QuantTensor {
+        let apply = |lhs: &Tensor, rhs: &Tensor| match op {
+            VectorBinaryOp::Add => lhs + rhs,
+            VectorBinaryOp::Sub => lhs - rhs,
+            VectorBinaryOp::Mul => lhs * rhs,
+        };
+        let result = if rmask == 0 {
+            apply(a.as_tensor(), b.as_tensor())
+        } else {
+            let result = a.as_tensor().shallow_clone();
+            let total_heads = self.tile_size / self.mask_unit;
+            for head in 0..total_heads {
+                if (mask & (1 << head)) != 0 {
+                    let start = (head * self.mask_unit) as i64;
+                    let end = ((head + 1) * self.mask_unit) as i64;
+                    let lhs = result.narrow(0, start, end - start);
+                    let rhs = b.as_tensor().narrow(0, start, end - start);
+                    let updated = apply(&lhs, &rhs);
+                    result.narrow(0, start, end - start).copy_(&updated);
+                }
+            }
+            result
+        };
+        match op {
+            VectorBinaryOp::Add | VectorBinaryOp::Sub => {
+                crate::timing::charge_arithmetic_cycles(*VECTOR_ADD_CYCLES).await;
+            }
+            VectorBinaryOp::Mul => {
+                crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES).await;
+            }
+        }
+        QuantTensor::quantize(result, a.data_type())
+    }
+
+    pub(crate) async fn tile_scale_accum(
+        &self,
+        destination: QuantTensor,
+        source: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let src = tensor_to_f32_vec(source.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        let rows = dst.len() / row_width as usize;
+        assert_eq!(dst.len(), rows * row_width as usize);
+        assert!(src.len() == row_width as usize || src.len() == dst.len());
+        scale_layout.validate(coeff.len(), rows, scale_width, 2);
+
+        let mut result = vec![0_f32; dst.len()];
+        for row in 0..rows {
+            let coefficient = scale_layout.coefficient_index(row, scale_width, 2);
+            let a = coeff[coefficient];
+            let b = coeff[coefficient + 1];
+            for col in 0..row_width as usize {
+                let index = row * row_width as usize + col;
+                let source_index = if src.len() == row_width as usize {
+                    col
+                } else {
+                    index
+                };
+                result[index] = a * dst[index] + b * src[source_index];
+            }
+        }
+        crate::timing::charge_arithmetic_cycles(2 * *VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
+    }
+
+    pub(crate) async fn tile_dot_accumulate(
+        &self,
+        accumulator: &mut [f32],
+        rows: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) {
+        let values = tensor_to_f32_vec(rows.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        assert!(row_width > 0);
+        assert!(values.len().is_multiple_of(row_width as usize));
+        let row_count = values.len() / row_width as usize;
+        assert_eq!(accumulator.len(), values.len());
+        scale_layout.validate(coeff.len(), row_count, scale_width, 1);
+
+        for row in 0..row_count {
+            let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+            for lane in 0..row_width as usize {
+                let index = row * row_width as usize + lane;
+                accumulator[index] += values[index] * scale;
+            }
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+    }
+
+    pub(crate) async fn tile_outer_update(
+        &self,
+        destination: QuantTensor,
+        vector: QuantTensor,
+        scales: QuantTensor,
+        row_width: u32,
+        scale_width: u32,
+        scale_layout: TileScaleLayout,
+    ) -> QuantTensor {
+        let dst = tensor_to_f32_vec(destination.as_tensor());
+        let source = tensor_to_f32_vec(vector.as_tensor());
+        let coeff = tensor_to_f32_vec(scales.as_tensor());
+        let rows = dst.len() / row_width as usize;
+        assert!(
+            source.len() == row_width as usize || source.len() == dst.len(),
+            "OUTER_UPDATE source must be shared by every tile or provide one row per tile"
+        );
+        scale_layout.validate(coeff.len(), rows, scale_width, 1);
+        let mut result = dst;
+        for row in 0..rows {
+            let scale = coeff[scale_layout.coefficient_index(row, scale_width, 1)];
+            for col in 0..row_width as usize {
+                let index = row * row_width as usize + col;
+                let source_index = if source.len() == row_width as usize {
+                    col
+                } else {
+                    index
+                };
+                result[index] += source[source_index] * scale;
+            }
+        }
+        crate::timing::charge_arithmetic_cycles(*VECTOR_MUL_CYCLES + *VECTOR_ADD_CYCLES).await;
+        QuantTensor::quantize(tensor_from_f32_slice(&result), destination.data_type())
     }
 }
 

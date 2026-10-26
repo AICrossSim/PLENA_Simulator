@@ -18,7 +18,7 @@
 use std::sync::Arc;
 
 use memory::ErasedMemoryModel;
-use quantize::{DataType, MxDataType, QuantTensor, tensor_from_f32_slice};
+use quantize::{DataType, MxDataType, QuantTensor, tensor_from_f32_slice, tensor_to_f32_vec};
 use runtime::Executor;
 use sram::VectorSram;
 use tokio::sync::oneshot::{self, Receiver};
@@ -88,6 +88,17 @@ impl MxLayout {
             scale_len_in_bytes,
         }
     }
+
+    fn contiguous_stride_bytes(hbm_type: MxDataType, dim: u32) -> u32 {
+        let bits = u32::from(hbm_type.element_type().size_in_bits())
+            .checked_mul(dim)
+            .expect("contiguous HBM row size overflowed u32");
+        assert!(
+            bits.is_multiple_of(8),
+            "a contiguous HBM row must occupy a whole number of bytes"
+        );
+        bits / 8
+    }
 }
 
 /// A strided MX-format region in HBM — the "where + what" of a transfer,
@@ -144,7 +155,14 @@ pub(crate) fn transfer_mx_from_hbm(
         rstride,
         stride,
     } = region;
-    let stride = if rstride == 1 { stride } else { load_dim };
+    // HBM addresses and C_SET_STRIDE_REG are byte based.  The old default
+    // happened to be correct for 8-bit tensors, but overlapped adjacent rows
+    // for BF16/FP32 because it advanced by an element count instead of bytes.
+    let stride = if rstride == 1 {
+        stride
+    } else {
+        MxLayout::contiguous_stride_bytes(hbm_type, load_dim)
+    };
     let hbm = hbm.clone();
 
     Executor::current().spawn(async move {
@@ -326,6 +344,28 @@ pub(crate) async fn snapshot_vram_rows(
     rows
 }
 
+/// Split one logical Matrix-view packet into contiguous HBM transfer rows.
+///
+/// Matrix views restore logical tile/row/lane order before this helper runs,
+/// so the HBM image stays compiler-defined packet-major and does not encode
+/// the SRAM bank mapping.
+pub(crate) fn split_packet_rows(
+    packet: &QuantTensor,
+    row_dim: u32,
+    sram_type: MxDataType,
+) -> Vec<QuantTensor> {
+    assert!(row_dim > 0, "DMA row width must be positive");
+    let values = tensor_to_f32_vec(packet.as_tensor());
+    values
+        .chunks(row_dim as usize)
+        .map(|row| {
+            let mut padded = vec![0_f32; row_dim as usize];
+            padded[..row.len()].copy_from_slice(row);
+            QuantTensor::quantize(tensor_from_f32_slice(&padded), sram_type)
+        })
+        .collect()
+}
+
 /// Write the snapshotted rows into an HBM [`MxRegion`] with a strided writing
 /// pattern (the timed half of `H_STORE_V`).
 pub(crate) async fn store_rows_to_hbm(
@@ -341,7 +381,11 @@ pub(crate) async fn store_rows_to_hbm(
         rstride,
         stride,
     } = region;
-    let stride = if rstride == 1 { stride } else { store_dim };
+    let stride = if rstride == 1 {
+        stride
+    } else {
+        MxLayout::contiguous_stride_bytes(hbm_type, store_dim)
+    };
 
     let layout = MxLayout::compute(hbm_type, stride, store_dim);
     let len_in_bytes_per_store = layout.len_in_bytes;
@@ -521,5 +565,27 @@ mod tests {
         let layout = MxLayout::compute(plain, 64, 64);
         assert_eq!(layout.element_bits, 16);
         assert_eq!(layout.len_in_bytes, 128); // 16 * 64 / 8
+    }
+
+    #[test]
+    fn test_contiguous_stride_is_measured_in_bytes_for_wide_elements() {
+        let bf16 = MxDataType::Plain(DataType::Fp(FpType::BF16));
+        let fp32 = MxDataType::Plain(DataType::Fp(FpType::F32));
+        assert_eq!(MxLayout::contiguous_stride_bytes(bf16, 64), 128);
+        assert_eq!(MxLayout::contiguous_stride_bytes(fp32, 64), 256);
+    }
+
+    #[test]
+    fn test_split_packet_rows_pads_only_the_final_physical_row() {
+        let fp32 = MxDataType::Plain(DataType::Fp(FpType::F32));
+        let values = (0..70).map(|value| value as f32).collect::<Vec<_>>();
+        let packet = QuantTensor::quantize(tensor_from_f32_slice(&values), fp32);
+        let rows = split_packet_rows(&packet, 64, fp32);
+        assert_eq!(rows.len(), 2);
+        let first = tensor_to_f32_vec(rows[0].as_tensor());
+        let second = tensor_to_f32_vec(rows[1].as_tensor());
+        assert_eq!(first, values[..64]);
+        assert_eq!(&second[..6], &values[64..]);
+        assert!(second[6..].iter().all(|value| *value == 0.0));
     }
 }

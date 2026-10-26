@@ -80,6 +80,16 @@ pub(crate) fn take_charged() -> u64 {
     CHARGED_CYCLES.with(|c| c.replace(0))
 }
 
+/// Charge real Matrix SRAM packet service through the existing timing mode.
+pub(crate) async fn charge_bank_cycles(cycles: u64) {
+    charge_cycles(cycles.try_into().expect("bank service exceeds u32 cycles")).await;
+}
+
+/// Charge a packet primitive using the configured Vector arithmetic latency.
+pub(crate) async fn charge_arithmetic_cycles(cycles: u32) {
+    charge_cycles(cycles).await;
+}
+
 #[cfg(test)]
 mod tests {
     use runtime::{Duration, Executor, Instant};

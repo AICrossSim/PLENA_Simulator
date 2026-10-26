@@ -47,3 +47,18 @@ testbench/
 MoE and decoder-block bring-up lives under `routed_moe/` and `models/` so that
 reviewers can distinguish reusable operator coverage from model semantics
 harnesses.
+
+## Matrix SRAM views and L_TILE
+
+```bash
+just test-matrix-lcompute
+```
+
+`aten/matrix_lcompute_test.py` checks projection writeback into a Matrix SRAM
+view, followed by prepared Mamba/KDA recurrence through the Compiler, assembler
+and Rust emulator. It covers four tokens at the model state dimensions with
+fixed and phased layouts, BF16 state readback, and bank-service checks.
+`aten/_matrix_lcompute.py` holds the reference formulas and input packing.
+
+These deterministic operator tests validate the view/L_TILE mechanism; they
+do not execute complete model checkpoints or produce end-to-end speedups.

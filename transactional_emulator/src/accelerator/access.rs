@@ -83,10 +83,11 @@ pub(crate) enum Cfg {
     Stride,
     VMask,
     TopkPolicy,
+    MatrixView,
 }
 
 impl Cfg {
-    pub(crate) const COUNT: usize = 4;
+    pub(crate) const COUNT: usize = 5;
 
     pub(crate) fn index(self) -> usize {
         match self {
@@ -94,6 +95,7 @@ impl Cfg {
             Cfg::Stride => 1,
             Cfg::VMask => 2,
             Cfg::TopkPolicy => 3,
+            Cfg::MatrixView => 4,
         }
     }
 }
@@ -237,57 +239,81 @@ pub(crate) fn op_access(
         op::Opcode::Invalid => OpAccess::none(Unit::Scalar),
 
         // === Matrix accumulate ops ===
-        op::Opcode::M_MM { rs1, rs2 } | op::Opcode::M_TMM { rs1, rs2 } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+        op::Opcode::M_MM { rs1, rs2, view } | op::Opcode::M_TMM { rs1, rs2, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 matrix_tile_at(gp(rs1)),
                 vector(gp(rs2), *MLEN * *BLEN),
                 Accum(AccumKind::M),
-            ],
-            vec![Accum(AccumKind::M)],
-        ),
-        op::Opcode::M_BMM { rs1, rs2 } | op::Opcode::M_BTMM { rs1, rs2 } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::M)])
+        }
+        op::Opcode::M_BMM { rs1, rs2, view } | op::Opcode::M_BTMM { rs1, rs2, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 matrix_tile_at(gp(rs1)),
                 vector(gp(rs2), matrix_tile),
                 Accum(AccumKind::Hm),
-            ],
-            vec![Accum(AccumKind::Hm)],
-        ),
-        op::Opcode::M_MV { rs1, rs2 } | op::Opcode::M_TMV { rs1, rs2 } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::Hm)])
+        }
+        op::Opcode::M_MV { rs1, rs2, view } | op::Opcode::M_TMV { rs1, rs2, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 matrix_tile_at(gp(rs1)),
                 vector(gp(rs2), vector_tile),
                 Accum(AccumKind::V),
-            ],
-            vec![Accum(AccumKind::V)],
-        ),
-        op::Opcode::M_BMV { rs1, rs2, rd } | op::Opcode::M_BTMV { rs1, rs2, rd } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::V)])
+        }
+        op::Opcode::M_BMV { rs1, rs2, rd, view } | op::Opcode::M_BTMV { rs1, rs2, rd, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 Gp(rd),
                 matrix_tile_at(gp(rs1).wrapping_add(gp(rd))),
                 vector(gp(rs2), vector_tile),
                 Accum(AccumKind::Hv),
-            ],
-            vec![Accum(AccumKind::Hv)],
-        ),
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::Hv)])
+        }
 
         // === Matrix write-outs ===
         // `mm_wo` is a read-modify-write: for each of `blen` rows it reads
         // `vec_base + i * mlen * stride_len`, splices the accumulator in, and
         // writes the row back.
-        op::Opcode::M_MM_WO { rd, rstride, imm } => {
+        op::Opcode::M_MM_WO {
+            rd,
+            rstride,
+            imm,
+            view,
+        } => {
+            if view.is_some() {
+                let mut reads = vec![Gp(rd), Accum(AccumKind::M), Resource::Cfg(Cfg::MatrixView)];
+                if rstride != 0 {
+                    reads.push(Gp(rstride));
+                }
+                return OpAccess::new(
+                    Unit::Matrix,
+                    reads,
+                    vec![Accum(AccumKind::M), matrix_tile_at(gp(rd))],
+                );
+            }
             let stride_len = if rstride == 0 { 1 } else { gp(rstride) };
             let base = row_base(gp(rd).wrapping_add(imm));
             let span = (*BLEN)
@@ -344,18 +370,21 @@ pub(crate) fn op_access(
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_SUB_VV {
             rd,
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_MUL_VV {
             rd,
             rs1,
             rs2,
             rmask,
+            ..
         } => {
             let mut reads = vec![
                 Gp(rd),
@@ -550,6 +579,18 @@ pub(crate) fn op_access(
             ],
             vec![vector(gp(rd), *VLEN * *PREFETCH_V_AMOUNT)],
         ),
+        op::Opcode::H_PREFETCH_V_MV { rd, rs1, rs2, .. } => OpAccess::new(
+            Unit::Dma,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Hbm(rs2),
+                Resource::Cfg(Cfg::Scale),
+                Resource::Cfg(Cfg::Stride),
+                Resource::Cfg(Cfg::MatrixView),
+            ],
+            vec![matrix(gp(rd), matrix_tile)],
+        ),
         // A store reads the vram region it drains. Its HBM-side write is not
         // tracked as a resource; dispatch conservatively drains all pending
         // prefetches before an H_STORE_V instead (HBM WAR/RAW).
@@ -566,6 +607,19 @@ pub(crate) fn op_access(
             vec![],
         ),
 
+        op::Opcode::H_STORE_V_MV { rd, rs1, rs2, .. } => OpAccess::new(
+            Unit::Dma,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Hbm(rs2),
+                Resource::Cfg(Cfg::Scale),
+                Resource::Cfg(Cfg::Stride),
+                Resource::Cfg(Cfg::MatrixView),
+                matrix(gp(rd), matrix_tile),
+            ],
+            vec![],
+        ),
         // === Control ===
         op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
             OpAccess::new(Unit::Scalar, vec![Gp(rs1), Gp(rs2)], vec![Hbm(rd)])
@@ -583,6 +637,24 @@ pub(crate) fn op_access(
             Unit::Scalar,
             vec![Gp(rd)],
             vec![Resource::Cfg(Cfg::TopkPolicy)],
+        ),
+        op::Opcode::L_TILE_CFG { shape, mapping, .. } => OpAccess::new(
+            Unit::Scalar,
+            vec![Gp(shape), Gp(mapping)],
+            vec![Resource::Cfg(Cfg::MatrixView)],
+        ),
+        op::Opcode::L_TILE_EXEC { rd, rs1, rs2, .. } => OpAccess::new(
+            Unit::Vector,
+            vec![
+                Gp(rd),
+                Gp(rs1),
+                Gp(rs2),
+                Resource::Cfg(Cfg::MatrixView),
+                matrix(gp(rd), matrix_tile),
+                matrix(gp(rs1), matrix_tile),
+                matrix(gp(rs2), matrix_tile),
+            ],
+            vec![matrix(gp(rd), matrix_tile)],
         ),
         op::Opcode::C_LOOP_START { rd, .. } => OpAccess::new(Unit::Scalar, vec![], vec![Gp(rd)]),
         op::Opcode::C_LOOP_END { rd } => OpAccess::new(Unit::Scalar, vec![Gp(rd)], vec![Gp(rd)]),
@@ -623,7 +695,11 @@ mod tests {
 
     #[test]
     fn matrix_multiply_reads_regs_tile_batch_and_accumulator() {
-        let a = access(op::Opcode::M_MM { rs1: 1, rs2: 2 });
+        let a = access(op::Opcode::M_MM {
+            rs1: 1,
+            rs2: 2,
+            view: None,
+        });
         assert_eq!(a.unit, Unit::Matrix);
         assert!(a.reads.contains(&Resource::Gp(1)));
         assert!(a.reads.contains(&Resource::Gp(2)));
@@ -646,6 +722,7 @@ mod tests {
             rd: 2,
             rstride: 0,
             imm: 0,
+            view: None,
         });
         let expected_span = (*BLEN - 1) * *MLEN + *VLEN;
         assert_eq!(
@@ -668,6 +745,7 @@ mod tests {
             rd: 2,
             rstride: 3,
             imm: 0,
+            view: None,
         });
         assert!(a.reads.contains(&Resource::Gp(3)));
         let expected_span = (*BLEN - 1) * *MLEN * gp_stub(3) + *VLEN;
@@ -708,6 +786,7 @@ mod tests {
             rs1: 2,
             rs2: 3,
             rmask: 0,
+            view_mask: 0,
         });
         assert_eq!(a.unit, Unit::Vector);
         assert_eq!(
@@ -729,6 +808,7 @@ mod tests {
             rs1: 2,
             rs2: 3,
             rmask: 1,
+            view_mask: 0,
         });
         assert!(masked.reads.contains(&Resource::Cfg(Cfg::VMask)));
     }

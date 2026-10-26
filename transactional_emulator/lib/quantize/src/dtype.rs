@@ -428,6 +428,14 @@ impl DataType {
     /// Convert bytes to vector of f32.
     pub fn convert_bytes_to_f32_vec(self, mut bytes: &[u8], out: &mut [f32]) {
         let bits = self.size_in_bits();
+        if bits == 32 {
+            assert!(bytes.len() >= out.len() * 4);
+            for (encoded, decoded) in bytes.chunks_exact(4).zip(out.iter_mut()) {
+                let word = u32::from_le_bytes(encoded.try_into().expect("four-byte word"));
+                *decoded = self.convert_bits_to_f32(word);
+            }
+            return;
+        }
         let mut data = 0;
         let mut bits_left = 0;
         for out in out.iter_mut() {
@@ -445,6 +453,13 @@ impl DataType {
 
     pub fn bytes_from_f32(self, input: &[f32], mut out: &mut [u8]) {
         let bits = self.size_in_bits();
+        if bits == 32 {
+            assert!(out.len() >= input.len() * 4);
+            for (value, encoded) in input.iter().zip(out.chunks_exact_mut(4)) {
+                encoded.copy_from_slice(&self.bits_from_f32(*value).to_le_bytes());
+            }
+            return;
+        }
         let mut data = 0;
         let mut bits_left = 0u8;
 
@@ -577,6 +592,17 @@ mod tests {
         let mut out = vec![0f32; 4];
         ty.convert_bytes_to_f32_vec(&bytes, &mut out);
         assert_eq!(out, vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_datatype_bytes_roundtrip_32bit_words() {
+        let ty = DataType::Fp(FpType::F32);
+        let input = [0.0, 1.0, 2.0, 3.0];
+        let mut bytes = vec![0u8; input.len() * 4];
+        ty.bytes_from_f32(&input, &mut bytes);
+        let mut out = vec![0.0; input.len()];
+        ty.convert_bytes_to_f32_vec(&bytes, &mut out);
+        assert_eq!(out, input);
     }
 
     #[test]
