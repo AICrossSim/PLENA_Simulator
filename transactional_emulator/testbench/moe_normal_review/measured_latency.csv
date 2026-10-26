@@ -1,0 +1,9 @@
+set,case,D,F,tokens,single_ps,large_small_ps
+search,qwen_full_decode_b8,2048,512,8,524575000,564819000
+search,qwen_full_decode_b32,2048,512,32,713878000,792445000
+search,deepseek_full_decode_b8,2048,1408,8,1484505000,1645167000
+search,deepseek_full_decode_b32,2048,1408,32,1504962000,1596841000
+holdout,qwen_holdout_b8,2048,512,8,801578000,869781000
+holdout,qwen_holdout_b32,2048,512,32,1268039000,1377461000
+holdout,deepseek_holdout_b8,2048,1408,8,1483785000,1647373000
+holdout,deepseek_holdout_b32,2048,1408,32,1506083000,1596643000

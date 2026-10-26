@@ -86,6 +86,7 @@ jobs:
           python3 -m pytest \
             transactional_emulator/testbench/test_testbench_stage_attribution.py \
             transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            transactional_emulator/testbench/moe_timing/replay/test_compare_moe_normal.py \
             transactional_emulator/testbench/moe_timing/campaign/test_run_subset_gates.py \
             -v
 
@@ -127,6 +128,14 @@ jobs:
         run: |
           uv python install 3.12
           uv sync
+
+      - name: Run Compiler to Rust MoE normal-core smoke
+        run: |
+          nix develop --command bash -c 'PYTHONPATH="$PWD/PLENA_Tools" uv run python \
+            transactional_emulator/testbench/moe_normal_review/smoke.py \
+            --compiler "$PWD/PLENA_Compiler" \
+            --binary "$PWD/transactional_emulator/target/release/moe_dual_normal" \
+            --output-dir /tmp/plena-moe-review-smoke'
 
       - name: Run ATen linear integration test
         run: |

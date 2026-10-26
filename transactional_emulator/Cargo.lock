@@ -1734,6 +1734,7 @@ version = "0.1.0"
 dependencies = [
  "buddy",
  "clap",
+ "futures",
  "half",
  "memory",
  "mimalloc",
@@ -1742,6 +1743,7 @@ dependencies = [
  "runtime",
  "serde",
  "serde_json",
+ "sha2",
  "sram",
  "tch",
  "tokio",

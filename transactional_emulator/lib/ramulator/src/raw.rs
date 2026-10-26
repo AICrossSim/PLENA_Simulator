@@ -1,7 +1,7 @@
 use anyhow::Result;
 use core::ffi::c_void;
 use core::mem::ManuallyDrop;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 use crate::config::*;
 
@@ -27,6 +27,10 @@ mod bindings {
         ) -> bool;
         pub fn ramulator_period(val: *mut ramulator) -> f32;
         pub fn ramulator_tick(val: *mut ramulator);
+        pub fn ramulator_capi_version() -> u32;
+        pub fn ramulator_tx_bytes(val: *mut ramulator) -> u32;
+        pub fn ramulator_stats(val: *mut ramulator, buffer: *mut c_char, capacity: u64) -> u64;
+        pub fn ramulator_library_path() -> *const c_char;
     }
 }
 
@@ -79,6 +83,10 @@ impl Drop for Ramulator {
 
 impl Ramulator {
     pub fn new(config: crate::config::Config) -> Result<Self> {
+        anyhow::ensure!(
+            !config.controllers.is_empty(),
+            "Ramulator needs at least one controller"
+        );
         let dram_impl = match &config.controllers[0] {
             Controller::GenericDDR(c) => &c.dram,
             Controller::HBM12(c) => &c.dram,
@@ -94,7 +102,7 @@ impl Ramulator {
             // "LPDDR5" => 8,
             // "GDDR6" => 8,
             // "HBM" => 2,
-            DRAM::HBM2(_) => 2,
+            DRAM::HBM2(_) => 4,
             // "HBM3" => 2,
         };
 
@@ -132,6 +140,12 @@ impl Ramulator {
         if raw.is_null() {
             anyhow::bail!("Ramulator failed to initialize");
         }
+        let native_tx = unsafe { bindings::ramulator_tx_bytes(raw) };
+        let expected_tx = internal_prefetch_size * default_channel_width / 8;
+        if unsafe { bindings::ramulator_capi_version() } != 2 || native_tx != expected_tx {
+            unsafe { bindings::ramulator_finalize(raw) };
+            anyhow::bail!("native transaction mismatch: native={native_tx}, wrapper={expected_tx}");
+        }
         Ok(Ramulator {
             raw,
             burst_size: internal_prefetch_size,
@@ -139,6 +153,25 @@ impl Ramulator {
             transfer_size: internal_prefetch_size * default_channel_width / 8,
             num_channels,
         })
+    }
+
+    pub fn native_stats(&mut self) -> serde_json::Value {
+        let size = unsafe { bindings::ramulator_stats(self.raw, std::ptr::null_mut(), 0) };
+        assert!((1..=16 * 1024 * 1024).contains(&size));
+        let mut buffer = vec![0u8; size as usize];
+        let written =
+            unsafe { bindings::ramulator_stats(self.raw, buffer.as_mut_ptr().cast(), size) };
+        assert_eq!(written, size);
+        serde_yaml_ng::from_slice(&buffer[..buffer.len() - 1])
+            .expect("native statistics must be valid YAML")
+    }
+
+    pub fn library_path() -> String {
+        let path = unsafe { bindings::ramulator_library_path() };
+        assert!(!path.is_null(), "native library identity unavailable");
+        unsafe { CStr::from_ptr(path) }
+            .to_string_lossy()
+            .into_owned()
     }
 
     pub fn period(&mut self) -> u32 {
