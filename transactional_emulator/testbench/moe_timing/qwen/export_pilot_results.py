@@ -18,6 +18,11 @@ ROUTING_STAGE_NAMES = {
     "gather",
     "expert_weight_address",
     "expert_route_weight",
+    # Selection itself, now that the replay emits V_TOPK instead of preloading
+    # the trace's top-k. Left out while it was absent, so a run from before that
+    # change contributes zero here rather than a wrong number -- the stage sums
+    # to nothing when nothing emitted it.
+    "router_topk",
     "scatter_combine",
 }
 
@@ -121,7 +126,12 @@ def export(args: argparse.Namespace) -> dict[str, Any]:
                 "routing_tax_cycles": routing_tax_cycles,
                 "routing_tax_fraction_of_total": routed_fraction,
                 "total_cycles": int(sim_cycles),
-                "note": "Fixed-route trace replay excludes router GEMM/topk; routing tax here is stage-derived movement/dispatch overhead, not device-selected-minus-oracle.",
+                "note": (
+                    "Trace-driven replay: top-k selection runs on device (V_TOPK) and is in "
+                    "this tax; the router GEMM that produced the logits is not emitted. "
+                    "Routing tax is stage-derived movement/dispatch overhead, not "
+                    "device-selected-minus-oracle."
+                ),
             }
         )
         logical = trace.get("logical_bytes", {})

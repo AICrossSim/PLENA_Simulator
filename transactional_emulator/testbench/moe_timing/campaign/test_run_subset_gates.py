@@ -19,6 +19,7 @@ pytest-only CI job. Stubbing keeps the *real* functions under test.
 
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from pathlib import Path
@@ -34,7 +35,22 @@ _INSTALLED: list[str] = []
 
 
 def _stub(name: str, **attrs: object) -> None:
+    """Substitute for a package only where the real one is unavailable.
+
+    The stub exists for the pytest-only CI job, which installs pytest and nothing
+    else. Where the real package *is* importable -- any dev checkout, and the
+    build-and-test job -- installing the stub anyway shadows it for the rest of
+    the session: `pytest transactional_emulator/testbench/moe_timing/` collects
+    this directory before `qwen/`, so the qwen guards would then fail to import
+    torch, with a traceback pointing at PLENA_Tools rather than at this file.
+    """
     if name in sys.modules:
+        return
+    try:
+        importlib.import_module(name)
+    except ImportError:
+        pass
+    else:
         return
     module = types.ModuleType(name)
     for key, value in attrs.items():
@@ -51,6 +67,15 @@ _stub("safetensors", safe_open=object)
 _stub("safetensors.torch", load_file=lambda *a, **k: {})
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+
+#: Modules already loaded before anything is imported against a stub.
+#:
+#: Withdrawing the stub names is not enough on its own: a module imported while
+#: they were installed keeps the fake bound inside it and stays cached, so a test
+#: collected later gets a module built on a stub -- the exact "silently exercises
+#: a stub" outcome the withdrawal exists to prevent. Everything loaded after this
+#: point goes too.
+_PRELOADED = frozenset(sys.modules)
 
 from transactional_emulator.testbench.moe_timing.campaign.run_subset import (  # noqa: E402
     _exit_code,
@@ -173,8 +198,19 @@ def test_a_clean_campaign_built_by_the_real_producer_exits_zero(tmp_path) -> Non
 
 
 def teardown_module(_module: object) -> None:
-    """Withdraw the stubs so the rest of the session sees the real packages."""
+    """Withdraw the stubs, and everything that was imported against them.
+
+    Popping only `_INSTALLED` restores the names but not the session: modules
+    imported while the stubs were live hold the fake objects and stay cached, so
+    the next test to import one gets a module built on a stub. Nothing is dropped
+    when no stub was installed -- the real packages were available and every
+    import was genuine.
+    """
+    if not _INSTALLED:
+        return
     for name in _INSTALLED:
+        sys.modules.pop(name, None)
+    for name in [name for name in sys.modules if name not in _PRELOADED]:
         sys.modules.pop(name, None)
 
 
@@ -244,3 +280,83 @@ def test_gate_failed_rows_are_excluded_from_the_exported_numbers() -> None:
     )
     assert [r["trace_id"] for r in dropped] == ["b"]
     assert len(unknown) == 1
+
+
+# The qwen replay reports two gates. `zero_input_smoke_gate` compares an all-zero
+# accumulator against an all-zero golden, which dummy expert weights produce for
+# any routing at all; `router_gate` checks the experts V_TOPK actually selected.
+# Only the second can fail on a routing fault, so anything that consults one gate
+# has to consult both -- otherwise the apparatus that decides what to retry and
+# what to average keys on the check that cannot fail.
+
+
+def _results(*, smoke: bool, router: bool | None) -> dict:
+    payload = {"zero_input_smoke_gate": {"passed": smoke, "gate_kind": "zero_input_shape_smoke"}}
+    if router is not None:
+        payload["router_gate"] = {"passed": router, "gate_kind": "device_selected_experts_match_trace"}
+    return payload
+
+
+def test_a_router_failed_run_is_not_treated_as_already_done(tmp_path) -> None:
+    """`--skip-existing` must retry it, not skip it.
+
+    The results file is written before the gate assertion raises, so a
+    router-failed run leaves a complete-looking artifact whose smoke gate says
+    True. Reading only that gate makes the failure permanent: the trace is never
+    re-run, and its cycles stay in the export.
+    """
+    from transactional_emulator.testbench.moe_timing.qwen.run_trace_batch import _prior_run_passed
+    from transactional_emulator.testbench.moe_timing.replay.utils import write_json
+
+    path = tmp_path / "qwen3_trace_replay_results.json"
+    write_json(path, _results(smoke=True, router=False))
+
+    assert _prior_run_passed(path) is False
+
+
+def test_a_run_passing_both_gates_is_treated_as_done(tmp_path) -> None:
+    from transactional_emulator.testbench.moe_timing.qwen.run_trace_batch import _prior_run_passed
+    from transactional_emulator.testbench.moe_timing.replay.utils import write_json
+
+    path = tmp_path / "qwen3_trace_replay_results.json"
+    write_json(path, _results(smoke=True, router=True))
+
+    assert _prior_run_passed(path) is True
+
+
+def test_a_result_with_no_router_gate_still_reads_from_the_smoke_gate(tmp_path) -> None:
+    """Artifacts written before on-device routing carry no `router_gate`.
+
+    Absent must stay unknown-but-passing here, or every pre-existing run in an
+    out_root would suddenly re-run.
+    """
+    from transactional_emulator.testbench.moe_timing.qwen.run_trace_batch import _prior_run_passed
+    from transactional_emulator.testbench.moe_timing.replay.utils import write_json
+
+    path = tmp_path / "qwen3_trace_replay_results.json"
+    write_json(path, _results(smoke=True, router=None))
+
+    assert _prior_run_passed(path) is True
+
+
+def test_the_campaign_summary_reports_a_router_failure_as_a_failed_gate(tmp_path) -> None:
+    """`functional_gate_passed` feeds the export filter and the exit code.
+
+    `summarize_run` picks one gate out of a precedence chain, and the qwen
+    replay lands on the smoke gate. Leaving `router_gate` out of it means
+    `export_selected` averages the cycles of a run that routed to the wrong
+    experts, and `_exit_code` counts it as passing.
+    """
+    from transactional_emulator.testbench.moe_timing.replay.utils import summarize_run, write_json
+
+    build = tmp_path / "run"
+    build.mkdir()
+    # `run_result_path` searches for this name, not `qwen3_trace_replay_results.json`;
+    # `run_trace` writes the same summary to both.
+    write_json(build / "gather_scatter_results.json", _results(smoke=True, router=False))
+    write_json(build / "rust_emulator_run_stats.json", {"sim_latency_cycles": 10})
+    write_json(build / "stage_profile.json", {"total_simulation_cycles": 10})
+
+    row, _ = summarize_run("r0", build)
+
+    assert row["functional_gate_passed"] is False
