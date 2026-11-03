@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 pub(crate) use clap::Parser;
 use clap::ValueEnum;
 
+use crate::load_config::HbmGen;
+
 /// Log level filter for the tracing subscriber.
 ///
 /// When passed via `--log-level`, this fully overrides the `RUST_LOG`
@@ -159,6 +161,18 @@ pub(crate) struct Opts {
     /// only a small HBM prefix can pass e.g. `--hbm-size 256M` to bound the
     /// steady-state RSS.
     pub(crate) hbm_size: Option<usize>,
+
+    #[arg(long, value_enum)]
+    /// Override the HBM generation of the Ramulator timing model (default:
+    /// HBM_GEN in plena_settings.toml, hbm2). hbm2 is the HBM2 preset at
+    /// 2.0 Gb/s with 64-bit channels; hbm3 is the HBM3 preset at 6.4 Gb/s
+    /// with 32-bit channels and BL8.
+    pub(crate) hbm_gen: Option<HbmGen>,
+
+    #[arg(long)]
+    /// Override the number of HBM channels in the Ramulator model (default:
+    /// HBM_CHANNELS in plena_settings.toml, 8).
+    pub(crate) hbm_channels: Option<usize>,
 
     #[arg(long)]
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and

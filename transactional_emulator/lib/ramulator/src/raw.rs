@@ -82,6 +82,7 @@ impl Ramulator {
         let dram_impl = match &config.controllers[0] {
             Controller::GenericDDR(c) => &c.dram,
             Controller::HBM12(c) => &c.dram,
+            Controller::HBM34(c) => &c.dram,
         };
 
         let internal_prefetch_size = match dram_impl {
@@ -95,7 +96,9 @@ impl Ramulator {
             // "GDDR6" => 8,
             // "HBM" => 2,
             DRAM::HBM2(_) => 2,
-            // "HBM3" => 2,
+            // BL8: together with the 32-bit channel below one transfer is the
+            // 32-byte DRAM transaction the HBM3 model accepts at most.
+            DRAM::HBM3(_) => 8,
         };
 
         let default_channel_width = match dram_impl {
@@ -109,7 +112,7 @@ impl Ramulator {
             // "GDDR6" => 64,
             // "HBM" => 128,
             DRAM::HBM2(_) => 64,
-            // "HBM3" => 64,
+            DRAM::HBM3(_) => 32,
         };
 
         let num_channels = config.controllers.len() as u32;

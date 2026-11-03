@@ -1,6 +1,6 @@
 // load_config.rs
 use serde::{Deserialize, Serialize};
-use std::{env, fs, sync::LazyLock};
+use std::{env, fmt, fs, str::FromStr, sync::LazyLock};
 
 // Import the types from your main module
 use quantize::{DataType, FpType, IntType, MxDataType};
@@ -14,6 +14,54 @@ pub struct ConfigValue {
 pub struct ConfigValueUsize {
     pub value: usize,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigValueString {
+    pub value: String,
+}
+
+/// HBM generation of the Ramulator timing model (`TRANSACTIONAL.CONFIG.HBM_GEN`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum HbmGen {
+    /// `Ramulator::hbm2_preset`: HBM2 at 2.0 Gb/s per pin, 64-bit channels.
+    #[default]
+    Hbm2,
+    /// `Ramulator::hbm3_preset`: HBM3 at 6.4 Gb/s per pin, 32-bit channels, BL8.
+    Hbm3,
+}
+
+impl HbmGen {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hbm2 => "hbm2",
+            Self::Hbm3 => "hbm3",
+        }
+    }
+}
+
+impl FromStr for HbmGen {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "hbm2" => Ok(Self::Hbm2),
+            "hbm3" => Ok(Self::Hbm3),
+            other => Err(format!(
+                "unsupported HBM generation {other:?} (expected \"hbm2\" or \"hbm3\")"
+            )),
+        }
+    }
+}
+
+impl fmt::Display for HbmGen {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Channel count used when `HBM_CHANNELS` is absent: what the emulator
+/// hard-coded before the count became a setting.
+pub const DEFAULT_HBM_CHANNELS: usize = 8;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LatencyValue {
@@ -108,6 +156,38 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+    /// HBM generation of the Ramulator model, "hbm2" or "hbm3". Optional so
+    /// settings files that predate the key keep working; absent means hbm2.
+    #[serde(rename = "HBM_GEN", default)]
+    pub hbm_gen: Option<ConfigValueString>,
+    /// Number of Ramulator HBM channels. Optional; absent means
+    /// [`DEFAULT_HBM_CHANNELS`].
+    #[serde(rename = "HBM_CHANNELS", default)]
+    pub hbm_channels: Option<ConfigValueUsize>,
+}
+
+impl ConfigSection {
+    pub fn hbm_gen(&self) -> HbmGen {
+        match &self.hbm_gen {
+            None => HbmGen::default(),
+            Some(generation) => generation
+                .value
+                .parse()
+                .unwrap_or_else(|err| panic!("TRANSACTIONAL.CONFIG.HBM_GEN: {err}")),
+        }
+    }
+
+    pub fn hbm_channels(&self) -> usize {
+        let channels = self
+            .hbm_channels
+            .as_ref()
+            .map_or(DEFAULT_HBM_CHANNELS, |channels| channels.value);
+        assert!(
+            channels >= 1,
+            "TRANSACTIONAL.CONFIG.HBM_CHANNELS must be at least 1, got {channels}"
+        );
+        channels
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -181,6 +261,8 @@ impl Default for AcceleratorConfig {
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
                 max_loop_instructions: ConfigValueUsize { value: 10000 },
+                hbm_gen: None,
+                hbm_channels: None,
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -443,6 +525,14 @@ pub fn hbm_size() -> usize {
     CONFIG.config.hbm_size.value
 }
 
+pub fn hbm_gen() -> HbmGen {
+    CONFIG.config.hbm_gen()
+}
+
+pub fn hbm_channels() -> usize {
+    CONFIG.config.hbm_channels()
+}
+
 pub fn matrix_sram_size() -> usize {
     CONFIG.config.matrix_sram_size.value
 }
@@ -700,6 +790,71 @@ mod tests {
         assert_eq!(cfg.config.hbm_size.value, 1073741824);
         assert_eq!(cfg.config.dc_en.value, 1);
         assert_eq!(cfg.config.max_loop_instructions.value, 10000);
+    }
+
+    #[test]
+    fn test_hbm_gen_parses_case_insensitively() {
+        assert_eq!("hbm2".parse::<HbmGen>().unwrap(), HbmGen::Hbm2);
+        assert_eq!("HBM3".parse::<HbmGen>().unwrap(), HbmGen::Hbm3);
+        assert!("hbm4".parse::<HbmGen>().is_err());
+        assert_eq!(HbmGen::Hbm3.to_string(), "hbm3");
+    }
+
+    #[test]
+    fn test_default_hbm_model_is_hbm2_with_eight_channels() {
+        let cfg = AcceleratorConfig::default();
+        assert!(cfg.config.hbm_gen.is_none());
+        assert!(cfg.config.hbm_channels.is_none());
+        assert_eq!(cfg.config.hbm_gen(), HbmGen::Hbm2);
+        assert_eq!(cfg.config.hbm_channels(), 8);
+    }
+
+    /// Drop the `[header]` table (up to the next table) from a TOML text.
+    fn without_table(text: &str, header: &str) -> String {
+        let mut out = String::new();
+        let mut skipping = false;
+        for line in text.lines() {
+            if line.trim() == header {
+                skipping = true;
+                continue;
+            }
+            if skipping && line.trim_start().starts_with('[') {
+                skipping = false;
+            }
+            if !skipping {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_settings_file_hbm_model() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../plena_settings.toml");
+        let text = fs::read_to_string(path).unwrap();
+
+        // The checked-in values reproduce the model the emulator used to hard-code.
+        let settings: PlenaSettings = toml::from_str(&text).unwrap();
+        assert_eq!(settings.transactional.config.hbm_gen(), HbmGen::Hbm2);
+        assert_eq!(settings.transactional.config.hbm_channels(), 8);
+
+        // A settings file without the keys means the same thing.
+        let stripped = without_table(&text, "[TRANSACTIONAL.CONFIG.HBM_GEN]");
+        let stripped = without_table(&stripped, "[TRANSACTIONAL.CONFIG.HBM_CHANNELS]");
+        assert!(!stripped.contains("HBM_GEN") && !stripped.contains("HBM_CHANNELS"));
+        let settings: PlenaSettings = toml::from_str(&stripped).unwrap();
+        assert!(settings.transactional.config.hbm_gen.is_none());
+        assert_eq!(settings.transactional.config.hbm_gen(), HbmGen::Hbm2);
+        assert_eq!(settings.transactional.config.hbm_channels(), 8);
+
+        let overridden = format!(
+            "{stripped}\n[TRANSACTIONAL.CONFIG.HBM_GEN]\nvalue = \"hbm3\"\n\n\
+             [TRANSACTIONAL.CONFIG.HBM_CHANNELS]\nvalue = 16\n"
+        );
+        let settings: PlenaSettings = toml::from_str(&overridden).unwrap();
+        assert_eq!(settings.transactional.config.hbm_gen(), HbmGen::Hbm3);
+        assert_eq!(settings.transactional.config.hbm_channels(), 16);
     }
 
     #[test]
