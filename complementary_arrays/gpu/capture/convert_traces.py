@@ -2,8 +2,8 @@
 
 A trace file has one row per (request group, decode step, MoE layer) with at least one live request: routes
 [rows, batch, topk] int16 (live requests first, zero padding), live [rows] int16, and metadata, a JSON list of
-{model, batch, live, source, group, cohort, layer, step}. Rows follow the shard order of the manifest; within a shard
-they are layer-major for captures with an alive mask (capture_routes) and step-major for per-step captures.
+{model, batch, live, source, group, cohort, layer, step}. Rows follow the shard order of the manifest and are
+layer-major within a shard.
 """
 
 import argparse
@@ -14,7 +14,7 @@ import numpy as np
 
 from .requests import file_sha256
 
-TRACE_MODELS = {"qwen35": "qwen", "deepseek": "deepseek", "qwen3next": "qwen3next"}
+TRACE_MODELS = {"qwen35": "qwen", "deepseek": "deepseek"}
 
 
 def masked_rows(z, layers):
@@ -25,15 +25,6 @@ def masked_rows(z, layers):
         for step in range(len(alive)):
             if alive[step].any():
                 yield layer, step + 1, ids[step][alive[step]]
-
-
-def per_step_rows(z, layers):
-    """(layer, step, ids of live requests) from a capture that stores live requests per step."""
-    for step, live in enumerate(z["live_counts"], start=1):
-        for layer in layers:
-            ids = z[f"ids_l{layer}_s{step}"]
-            assert len(ids) == live, (layer, step)
-            yield layer, step, ids
 
 
 def main():
@@ -61,8 +52,7 @@ def main():
             raise ValueError(f"{path} does not match its manifest hash")
         routes, metadata = traces.setdefault((batch, a.split or group["split"]), ([], []))
         with np.load(path) as z:
-            rows = per_step_rows(z, layers) if "live_counts" in z.files else masked_rows(z, layers)
-            for layer, step, ids in rows:
+            for layer, step, ids in masked_rows(z, layers):
                 live = len(ids)
                 assert ids.shape == (live, topk) and ids.min() >= 0 and ids.max() < experts, (path, layer, step)
                 assert np.all(np.diff(np.sort(ids, axis=1), axis=1) > 0), (path, layer, step)

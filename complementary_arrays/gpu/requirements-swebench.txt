@@ -1,0 +1,5 @@
+# SWE-bench Verified agent and grading (accuracy/swebench.py): Python 3.11, rootless podman with its Docker API socket.
+mini-swe-agent==2.4.6
+swebench==5.0.2
+litellm==1.109.1
+datasets==5.2.0

@@ -4,7 +4,7 @@
 
 #include "layer.hpp"
 
-// Tasks: the router, every routed expert with tokens and the shared expert, in front-end order.
+// Tasks: the router, every routed expert with tokens and the shared expert (or its two halves), in front-end order.
 bool Layer::build_tasks() {
   const int E = cfg.experts, K = cfg.topk;
   for (int e = 0; e < E; e++) {
@@ -17,9 +17,15 @@ bool Layer::build_tasks() {
       tasks.push_back(a);
     }
   }
-  Task shared{E, B, std::vector<int>(B)};
-  std::iota(shared.tokens.begin(), shared.tokens.end(), 0);
-  tasks.push_back(shared);
+  if (cfg.shared_expert) {
+    Task shared{E, B, std::vector<int>(B)};
+    std::iota(shared.tokens.begin(), shared.tokens.end(), 0);
+    tasks.push_back(shared);
+    if (cfg.shared_place == 3) {
+      shared.type = B + 2;
+      tasks.push_back(shared);
+    }
+  }
   for (const Task& task : tasks) {
     bool fits = false;
     for (int c = 0; c < nc; c++) fits |= prog[c][task.type].tm > 0;
@@ -41,6 +47,7 @@ bool Layer::build_tasks() {
       return a.tokens.size() > b.tokens.size();
     });
   tasks.insert(tasks.begin(), Task{-1, B + 1, {}});
+  first_routed = !cfg.shared_expert ? 1 : cfg.shared_place == 3 ? 3 : 2;
   return true;
 }
 
@@ -72,12 +79,10 @@ bool Layer::running(int j) const {
   return false;
 }
 
-// The shared expert (it does not wait for the router) goes to the context predicted to finish it first; a free context
-// also takes it while that context is busy, if it finishes it at most 1.5 times later.
-bool Layer::take_shared(int c, bool free) {
-  if (shared_done) return false;
+// The context predicted to finish the shared expert first (fb its finish; fc that of context c), -1 if none fits.
+int Layer::preferred_shared(int c, int64_t& fb, int64_t& fc) const {
   int pref = -1;
-  int64_t fb = IINF, fc = IINF;
+  fb = fc = IINF;
   for (int cc = 0; cc < nc; cc++)
     if (prog[cc][B].tm) {
       int64_t f = remaining_int(cc) + icost(cc, B);
@@ -87,17 +92,57 @@ bool Layer::take_shared(int c, bool free) {
       }
       if (cc == c) fc = f;
     }
+  return pref;
+}
+
+// The shared expert (it does not wait for the router) goes to the context predicted to finish it first; a free context
+// also takes it while that context is busy, if it finishes it at most 1.5 times later. The halves of a split shared
+// expert go to the first context that fits each. Returns the task taken by context c, or -1.
+int Layer::take_shared(int c, bool free) {
+  if (shared_done) return -1;
+  if (cfg.shared_place == 3) {
+    for (int h = 0; h < 2; h++)
+      if (!half_taken[h] && prog[c][tasks[1 + h].type].tm) {
+        half_taken[h] = true;
+        shared_done = half_taken[0] && half_taken[1];
+        return 1 + h;
+      }
+    return -1;
+  }
+  int64_t fb, fc;
+  int pref = preferred_shared(c, fb, fc);
   if (pref == c || (free && pref >= 0 && st[pref].task >= 0 && prog[c][B].tm && fc <= fb + (fb >> 1))) {
     shared_done = true;
-    return true;
+    return 1;
   }
-  return false;
+  return -1;
+}
+
+// A band plan charges the shared expert not yet dispatched to its preferred array (scaled by that array's progress
+// factor when re-planning); each undispatched half of a split shared expert to its array.
+void Layer::charge_shared(int64_t* R, bool scaled) const {
+  if (cfg.shared_place == 3) {
+    for (int h = 0; h < 2; h++)
+      if (!half_taken[h])
+        for (int cc = 0; cc < nc; cc++)
+          if (prog[cc][tasks[1 + h].type].tm) {
+            R[topo.rank[array_of(cc)]] += icost(cc, tasks[1 + h].type);
+            break;
+          }
+    return;
+  }
+  if (shared_done) return;
+  int64_t fb, fc;
+  int pref = preferred_shared(-1, fb, fc);
+  if (pref >= 0)
+    R[topo.rank[array_of(pref)]] += scaled ? icost(pref, B) * factor(array_of(pref)) / 1024 : icost(pref, B);
 }
 
 // Pincer: routed tasks are taken from the hot end by the array with more multipliers (on one array: even contexts) and
 // from the cold end by the other.
 int Layer::pick_pincer(int c, bool free) {
-  if (take_shared(c, free)) return 1;
+  int js = take_shared(c, free);
+  if (js >= 0) return js;
   if (!router_done || hotp > coldp) return -1;
   int k = array_of(c);
   bool hot;
@@ -116,6 +161,65 @@ int Layer::pick_pincer(int c, bool free) {
   return j;
 }
 
+// HBM and weight-port bytes per cycle (x1024) of a program on context c from phase `from` on; the port rate counts
+// first passes, packed re-reads and re-deliveries.
+void Layer::rates(int c, int type, int from, int64_t& hr, int64_t& pr) const {
+  const Program& p = prog[c][type];
+  const int64_t T = std::max<int64_t>(1, llround(p.suffix[from]));
+  hr = p.hsuffix[from] * 1024 / T;
+  pr = (p.wsuffix[from] + p.rsuffix[from]) * 1024 / T;
+}
+
+// Supply-aware choice between the hot-end task (h) and the cold-end task (c) given the rates of the other contexts
+// (Ho, Po): the penalty of a candidate is port overload + HBM idling + half the HBM oversubscription, each normalised;
+// within the tie tolerance the context keeps its own end.
+static bool supply_choice(bool own_hot, int64_t hh, int64_t ph, int64_t hc, int64_t pc, int64_t Ho, int64_t Po,
+                          int64_t W, int64_t H, int tie) {
+  auto penalty = [&](int64_t h, int64_t p) {
+    const int64_t P = Po + p, Hs = Ho + h;
+    return std::max<int64_t>(0, P - 1024 * W) / W + std::max<int64_t>(0, 1024 * H - Hs) / H +
+           std::max<int64_t>(0, Hs - 1024 * H) / (2 * H);
+  };
+  const int64_t a = penalty(hh, ph), b = penalty(hc, pc), tol = int64_t(tie) * 1024 / 1000;
+  if (a + tol < b) return true;
+  if (b + tol < a) return false;
+  return own_hot;
+}
+
+// Supply-aware pincer: as the pincer, but a context weighs both end tasks by how well each keeps HBM busy without
+// overloading the weight port next to what the other contexts are running. Own end: the tallest array (on one array
+// even contexts) the hot end.
+int Layer::pick_supply(int c, bool free) {
+  int js = take_shared(c, free);
+  if (js >= 0) return js;
+  if (!router_done || hotp > coldp) return -1;
+  const bool own = topo.arrays == 1 ? topo.pos[c] % 2 == 0 : topo.rank[array_of(c)] == 0;
+  const int jh = hotp, jc = coldp;
+  const bool fh = prog[c][tasks[jh].type].tm > 0, fc = prog[c][tasks[jc].type].tm > 0;
+  if (!fh && !fc) return -1;
+  bool hot;
+  if (jh == jc)
+    hot = true;
+  else if (fh != fc)
+    hot = fh;
+  else {
+    int64_t Ho = 0, Po = 0, hh, ph, hc, pc;
+    for (int cc = 0; cc < nc; cc++)
+      if (cc != c && st[cc].task >= 0) {
+        int64_t h, q;
+        rates(cc, tasks[st[cc].task].type, st[cc].phase, h, q);
+        Ho += h;
+        Po += q;
+      }
+    rates(c, tasks[jh].type, 0, hh, ph);
+    rates(c, tasks[jc].type, 0, hc, pc);
+    hot = supply_choice(own, hh, ph, hc, pc, Ho, Po, cfg.W, cfg.H, cfg.p15_tie);
+  }
+  if (jh != jc && hot != own) out[S_end_switches]++;
+  if (hot) return hotp++;
+  return coldp--;
+}
+
 int64_t Layer::array_task_cost(int r, int j) const {  // cheapest context of the array of rank r
   int k = topo.byrank[r];
   int64_t b = IINF;
@@ -130,81 +234,76 @@ int64_t Layer::array_committed(int r) const {
   return z;
 }
 
-// Once the router finishes, the routed tasks are cut into one contiguous band per array (tallest array first) with the
-// smallest predicted makespan.
-void Layer::plan_bands() {
-  planned = true;
-  const int K = topo.arrays, N = int(tasks.size());
-  int64_t R[MAXA];
-  for (int r = 0; r < K; r++) R[r] = array_committed(r);
-  if (!shared_done) {  // charged to the context the shared expert will go to
-    int pref = -1;
-    int64_t fb = IINF;
-    for (int cc = 0; cc < nc; cc++)
-      if (prog[cc][B].tm) {
-        int64_t f = remaining_int(cc) + icost(cc, B);
-        if (f < fb) {
-          fb = f;
-          pref = cc;
-        }
-      }
-    if (pref >= 0) R[topo.rank[array_of(pref)]] += icost(pref, B);
-  }
-  std::vector<int64_t>& task_cost = band_task_cost;
-  task_cost.assign(size_t(K) * N, IINF);
-  for (int r = 0; r < K; r++)
-    for (int j = 2; j < N; j++) task_cost[size_t(r) * N + j] = array_task_cost(r, j);
-  int lo[MAXA], hi[MAXA];
+// Cut of n tasks with costs bc (rank-major, IINF where a task does not fit) into one contiguous band per rank after the
+// committed work R, with the smallest feasible makespan (binary search, greedy fill in rank order); without a feasible
+// cut the last band takes the rest and plan_fallback is set.
+static void cut_bands(int K, int n, const int64_t* R, const std::vector<int64_t>& bc, int* lo, int* hi, int64_t* out) {
   auto cut = [&](int64_t T) {  // greedy fill in rank order; returns the first task left over
-    int j = 2;
+    int i = 0;
     for (int r = 0; r < K; r++) {
-      lo[r] = j;
+      lo[r] = i;
       int64_t acc = R[r];
-      while (j < N) {
-        int64_t x = task_cost[size_t(r) * N + j];
+      while (i < n) {
+        int64_t x = bc[size_t(r) * n + i];
         if (x >= IINF || acc + x > T) break;
         acc += x;
-        j++;
+        i++;
       }
-      hi[r] = j - 1;
+      hi[r] = i - 1;
     }
-    return j;
+    return i;
   };
   int64_t T = 0;
   for (int r = 0; r < K; r++) T = std::max(T, R[r]);
-  for (int j = 2; j < N; j++) {
+  for (int i = 0; i < n; i++) {
     int64_t w = 0;
     for (int r = 0; r < K; r++) {
-      int64_t x = task_cost[size_t(r) * N + j];
+      int64_t x = bc[size_t(r) * n + i];
       if (x < IINF) w = std::max(w, x);
     }
     T += w;
   }
-  if (cut(T) < N) {  // no contiguous cut respects the SRAM: the last band takes the rest
+  if (cut(T) < n) {
     out[S_band_plan_fallback] = 1;
-    hi[K - 1] = N - 1;
+    hi[K - 1] = n - 1;
   } else {
     int64_t a = 0, b = T;
     while (a < b) {
       int64_t m = a + (b - a) / 2;
-      if (cut(m) == N)
+      if (cut(m) == n)
         b = m;
       else
         a = m + 1;
     }
     cut(a);
   }
+}
+
+// Once the router finishes, the routed tasks are cut into one contiguous band per array (tallest array first) with the
+// smallest predicted makespan.
+void Layer::plan_bands() {
+  planned = true;
+  const int K = topo.arrays, N = int(tasks.size()), j0 = first_routed, n = N - j0;
+  int64_t R[MAXA];
+  for (int r = 0; r < K; r++) R[r] = array_committed(r);
+  charge_shared(R, false);
+  band_task_cost.assign(size_t(K) * N, IINF);
+  std::vector<int64_t> bc(size_t(K) * std::max(n, 1), IINF);
+  for (int r = 0; r < K; r++)
+    for (int j = j0; j < N; j++) bc[size_t(r) * n + j - j0] = band_task_cost[size_t(r) * N + j] = array_task_cost(r, j);
+  int lo[MAXA], hi[MAXA];
+  cut_bands(K, n, R, bc, lo, hi, out);
   int64_t makespan = 0;
   for (int r = 0; r < K; r++) {
-    band_lo[r] = lo[r];
-    band_hi[r] = hi[r];
+    band_lo[r] = lo[r] + j0;
+    band_hi[r] = hi[r] + j0;
     band_left[r] = 0;
-    for (int j = lo[r]; j <= hi[r]; j++) {
-      int64_t x = task_cost[size_t(r) * N + j];
+    for (int j = band_lo[r]; j <= band_hi[r]; j++) {
+      int64_t x = band_task_cost[size_t(r) * N + j];
       if (x < IINF) band_left[r] += x;
     }
     makespan = std::max(makespan, R[r] + band_left[r]);
-    if (log) log->push_back({t, topo.byrank[r], lo[r], hi[r], r, 5, cfg.policy, R[r] + band_left[r]});
+    if (log) log->push_back({t, topo.byrank[r], band_lo[r], band_hi[r], r, 5, cfg.policy, R[r] + band_left[r]});
   }
   out[S_band_plan_cycle] = t;
   out[S_band_planned_makespan] = makespan;
@@ -214,7 +313,8 @@ void Layer::plan_bands() {
 // array even contexts from the hot end). With its band empty it steals from the other band at the nearer end;
 // p14_steal 2 steals only a task the thief is predicted to finish before the band's owner finishes its band.
 int Layer::pick_band(int c, bool free) {
-  if (take_shared(c, free)) return 1;
+  int js = take_shared(c, free);
+  if (js >= 0) return js;
   if (!router_done) return -1;
   if (!planned) plan_bands();
   const int K = topo.arrays, r = topo.rank[array_of(c)], N = int(tasks.size());
@@ -244,6 +344,120 @@ int Layer::pick_band(int c, bool free) {
     }
   }
   return -1;
+}
+
+// Band dispatch with re-planning: costs on an array are scaled by its progress factor, the measured occupancy of the
+// tasks it finished (start until they left the context, router excluded) over their estimates (x1024, 1024 before
+// the first finish).
+int64_t Layer::factor(int k) const { return estimated[k] > 0 ? occupancy[k] * 1024 / estimated[k] : 1024; }
+
+int64_t Layer::replan_cost(int r, int j) const {
+  int64_t x = array_task_cost(r, j);
+  return x >= IINF ? IINF : x * factor(topo.byrank[r]) / 1024;
+}
+
+int64_t Layer::replan_committed(int r) const {
+  const int k = topo.byrank[r];
+  const int64_t f = factor(k);
+  int64_t z = 0;
+  for (int i = 0; i < topo.nctx[k]; i++) {
+    const Context& s = st[topo.ctx[k][i]];
+    if (s.task < 0) continue;
+    const int c = topo.ctx[k][i];
+    z += std::max<int64_t>(0, s.start + icost(c, tasks[s.task].type) * f / 1024 - t);
+    if (s.next_task >= 0) z += icost(c, tasks[s.next_task].type) * f / 1024;
+  }
+  return z;
+}
+
+// The first plan cuts every routed task; later plans re-cut the unassigned tasks (the bands concatenated in rank
+// order).
+void Layer::replan_bands() {
+  const int K = topo.arrays, N = int(tasks.size());
+  std::vector<int> L;
+  if (planned_done < 0)
+    for (int j = first_routed; j < N; j++) L.push_back(j);
+  else
+    for (int r = 0; r < K; r++) {
+      L.insert(L.end(), band_queue[r].begin(), band_queue[r].end());
+      band_queue[r].clear();
+    }
+  const int n = int(L.size());
+  int64_t R[MAXA];
+  for (int r = 0; r < K; r++) R[r] = replan_committed(r);
+  charge_shared(R, true);
+  std::vector<int64_t> bc(size_t(K) * std::max(n, 1), IINF);
+  for (int r = 0; r < K; r++)
+    for (int i = 0; i < n; i++) bc[size_t(r) * n + i] = replan_cost(r, L[i]);
+  int lo[MAXA], hi[MAXA];
+  cut_bands(K, n, R, bc, lo, hi, out);
+  int64_t makespan = 0;
+  for (int r = 0; r < K; r++) {
+    int64_t z = 0;
+    for (int i = lo[r]; i <= hi[r]; i++) {
+      band_queue[r].push_back(L[i]);
+      if (bc[size_t(r) * n + i] < IINF) z += bc[size_t(r) * n + i];
+    }
+    makespan = std::max(makespan, R[r] + z);
+    if (log)
+      log->push_back({t, topo.byrank[r], lo[r] <= hi[r] ? L[lo[r]] : -1, lo[r] <= hi[r] ? L[hi[r]] : -1, r, 5,
+                      cfg.policy, R[r] + z});
+  }
+  out[S_band_plan_cycle] = t;
+  out[S_band_planned_makespan] = makespan;
+  out[S_band_plans]++;
+  planned_done = done;
+}
+
+// Takes and steals as the band policy, on bands re-cut whenever a task has finished since the last plan.
+int Layer::pick_replan(int c, bool free) {
+  int js = take_shared(c, free);
+  if (js >= 0) return js;
+  if (!router_done) return -1;
+  const int K = topo.arrays, r = topo.rank[array_of(c)];
+  if (planned_done < 0 || (done != planned_done && K > 1)) replan_bands();
+  auto take = [&](int b, bool lo) {
+    std::deque<int>& q = band_queue[b];
+    if (q.empty()) return -1;
+    int j = lo ? q.front() : q.back();
+    if (!prog[c][tasks[j].type].tm) return -1;
+    if (lo)
+      q.pop_front();
+    else
+      q.pop_back();
+    return j;
+  };
+  if (!band_queue[r].empty()) return take(r, K == 1 ? topo.pos[c] % 2 == 0 : r < K - 1);
+  for (int b = 0; b < K; b++) {  // with at most two arrays there is one other band
+    if (b == r || band_queue[b].empty()) continue;
+    bool lo = b > r;
+    int jn = lo ? band_queue[b].front() : band_queue[b].back();
+    if (cfg.p14_steal == 2) {
+      int64_t finish = replan_committed(b);  // the band owner's predicted finish
+      for (int j : band_queue[b])
+        if (replan_cost(b, j) < IINF) finish += replan_cost(b, j);
+      if (replan_cost(b, jn) < IINF && !(replan_committed(r) + replan_cost(r, jn) < finish)) continue;
+    }
+    int j = take(b, lo);
+    if (j >= 0) {
+      out[S_band_steals]++;
+      return j;
+    }
+  }
+  return -1;
+}
+
+int Layer::pick(int c, bool free) {
+  switch (cfg.policy) {
+    case BAND:
+      return pick_band(c, free);
+    case SUPPLY_PINCER:
+      return pick_supply(c, free);
+    case REPLAN_BAND:
+      return pick_replan(c, free);
+    default:
+      return pick_pincer(c, free);
+  }
 }
 
 // Regret: a queued task prefers the context predicted to finish it first; take the task whose finish differs most
@@ -298,7 +512,7 @@ void Layer::dispatch() {
     any = false;
     for (int c = 0; c < nc; c++)
       if (st[c].task < 0) {
-        int j = cfg.policy == BAND ? pick_band(c, true) : pick_pincer(c, true);
+        int j = pick(c, true);
         if (j < 0) continue;
         start(c, j, t);
         record(t, c, j, 0, 0);
@@ -310,6 +524,7 @@ void Layer::dispatch() {
 // One-deep task queue: once every HBM request of its task is issued, a busy context reserves its next task, whose first
 // phase then prefetches into the same landing slots.
 void Layer::reserve_next() {
+  if (!cfg.prefetch) return;
   for (int c = 0; c < nc; c++) {
     Context& s = st[c];
     if (s.task < 0 || s.next_task >= 0 || (cfg.policy == REGRET && queue.empty())) continue;
@@ -322,7 +537,7 @@ void Layer::reserve_next() {
       j = queue[best];
       queue.erase(queue.begin() + best);
     } else {
-      j = cfg.policy == BAND ? pick_band(c, false) : pick_pincer(c, false);
+      j = pick(c, false);
       if (j < 0) continue;
     }
     s.next_task = j;

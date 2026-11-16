@@ -6,10 +6,10 @@ import pytest
 from complementary_arrays.dse import shapes as sh
 
 
-@pytest.mark.parametrize("model,fmt", [("qwen", "bf16"), ("deepseek", "w8g128"), ("qwen3next", "w4g32")])
+@pytest.mark.parametrize("model,fmt", [("qwen", "bf16"), ("deepseek", "w8g128"), ("qwen", "w4g32p"), ("deepseek", "fp8b128")])
 def test_vocabulary_is_record_aligned(model, fmt):
     v = sh.vocabulary(model, fmt)
-    group = {"bf16": 32, "w8g128": 128, "w4g32": 32}[fmt]
+    group = {"bf16": 32, "w8g128": 128, "w4g32p": 64, "fp8b128": 128}[fmt]
     rows = [tuple(r) for r in v.tolist()]
     assert rows == sorted(set(rows))
     assert set(v[:, 0].tolist()) <= set(sh.HEIGHTS)
@@ -31,8 +31,8 @@ def test_state_bytes_and_legality():
     assert not sh.legal([[3, 64, 64]], 98304)
 
 
-def test_analytic_times_respect_the_hbm_floor(tmp_path):
-    m = sh.AnalyticModel(tmp_path, "qwen", "bf16")
+def test_analytic_times_respect_the_hbm_floor():
+    m = sh.AnalyticModel(None, "qwen", "bf16")
     rows = m.shapes.tolist()
     i, j = rows.index([2, 64, 64]), rows.index([8, 256, 256])
     hh = np.zeros((2, 130), np.int32)

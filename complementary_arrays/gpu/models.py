@@ -1,7 +1,11 @@
-"""Model loading and weight formats shared by the routing captures and the accuracy runs (one GPU).
+"""Model loading and the emulated expert-weight formats shared by the routing captures and the accuracy runs (one GPU).
 
-RTN formats are symmetric round-to-nearest with one FP16 scale per group of consecutive weights along the reduction
-dimension K of every weight row: w8g128 (INT8, groups of 128) and w4g32 (INT4, groups of 32).
+Emulated formats reconstruct the expert weights in BF16 after quantizing them; groups and blocks run along the
+reduction dimension K of every weight row:
+  w8g128   INT8 symmetric round-to-nearest, one FP16 scale per 128 weights
+  w4g32    INT4 symmetric round-to-nearest, one FP16 scale per 32 weights
+  fp8b128  FP8 E4M3 in 128 x 128 blocks with an FP32 scale per block
+  nvfp4    FP4 E2M1 in blocks of 16 with an FP8 E4M3 block scale and an FP32 scale per matrix
 """
 
 import json
@@ -10,7 +14,8 @@ import types
 from pathlib import Path
 
 RTN_FORMATS = {"w8g128": (8, 128), "w4g32": (4, 32)}
-EXPERT_CHUNK_TOKENS = 65536
+FORMATS = (*RTN_FORMATS, "fp8b128", "nvfp4")
+E2M1 = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
 
 
 def read_config(model_dir):
@@ -129,11 +134,51 @@ class _ErrorStats:
         return dict(tensors=self.tensors, elements=self.elements, rel_l2=rel, max_rel_l2=self.worst, **extra)
 
 
-def fake_quantize_experts(model, fmt):
-    """Overwrite the routed experts, the shared experts and the shared-expert gate with their RTN reconstruction."""
+def e4m3(v):
     import torch
 
-    bits, group = RTN_FORMATS[fmt]
+    return v.clamp(-448.0, 448.0).to(torch.float8_e4m3fn).float()
+
+
+def grid_round(v, grid):
+    """Nearest value of a non-negative grid with v's sign (ties to the smaller magnitude)."""
+    import torch
+
+    g = torch.tensor(grid, device=v.device, dtype=torch.float32)
+    idx = torch.bucketize(v.abs().clamp(max=float(g[-1])), (g[1:] + g[:-1]) / 2)
+    return torch.sign(v) * g[idx]
+
+
+def reconstruct(w, fmt):
+    """BF16-bound float32 reconstruction of float32 rows w [R, K] in an emulated format."""
+    import torch.nn.functional as F
+
+    R, K = w.shape
+    if fmt in RTN_FORMATS:
+        q, s = rtn(w, *RTN_FORMATS[fmt])
+        return (q * s.float()).reshape(R, -1)[:, :K]
+    if fmt == "fp8b128":
+        RR, KK = -(-R // 128) * 128, -(-K // 128) * 128
+        wp = F.pad(w, (0, KK - K, 0, RR - R)).reshape(RR // 128, 128, KK // 128, 128)
+        s = (wp.abs().amax(dim=(1, 3), keepdim=True) / 448.0).clamp_min(1e-30)
+        return (e4m3(wp / s) * s).reshape(RR, KK)[:R, :K]
+    if fmt == "nvfp4":
+        import torch
+
+        G = -(-K // 16)
+        wp = F.pad(w, (0, G * 16 - K)).reshape(R, G, 16)
+        gs = (w.abs().amax() / (448.0 * 6.0)).clamp_min(1e-30)
+        bs = e4m3(wp.abs().amax(-1, keepdim=True) / 6.0 / gs) * gs
+        bs = torch.where(bs > 0, bs, torch.ones_like(bs))
+        return (grid_round(wp / bs, E2M1) * bs).reshape(R, -1)[:, :K]
+    raise ValueError(fmt)
+
+
+def fake_quantize_experts(model, fmt):
+    """Overwrite the routed experts, the shared experts and the shared-expert gate with their reconstruction in an
+    emulated format; router, attention, norms, embeddings and LM head keep the reference weights."""
+    import torch
+
     stats = _ErrorStats()
     with torch.inference_mode():
         for name, p in model.named_parameters():
@@ -144,164 +189,13 @@ def fake_quantize_experts(model, fmt):
             err = norm = 0.0
             for i in range(mats.shape[0]):
                 w = mats[i].float()
-                q, s = rtn(w, bits, group)
-                rec = (q * s.float()).reshape(w.shape[0], -1)[:, : w.shape[1]]
+                rec = reconstruct(w, fmt)
+                if not torch.isfinite(rec).all():
+                    raise ValueError(f"non-finite reconstruction of {name}")
                 err += float((rec - w).square().sum())
                 norm += float(w.square().sum())
                 mats[i].copy_(rec.to(mats.dtype))
             stats.add(err, norm, p.numel())
     if not stats.tensors:
         raise ValueError("no expert weights found")
-    return stats.summary(format=fmt, bits=bits, group=group)
-
-
-def dequantize_fp8(q, s):
-    """BF16 values of FP8 weights [..., R, K] with FP32 block scales [..., R / br, K / bk], computed as transformers
-    dequantizes an FP8 checkpoint."""
-    import torch
-
-    R, K = q.shape[-2:]
-    sr, sc = s.shape[-2:]
-    qq = q.to(torch.float32).reshape(-1, sr, R // sr, sc, K // sc)
-    ss = s.to(torch.float32).reshape(-1, sr, sc).unsqueeze(-1).unsqueeze(2)
-    return (qq * ss).to(torch.bfloat16).reshape(q.shape)
-
-
-_INT8_KERNEL = {}
-
-
-def dequantize_int8(q, s, out):
-    """out = bf16(float32(q) * float32(s)) for int8 q [..., K] and FP16 scales s [..., K / G], with a Triton kernel."""
-    if not _INT8_KERNEL:
-        import triton
-        import triton.language as tl
-
-        @triton.jit
-        def kernel(q_ptr, s_ptr, o_ptr, n, G: tl.constexpr, BLOCK: tl.constexpr):
-            offs = tl.program_id(0).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
-            m = offs < n
-            q = tl.load(q_ptr + offs, mask=m, other=0).to(tl.float32)
-            s = tl.load(s_ptr + offs // G, mask=m, other=0.0).to(tl.float32)
-            tl.store(o_ptr + offs, (q * s).to(tl.bfloat16), mask=m)
-
-        _INT8_KERNEL.update(kernel=kernel, cdiv=triton.cdiv)
-    n, G, block = q.numel(), q.shape[-1] // s.shape[-1], 4096
-    assert q.is_contiguous() and s.is_contiguous() and out.is_contiguous()
-    assert q.shape == out.shape and q.shape[-1] == G * s.shape[-1]
-    _INT8_KERNEL["kernel"][(_INT8_KERNEL["cdiv"](n, block),)](q, s, out, n, G=G, BLOCK=block)
-    return out
-
-
-class _ExpertWeights:
-    """The attributes that transformers' grouped_mm_experts_forward reads from an experts module."""
-
-    has_gate, has_bias, is_transposed = True, False, False
-
-    def __init__(self, gate_up_proj, down_proj, num_experts):
-        import torch.nn.functional as F
-
-        self.gate_up_proj, self.down_proj, self.num_experts = gate_up_proj, down_proj, num_experts
-        self.act_fn = F.silu
-
-    def _apply_gate(self, gate_up_out):
-        gate, up = gate_up_out.chunk(2, dim=-1)
-        return self.act_fn(gate) * up
-
-
-def compact_routed_experts(layers, fmt):
-    """Quantize the routed experts of an FP8 checkpoint with RTN, starting from their BF16 dequantization. The integers
-    stay on the GPU as int8 with their FP16 scales; before each use a layer's experts are reconstructed into one shared
-    BF16 buffer and run with transformers' BF16 grouped_mm forward."""
-    import torch
-    from transformers.integrations.moe import grouped_mm_experts_forward
-
-    bits, group = RTN_FORMATS[fmt]
-    first = layers[min(layers)].experts
-    gate_up = torch.empty(tuple(first.gate_up_proj.shape), dtype=torch.bfloat16, device="cuda")
-    down = torch.empty(tuple(first.down_proj.shape), dtype=torch.bfloat16, device="cuda")
-    weights = _ExpertWeights(gate_up, down, first.num_experts)
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        dequantize_int8(self.gate_up_proj_q, self.gate_up_proj_s, gate_up)
-        dequantize_int8(self.down_proj_q, self.down_proj_s, down)
-        return grouped_mm_experts_forward(weights, hidden_states, top_k_index, top_k_weights)
-
-    stats = _ErrorStats()
-    with torch.inference_mode():
-        for moe in layers.values():
-            experts = moe.experts
-            for name in ("gate_up_proj", "down_proj"):
-                w8, s8 = getattr(experts, name), getattr(experts, name + "_scale_inv")
-                n, R, K = w8.shape
-                q_all = torch.empty((n, R, K), dtype=torch.int8, device="cuda")
-                s_all = torch.empty((n, R, K // group), dtype=torch.float16, device="cuda")
-                err = norm = 0.0
-                for e0 in range(0, n, 32):
-                    w = dequantize_fp8(w8[e0 : e0 + 32], s8[e0 : e0 + 32]).float()
-                    m = w.shape[0]
-                    q, s = rtn(w.reshape(m * R, K), bits, group)
-                    err += float(((q * s.float()).reshape(m, R, K) - w).square().sum())
-                    norm += float(w.square().sum())
-                    q_all[e0 : e0 + m] = q.to(torch.int8).reshape(m, R, K)
-                    s_all[e0 : e0 + m] = s.reshape(m, R, K // group)
-                stats.add(err, norm, n * R * K)
-                delattr(experts, name)
-                delattr(experts, name + "_scale_inv")
-                experts.register_buffer(name + "_q", q_all, persistent=False)
-                experts.register_buffer(name + "_s", s_all, persistent=False)
-            experts.forward = types.MethodType(forward, experts)
-            torch.cuda.empty_cache()
-    return stats.summary(format=fmt, bits=bits, group=group)
-
-
-def split_large_expert_calls(layers, max_tokens=EXPERT_CHUNK_TOKENS):
-    """Run the routed experts on chunks of at most max_tokens tokens. The FP8 grouped kernel addresses its operands
-    with 32-bit offsets, which overflow above about 105K tokens at top-10 and width 2048 (a 128 x 1024 prefill)."""
-    import torch
-
-    for moe in layers.values():
-
-        def forward(hidden_states, top_k_index, top_k_weights, inner=moe.experts.forward):
-            T = hidden_states.shape[0]
-            if T <= max_tokens:
-                return inner(hidden_states, top_k_index, top_k_weights)
-            chunks = range(0, T, max_tokens)
-            return torch.cat(
-                [
-                    inner(
-                        hidden_states[i : i + max_tokens],
-                        top_k_index[i : i + max_tokens],
-                        top_k_weights[i : i + max_tokens],
-                    )
-                    for i in chunks
-                ]
-            )
-
-        moe.experts.forward = forward
-
-
-def pin_fp8_kernel(snapshot):
-    """Make transformers' FP8 layers use a local snapshot of the kernels-community/finegrained-fp8 hub kernel."""
-    import kernels
-    from transformers.integrations import hub_kernels
-
-    module = kernels.get_local_kernel(Path(snapshot), "cuda")
-    missing = [n for n in ("matmul_2d", "matmul_batched", "matmul_grouped") if not hasattr(module, n)]
-    if missing:
-        raise RuntimeError(f"{snapshot} lacks {missing}")
-    hub_kernels._KERNEL_MODULE_MAPPING["finegrained-fp8"] = module
-
-
-def load_qwen3next(model_dir, fmt="fp8", fp8_kernel=None):
-    """Qwen3-Next-80B-A3B from its official FP8 checkpoint, run natively (FP8 weights and per-token FP8 activations;
-    router, norms, embeddings and LM head in BF16). With an RTN format the routed experts are replaced by
-    compact_routed_experts. Returns the model, its MoE blocks and the quantization error statistics."""
-    from transformers import AutoModelForCausalLM
-
-    if fp8_kernel:
-        pin_fp8_kernel(fp8_kernel)
-    model = AutoModelForCausalLM.from_pretrained(model_dir, **_from_pretrained_kwargs()).eval()
-    layers = moe_layers(model.model.layers)
-    stats = compact_routed_experts(layers, fmt) if fmt != "fp8" else None
-    split_large_expert_calls(layers)
-    return model, layers, stats
+    return stats.summary(format=fmt)

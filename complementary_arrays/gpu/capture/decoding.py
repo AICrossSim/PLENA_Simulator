@@ -57,19 +57,6 @@ def left_padded(requests, pad):
     return ids, mask
 
 
-def record_live_step(arrays, step, active, recorder, rows=None):
-    """Add one decode step of live requests to a shard: their batch indices, expert ids and scores (`rows` selects
-    them when the batch still holds finished requests)."""
-    arrays[f"request_indices_s{step}"] = active.copy()
-    for li in recorder.layers:
-        ids, scores = recorder.ids[li], recorder.scores[li]
-        if rows is not None:
-            ids, scores = ids[rows], scores[rows]
-        assert np.all(np.diff(np.sort(ids, axis=1), axis=1) > 0)
-        arrays[f"ids_l{li}_s{step}"] = ids
-        arrays[f"scores_l{li}_s{step}"] = scores
-
-
 def runtime():
     import torch
     import transformers

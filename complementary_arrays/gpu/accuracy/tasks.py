@@ -1,16 +1,20 @@
 """Accuracy tasks scored from model likelihoods and greedy generations, with the lm-eval-harness prompt formats.
 
 The data directory holds wikitext2/test.arrow, lambada/test.arrow, arc_e/test.arrow, arc_c/test.arrow,
-hellaswag/validation.arrow, piqa/validation.arrow, winogrande/validation.arrow, mmlu/test.parquet, mmlu/dev.parquet
-and gsm8k/test.arrow. Every task returns its per-item correctness for paired comparisons between weight formats.
+hellaswag/validation.arrow, piqa/validation.arrow, winogrande/validation.arrow, mmlu/test.parquet, mmlu/dev.parquet,
+gsm8k/test.arrow and gpqa/gpqa_diamond.csv. Every task returns its per-item correctness for paired comparisons between
+weight formats.
 """
 
+import csv
+import hashlib
 import math
+import random
 import re
 
 import numpy as np
 
-TASKS = ("wikitext2", "lambada", "arc_e", "arc_c", "hellaswag", "piqa", "winogrande", "mmlu", "gsm8k")
+TASKS = ("wikitext2", "lambada", "arc_e", "arc_c", "hellaswag", "piqa", "winogrande", "mmlu", "gpqa", "gsm8k")
 
 
 class Scorer:
@@ -129,14 +133,17 @@ def limited(items, limit):
     return items[:limit] if limit else items
 
 
+def wikitext2_windows(tok, data, limit=0, W=1024):
+    """Disjoint W-token windows of the test split, each with the next token of its last position."""
+    ids = enc(tok, "\n\n".join(arrow(data, "wikitext2", "test")["text"]))
+    return limited([w for w in (ids[o : o + W + 1] for o in range(0, len(ids) - 1, W)) if len(w) >= 2], limit)
+
+
 def wikitext2(sc, tok, a):
     """Perplexity over disjoint 1024-token windows of the test split."""
     import torch
 
-    ids = enc(tok, "\n\n".join(arrow(a.data, "wikitext2", "test")["text"]))
-    W = 1024
-    wins = [w for w in (ids[o : o + W + 1] for o in range(0, len(ids) - 1, W)) if len(w) >= 2]
-    wins = limited(wins, a.limit)
+    wins = wikitext2_windows(tok, a.data, a.limit)
     nll, nt = 0.0, 0
     with torch.inference_mode():
         for s in range(0, len(wins), 8):
@@ -257,6 +264,31 @@ def chat_ids(tok, text):
     return list(x)
 
 
+def gpqa(sc, tok, a):
+    """GPQA Diamond as a diagnostic: options shuffled per question, chat prompt asking for one letter, then the forced
+    prefix 'The answer is '; the highest next-token logit among A-D is the answer (not the official generative score)."""
+    path = a.data / "gpqa" / "gpqa_diamond.csv"
+    with path.open() as f:
+        rows = limited(list(csv.DictReader(f)), a.limit)
+    ctxs, golds = [], []
+    for j, row in enumerate(rows):
+        opts = [row["Correct Answer"]] + [row[f"Incorrect Answer {i}"] for i in (1, 2, 3)]
+        order = list(range(4))
+        random.Random(320411 + j).shuffle(order)
+        listed = "\n".join(f"{chr(65 + i)}. {opts[o]}" for i, o in enumerate(order))
+        prompt = (
+            "Choose the correct answer. Respond with one letter: A, B, C, or D.\n" + row["Question"] + "\n" + listed
+        )
+        ctxs.append((chat_ids(tok, prompt) + enc(tok, "The answer is "))[-4096:])
+        golds.append(order.index(0))
+    cand = [enc(tok, letter) for letter in "ABCD"]
+    assert all(len(c) == 1 for c in cand)
+    logits = sc.next_token_logits(ctxs, [c[0] for c in cand])
+    correct = [int(int(np.argmax(lg)) == g) for lg, g in zip(logits, golds, strict=True)]
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return dict(acc=float(np.mean(correct)), n=len(rows), correct=correct, csv_sha256=digest)
+
+
 def _last_number(s):
     m = re.findall(r"-?\d+(?:\.\d+)?", s.replace(",", "").replace("$", "").strip())
     return float(m[-1]) if m else None
@@ -326,4 +358,5 @@ def run_task(name, sc, tok, model, a):
         "piqa": piqa,
         "winogrande": winogrande,
         "mmlu": mmlu,
+        "gpqa": gpqa,
     }[name](sc, tok, a)

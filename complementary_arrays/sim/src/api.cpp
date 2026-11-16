@@ -5,6 +5,10 @@
 
 #include "layer.hpp"
 
+#ifdef SIM_RAMULATOR
+#include "hbm_ramulator.hpp"
+#endif
+
 namespace {
 
 std::string names(std::initializer_list<const char*> list) {
@@ -17,10 +21,11 @@ std::string names(std::initializer_list<const char*> list) {
 const std::string& layout() {
   static const std::string s = "config:" + names({CONFIG_FIELDS(NAME)}) + ";scalar:" + names({SCALAR_OUTPUTS(NAME)}) +
                                ";context:" + names({CONTEXT_OUTPUTS(NAME)}) + ";array:" + names({ARRAY_OUTPUTS(NAME)}) +
-                               ";class:" + names({CLASS_OUTPUTS(NAME)}) + ";trace:" + names({TRACE_FIELDS(NAME)}) +
+                               ";class:" + names({CLASS_OUTPUTS(NAME)}) + ";state:" + names({ARRAY_STATES(NAME)}) +
+                               ";trace:" + names({TRACE_FIELDS(NAME)}) +
                                ";trace_context:" + names({TRACE_CONTEXT_FIELDS(NAME)}) +
-                               ";dims:" + std::to_string(MAXC) + "," + std::to_string(MAXA) + "," +
-                               std::to_string(NCLASS);
+                               ";trace_array:" + names({TRACE_ARRAY_FIELDS(NAME)}) + ";dims:" + std::to_string(MAXC) +
+                               "," + std::to_string(MAXA) + "," + std::to_string(NCLASS);
   return s;
 }
 #undef NAME
@@ -37,18 +42,21 @@ Config read_config(const int64_t* v) {
 struct Chip {
   Topology topo;
   std::vector<Shape> shape;
-  std::vector<std::vector<Program>> prog;  // per context: routed expert with 1..B tokens, shared expert, router
+  // per context: routed expert with 1..B tokens, shared expert (or its first half), router, second shared half
+  std::vector<std::vector<Program>> prog;
 };
 
 // Contexts c of a shared array run on array c / ctx_per_core; otherwise each context has its own array. Vector lanes
 // are split over the arrays in proportion to their multipliers; SRAM after the token buffers is split by share (and
 // share2 inside pairs for four contexts). Programs are compiled for the token counts in the windows and those flagged
-// in provision (one flag per count 1..B); the largest reservation among them decides whether a tail buffer fits.
-// Returns 0 or a negative error code.
+// in provision (one flag per count 1..B); the largest reservation among them decides whether a tail buffer fits. The
+// shared expert is compiled for every context, for the contexts of one array, or as two halves (the first, with the
+// gate, on array 0, the second on array 1). Returns 0 or a negative error code.
 int prepare(const Config& cfg, const int32_t* shapes, int windows, const int32_t* routes, const int8_t* provision,
             Chip& chip) {
   const int nc = cfg.contexts, B = cfg.batch, E = cfg.experts;
   if ((nc != 2 && nc != 4) || 6LL * B * cfg.hidden >= cfg.capacity) return -1;
+  if (B > 1024 || cfg.topk > 64 || cfg.topk > E) return -8;
   Topology& T = chip.topo;
   T.contexts = nc;
   T.shared = cfg.shared_array;
@@ -101,7 +109,10 @@ int prepare(const Config& cfg, const int32_t* shapes, int windows, const int32_t
                               (c % 2 == 0 ? cfg.share2 : 1000 - cfg.share2) / 1000
                         : sram * (c == 0 ? cfg.share : 1000 - cfg.share) / 1000;
   }
-  if (cfg.policy != REGRET && cfg.policy != PINCER && cfg.policy != BAND) return -4;
+  if (cfg.shared_place < 0 || cfg.shared_place > 3 || (cfg.shared_place >= 2 && T.arrays != 2)) return -9;
+  if (cfg.policy != REGRET && cfg.policy != PINCER && cfg.policy != BAND && cfg.policy != SUPPLY_PINCER &&
+      cfg.policy != REPLAN_BAND)
+    return -4;
   if (cfg.policy == REGRET && nc != 2) return -4;
   std::vector<char> needed(provision, provision + B);
   for (int s = 0; s < windows; s++) {
@@ -117,13 +128,21 @@ int prepare(const Config& cfg, const int32_t* shapes, int windows, const int32_t
         needed[n - 1] = 1;
       }
   }
-  chip.prog.assign(nc, std::vector<Program>(B + 2));
+  chip.prog.assign(nc, std::vector<Program>(B + 3));
+  const int F = cfg.routed_width, S = cfg.shared_width;
   for (int c = 0; c < nc; c++) {
-    const int cap = int(T.sram[c]);
+    const int cap = int(T.sram[c]), k = T.array_of[c];
+    const Shape& sh = chip.shape[c];
     for (int m = 1; m <= B; m++)
-      if (needed[m - 1]) chip.prog[c][m - 1] = compile(cfg, chip.shape[c], m, false, false, cap);
-    chip.prog[c][B] = compile(cfg, chip.shape[c], B, true, false, cap);
-    chip.prog[c][B + 1] = compile(cfg, chip.shape[c], B, false, true, cap);
+      if (needed[m - 1]) chip.prog[c][m - 1] = compile(cfg, sh, m, ROUTED, F, false, cap);
+    if (cfg.shared_expert && cfg.shared_place == 3) {
+      if (k == 0)
+        chip.prog[c][B] = compile(cfg, sh, B, SHARED, S / 2, cfg.shared_gate, cap);
+      else
+        chip.prog[c][B + 2] = compile(cfg, sh, B, SHARED, S - S / 2, false, cap);
+    } else if (cfg.shared_expert && (cfg.shared_place == 0 || k == cfg.shared_place - 1))
+      chip.prog[c][B] = compile(cfg, sh, B, SHARED, S, cfg.shared_gate, cap);
+    chip.prog[c][B + 1] = compile(cfg, sh, B, ROUTER, F, false, cap);
     for (const Program& p : chip.prog[c])
       if (p.tm) T.maxres[c] = std::max(T.maxres[c], p.reserved);
   }
@@ -134,30 +153,61 @@ int prepare(const Config& cfg, const int32_t* shapes, int windows, const int32_t
 
 extern "C" const char* sim_layout() { return layout().c_str(); }
 
-// windows x (batch x topk) routes -> windows x NOUT outputs. shapes: per context m, n, k, drain latency.
-extern "C" int sim_run(const int64_t* config, const int32_t* shapes, int windows, const int32_t* routes,
-                       const int8_t* provision, int threads, int64_t* out) {
+namespace {
+
+int run_windows(const int64_t* config, const int32_t* shapes, int windows, const int32_t* routes,
+                const int8_t* provision, int threads, int64_t* out, const xcheck::Options* ram) {
   const Config cfg = read_config(config);
   Chip chip;
   if (int err = prepare(cfg, shapes, windows, routes, provision, chip)) return err;
+  if (ram && cfg.shared_place == 3) return -10;
   const int64_t stride = int64_t(cfg.batch) * cfg.topk;
 #pragma omp parallel for num_threads(threads) schedule(dynamic, 1)
   for (int s = 0; s < windows; s++)
-    Layer(cfg, chip.topo, chip.shape.data(), chip.prog, routes + s * stride, out + int64_t(s) * NOUT).run();
+    Layer(cfg, chip.topo, chip.shape.data(), chip.prog, routes + s * stride, out + int64_t(s) * NOUT, nullptr, 0,
+          nullptr, ram, s)
+        .run();
   return 0;
 }
+
+}  // namespace
+
+// windows x (batch x topk) routes -> windows x NOUT outputs. shapes: per context m, n, k, drain latency.
+extern "C" int sim_run(const int64_t* config, const int32_t* shapes, int windows, const int32_t* routes,
+                       const int8_t* provision, int threads, int64_t* out) {
+  return run_windows(config, shapes, windows, routes, provision, threads, out, nullptr);
+}
+
+#ifdef SIM_RAMULATOR
+// As sim_run with the HBM requests served in closed loop through Ramulator (ram_config: its configuration text; extra
+// cycles from the last returned transfer to a usable request; cap on lines issued per cycle; address layout; lines
+// tried per context and cycle; log: file prefix of the per-window logs, empty for none).
+extern "C" int sim_run_ramulator(const int64_t* config, const int32_t* shapes, int windows, const int32_t* routes,
+                                 const int8_t* provision, int threads, const char* ram_config, int extra, int cap,
+                                 int layout, int look, const char* log, int64_t* out) {
+  xcheck::Options o;
+  o.config = ram_config;
+  o.extra = extra;
+  o.cap = cap;
+  o.layout = layout;
+  o.look = look;
+  o.log = log ? log : "";
+  return run_windows(config, shapes, windows, routes, provision, threads, out, &o);
+}
+#endif
 
 // Compiled program of one expert task on one array (shape: m, n, k, lanes, drain): estimate, compute cycles, HBM bytes.
 extern "C" int sim_program(const int64_t* config, const int32_t* shape, int tokens, int shared, int cap, double* out) {
   const Config cfg = read_config(config);
   const Program p =
-      compile(cfg, Shape{shape[0], shape[1], shape[2], shape[3], shape[4]}, tokens, shared != 0, false, cap);
+      compile(cfg, Shape{shape[0], shape[1], shape[2], shape[3], shape[4]}, tokens, shared ? SHARED : ROUTED,
+              shared ? cfg.shared_width : cfg.routed_width, shared && cfg.shared_gate, cap);
   if (!p.tm) return -1;
   out[0] = p.suffix[0];
   out[1] = out[2] = 0;
   for (const Phase& ph : p.phases) {
     out[1] += ph.cycles;
-    out[2] += double(ph.bytes[0]);
+    out[2] += double(ph.hbm);
   }
   return 0;
 }

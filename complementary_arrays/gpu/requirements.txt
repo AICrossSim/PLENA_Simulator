@@ -1,4 +1,7 @@
-# Python 3.11.15 on one NVIDIA B200 with CUDA 12.8.
+# Request files and pools (capture/prepare_sources.py, pool.py, pool_large.py: their tokenizers fix the token ids), the
+# transformers capture path (capture/capture_routes.py) and the transformers parts of accuracy/ (evaluate.py, prepare.py,
+# perplexity.py windows, summarize.py): Python 3.11.15 on one NVIDIA B200, CUDA 12.8. Other environments:
+# requirements-vllm.txt, requirements-sglang.txt, requirements-evals.txt, requirements-swebench.txt.
 torch==2.9.0  # CUDA 12.8 build: 2.9.0+cu128
 transformers==5.15.0
 vllm==0.12.0
@@ -11,5 +14,3 @@ flash-linear-attention==0.5.2
 datasets==5.0.1
 pandas==3.0.5
 pyarrow==25.0.1
-# Qwen3-Next ran with kernels-community/finegrained-fp8 revision 03ae31933313f38fae2b050dbe2731024386c369 (version 4),
-# given as a local snapshot through --fp8-kernel.

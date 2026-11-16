@@ -1,6 +1,8 @@
-"""The simulator reproduces outputs of the reference engine bit for bit on small windows (data/sim_reference.npz)."""
+"""The simulator reproduces outputs of the reference engines bit for bit on small windows (data/sim_reference.npz):
+counters of every dispatch policy, weight format and option, per-cycle traces, compiled-program metrics."""
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -12,13 +14,17 @@ DATA = np.load(Path(__file__).with_name("data") / "sim_reference.npz")
 MANIFEST = json.loads(str(DATA["manifest"]))
 CASES = [m for m in MANIFEST if isinstance(m["case"], int)]
 TRACE = next(m for m in MANIFEST if m["case"] == "trace")
+TRACE_PACKED = next(m for m in MANIFEST if m["case"] == "trace_packed")
+CLOSED_LOOP = next(m for m in MANIFEST if m["case"] == "closed_loop")
 METRICS = next(m for m in MANIFEST if m["case"] == "metrics")["tasks"]
 PROVISION = next(m for m in MANIFEST if m["case"] == "provision")
 
 
 def _label(m):
     env = m["env"]
-    return f"{m['cell']}-{m['org']}-B{m['batch']}-systolic{env.get('systolic', 0)}-{env.get('drain_form', 'linear')}-port{env['port_mode']}"
+    label = f"{m['cell']}-{m['org']}-B{m['batch']}-systolic{env.get('systolic', 0)}-{env.get('drain_form', 'linear')}"
+    label += f"-port{env.get('port_mode', 0)}-policy{env.get('policy', 13)}"
+    return label + (f"-{m['variant']}" if m.get("variant") else "")
 
 
 @pytest.mark.parametrize("case", CASES, ids=[_label(m) for m in CASES])
@@ -57,6 +63,63 @@ def test_trace():
             value = rec[names[col[3:]]][:, int(col[1])]
         assert np.array_equal(value, ledger[:, j]), col
     assert np.array_equal(decisions, DATA["trace/decisions"])
+
+
+def test_trace_packed():
+    """Per-cycle record of a window with packed re-reads on two arrays, including the array states."""
+    _, rec, _ = trace(
+        DATA["trace_packed/ids"], TRACE_PACKED["shapes"], TRACE_PACKED["workload"], Environment(**TRACE_PACKED["env"])
+    )
+    names = dict(
+        hbm_B="hbm_bytes",
+        w_B="port_first_bytes",
+        redeliv_w="port_reread_weights",
+        conv_el="decoded",
+        x_B="x_bytes",
+        y_B="y_bytes",
+        state="state",
+        hcur_B="hbm_current",
+        hnext_B="hbm_prefetch",
+        pw_B="port_packed_bytes",
+    )
+    ledger = DATA["trace_packed/ledger"]
+    assert len(rec["cycle"]) == len(ledger)
+    for j, col in enumerate(TRACE_PACKED["ledger_columns"]):
+        if col == "cycle":
+            value = rec["cycle"]
+        elif col == "port_used_B":
+            value = rec["port_used"]
+        elif col.startswith("core"):
+            value = rec["array_state"][:, int(col[4])]
+        else:
+            value = rec[names[col[3:]]][:, int(col[1])]
+        assert np.array_equal(value, ledger[:, j]), col
+
+
+@pytest.mark.skipif(not os.environ.get("RAMULATOR_LIB"), reason="the closed-loop HBM build needs RAMULATOR_LIB")
+def test_closed_loop():
+    """A window with its HBM requests served through Ramulator 2 (closed loop) instead of the fixed-rate stream."""
+    from complementary_arrays.xcheck.run import ramulator_config
+
+    case = CLOSED_LOOP
+    config = ramulator_config(Path(__file__).parents[1] / "xcheck" / case["ram_config"])
+    got = counters(
+        simulate(
+            DATA["closed_loop/ids"][None],
+            case["shapes"],
+            case["workload"],
+            Environment(**case["env"]),
+            threads=1,
+            ram_config=config,
+            **case["ram"],
+        )
+    )
+    flat, o, nc = DATA["closed_loop/expected"], 0, len(case["shapes"])
+    for name, shape in case["fields"]:
+        n = int(np.prod(shape))
+        value = got[name][:, :nc] if name.startswith("ctx_") else got[name]
+        assert np.array_equal(value, flat[o : o + n].reshape(shape)), name
+        o += n
 
 
 @pytest.mark.parametrize("task", METRICS)

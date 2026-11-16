@@ -1,4 +1,5 @@
-"""Benchmark requests: stable hashes, the dev/held-out split, request groups and chat tokenization."""
+"""Benchmark requests: stable hashes, the dev/held-out split, request groups, exclusion of earlier requests and chat
+tokenization."""
 
 import hashlib
 import json
@@ -96,22 +97,6 @@ def unseen_requests(rows, source, seen):
     ids, records = seen
     fresh = [r for r in rows if request_hash(source, r["sample_id"]) not in ids and digest(r) not in records]
     return sorted(fresh, key=lambda r: digest([SEALED_SEED, source, str(r["sample_id"])], compact=False))
-
-
-def plan_sealed(fresh, source, batches=BATCHES, groups=4):
-    """Up to `groups` request groups per batch size, taken in order from the unseen requests."""
-    return [
-        dict(
-            id=f"{source}_sealed_b{b}_c{c}",
-            source=source,
-            split="sealed",
-            batch=b,
-            cohort=c,
-            requests=fresh[c * b : (c + 1) * b],
-        )
-        for b in batches
-        for c in range(min(groups, len(fresh) // b))
-    ]
 
 
 def merge_system_messages(messages):

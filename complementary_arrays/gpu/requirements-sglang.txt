@@ -1,0 +1,10 @@
+# SGLang runs of bench/: Python 3.11.15 on one NVIDIA B200, CUDA 13.0 (its JIT kernels need a CUDA 13 toolkit:
+# CUDA_HOME at the nvidia/cu13 package of this environment, nvcc on PATH; SGLANG_ENABLE_JIT_DEEPGEMM=0).
+torch==2.14.1  # CUDA 13.0 build: 2.14.1+cu130
+sglang==0.5.23
+transformers==5.19.0
+flashinfer-python==0.7.2
+triton==3.8.0
+compressed-tensors==0.18.0
+numpy==2.3.5
+nvidia-ml-py==13.615.71

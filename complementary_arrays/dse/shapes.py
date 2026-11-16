@@ -9,11 +9,10 @@ on-chip re-delivery of weights for passes 2..ceil(t/m) at kappa times the HBM ra
 from __future__ import annotations
 
 import math
-from pathlib import Path
-
 import numpy as np
 
 from ..sim import workload as wl
+from .formats import FORMATS
 
 HEIGHTS = (2, 3, 4, 5, 6, 8, 12, 16, 20, 24, 32, 48, 64)
 MAX_N = 1024
@@ -62,7 +61,7 @@ def vocabulary(model: str, fmt: str) -> np.ndarray:
     """Every height in HEIGHTS with N a multiple of lcm(m, 16) and K a multiple of lcm(m, group), both reduced to
     the smallest value with the same tile counts over the model's matrix dimensions; rows sorted by (m, n, k)."""
     cols, reds = gemm_dims(model)
-    group = wl.FORMATS[fmt]["group"]
+    group = FORMATS[fmt]["group"]
     nmax = min(MAX_N, max(cols))
 
     def class_min(dims, step, x):
@@ -80,24 +79,25 @@ def vocabulary(model: str, fmt: str) -> np.ndarray:
 class AnalyticModel:
     """Analytic per-window step time of one model in one weight format on the shape vocabulary.
 
-    hbm: HBM bytes per cycle. drain(n), when given, adds the exposed drain latency of an n-column array to every
-    task: expert_drains times per routed or shared expert, once per router task.
+    hists(B) gives the distinct load histograms of batch B and their weights (snapshots.histograms). hbm: HBM bytes per
+    cycle. drain(n), when given, adds the exposed drain latency of an n-column array to every task: expert_drains times
+    per routed or shared expert, once per router task.
     """
 
-    def __init__(self, root: Path, model: str, fmt: str, hbm: float = 8000.0, drain=None, expert_drains: int = 0):
+    def __init__(self, hists, model: str, fmt: str, hbm: float = 8000.0, drain=None, expert_drains: int = 0):
         w = wl.MODELS[model]
         H, F, S, E, gate = w["hidden"], w["routed_width"], w["shared_width"], w["experts"], int(w["shared_gate"])
-        self.root, self.model, self.fmt, self.hbm = root, model, fmt, hbm
+        self.hists, self.model, self.fmt, self.hbm = hists, model, fmt, hbm
         self.shapes = vocabulary(model, fmt)
         self.macs = self.shapes[:, 1].astype(np.int64) * self.shapes[:, 2]
         self.matrix = wl.matrix_table(model, self.shapes)
         self.vector = wl.vector_table(model)
         self.routed_weights, self.shared_weights, self.router_weights = 3 * H * F, 3 * H * S + gate * H, H * E
-        self.bytes_per_weight = wl.FORMATS[fmt]["bytes_per_weight"]
+        self.bytes_per_weight = FORMATS[fmt]["bytes_per_weight"]
         self.drain, self.expert_drains = drain, expert_drains
 
-    def histograms(self, batches=(32, 128), split="dev") -> dict:
-        return {B: wl.histograms(self.root, self.model, B, split) for B in batches}
+    def histograms(self, batches=(32, 128)) -> dict:
+        return {B: self.hists(B) for B in batches}
 
     def items(self, idx: int, lanes: int, hh: np.ndarray):
         """Per histogram row and task group (routed at t = 1..128 tokens, shared, router): cycles per task,

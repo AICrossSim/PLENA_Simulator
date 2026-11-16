@@ -1,5 +1,8 @@
-"""Event timeline of one window on a final chip: per expert task its dispatch, HBM, port and compute intervals, and the
-exact per-cycle run lengths of the array states, the HBM users and the weight-port users."""
+"""Event timeline of one MoE layer window on the chips of one set: per expert task its dispatch, HBM, port and compute
+intervals, and the exact per-cycle run lengths of the array states, the HBM users and the weight-port users.
+
+Window: the eval snapshot of the batch whose MoE step time on the pair is the lower median of the snapshots, and the
+layer of that snapshot whose time on the pair is the lower median (from the evaluation files of the chip set)."""
 
 from __future__ import annotations
 
@@ -11,10 +14,12 @@ from pathlib import Path
 import numpy as np
 
 from ..dse import results as rs
-from ..dse.organisations import ORGS, expand
+from ..dse import snapshots as ss
+from ..dse.evaluate import chip_setup
+from ..dse.formats import FORMATS, ROUTES
+from ..dse.organisations import FAMILY, ORGS
 from ..sim import workload as wl
-from ..sim.engine import core_map, counters, trace
-from .stall import chip_environment, final_chip, labels
+from ..sim.engine import ARRAY_STATES, core_map, counters, trace
 
 MERGE_GAP = 32
 STATES = {
@@ -29,11 +34,15 @@ STATES = {
 }
 TASK_STATES = ((1, "compute"), (2, "wait_hbm"), (3, "wait_port_reread"), (4, "wait_port_first"), (6, "wait_other"))
 FIELDS = dict(
-    array_states="[state, t0, t1] exact per-cycle runs; compute = the array advanced its phase this cycle (pipeline fill and drain "
-    "included); wait_hbm = first-pass weights not yet in SRAM; wait_port = weights in SRAM but not yet delivered by the shared port "
-    "(first pass or re-delivery); wait_other = converter, pipeline latency, activations, output, merge and commit; idle = no task",
+    array_states="per task stream, [state, t0, t1] exact per-cycle runs; compute = the array advanced its phase this cycle "
+    "(pipeline fill and drain included); wait_hbm = first-pass weights not yet in SRAM; wait_port = weights in SRAM but not yet "
+    "delivered by the shared port (first pass or re-read); wait_other = converter, pipeline latency, activations, output, merge "
+    "and commit; idle = no task",
+    core_states="per physical array, [state, t0, t1] runs of the engine's array states",
     hbm_runs="[users, t0, t1, bytes]; users = arrays receiving HBM bytes this cycle (cur = the phase being computed, next = prefetch)",
-    port_runs="[users, t0, t1, first_pass_bytes, reread_bytes]; first = first pass (stored bytes), reread = re-delivery from SRAM (2 B per weight)",
+    port_runs="[users, t0, t1, first_pass_bytes, reread_bytes]; first = first pass (stored bytes), reread = re-read from SRAM "
+    "(2 B per BF16 weight, stored bytes for packed re-reads)",
+    hbm_bytes_attribution="HBM bytes of the layer by the task they land for (current task or prefetched next task)",
     experts="intervals merged across gaps of <= merge_gap_cycles; exact counts in compute_cycles, reread_weights and hbm_bytes; "
     "passes = ceil(tokens / array height); passes_measured = 1 + re-delivered weights / first-pass weights",
 )
@@ -61,16 +70,43 @@ def runs(label, cycles) -> list[list]:
     return out
 
 
-def timeline(
-    root: Path, out: Path, model: str, fmt: str, P: int, org: str, batch: int, group: str, layer: int, step: int
-) -> dict:
-    cell = rs.cell_name(model, fmt, P)
-    meta, chip = final_chip(out, cell, org)
-    shapes, env = expand(ORGS[org], chip["base"]), chip_environment(org, chip)
+def labels(org: str, shapes, cmap) -> list[str]:
+    if ORGS[org].kind == "het":
+        tallest = max(int(s[0]) for s in shapes)
+        return ["tall" if int(s[0]) == tallest else "short" for s in shapes]
+    if ORGS[org].kind == "single":
+        return [f"A0/s{c}" for c in range(len(shapes))]
+    return [f"A{cmap[c]}" for c in range(len(shapes))]
+
+
+def pick(eval_dir: Path, batch: int, set_name: str) -> dict:
+    """The median window of the pair (lower medians) and the step and layer times of every chip there."""
+    per = {}
+    for o in FAMILY:
+        with np.load(Path(eval_dir) / f"{set_name}_{o}.npz") as z:
+            per[o] = (z[f"B{batch}_cycles"], z[f"B{batch}_unit"], z[f"B{batch}_layer"])
+    cyc, unit, layer = per["het11"]
+    S = int(unit.max()) + 1
+    step = np.bincount(unit, weights=cyc, minlength=S)
+    snap = int(np.argsort(step, kind="stable")[(S - 1) // 2])
+    ix = np.flatnonzero(unit == snap)
+    lay = int(layer[ix][np.argsort(cyc[ix], kind="stable")[(len(ix) - 1) // 2]])
+    return dict(
+        batch=batch,
+        snapshot=snap,
+        layer=lay,
+        step_cycles={o: float(per[o][0][per[o][1] == snap].sum()) for o in per},
+        layer_cycles={o: float(per[o][0][(per[o][1] == snap) & (per[o][2] == lay)].sum()) for o in per},
+        step_cycles_quantiles_het11={q: float(np.percentile(step, q)) for q in (5, 25, 50, 75, 95)},
+    )
+
+
+def timeline(root: Path, model: str, fmt: str, org: str, chip: dict, batch: int, snapshot: int, layer: int) -> dict:
+    shapes, env = chip_setup(chip, org)
     cmap = core_map(env, len(shapes))
     lab = labels(org, shapes, cmap)
-    rows = wl.windows(root, model, batch, "report")
-    idx = [i for i, r in enumerate(rows) if r["group"] == group and r["layer"] == layer and r["step"] == step]
+    rows = ss.windows(root, model, ROUTES[fmt], batch, "eval")
+    idx = [i for i, r in enumerate(rows) if r["snapshot"] == snapshot and r["layer"] == layer]
     if len(idx) != 1:
         raise ValueError(f"window not unique: {idx}")
     win, E = rows[idx[0]], wl.MODELS[model]["experts"]
@@ -79,9 +115,13 @@ def timeline(
     c = counters(o)
     cyc, K = ledger["cycle"], min(len(shapes), 2)
     state, task, nxt = (ledger[f][:, :K].T for f in ("state", "task", "prefetch_task"))
-    hcur, hnext, first_bytes, reread_w = (
-        ledger[f][:, :K].T for f in ("hbm_current", "hbm_prefetch", "port_first_bytes", "port_reread_weights")
+    hcur, hnext, port_bytes, bf16_w, packed = (
+        ledger[f][:, :K].T
+        for f in ("hbm_current", "hbm_prefetch", "port_first_bytes", "port_reread_weights", "port_packed_bytes")
     )
+    stored = FORMATS[fmt]["bytes_per_weight"]
+    first_bytes = port_bytes - packed  # the port beats of packed re-reads are counted with the first passes
+    reread_w = bf16_w + packed / stored
     tasks = {}
     plan = [
         dict(cycle=int(t), ctx=int(k), field_a=int(a), field_b=int(b), planned_makespan=int(pred))
@@ -98,7 +138,6 @@ def timeline(
             r["start"], r["ctx"] = int(t), int(k)
         if kind == 4:
             r["done"] = int(t)
-    stored = wl.FORMATS[fmt]["bytes_per_weight"]
     experts = []
     for tk, r in tasks.items():
         k = r.get("ctx")
@@ -111,10 +150,11 @@ def timeline(
             hbytes += int(hcur[q][a].sum() + hnext[q][b].sum())
         own = task[k] == tk
         comp, rer = cyc[own & (state[k] == 1)], cyc[own & (reread_w[k] > 0)]
-        fpass, rwt = int(first_bytes[k][own].sum()), int(reread_w[k][own].sum())
+        fpass, rwt = int(first_bytes[k][own].sum()), float(reread_w[k][own].sum())
         hc = cyc[hmask]
         experts.append(
             dict(
+                kind="router" if r["expert"] < 0 else "shared" if r["expert"] >= E else "routed",
                 id="router" if r["expert"] < 0 else "shared" if r["expert"] >= E else int(r["expert"]),
                 task=r["task"],
                 tokens=r["tokens"],
@@ -157,27 +197,26 @@ def timeline(
         for i in range(len(cyc))
     ]
     hbm_runs, port_runs = runs(hbm_users, t), runs(port_users, t)
-    hbm_total, port_first, port_reread = (hcur + hnext).sum(0), first_bytes.sum(0), (2 * reread_w).sum(0)
+    hbm_total, port_first, port_reread = (hcur + hnext).sum(0), first_bytes.sum(0), (2 * bf16_w + packed).sum(0)
+    attribution = dict(total=int(hbm_total.sum()))
+    for kind in ("routed", "shared", "router"):
+        attribution[kind] = sum(x["hbm_bytes"] for x in experts if x["kind"] == kind)
+    attribution["not_attributed"] = attribution["total"] - attribution["routed"] - attribution["shared"] - attribution["router"]
     pos = {x: i for i, x in enumerate(t)}
     for r in hbm_runs:
         r.append(int(hbm_total[pos[r[1]] : pos[r[2]] + 1].sum()))
     for r in port_runs:
         r += [int(port_first[pos[r[1]] : pos[r[2]] + 1].sum()), int(port_reread[pos[r[1]] : pos[r[2]] + 1].sum())]
     return dict(
-        cell=cell,
         chip=org,
-        **meta,
         base=chip["base"],
         stream_shapes=[list(map(int, s)) for s in shapes],
         labels=lab,
         policy=chip["policy"],
         window=dict(
-            index_in_report_list=idx[0],
-            source=win["source"],
-            group=win["group"],
-            cohort=win["cohort"],
-            layer=win["layer"],
-            step=win["step"],
+            batch=batch,
+            snapshot=snapshot,
+            layer=layer,
             live=int(win["live"]),
             routed_experts_active=int((tokens > 0).sum()),
             token_assignments=int(tokens.sum()),
@@ -193,6 +232,10 @@ def timeline(
         stored_B_per_weight=stored,
         experts=routed + [x for x in experts if not isinstance(x["id"], int)],
         array_states={lab[k]: runs([STATES[int(s)] for s in state[k]], t) for k in range(K)},
+        core_states={f"array{a}": runs([ARRAY_STATES[int(s)] for s in ledger["array_state"][:, a]], t)
+                     for a in range(ledger["array_state"].shape[1])},
+        hbm_bytes_attribution=attribution,
+        redeliv_packed=int(env.redeliv_packed),
         hbm_runs=hbm_runs,
         port_runs=port_runs,
         fields=FIELDS,
@@ -202,21 +245,29 @@ def timeline(
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("model", choices=sorted(wl.MODELS))
-    ap.add_argument("fmt", choices=sorted(wl.FORMATS))
-    ap.add_argument("P", type=int)
-    ap.add_argument("org", choices=sorted(ORGS))
+    ap.add_argument("fmt")
+    ap.add_argument("P", type=int, help="multiplier budget")
+    ap.add_argument("--chips", type=Path, required=True, help="directory with <org>.json chip records")
+    ap.add_argument("--version", required=True, help="name of the chip set (its folder under eval/)")
+    ap.add_argument("--set", default="s1_eval", help="evaluation set holding the batch (e.g. s1_b128)")
     ap.add_argument("--batch", type=int, default=128)
-    ap.add_argument("--group", default="bfcl_heldout_b128_c1")
-    ap.add_argument("--layer", type=int, default=9)
-    ap.add_argument("--step", type=int, default=26)
+    ap.add_argument("--orgs", default=",".join(FAMILY))
     ap.add_argument("--data", type=Path, default=os.environ.get("COMPLEMENTARY_ARRAYS_DATA"), help="data root")
     ap.add_argument("--out", type=Path, default=os.environ.get("COMPLEMENTARY_ARRAYS_OUT"), help="output root")
     a = ap.parse_args(argv)
     if a.data is None or a.out is None:
         ap.error("--data and --out (or COMPLEMENTARY_ARRAYS_DATA / COMPLEMENTARY_ARRAYS_OUT) are required")
-    res = timeline(a.data, a.out, a.model, a.fmt, a.P, a.org, a.batch, a.group, a.layer, a.step)
-    rs.write_json(Path(a.out) / "mech" / "timeline" / f"{res['cell']}_{a.org}.json", res, indent=None)
-    print(res["cell"], a.org, "cycles", res["cycles"], "experts", len(res["experts"]), flush=True)
+    cell = rs.cell_name(a.model, a.fmt, a.P)
+    folder = Path(a.out) / "mech" / "timeline" / a.version
+    window = pick(rs.eval_dir(a.out, a.version, cell), a.batch, a.set)
+    rs.write_json(folder / f"{cell}_step.json", window)
+    for org in a.orgs.split(","):
+        chip = rs.read_json(a.chips / f"{org}.json")["best_main"]
+        res = timeline(a.data, a.model, a.fmt, org, chip, a.batch, window["snapshot"], window["layer"])
+        if res["cycles"] != window["layer_cycles"][org]:
+            raise ValueError(f"{org}: traced window takes {res['cycles']} cycles, the evaluation {window['layer_cycles'][org]}")
+        rs.write_json(folder / f"{cell}_{org}.json", dict(res, cell=cell, version=a.version), indent=None)
+        print(cell, a.version, org, "cycles", res["cycles"], "experts", len(res["experts"]), flush=True)
 
 
 if __name__ == "__main__":

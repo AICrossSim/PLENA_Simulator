@@ -1,4 +1,11 @@
-"""Result file layout under the output root."""
+"""Result file layout under the output root.
+
+search/<stage>/<cell>/<org>.json      search stages (top10, hetopt, prior, hetx<i>, retune<i>)
+<name>/<cell>/<org>.json              selected chips (final by default)
+perbatch/<cell>/B<B>/<org>.json       designs for one batch size
+eval/<version>/<cell>/<set>_<org>.*   evaluation of a chip set on a window set
+bootstrap/<version>/<cell>[...]       bootstrap replicates and intervals
+"""
 
 from __future__ import annotations
 
@@ -6,9 +13,7 @@ import json
 import os
 from pathlib import Path
 
-# Row order of the result tables.
-MODEL_ORDER = ("qwen", "deepseek", "qwen3next")
-FORMAT_ORDER = ("w8g128", "bf16", "w4g32")
+MODEL_ORDER = ("qwen", "deepseek")
 BUDGETS = (98304, 196608)
 
 
@@ -20,12 +25,16 @@ def search_path(out: Path, stage: str, cell: str, org: str) -> Path:
     return Path(out) / "search" / stage / cell / f"{org}.json"
 
 
-def final_path(out: Path, cell: str, org: str) -> Path:
-    return Path(out) / "final" / cell / f"{org}.json"
+def final_path(out: Path, cell: str, org: str, name: str = "final") -> Path:
+    return Path(out) / name / cell / f"{org}.json"
 
 
-def sealed_path(out: Path, cell: str) -> Path:
-    return Path(out) / "sealed" / f"{cell}.json"
+def perbatch_path(out: Path, cell: str, batch: int, org: str) -> Path:
+    return Path(out) / "perbatch" / cell / f"B{batch}" / f"{org}.json"
+
+
+def eval_dir(out: Path, version: str, cell: str) -> Path:
+    return Path(out) / "eval" / version / cell
 
 
 def read_json(path: Path):

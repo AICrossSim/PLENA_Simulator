@@ -6,9 +6,15 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+
+#ifdef SIM_RAMULATOR
+#include "hbm_ramulator.hpp"
+#endif
 
 Layer::Layer(const Config& cfg, const Topology& topo, const Shape* shape, const std::vector<std::vector<Program>>& prog,
-             const int32_t* ids, int64_t* out, int64_t* trace, int64_t trace_rows, std::vector<Decision>* log)
+             const int32_t* ids, int64_t* out, int64_t* trace, int64_t trace_rows, std::vector<Decision>* log,
+             const xcheck::Options* ram, int window)
     : cfg(cfg),
       topo(topo),
       shape(shape),
@@ -18,6 +24,8 @@ Layer::Layer(const Config& cfg, const Topology& topo, const Shape* shape, const 
       trace(trace),
       trace_rows(trace_rows),
       log(log),
+      ram(ram),
+      window(window),
       B(cfg.batch),
       nc(topo.contexts) {}
 
@@ -47,12 +55,32 @@ void Layer::promote(int c) {
   record(t + 1, c, j, 2, 0);
 }
 
+// Band dispatch with re-planning measures how long the array's contexts were occupied by the tasks they ran.
+void Layer::leave(int c, int j) {
+  if (cfg.policy != REPLAN_BAND || j == 0) return;
+  occupancy[array_of(c)] += t + 1 - st[c].start;
+  estimated[array_of(c)] += icost(c, tasks[j].type);
+}
+
 void Layer::finish_task(int c, int j, const Program& p) {
-  double* x = cls_count[array_of(c)][task_class(j)];
+  assert(!finished[j]);
+  finished[j] = 1;
+  if (j == 0) router_done = true;
+  done++;
+  const int a = array_of(c);
+  double* x = cls_count[a][task_class(j)];
   x[K_tasks]++;
   x[K_unique_weights] += p.unique;
   x[K_useful_macs] += p.useful;
   if (p.tm < int(tasks[j].tokens.size())) out[S_multi_group_tasks]++;
+  const int ntok = int(tasks[j].tokens.size());
+  out[OUT_ARRAY + A_passes * MAXA + a] += p.passes;
+  out[OUT_ARRAY + A_pass_tokens * MAXA + a] += ntok;
+  if (task_class(j) == 0) {
+    out[OUT_ARRAY + A_routed_passes * MAXA + a] += p.passes;
+    out[OUT_ARRAY + A_routed_tokens * MAXA + a] += ntok;
+    out[OUT_ARRAY + A_routed_tasks * MAXA + a]++;
+  }
   record(t + 1, c, j, 4, 0);
 }
 
@@ -103,6 +131,20 @@ void Layer::deliver() {
     for (int c = 0; c < nc; c++)
       if (st[c].task >= 0) F += std::min(pending(c, WPORT), intake(c));
     int64_t R = 2 * tot, Fb = 64 * F, gR = R + Fb <= cfg.W ? R : std::min(R, std::max<int64_t>(cfg.W / 2, cfg.W - Fb));
+    if (cfg.port_fcfs && R + Fb > cfg.W) {  // the class whose oldest waiting request is older takes the port first
+      int64_t oldest_reread = NEVER, oldest_first = NEVER;
+      for (int c = 0; c < nc; c++) {
+        const Context& s = st[c];
+        if (s.task < 0) continue;
+        if (needc[c] > 0 && !s.fifo[0].empty()) oldest_reread = std::min(oldest_reread, s.fifo[0].front().ready);
+        for (const Request& q : s.fifo[0])
+          if (q.remaining && landed(s, q)) {
+            oldest_first = std::min(oldest_first, s.hbm[q.idx].ready);
+            break;
+          }
+      }
+      gR = oldest_reread < oldest_first ? std::min<int64_t>(R, cfg.W) : std::min(R, std::max<int64_t>(0, cfg.W - Fb));
+    }
     D = gR / 2;
     if (row) {
       row[T_port_need_reread] = tot;
@@ -233,27 +275,28 @@ void Layer::advance_contexts() {
     int ynew = s.v < ph.cycles ? ph.output[s.v] : 0;
     int ycap = ph.kind != MATRIX ? std::max(64, cfg.ybanks * 8 * shape[c].lanes)
                                  : std::max(64, cfg.ybanks * 4 * shape[c].m * shape[c].n);
-    if (!ready) {
+    if (!ready) {  // the first reason that applies; a stall on a packed re-read counts as waiting for re-delivery
       n[C_input_stall]++;
+      int reason = C_wait_latency, state = WAIT_OTHER;
       if (dwait) {
-        n[C_delivery_wait]++;
-        set_state(c, WAIT_REDELIVERY);
+        reason = C_delivery_wait;
+        state = WAIT_REDELIVERY;
       } else if (!s.fifo[0].empty() && !landed(s, s.fifo[0].front())) {
-        n[C_wait_hbm]++;
-        set_state(c, WAIT_HBM);
+        reason = C_wait_hbm;
+        state = WAIT_HBM;
       } else if (!s.fifo[0].empty() && s.fifo[0].front().remaining) {
-        n[C_wait_wport]++;
-        set_state(c, WAIT_PORT);
-      } else if (!s.fifo[1].empty() && s.fifo[1].front().remaining) {
-        n[C_wait_x]++;
-        set_state(c, WAIT_OTHER);
-      } else if (!s.fifo[0].empty() && s.fifo[0].front().decode) {
-        n[C_wait_decode]++;
-        set_state(c, WAIT_OTHER);
-      } else {
-        n[C_wait_latency]++;
-        set_state(c, WAIT_OTHER);
+        reason = C_wait_wport;
+        state = WAIT_PORT;
+      } else if (!s.fifo[1].empty() && s.fifo[1].front().remaining)
+        reason = C_wait_x;
+      else if (!s.fifo[0].empty() && s.fifo[0].front().decode)
+        reason = C_wait_decode;
+      n[reason]++;
+      if (!dwait && reason != C_wait_x && ph.inputs[s.consumed].packed) {
+        n[C_packed_wait]++;
+        state = WAIT_REDELIVERY;
       }
+      set_state(c, state);
     } else if (s.y + ynew > ycap) {
       n[C_output_stall]++;
       set_state(c, STALL);
@@ -276,6 +319,7 @@ void Layer::advance_contexts() {
       s.y += ynew;
       s.v++;
       n[C_enabled]++;
+      n[C_matrix_busy + ph.kind]++;
       double* x = cls_count[a][task_class(s.task)];
       x[K_busy]++;
       if (ph.kind == MATRIX) x[K_matrix_busy]++;
@@ -290,7 +334,7 @@ void Layer::advance_contexts() {
 
 // HBM runs ahead of the weight FIFO in stage_slots landing slots per context (empty requests need none); once the
 // phase's requests are issued, the same slots prefetch the next phase that reads HBM, of this task or of the reserved
-// next one.
+// next one. Without prefetch every request waits for a landing slot and nothing is requested across phases.
 void Layer::issue_requests(int c, const Program& p, const Phase& ph) {
   Context& s = st[c];
   const int ninputs = int(ph.inputs.size());
@@ -302,13 +346,13 @@ void Layer::issue_requests(int c, const Program& p, const Phase& ph) {
     }
   }
   while (s.hbm_issued < ninputs) {
-    int sz = ph.inputs[s.hbm_issued].w;
-    if (int(s.landing.size() + s.pre_landing.size()) >= cfg.stage_slots && sz) break;
+    int sz = ph.inputs[s.hbm_issued].hbm;
+    if (int(s.landing.size() + s.pre_landing.size()) >= cfg.stage_slots && (sz || !cfg.prefetch)) break;
     int j = s.hbm_issued++;
     s.hbm[j] = {j, beats(sz), sz ? NEVER : t};
     if (sz) s.landing.push_back(j);
   }
-  if (s.hbm_issued == ninputs && s.pre_task < 0) {
+  if (cfg.prefetch && s.hbm_issued == ninputs && s.pre_task < 0) {
     int f = p.next_hbm[s.phase + 1];
     if (f >= 0) {
       s.pre_task = s.task;
@@ -329,7 +373,7 @@ void Layer::issue_requests(int c, const Program& p, const Phase& ph) {
       s.pre_issued = 0;
     }
     while (s.pre_issued < int(nx.inputs.size()) && int(s.landing.size() + s.pre_landing.size()) < cfg.stage_slots) {
-      int j = s.pre_issued++, sz = nx.inputs[j].w;
+      int j = s.pre_issued++, sz = nx.inputs[j].hbm;
       out[s.pre_task == s.task ? S_prefetch_same_task_bytes : S_prefetch_next_task_bytes] += sz;
       s.pre[j] = {j, beats(sz), sz ? NEVER : t};
       if (sz) s.pre_landing.push_back(j);
@@ -341,7 +385,8 @@ void Layer::issue_requests(int c, const Program& p, const Phase& ph) {
       if (ph.inputs[j].release > s.consumed) break;
       s.requested[r]++;
       int sz = r == 0 ? ph.inputs[j].w : ph.inputs[j].x;
-      s.fifo[r].push_back({j, beats(sz), sz ? NEVER : t, r == 0 ? ph.inputs[j].decode : 0});
+      s.fifo[r].push_back(
+          {j, beats(sz), sz ? NEVER : t, r == 0 ? ph.inputs[j].decode : 0, r == 0 && ph.inputs[j].packed});
     }
 }
 
@@ -440,6 +485,7 @@ void Layer::serve(int c, int r, int b) {
         q.remaining -= n;
         b -= n;
         s.count[C_hbm_service] += 64LL * n;
+        s.count[C_prefetch_hbm_bytes] += 64LL * n;
         if (row) {
           trace_ctx(TC_hbm_prefetch, c) += 64LL * n;
           trace_ctx(TC_prefetch_task, c) = s.pre_task;
@@ -460,6 +506,7 @@ void Layer::serve(int c, int r, int b) {
     int n = std::min(b, q.remaining);
     q.remaining -= n;
     b -= n;
+    if (row && q.packed) trace_ctx(TC_port_packed_bytes, c) += 64LL * n;
     if (!q.remaining) {
       q.ready = t + 1 + cfg.latency;
       if (r == WPORT && !s.landing.empty() && s.landing.front() == q.idx)
@@ -488,6 +535,12 @@ void Layer::serve_tail(int c, int r, int b) {
 
 void Layer::serve_ports() {
   for (int r = 0; r < 4; r++) {
+#ifdef SIM_RAMULATOR
+    if (r == HBM && closed) {
+      serve_closed_loop();
+      continue;
+    }
+#endif
     std::array<int, MAXC> need{}, give{}, tneed{};
     int budget = r == HBM ? int(((t + 1) * cfg.H) / 64 - (t * cfg.H) / 64)
                           : (r == WPORT   ? cfg.W
@@ -540,33 +593,112 @@ void Layer::serve_ports() {
   }
 }
 
-// One converter decodes landed low-bit records into BF16, at most 64 elements per request and cycle, alternating over
-// the contexts; an array consumes at most n k / m weights per cycle (with core_caps shared by its contexts).
+#ifdef SIM_RAMULATOR
+// Closed-loop HBM: the landing requests of the active contexts (the current phase's, then the prefetched phase's) are
+// registered with Ramulator in program order; a request's beats count down as its transfers return, it completes in
+// order within its context and is usable extra() cycles later (xcheck/hbm_ramulator.hpp).
+void Layer::serve_closed_loop() {
+  xcheck::Hbm& h = *closed;
+  auto add = [&](int c, Request& q, const Phase& ph, int task) {
+    if (q.id >= 0 || q.remaining <= 0) return;
+    auto g = std::lower_bound(ph.regions.begin(), ph.regions.end(), q.idx,
+                              [](const WeightRegion& x, int i) { return x.input < i; });
+    assert(g != ph.regions.end() && g->input == q.idx);
+    q.id = h.add(c, xcheck::Region{tasks[task].expert, g->matrix, g->n0, g->nr, g->k0, g->kr}, q.remaining, t);
+  };
+  for (int c = 0; c < nc; c++) {
+    Context& s = st[c];
+    if (s.task < 0) continue;
+    for (int j : s.landing) add(c, s.hbm[j], current(c).phases[s.phase], s.task);
+    if (!s.pre_landing.empty())
+      for (int j : s.pre_landing) add(c, s.pre[j], prog[c][tasks[s.pre_task].type].phases[s.pre_phase], s.pre_task);
+  }
+  h.issue(t);
+  h.tick(t);
+  int64_t given = 0;
+  bool active = false;
+  for (int c = 0; c < nc; c++) {
+    Context& s = st[c];
+    if (s.task < 0) continue;
+    active = true;
+    bool older = false;  // an older request of the context is not complete
+    auto serve = [&](Request& q, bool prefetched) {
+      if (q.remaining <= 0) return;
+      if (q.id < 0) {
+        older = true;
+        return;
+      }
+      const int64_t left = h.pending(q.id, older);
+      if (left >= q.remaining) return;
+      const int64_t bytes = 64 * (q.remaining - left);
+      given += bytes;
+      s.count[C_hbm_service] += bytes;
+      if (prefetched) s.count[C_prefetch_hbm_bytes] += bytes;
+      if (row) {
+        trace_ctx(TC_hbm_bytes, c) += bytes;
+        trace_ctx(prefetched ? TC_hbm_prefetch : TC_hbm_current, c) += bytes;
+        if (prefetched) {
+          trace_ctx(TC_prefetch_task, c) = s.pre_task;
+          trace_ctx(TC_prefetch_phase, c) = s.pre_phase;
+        }
+      }
+      q.remaining = int(left);
+      if (!left) {
+        q.ready = t + 1 + h.extra();
+        h.complete(q.id, t);
+      }
+    };
+    for (int j : s.landing) serve(s.hbm[j], false);
+    for (int j : s.pre_landing) serve(s.pre[j], true);
+  }
+  h.account(given);
+  if (active && !given) out[S_hbm_idle_cycles]++;
+}
+#endif
+
+// Converters decode landed low-bit records into BF16 at most 64 elements per request and cycle, alternating over the
+// contexts. The chip-wide converter decodes converter_rate elements per cycle and an array consumes at most n k / m
+// weights per cycle (with core_caps shared by its contexts); per-array converters each decode their own lanes; an
+// unlimited converter decodes every landed record at once.
 void Layer::convert() {
   if (cfg.bits >= 16) return;
-  int budget = cfg.converter_rate;
+  auto decoded = [&](int c, Request& q, int n) {
+    q.decode -= n;
+    st[c].count[C_decoded] += n;
+    if (row) trace_ctx(TC_decoded, c) += n;
+    if (!q.decode) q.ready = t + 1 + cfg.converter_latency;
+  };
+  auto eligible = [&](const Request& q) { return !q.remaining && q.ready <= t && q.decode; };
+  if (cfg.converter == -1) {
+    for (int c = 0; c < nc; c++)
+      if (st[c].task >= 0)
+        for (Request& q : st[c].fifo[0])
+          if (eligible(q)) decoded(c, q, q.decode);
+    return;
+  }
+  int budget = cfg.converter ? 1 << 30 : cfg.converter_rate;
   std::array<int, MAXC> cap{};
   std::array<int, MAXA> capk{};
   for (int c = 0; c < nc; c++) cap[c] = shape[c].n * shape[c].k / shape[c].m;
-  for (int c = 0; c < nc; c++)
-    if (topo.caps[array_of(c)]) capk[array_of(c)] = shape[c].n * shape[c].k / shape[c].m;
+  for (int k = 0; k < topo.arrays; k++) {
+    const Shape& f = shape[topo.first[k]];
+    capk[k] = cfg.converter ? converter_lanes(cfg, f) : f.n * f.k / f.m;
+  }
   int first = int(t % nc);
   for (bool progress = true; budget && progress;) {
     progress = false;
     for (int z = 0; z < nc && budget; z++) {
       int c = (first + z) % nc;
       Context& s = st[c];
-      int& lim = topo.caps[array_of(c)] ? capk[array_of(c)] : cap[c];
+      int& lim = cfg.converter || topo.caps[array_of(c)] ? capk[array_of(c)] : cap[c];
       if (s.task < 0 || !lim) continue;
       for (Request& q : s.fifo[0]) {
-        if (q.remaining || q.ready > t || !q.decode) continue;
+        if (!eligible(q)) continue;
         int n = std::min({budget, lim, q.decode, 64});
-        q.decode -= n;
         lim -= n;
         budget -= n;
         progress = true;
-        if (row) trace_ctx(TC_decoded, c) += n;
-        if (!q.decode) q.ready = t + 1 + cfg.converter_latency;
+        decoded(c, q, n);
         break;
       }
     }
@@ -592,11 +724,8 @@ void Layer::complete_tails() {
       out[S_rows]++;
     }
     if (++u.phase == int(p.phases.size())) {
-      if (u.task == 0) router_done = true;
-      finished[u.task] = 1;
       finish_task(c, u.task, p);
       s.count[C_finish] = std::max(s.count[C_finish], t + 1);
-      done++;
       u.task = -1;
       u.buffer = 0;
     } else {
@@ -659,11 +788,18 @@ void Layer::complete_phases() {
     assert(s.consumed == int(ph.inputs.size()));
     double* x = cls_count[array_of(c)][task_class(s.task)];
     x[K_decoded] += ph.decoded;
-    x[K_hbm_bytes] += ph.bytes[0];
+    x[K_hbm_bytes] += ph.hbm;
     x[K_wport_bytes] += ph.bytes[0];
     x[K_expanded_write_bytes] += ph.expanded;
     x[K_local_read_bytes] += ph.localw;
     x[K_reread_bytes] += ph.reread;
+    n[C_packed_reread_bytes] += ph.packed_reread;
+    if (ph.kind == MATRIX) {
+      const int a = array_of(c);
+      out[OUT_ARRAY + A_mac_inputs * MAXA + a] += ph.mac_inputs;
+      out[OUT_ARRAY + A_empty_row_slots * MAXA + a] += ph.empty_row_slots;
+      out[OUT_ARRAY + A_matrix_phase_cycles * MAXA + a] += ph.cycles;
+    }
     if (ph.kind == ROW) {
       if (cfg.token_locks) {
         assert(locks[s.lock] == c);
@@ -687,20 +823,84 @@ void Layer::complete_phases() {
       n[C_tail_handoffs]++;
       assert(u.phase < int(p.phases.size()) && u.fifo.empty());
       record(t + 1, c, s.task, 6, 0);
+      leave(c, s.task);
       s.task = -1;
       if (s.next_task >= 0) promote(c);
     } else if (s.phase == int(p.phases.size())) {
-      if (s.task == 0) router_done = true;
-      finished[s.task] = 1;
       assert(s.drain_ready == 0 && s.drain_until < 0);
+      leave(c, s.task);
       finish_task(c, s.task, p);
       s.task = -1;
       n[C_finish] = t + 1;
-      done++;
       if (s.next_task >= 0) promote(c);
     } else
       reset_phase(s, t + 1);
   }
+}
+
+// What each array did this cycle (ARRAY_STATES, from the changes of its contexts' counters), and with two arrays the
+// cycles one of them idles while the other works.
+void Layer::classify_arrays(int64_t port_before) {
+  int state[MAXA];
+  for (int k = 0; k < topo.arrays; k++) {
+    bool f[NARRAY_STATE]{};
+    for (int i = 0; i < topo.nctx[k]; i++) {
+      const int c = topo.ctx[k][i];
+      const int64_t* now = st[c].count;
+      auto d = [&](int field) { return now[field] - before[c][field]; };
+      f[AS_matrix] |= d(C_matrix_busy) > 0;
+      f[AS_vector] |= d(C_vector_busy) + d(C_row_busy) > 0;
+      f[AS_control] |= d(C_control_busy) > 0;
+      f[AS_drain] |= d(C_drain_wait) > 0 || d(C_tail_blocked) > 0;
+      f[AS_wait_redelivery] |= d(C_delivery_wait) > 0 || d(C_packed_wait) > 0;
+      f[AS_wait_port] |= d(C_wait_wport) > 0;
+      f[AS_wait_hbm] |= d(C_wait_hbm) > 0;
+      f[AS_wait_decode] |= d(C_wait_decode) > 0;
+      f[AS_wait_latency] |= d(C_wait_latency) > 0;
+      f[AS_wait_x] |= d(C_wait_x) > 0;
+      f[AS_stall] |=
+          d(C_output_stall) > 0 || d(C_merge_stall) > 0 || d(C_commit_wait) > d(C_drain_wait) + d(C_tail_blocked);
+      f[AS_tail] |= d(C_tail_busy) > 0 || d(C_tail_wait) > 0;
+    }
+    state[k] = AS_idle;
+    for (int z = 0; z < AS_idle; z++)
+      if (f[z]) {
+        state[k] = z;
+        break;
+      }
+    if (state[k] == AS_idle)
+      idle_run[k]++;
+    else {
+      state_count[k][AS_idle] += idle_run[k];
+      idle_run[k] = 0;
+      state_count[k][state[k]]++;
+    }
+    if (row) row[NTRACE_FIELD + NTRACE_CONTEXT_FIELD * MAXC + TA_array_state * MAXA + k] = state[k];
+  }
+  if (topo.arrays < 2) return;
+  int idle = 0, busy = 0, in_flight = 0;
+  bool reserved = false;
+  for (int k = 0; k < topo.arrays; k++) {
+    if (state[k] == AS_idle) {
+      idle++;
+      continue;
+    }
+    busy++;
+    for (int i = 0; i < topo.nctx[k]; i++) reserved |= st[topo.ctx[k][i]].next_task >= 0;
+  }
+  for (int c = 0; c < nc; c++) in_flight += (st[c].task >= 0) + (st[c].next_task >= 0) + (st[c].tail.task >= 0);
+  const bool left = router_done && int(tasks.size()) - done - in_flight > 0;
+  const int64_t spare = cfg.W - (out[S_port_bytes] - port_before);
+  if (idle && busy) {
+    out[S_idle_while_other_works]++;
+    out[S_idle_while_other_works_spare_port_bytes] += spare;
+    if (left) {
+      out[S_idle_while_other_works_tasks_left]++;
+      out[S_idle_while_other_works_tasks_left_spare_port_bytes] += spare;
+    }
+    if (reserved) out[S_idle_while_other_works_reserved]++;
+  }
+  if (idle == topo.arrays && left) out[S_all_idle_tasks_left]++;
 }
 
 void Layer::write_outputs() {
@@ -721,21 +921,36 @@ void Layer::write_outputs() {
     for (int f = 0; f < NCONTEXT_OUTPUT; f++) out[OUT_CONTEXT + f * MAXC + c] = n[f];
     hbm += n[C_hbm_service];
   }
-  assert(hbm <= 64 * ((t * cfg.H) / 64));
+  assert(closed || hbm <= 64 * ((t * cfg.H) / 64));  // the fixed-rate server's bound
   (void)hbm;
-  for (int k = 0; k < topo.arrays; k++) out[OUT_ARRAY + A_lanes * MAXA + k] = shape[topo.first[k]].lanes;
+  for (int k = 0; k < topo.arrays; k++) {
+    out[OUT_ARRAY + A_lanes * MAXA + k] = shape[topo.first[k]].lanes;
+    state_count[k][AS_idle_end] = idle_run[k];
+    state_count[k][AS_startup] = startup;
+    int64_t sum = 0;
+    for (int z = 0; z < NARRAY_STATE; z++) sum += out[OUT_STATE + k * NARRAY_STATE + z] = state_count[k][z];
+    assert(sum == t);
+    (void)sum;
+  }
   for (int k = 0; k < MAXA; k++)
     for (int q = 0; q < NCLASS; q++)
       for (int f = 0; f < NCLASS_OUTPUT; f++)
         out[OUT_CLASS + (f * MAXA + k) * NCLASS + q] = llround(cls_count[k][q][f]);
   int routed = 0;
   for (const Task& task : tasks) routed += task.expert >= 0 && task.expert < cfg.experts;
-  const int H = cfg.hidden, F = cfg.routed_width, S = cfg.shared_width;
-  out[S_weight_bytes] = stored_bytes(cfg, cfg.experts, H, 16) +
-                        routed * (stored_bytes(cfg, 2 * F, H, cfg.bits) + stored_bytes(cfg, H, F, cfg.bits)) +
-                        stored_bytes(cfg, 2 * S + cfg.shared_gate, H, cfg.bits) + stored_bytes(cfg, H, S, cfg.bits);
-  assert(out[S_rows] == int64_t(B) * (cfg.topk + 1));
+  const int H = cfg.hidden, F = cfg.routed_width, S = cfg.shared_width, g = cfg.shared_gate;
+  auto expert_bytes = [&](int n, int gate) {
+    return stored_bytes(cfg, 2 * n + gate, H, cfg.bits) + stored_bytes(cfg, H, n, cfg.bits);
+  };
+  int64_t shared = 0;
+  if (cfg.shared_expert)
+    shared = cfg.shared_place == 3 ? expert_bytes(S / 2, g) + expert_bytes(S - S / 2, 0) : expert_bytes(S, g);
+  out[S_weight_bytes] = stored_bytes(cfg, cfg.experts, H, 16) + routed * expert_bytes(F, 0) + shared;
+  const int shared_rows = cfg.shared_expert ? (cfg.shared_place == 3 ? 2 : 1) : 0;
+  assert(out[S_rows] == int64_t(B) * (cfg.topk + shared_rows));
+  (void)shared_rows;
   for (int l : locks) assert(l == -1);
+  for (char f : finished) assert(f);
 }
 
 void Layer::run() {
@@ -746,7 +961,9 @@ void Layer::run() {
   }
   locks.assign(B, -1);
   finished.assign(tasks.size(), 0);
+  hotp = first_routed;
   coldp = int(tasks.size()) - 1;
+  shared_done = !cfg.shared_expert;
   const int H = cfg.hidden;
   const int64_t token_buffers =
       6LL * B * H;  // FP32 outputs and BF16 activations of every token, shared by the contexts
@@ -766,6 +983,25 @@ void Layer::run() {
     out[S_status] = 1;
     return;
   }
+#ifdef SIM_RAMULATOR
+  std::unique_ptr<xcheck::Hbm> service;  // closed-loop HBM: the weight image of one layer in the stored record format
+  if (ram) {
+    xcheck::Geometry g;
+    g.experts = cfg.experts;
+    g.hidden = cfg.hidden;
+    g.width = cfg.routed_width;
+    g.shared_width = cfg.shared_width;
+    g.shared_gate = cfg.shared_gate;
+    g.group = cfg.group;
+    g.bits = cfg.bits;
+    g.record_bytes = int(stored_bytes(cfg, 16, cfg.group, cfg.bits));
+    g.router_record_bytes = int(stored_bytes(cfg, 16, cfg.group, 16));
+    service.reset(new xcheck::Hbm(*ram, g, nc));
+    closed = service.get();
+  }
+#else
+  assert(!ram);
+#endif
   start(rc, 0, t);
   record(t, rc, 0, 3, icost(rc, B + 1));
   int64_t last_progress = t, previous = -1;
@@ -774,6 +1010,7 @@ void Layer::run() {
     for (int c = 0; c < nc; c++) {
       const int64_t* n = st[c].count;
       progress += n[C_enabled] + n[C_hbm_service] + n[C_delivered_weights] + n[C_tail_busy];
+      std::copy(n, n + NCONTEXT_OUTPUT, before[c].begin());
     }
     if (progress != previous) {
       last_progress = t;
@@ -790,6 +1027,7 @@ void Layer::run() {
       row[T_cycle] = t;
       for (int c = 0; c < MAXC; c++) trace_ctx(TC_prefetch_task, c) = trace_ctx(TC_prefetch_phase, c) = -1;
     }
+    const int64_t port_before = out[S_port_bytes];
     if (cfg.policy == REGRET) fill_window();
     dispatch();
     reserve_next();
@@ -815,7 +1053,12 @@ void Layer::run() {
     convert();
     if (cfg.tail_slot) complete_tails();
     complete_phases();
+    classify_arrays(port_before);
     t++;
   }
   write_outputs();
+#ifdef SIM_RAMULATOR
+  if (closed) closed->write_log(window, t, startup);
+  closed = nullptr;
+#endif
 }

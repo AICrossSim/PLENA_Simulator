@@ -1,4 +1,5 @@
-"""Chip organisations: task streams (contexts) and arrays, and the array shape of every stream."""
+"""Chip organisations at equal resources: one array that interleaves two task streams, two identical arrays, and a
+shorter and a taller array (the pair). Every organisation has two task streams."""
 
 from __future__ import annotations
 
@@ -14,8 +15,8 @@ class Organisation:
 
     @property
     def shared_array(self) -> bool:
-        """Several task streams share one array."""
-        return self.streams == 4 or self.kind == "single"
+        """Both task streams share one array."""
+        return self.kind == "single"
 
 
 ORGS = {
@@ -24,18 +25,13 @@ ORGS = {
         Organisation("single2", "single", 2, 1),
         Organisation("hom11", "hom", 2, 2),
         Organisation("het11", "het", 2, 2),
-        Organisation("single4", "single", 4, 1),
-        Organisation("hom22", "hom", 4, 2),
-        Organisation("het22", "het", 4, 2),
     )
 }
-FAMILIES = {2: ("single2", "hom11", "het11"), 4: ("single4", "hom22", "het22")}
+FAMILY = ("single2", "hom11", "het11")
 
 
 def expand(org: Organisation, base) -> list[list[int]]:
     """Array shape of every task stream."""
     if org.kind == "single":
         return [list(base[0])] * org.streams
-    if org.streams == 4:
-        return [list(base[0]), list(base[0]), list(base[1]), list(base[1])]
     return [list(x) for x in base]

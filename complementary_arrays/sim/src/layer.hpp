@@ -8,6 +8,11 @@
 
 constexpr int64_t NEVER = std::numeric_limits<int64_t>::max();
 
+namespace xcheck {  // closed-loop HBM service through Ramulator (xcheck/hbm_ramulator.hpp, built with SIM_RAMULATOR)
+struct Options;
+class Hbm;
+}  // namespace xcheck
+
 struct Topology {
   int contexts = 0, arrays = 0;
   bool shared = false;                // contexts of one array share its MAC array and vector lanes
@@ -23,6 +28,8 @@ struct Request {
   int idx, remaining;
   int64_t ready;
   int decode = 0;
+  bool packed = false;  // a packed re-read
+  int64_t id = -1;      // closed-loop HBM: the request's id once registered
 };
 
 struct Tail {  // trailing phases of the task a context last handed off (tail mode)
@@ -48,7 +55,8 @@ struct Context {
   int64_t count[NCONTEXT_OUTPUT]{};  // output counters, C_*
 };
 
-// expert: -1 router, `experts` the shared expert; type: program index (tokens - 1, B shared expert, B + 1 router)
+// expert: -1 router, `experts` the shared expert; type: program index (tokens - 1; B shared expert or its first half;
+// B + 1 router; B + 2 second half of a split shared expert)
 struct Task {
   int expert, type;
   std::vector<int> tokens;
@@ -60,7 +68,7 @@ class Layer {
  public:
   Layer(const Config& cfg, const Topology& topo, const Shape* shape, const std::vector<std::vector<Program>>& prog,
         const int32_t* ids, int64_t* out, int64_t* trace = nullptr, int64_t trace_rows = 0,
-        std::vector<Decision>* log = nullptr);
+        std::vector<Decision>* log = nullptr, const xcheck::Options* ram = nullptr, int window = 0);
   void run();
 
  private:
@@ -71,6 +79,8 @@ class Layer {
   const int32_t* ids;
   int64_t *out, *trace, trace_rows;
   std::vector<Decision>* log;
+  const xcheck::Options* ram;  // closed-loop HBM options, nullptr: the fixed-rate HBM server
+  const int window;            // index of the window in its call (closed-loop log names)
   const int B, nc;
 
   std::vector<Task> tasks;
@@ -79,19 +89,29 @@ class Layer {
   std::array<Context, MAXC> st;
   int64_t t = 0, startup = 0, allocated = 0;
   int done = 0, cursor = 1, hotp = 2, coldp = 0;
+  int first_routed = 2;  // index of the first routed task in front-end order
   bool router_done = false, shared_done = false;
+  bool half_taken[2]{};     // split shared expert: halves dispatched
   std::array<int, 4> rr{};  // round-robin pointers of the servers
   bool planned = false;     // band dispatch: unassigned range of each band and its estimated cost
   int band_lo[MAXA]{}, band_hi[MAXA]{};
   int64_t band_left[MAXA]{};
   std::vector<int64_t> band_task_cost;
+  // band dispatch with re-planning: the bands as queues, the done count at the last plan, and per array the measured
+  // occupancy and the estimates of the tasks it finished
+  std::array<std::deque<int>, MAXA> band_queue;
+  int planned_done = -1;
+  int64_t occupancy[MAXA]{}, estimated[MAXA]{};
   int64_t knum = 0, kden = 1;                 // re-delivery budget, knum / kden weights per cycle
   int64_t port_reread = 0, first_beats = -1;  // shared port this cycle: re-delivery bytes, beats left for first passes
   int array_rr = 0;
   // per array this cycle: MAC array / vector lanes taken; a matrix phase advanced
   bool used_res[MAXA][2]{}, mat_adv[MAXA]{};
   double cls_count[MAXA][NCLASS][NCLASS_OUTPUT]{};
-  int64_t* row = nullptr;  // trace row of the current cycle
+  int64_t state_count[MAXA][NARRAY_STATE]{}, idle_run[MAXA]{};
+  std::array<std::array<int64_t, NCONTEXT_OUTPUT>, MAXC> before{};  // context counters at the start of the cycle
+  int64_t* row = nullptr;                                           // trace row of the current cycle
+  xcheck::Hbm* closed = nullptr;                                    // closed-loop HBM service of this window
 
   enum Server { WPORT, XPORT, YPORT, HBM };
 
@@ -108,7 +128,7 @@ class Layer {
   bool landed(const Context& s, const Request& q) const {
     return s.hbm[q.idx].remaining == 0 && s.hbm[q.idx].ready <= t;
   }
-  bool limited(const Input& in) const { return in.localw > 0 && in.reuse; }
+  bool limited(const Input& in) const { return in.localw > 0 && in.reuse && !in.packed; }
   int64_t& trace_ctx(int field, int c) { return row[NTRACE_FIELD + field * MAXC + c]; }
   void set_state(int c, int state) {
     if (row) trace_ctx(TC_state, c) = state;
@@ -119,18 +139,29 @@ class Layer {
   bool build_tasks();
   void start(int c, int j, int64_t when);
   void promote(int c);
+  void leave(int c, int j);
   void finish_task(int c, int j, const Program& p);
   void reset_phase(Context& s, int64_t when);
   double remaining(int c) const;
   int64_t remaining_int(int c) const;
   int64_t committed(int c) const;
   bool running(int j) const;
-  bool take_shared(int c, bool free);
+  int preferred_shared(int c, int64_t& fb, int64_t& fc) const;
+  int take_shared(int c, bool free);
+  void charge_shared(int64_t* R, bool scaled) const;
   int pick_pincer(int c, bool free);
+  void rates(int c, int type, int from, int64_t& hr, int64_t& pr) const;
+  int pick_supply(int c, bool free);
   int64_t array_task_cost(int r, int j) const;
   int64_t array_committed(int r) const;
   void plan_bands();
   int pick_band(int c, bool free);
+  int64_t factor(int k) const;
+  int64_t replan_cost(int r, int j) const;
+  int64_t replan_committed(int r) const;
+  void replan_bands();
+  int pick_replan(int c, bool free);
+  int pick(int c, bool free);
   int pick_regret(int only, int& core) const;
   void fill_window();
   void dispatch();
@@ -145,8 +176,10 @@ class Layer {
   void serve(int c, int r, int b);
   void serve_tail(int c, int r, int b);
   void serve_ports();
+  void serve_closed_loop();
   void convert();
   void complete_tails();
   void complete_phases();
+  void classify_arrays(int64_t port_before);
   void write_outputs();
 };

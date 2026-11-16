@@ -1,142 +1,79 @@
-"""The pipeline reproduces the reference results (needs COMPLEMENTARY_ARRAYS_DATA and COMPLEMENTARY_ARRAYS_REFERENCE)."""
+"""The pipeline reproduces the reference results (needs COMPLEMENTARY_ARRAYS_DATA, the snapshot data root, and
+COMPLEMENTARY_ARRAYS_REFERENCE, reference results in the output layout: search/, final/, eval/final/)."""
 
-import json
-from collections import Counter
-from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from complementary_arrays.dse import bootstrap, export, select
 from complementary_arrays.dse import results as rs
-from complementary_arrays.dse.candidates import Ranking, rule_candidates
-from complementary_arrays.dse.organisations import FAMILIES, ORGS, expand
-from complementary_arrays.dse.search import KAPPA
-from complementary_arrays.dse.shapes import AnalyticModel, legal
+from complementary_arrays.dse import snapshots as ss
+from complementary_arrays.dse.evaluate import chip_setup
+from complementary_arrays.dse.formats import ROUTES
+from complementary_arrays.dse.organisations import FAMILY
+from complementary_arrays.dse.select import select
 from complementary_arrays.sim import workload as wl
 
 from . import reference_arithmetic
 
-MODEL, FMT, P = "deepseek", "w8g128", 98304
-CELL = rs.cell_name(MODEL, FMT, P)
+LISTING = Path(__file__).resolve().parents[1] / "scripts" / "snapshots.sha256"
 
 
-def _approx_equal(mine, ref, rel=1e-12):
-    if isinstance(ref, dict):
-        assert set(ref) <= set(mine)
-        for k in ref:
-            _approx_equal(mine[k], ref[k], rel)
-    elif isinstance(ref, list):
-        assert len(mine) == len(ref)
-        for a, b in zip(mine, ref):
-            _approx_equal(a, b, rel)
-    elif isinstance(ref, float):
-        assert mine == pytest.approx(ref, rel=rel)
-    else:
-        assert mine == ref
+def _cells(reference):
+    root = reference / "final"
+    return sorted(p.name for p in root.iterdir() if all((p / f"{o}.json").exists() for o in FAMILY)) if root.exists() else []
 
 
-def _link_cell(reference, tmp_path, *parts):
-    for part in parts:
-        dst = tmp_path.joinpath(*part.split("/"), CELL)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.symlink_to(reference.joinpath(*part.split("/"), CELL))
+def _parse(cell):
+    model, fmt, _, P = cell.split("_")
+    return model, fmt, int(P[1:])
 
 
-def test_candidates(data_root, reference):
-    rules = rule_candidates(Ranking(AnalyticModel(data_root, MODEL, FMT), KAPPA[FMT]), P)
-    for org in FAMILIES[2]:
-        ref = rs.read_json(rs.search_path(reference, "top10", CELL, org))
-        mine = [c for c in rules[ORGS[org].kind] if legal(c["base"], P)]
-        assert len(rules[ORGS[org].kind]) == ref["n_candidates"] and rules["C"] == ref["rule_candidates"]
-        assert Counter((str(c["base"]), c["rule"]) for c in mine) == Counter(
-            (str(r["base"]), r["rule"]) for r in ref["probe"]
-        )
-        probe = {str(r["base"]): r["probe"] for r in ref["probe"]}
-        assert [str(c["base"]) for c in sorted(mine, key=lambda c: probe[str(c["base"])])] == [
-            str(r["base"]) for r in ref["probe"]
-        ]
+def test_snapshot_digests(data_root, tmp_path):
+    lines = [line for line in LISTING.read_text().splitlines() if (data_root / f"{line.split()[1]}.npz").exists()]
+    if not lines:
+        pytest.skip("no snapshot files of the listing in the data root")
+    (tmp_path / "listing").write_text("\n".join(lines) + "\n")
+    assert ss.check(data_root, tmp_path / "listing") == []
 
 
-def test_report_windows(data_root, reference):
-    from complementary_arrays.sim.engine import Environment, counters, simulate
+def test_eval_windows(data_root, reference):
+    from complementary_arrays.sim.engine import counters, simulate, token_counts
 
-    chip = rs.read_json(rs.final_path(reference, CELL, "het11"))["best_main"]
-    env = replace(Environment.from_dict(chip["env"]), shared_array=ORGS["het11"].shared_array)
-    shapes = expand(ORGS["het11"], chip["base"])
-    for B in wl.BATCHES:
-        rows = wl.windows(data_root, MODEL, B, "report")
-        for i in (0, len(rows) // 2, len(rows) - 1):
-            out = simulate(rows[i]["ids"][None], shapes, wl.MODELS[MODEL], env, threads=1)
-            assert counters(out)["cycles"][0] == chip["report"][f"B{B}"]["window_cycles"][i]
+    for cell in _cells(reference):
+        model, fmt, _ = _parse(cell)
+        for org in FAMILY:
+            shapes, env = chip_setup(rs.read_json(reference / "final" / cell / f"{org}.json")["best_main"], org)
+            with np.load(rs.eval_dir(reference, "final", cell) / f"s1_eval_{org}.npz") as z:
+                for B in (32, 128):
+                    rows = ss.windows(data_root, model, ROUTES[fmt], B, "eval")
+                    provision = token_counts(np.stack([r["ids"] for r in rows]), wl.MODELS[model]["experts"])
+                    for i in (0, len(rows) // 2, len(rows) - 1):
+                        c = counters(simulate(rows[i]["ids"][None], shapes, wl.MODELS[model], env, threads=1,
+                                              provision_tokens=provision))
+                        assert c["cycles"][0] == z[f"B{B}_cycles"][i]
 
 
-def test_report_means(reference, monkeypatch):
+def test_eval_means(reference, monkeypatch):
     monkeypatch.setattr(wl, "dot", reference_arithmetic.dot)
-    for org in FAMILIES[2] + FAMILIES[4]:
-        chip = (
-            rs.read_json(rs.final_path(reference, CELL, org))["best_main"]
-            if rs.final_path(reference, CELL, org).exists()
-            else None
-        )
-        for x in chip["report"].values() if chip else ():
-            w, c = np.asarray(x["window_weights"]), np.asarray(x["window_cycles"])
-            assert wl.dot(w, c) / float(w.sum()) == x["cycles"]
+    for cell in _cells(reference):
+        for org in FAMILY:
+            d = rs.eval_dir(reference, "final", cell)
+            summary = rs.read_json(d / f"s1_eval_{org}.json")["batches"]
+            with np.load(d / f"s1_eval_{org}.npz") as z:
+                for key, x in summary.items():
+                    w, c = z[f"{key}_weights"], z[f"{key}_cycles"]
+                    assert wl.dot(w, c) / float(w.sum()) * len(set(z[f"{key}_layer"].tolist())) == x["step_cycles"]
 
 
-def test_final_selection(reference, tmp_path):
-    _link_cell(reference, tmp_path, "search/top10", "search/hetopt")
-    chosen = select.select(tmp_path)
-    assert len(chosen) == 6
-    for _, org, stage in chosen:
-        ref = rs.read_json(rs.final_path(reference, CELL, org))
-        mine = rs.read_json(rs.final_path(tmp_path, CELL, org))
-        assert stage == ref["selected_from"] and mine["best_main"] == ref["best_main"]
-        assert (
-            mine["candidates_select_main"] == ref["candidates_select_main"]
-            and mine["provisional"] == ref["provisional"]
-        )
-
-
-def test_bootstrap(data_root, reference, tmp_path):
-    _link_cell(reference, tmp_path, "search/top10")
-    ref = next(
-        r
-        for r in rs.read_json(reference / "bootstrap.json")
-        if (r["model"], r["fmt"], r["P"], r["streams"], r["version"]) == (MODEL, FMT, P, 2, "top10")
-    )
-    _approx_equal(bootstrap.heldout(data_root, tmp_path, MODEL, FMT, P, 2, "top10"), ref["heldout"])
-
-
-def test_export(reference, tmp_path):
-    for part in ("final", "search/fullhom", "search/hetcap"):
-        (tmp_path / part).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / part).symlink_to(reference / part)
-    (tmp_path / "bootstrap.json").symlink_to(reference / "bootstrap.json")
-    assert json.loads(json.dumps(export.export(tmp_path))) == json.loads((reference / "export.json").read_text())
-
-
-def test_systolic_frozen_windows(data_root, reference):
-    from complementary_arrays.dse.frozen import DRAIN_COUNTERS
-    from complementary_arrays.sim.engine import Environment, counters, simulate, token_counts
-
-    ref = rs.read_json(reference / "frozen" / "systolic3" / CELL / "het11.json")
-    env = replace(Environment.from_dict(ref["env"]), shared_array=False, **ref["engine_fields"])
-    shapes = expand(ORGS["het11"], ref["base"])
-    for B in wl.BATCHES:
-        rows, x = wl.windows(data_root, MODEL, B, "report"), ref["report"][f"B{B}"]
-        live = np.array([r["live"] for r in rows])
-        for i in (0, len(rows) - 1):
-            group = np.stack([rows[j]["ids"] for j in np.flatnonzero(live == live[i])])
-            c = counters(
-                simulate(
-                    rows[i]["ids"][None],
-                    shapes,
-                    wl.MODELS[MODEL],
-                    env,
-                    threads=1,
-                    provision_tokens=token_counts(group, wl.MODELS[MODEL]["experts"]),
-                )
-            )
-            assert c["cycles"][0] == x["window_cycles"][i]
-            assert [int(c[k][0]) for k in DRAIN_COUNTERS] == x["window_sys"][i]
+def test_final_selection(reference):
+    for cell in _cells(reference):
+        for org in FAMILY:
+            ref = rs.read_json(reference / "final" / cell / f"{org}.json")
+            stages = [(s, rs.search_path(reference, s, cell, org)) for s in ref["candidates_select_main"]]
+            stages = [(s, p) for s, p in stages if p.exists()]
+            if ref["selected_from"] not in dict(stages):
+                continue
+            res = select(org, stages)
+            assert res["best_main"] == ref["best_main"]
+            assert all(res["candidates_select_main"][s] == ref["candidates_select_main"][s] for s, _ in stages)

@@ -1,7 +1,16 @@
 """Cycle-level simulator of one MoE decode layer on one or two systolic arrays that share HBM, SRAM and a weight port.
 
 simulate() runs layer windows (the routed experts of B tokens) and returns one int64 row of counters per window;
-counters() names them. trace() runs one window with a per-cycle record and the dispatch decision log.
+counters() names them. trace() runs one window with a per-cycle record and the dispatch decision log. With ram_config,
+simulate() serves the HBM requests in closed loop through Ramulator 2 instead of the fixed rate H (xcheck/hbm_ramulator.hpp;
+a separate build linked against libramulator from $RAMULATOR_LIB).
+
+Dispatch policies (Environment.policy): 2 regret list scheduling over a window of tasks; 13 pincer, the array with more
+multipliers takes routed tasks from the hot end (most tokens) and the other from the cold end; 14 band dispatch, the
+routed tasks are cut into one contiguous band per array (tallest array first) with the smallest predicted makespan;
+15 supply-aware pincer, a context weighs both end tasks by how well each keeps HBM busy without overloading the weight
+port next to the other contexts' work; 16 band dispatch that re-cuts the remaining tasks whenever a task has finished,
+with costs scaled by each array's measured progress.
 """
 
 import ctypes
@@ -15,6 +24,7 @@ from pathlib import Path
 import numpy as np
 
 SRC = Path(__file__).resolve().parent / "src"
+XCHECK = Path(__file__).resolve().parent.parent / "xcheck"  # hbm_ramulator.hpp: the closed-loop HBM service
 FLAGS = ("-O3", "-std=c++17", "-fopenmp", "-shared", "-fPIC")
 MAX_CONTEXTS, MAX_ARRAYS, NCLASS = 4, 2, 3
 CLASSES = ("routed", "shared", "router")
@@ -59,7 +69,19 @@ CONFIG_FIELDS = (
     "drain_last",
     "tile_bubble",
     "tail_slot",
+    "scale_group",
+    "packed",
+    "converter",
+    "p15_tie",
+    "shared_expert",
+    "shared_place",
+    "prefetch",
+    "port_fcfs",
 )
+# end_switches: policy 15, routed tasks a context took from the other end than its own; band_plans: policy 16, band
+# plans made. idle_while_other_works: cycles one array idles while the other works; of those, with unassigned tasks left
+# (_tasks_left) or with the working array holding a reserved next task (_reserved); _spare_port_bytes: unused weight-port
+# bytes in those cycles (port_mode 1). all_idle_tasks_left: both arrays idle while unassigned tasks are left.
 SCALAR_FIELDS = (
     "status",
     "cycles",
@@ -80,7 +102,18 @@ SCALAR_FIELDS = (
     "tail_fallbacks",
     "multi_group_tasks",
     "weight_bytes",
+    "end_switches",
+    "band_plans",
+    "idle_while_other_works",
+    "idle_while_other_works_tasks_left",
+    "idle_while_other_works_reserved",
+    "idle_while_other_works_spare_port_bytes",
+    "idle_while_other_works_tasks_left_spare_port_bytes",
+    "all_idle_tasks_left",
 )
+# Context fields decoded: elements the converter decoded; packed_reread_bytes: stored bytes of packed re-reads;
+# prefetch_hbm_bytes: HBM bytes served to a prefetched phase; packed_wait: stall cycles on a packed re-read input;
+# matrix_busy, vector_busy, row_busy, control_busy: enabled cycles by phase kind.
 CTX_FIELDS = (
     "core",
     "sram_bytes",
@@ -109,8 +142,30 @@ CTX_FIELDS = (
     "tail_wait",
     "tail_busy",
     "tail_blocked",
+    "decoded",
+    "packed_reread_bytes",
+    "prefetch_hbm_bytes",
+    "packed_wait",
+    "matrix_busy",
+    "vector_busy",
+    "row_busy",
+    "control_busy",
 )
-ARRAY_FIELDS = ("lanes", "drain_idle")
+# Array fields mac_inputs: input cycles of its matrix phases; empty_row_slots: MAC slots of the rows a pass leaves empty;
+# matrix_phase_cycles: compute cycles of its matrix phases; passes, pass_tokens: token passes (ceil(rows / m) per pass
+# group) and tokens of the tasks it finished, routed_*: the same for routed experts, routed_tasks their number.
+ARRAY_FIELDS = (
+    "lanes",
+    "drain_idle",
+    "mac_inputs",
+    "empty_row_slots",
+    "matrix_phase_cycles",
+    "passes",
+    "pass_tokens",
+    "routed_passes",
+    "routed_tokens",
+    "routed_tasks",
+)
 CLASS_FIELDS = (
     "tasks",
     "unique_weights",
@@ -123,6 +178,25 @@ CLASS_FIELDS = (
     "matrix_busy",
     "useful_macs",
     "reread_bytes",
+)
+# What an array did in a cycle (array_state_cycles, the trace's array_state): the first of these that applies over its
+# contexts; idle cycles after the array's last activity count as idle_end, the zeroing of the outputs as startup.
+ARRAY_STATES = (
+    "matrix",
+    "vector",
+    "control",
+    "drain",
+    "wait_redelivery",
+    "wait_port",
+    "wait_hbm",
+    "wait_decode",
+    "wait_latency",
+    "wait_x",
+    "stall",
+    "tail",
+    "idle",
+    "idle_end",
+    "startup",
 )
 TRACE_FIELDS = ("cycle", "port_need_reread", "port_need_first", "port_used", "port_first_budget")
 TRACE_CTX_FIELDS = (
@@ -139,7 +213,9 @@ TRACE_CTX_FIELDS = (
     "decoded",
     "x_bytes",
     "y_bytes",
+    "port_packed_bytes",
 )
+TRACE_ARRAY_FIELDS = ("array_state",)
 # Totals over the contexts that counters() adds under the field name without the ctx_ prefix.
 TOTALS = (
     "hbm_service",
@@ -163,8 +239,9 @@ NOUT = (
     + MAX_CONTEXTS * len(CTX_FIELDS)
     + MAX_ARRAYS * len(ARRAY_FIELDS)
     + MAX_ARRAYS * NCLASS * len(CLASS_FIELDS)
+    + MAX_ARRAYS * len(ARRAY_STATES)
 )
-NTRACE = len(TRACE_FIELDS) + MAX_CONTEXTS * len(TRACE_CTX_FIELDS)
+NTRACE = len(TRACE_FIELDS) + MAX_CONTEXTS * len(TRACE_CTX_FIELDS) + MAX_ARRAYS * len(TRACE_ARRAY_FIELDS)
 
 # Systolic timing modes -> (drain_inner, drain_last, tile_bubble, tail_slot). drain_inner / drain_last: a phase that reads
 # a matrix phase's outputs waits for the array's drain L(n), inside a task / after its last matrix phase; tile_bubble:
@@ -181,6 +258,8 @@ SYSTOLIC = {
     7: (0, 1, 1, 0),
 }
 DRAIN_FORMS = ("linear", "tree", "express", "table")
+POLICIES = (2, 13, 14, 15, 16)
+CONVERTERS = ("shared", "per_array", "matched", "unlimited")
 
 # Settings of earlier model variants that this model fixes; stored settings must hold these values.
 FIXED = dict(
@@ -210,6 +289,9 @@ ERRORS = {
     -5: "more than 2**20 multipliers",
     -6: "expert ids out of range",
     -7: "decision log overflow",
+    -8: "more than 1024 tokens or 64 routed experts per token",
+    -9: "shared_place 2 or 3 needs two arrays",
+    -10: "the closed-loop HBM service does not model a split shared expert",
 }
 
 
@@ -233,25 +315,33 @@ class Environment:
     vslots: int = 4  # FIFO depth of a vector phase
     ybanks: int = 2  # output buffer banks
     share: int = 500  # SRAM permille of context 0 (four contexts: of contexts 0 and 1)
-    policy: int = 13  # 2 regret list scheduling, 13 pincer (hot end / cold end), 14 band dispatch
+    policy: int = 13  # see POLICIES and the module docstring
     H: int = 174720  # HBM
     hlatency: int = 4  # HBM latency (cycles)
     stage_slots: int = 2  # HBM landing slots per context
     bits: int = 16  # stored weight bits (the router stays BF16)
-    group: int = 128  # quantization group along K (one FP16 scale per 16 rows x group)
-    converter_rate: int = 4096  # weights decoded per cycle
+    group: int = 128  # record width along K: 16 rows x group values and their FP16 scales
+    converter_rate: int = 4096  # weights decoded per cycle (per array with converter 'per_array')
     converter_latency: int = 4
     share2: int = 500  # four contexts: SRAM permille of the even context of each pair
     ctx_per_core: int = 2  # shared_array: contexts per array
     core_caps: int = 0  # contexts of a shared array share its weight-port and converter intake
     kappa_reread: float = 0.0  # port_mode 0: re-delivery budget in units of the HBM weight rate (0: unlimited)
     port_mode: int = 0  # 1: one W-byte port carries first passes and re-deliveries (half-port rule)
-    p14_steal: int = 1  # policy 14: 2 steals only tasks the thief finishes before the band's owner; 0, 1 always
+    p14_steal: int = 1  # policies 14, 16: 2 steals only tasks the thief finishes before the band's owner; 0, 1 always
     shared_array: bool = False  # context c runs on array c // ctx_per_core; else every context has its own array
     systolic: int = 0  # timing mode of the arrays' outputs, see SYSTOLIC
     drain_form: str = "linear"  # L(n): linear n - 1; tree / express over segments of drain_segment columns; table
     drain_segment: int = 16
     drain_table: tuple = ()  # ((n, L), ...) for drain_form 'table'
+    scale_group: int = 0  # scales per record row: 0 one per group, g one per g columns, -1 none (8-bit block scaling)
+    redeliv_packed: int = 0  # 1: later token passes re-read the retained panel packed over the port and decode again
+    converter: str = "shared"  # one of converter_rate; per_array: converter_rate each; matched: n k / m each; unlimited
+    p15_tie: int = 63  # policy 15: tie tolerance, thousandths of a normalised penalty
+    shared_expert: bool = True  # False: the layer has no shared expert
+    shared_place: int = 0  # 0 dispatch rule; 1 / 2 on array 0 / 1; 3 two half-width halves, one per array
+    prefetch: bool = True  # HBM requests run ahead into later phases and a reserved next task
+    port_arbitration: str = "half"  # port_mode 1, port oversubscribed: 'half' rule or 'fcfs' (older class first)
 
     def __post_init__(self):
         object.__setattr__(self, "drain_table", tuple(tuple(int(v) for v in x) for x in self.drain_table))
@@ -261,7 +351,7 @@ class Environment:
         """Environment from stored settings, which may carry FIXED fields at their fixed values."""
         d = dict(d)
         for k, v in FIXED.items():
-            if k in d and (tuple(d[k]) if isinstance(d[k], (list, tuple)) else d[k]) != v:
+            if k in d and (tuple(d[k]) if isinstance(d[k], list | tuple) else d[k]) != v:
                 raise ValueError(f"{k}={d[k]!r}: this model implements only {k}={v!r}")
             d.pop(k, None)
         return cls(**d)
@@ -286,28 +376,38 @@ def drain_latency(n, env):
     return s - 1 + ((segments - 1).bit_length() if form == "tree" else segments)
 
 
-def library(build_dir=None):
-    """The compiled simulator, built on first use into build_dir (default: $SIM_BUILD_DIR or ~/.cache)."""
+def library(build_dir=None, ramulator=False):
+    """The compiled simulator, built on first use into build_dir (default: $SIM_BUILD_DIR or ~/.cache). ramulator: the
+    build with the closed-loop HBM service, linked against libramulator in $RAMULATOR_LIB (needed only to build it)."""
     d = build_dir or os.environ.get("SIM_BUILD_DIR") or Path.home() / ".cache" / "complementary_arrays" / "sim"
-    return _load(str(Path(d).resolve()))
+    return _load(str(Path(d).resolve()), bool(ramulator))
 
 
 @lru_cache(None)
-def _load(build_dir):
+def _load(build_dir, ramulator=False):
     sources = sorted(SRC.glob("*.cpp")) + sorted(SRC.glob("*.hpp"))
-    h = hashlib.sha256(" ".join(FLAGS).encode())
-    for p in sources:
+    flags = FLAGS + (("-DSIM_RAMULATOR",) if ramulator else ())
+    h = hashlib.sha256(" ".join(flags).encode())
+    for p in sources + ([XCHECK / "hbm_ramulator.hpp"] if ramulator else []):
         h.update(p.name.encode() + b"\0" + p.read_bytes())
-    so = Path(build_dir) / f"sim-{h.hexdigest()[:16]}.so"
+    so = Path(build_dir) / f"sim-{'ramulator-' if ramulator else ''}{h.hexdigest()[:16]}.so"
     if not so.exists():
+        cmd = ["g++", *flags, *(str(p) for p in sources if p.suffix == ".cpp")]
+        if ramulator:
+            lib_dir = os.environ.get("RAMULATOR_LIB")
+            if not lib_dir:
+                raise RuntimeError("the closed-loop HBM build needs RAMULATOR_LIB, the directory of libramulator")
+            cmd += [f"-I{XCHECK}", f"-L{lib_dir}", "-lramulator", f"-Wl,-rpath,{lib_dir}"]
         so.parent.mkdir(parents=True, exist_ok=True)
         tmp = so.with_name(f"{so.name}.{os.getpid()}.tmp")
-        subprocess.run(["g++", *FLAGS, *(str(p) for p in sources if p.suffix == ".cpp"), "-o", str(tmp)], check=True)
+        subprocess.run([*cmd, "-o", str(tmp)], check=True)
         os.replace(tmp, so)
     lib = ctypes.CDLL(str(so))
-    I, I64, P = ctypes.c_int, ctypes.c_int64, ctypes.c_void_p
+    I, I64, P, S = ctypes.c_int, ctypes.c_int64, ctypes.c_void_p, ctypes.c_char_p
     lib.sim_layout.restype = ctypes.c_char_p
     lib.sim_run.argtypes = [P, P, I, P, P, I, P]
+    if ramulator:
+        lib.sim_run_ramulator.argtypes = [P, P, I, P, P, I, S, I, I, I, I, S, P]
     lib.sim_trace.argtypes = [P, P, P, P, P, P, I64, P, I, P]
     lib.sim_program.argtypes = [P, P, I, I, I, P]
     layout = dict(part.split(":") for part in lib.sim_layout().decode().split(";"))
@@ -317,8 +417,10 @@ def _load(build_dir):
         context=CTX_FIELDS,
         array=ARRAY_FIELDS,
         cls=CLASS_FIELDS,
+        state=ARRAY_STATES,
         trace=TRACE_FIELDS,
         trace_context=TRACE_CTX_FIELDS,
+        trace_array=TRACE_ARRAY_FIELDS,
     )
     layout["cls"] = layout.pop("class")
     assert all(tuple(layout[k].split(",")) == v for k, v in expected.items()), (
@@ -328,20 +430,34 @@ def _load(build_dir):
     return lib
 
 
+def _converter_code(env):
+    return {"shared": 0, "unlimited": -1, "matched": -2, "per_array": env.converter_rate}[env.converter]
+
+
 def _config(env, workload, batch, contexts):
     if (
-        env.policy not in (2, 13, 14)
+        env.policy not in POLICIES
         or env.p14_steal not in (0, 1, 2)
+        or not 0 <= env.p15_tie <= 1000
         or env.port_mode not in (0, 1)
         or env.kappa_reread < 0
     ):
-        raise ValueError("policy, p14_steal, port_mode or kappa_reread out of range")
+        raise ValueError("policy, p14_steal, p15_tie, port_mode or kappa_reread out of range")
     if env.port_mode and env.kappa_reread:
         raise ValueError("port_mode 1 replaces kappa_reread")
     if env.systolic not in SYSTOLIC or env.drain_form not in DRAIN_FORMS or env.drain_segment < 1:
         raise ValueError("systolic mode or drain form out of range")
-    if min(env.W, env.X, env.Y) < 64 or env.bits not in (2, 4, 8, 16) or env.group not in (32, 128):
+    if min(env.W, env.X, env.Y) < 64 or env.bits not in (2, 4, 8, 16) or env.group not in (32, 64, 128):
         raise ValueError("ports below one 64-byte beat, or unknown weight format")
+    sg = env.scale_group
+    if not (sg == 0 or (env.bits < 16 and sg in (16, 32, 64) and env.group % sg == 0) or (sg == -1 and env.bits == 8)):
+        raise ValueError("scale_group: 0, a divisor of group in (16, 32, 64) for low-bit formats, or -1 for 8 bits")
+    if env.redeliv_packed not in (0, 1) or (env.redeliv_packed and (env.port_mode != 1 or env.kappa_reread)):
+        raise ValueError("redeliv_packed is 0 or 1 and needs port_mode 1")
+    if env.converter not in CONVERTERS or env.port_arbitration not in ("half", "fcfs"):
+        raise ValueError("converter or port_arbitration unknown")
+    if env.shared_place not in (0, 1, 2, 3) or (env.shared_place and not env.shared_expert):
+        raise ValueError("shared_place is 0..3 and needs the shared expert")
     inner, last, bubble, tail = SYSTOLIC[env.systolic]
     v = dict(
         asdict(env),
@@ -358,6 +474,9 @@ def _config(env, workload, batch, contexts):
         drain_last=last,
         tile_bubble=bubble,
         tail_slot=tail,
+        packed=env.redeliv_packed,
+        converter=_converter_code(env),
+        port_fcfs=env.port_arbitration == "fcfs",
     )
     return np.array([int(v[k]) for k in CONFIG_FIELDS], np.int64)
 
@@ -408,27 +527,52 @@ def _check(ret, out, B, topk, env):
         raise CapacityError("a task fits no context")
     if np.any(c["status"] == 2):
         raise RuntimeError("deadlock: no progress for 100,000 cycles")
-    assert np.all(c["rows"] == B * (topk + 1)) and np.all(c["peak_sram"] <= env.capacity), "inconsistent engine output"
+    shared_rows = (2 if env.shared_place == 3 else 1) if env.shared_expert else 0
+    assert np.all(c["rows"] == B * (topk + shared_rows)) and np.all(c["peak_sram"] <= env.capacity), (
+        "inconsistent engine output"
+    )
 
 
-def simulate(routes, shapes, workload, env, threads=4, provision_tokens=None):
+def simulate(
+    routes,
+    shapes,
+    workload,
+    env,
+    threads=4,
+    provision_tokens=None,
+    ram_config=None,
+    ram_extra_latency=65,
+    ram_issue_cap=0,
+    ram_layout=0,
+    ram_look=0,
+    ram_log=None,
+):
     """Simulate windows of one layer. routes: (windows, B, topk) expert ids; shapes: (m, n, k) of each context's array.
     SRAM is provisioned for the largest program over the token counts in routes and provision_tokens (e.g. token_counts()
     of a whole window group), which decides tail-slot eligibility in systolic modes 3 and 5. Returns an int64 array
-    (windows, NOUT)."""
+    (windows, NOUT).
+    ram_config (Ramulator 2 configuration text) serves the HBM requests in closed loop through Ramulator; the dispatcher
+    keeps H in its estimates. ram_extra_latency: cycles from a request's last returned transfer until it is usable;
+    ram_issue_cap: 64-byte lines issued per cycle (0: no limit); ram_layout: address map bits; ram_look: lines tried per
+    context and cycle (0: in order); ram_log: file prefix of the per-window logs <prefix>_w<window>.json and _req.csv,
+    window counted within the call (see xcheck/hbm_ramulator.hpp)."""
     routes, shp, cfg = _inputs(routes, shapes, workload, env)
     provision = _provision(provision_tokens, routes.shape[1])
     out = np.zeros((len(routes), NOUT), np.int64)
-    lib = library()
-    ret = lib.sim_run(
-        cfg.ctypes.data,
-        shp.ctypes.data,
-        len(routes),
-        routes.ctypes.data,
-        provision.ctypes.data,
-        int(threads),
-        out.ctypes.data,
-    )
+    args = (cfg.ctypes.data, shp.ctypes.data, len(routes), routes.ctypes.data, provision.ctypes.data, int(threads))
+    if ram_config:
+        ret = library(ramulator=True).sim_run_ramulator(
+            *args,
+            ram_config.encode(),
+            int(ram_extra_latency),
+            int(ram_issue_cap),
+            int(ram_layout),
+            int(ram_look),
+            (ram_log or "").encode(),
+            out.ctypes.data,
+        )
+    else:
+        ret = library().sim_run(*args, out.ctypes.data)
     libc = ctypes.CDLL(None)  # return freed program memory to the system between candidates of a search
     if hasattr(libc, "malloc_trim"):
         libc.malloc_trim(0)
@@ -458,7 +602,8 @@ def program_metrics(shape, tokens, shared, workload, env, capacity, lanes=1024):
 def counters(out):
     """Name the fields of simulate() output; leading axes are those of out. Per-context fields 'ctx_*' end in a context
     axis, per-array fields 'array_*' in an array axis, task-class counters in (array, class) axes (classes in CLASSES
-    order). Adds the TOTALS over contexts and array_busy, the enabled cycles of each array's contexts."""
+    order), array_state_cycles in (array, state) axes (states in ARRAY_STATES order). Adds the TOTALS over contexts and
+    array_busy, the enabled cycles of each array's contexts."""
     out = np.asarray(out)
     lead, o, d = out.shape[:-1], 0, {}
     for n in SCALAR_FIELDS:
@@ -473,6 +618,9 @@ def counters(out):
     for n in CLASS_FIELDS:
         d[n] = out[..., o : o + MAX_ARRAYS * NCLASS].reshape((*lead, MAX_ARRAYS, NCLASS))
         o += MAX_ARRAYS * NCLASS
+    d["array_state_cycles"] = out[..., o : o + MAX_ARRAYS * len(ARRAY_STATES)].reshape(
+        (*lead, MAX_ARRAYS, len(ARRAY_STATES))
+    )
     for n in TOTALS:
         d[n] = d["ctx_" + n].sum(-1)
     d["array_busy"] = np.stack(
@@ -483,18 +631,20 @@ def counters(out):
 
 def trace(ids, shapes, workload, env, provision_tokens=None):
     """One window (ids: B x topk) with a per-cycle record and the dispatch decision log: (out row, record, decisions).
-    record maps TRACE_FIELDS to (cycles,) and TRACE_CTX_FIELDS to (cycles, contexts) arrays, from cycle `startup` on;
-    state codes are STATES indices. A decision is (cycle, context, task, expert (-1 router, `experts` the shared expert),
-    tokens, kind, policy, predicted cycles) with kind 0 dispatch to a free context, 1 next-task reservation, 2 reserved
-    task started, 3 router started, 4 task finished, 6 tail handoff; kind 5 is a band plan: (cycle, array, first task,
-    last task, rank, 5, policy, planned makespan)."""
+    record maps TRACE_FIELDS to (cycles,), TRACE_CTX_FIELDS to (cycles, contexts) and TRACE_ARRAY_FIELDS to
+    (cycles, arrays) arrays, from cycle `startup` on; context state codes are STATES indices, array states ARRAY_STATES
+    indices. A decision is (cycle, context, task, expert (-1 router, `experts` the shared expert), tokens, kind, policy,
+    predicted cycles) with kind 0 dispatch to a free context, 1 next-task reservation, 2 reserved task started, 3 router
+    started, 4 task finished, 6 tail handoff; kind 5 is a band plan: (cycle, array, first task, last task, rank, 5,
+    policy, planned makespan), first and last task -1 for an empty band."""
     out = simulate(np.asarray(ids)[None], shapes, workload, env, threads=1, provision_tokens=provision_tokens)
     routes, shp, cfg = _inputs(np.asarray(ids)[None], shapes, workload, env)
     provision = _provision(provision_tokens, routes.shape[1])
     c = counters(out)
     T, nc = int(c["cycles"][0] - c["startup"][0]), len(shp)
     rows, n = np.zeros((T, NTRACE), np.int64), ctypes.c_int()
-    dec = np.zeros((4 * (workload["experts"] + 2) + MAX_ARRAYS, 8), np.int64)
+    ntasks = workload["experts"] + 3
+    dec = np.zeros((4 * ntasks + MAX_ARRAYS * (ntasks + 1), 8), np.int64)
     again = np.zeros_like(out)
     ret = library().sim_trace(
         cfg.ctypes.data,
@@ -511,8 +661,11 @@ def trace(ids, shapes, workload, env, provision_tokens=None):
     if ret:
         raise ValueError(ERRORS.get(ret, f"engine error {ret}"))
     assert np.array_equal(again, out)
-    k = len(TRACE_FIELDS)
+    k, na = len(TRACE_FIELDS), len(set(core_map(env, nc)))
     rec = {f: rows[:, i] for i, f in enumerate(TRACE_FIELDS)}
     for i, f in enumerate(TRACE_CTX_FIELDS):
         rec[f] = rows[:, k + i * MAX_CONTEXTS : k + i * MAX_CONTEXTS + nc]
+    k += len(TRACE_CTX_FIELDS) * MAX_CONTEXTS
+    for i, f in enumerate(TRACE_ARRAY_FIELDS):
+        rec[f] = rows[:, k + i * MAX_ARRAYS : k + i * MAX_ARRAYS + na]
     return out[0], rec, dec[: n.value].copy()
